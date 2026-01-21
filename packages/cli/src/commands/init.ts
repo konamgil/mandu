@@ -26,10 +26,10 @@ async function copyDir(src: string, dest: string, projectName: string): Promise<
 }
 
 function getTemplatesDir(): string {
-  // When running from the CLI package, templates are in the repo root
-  const cliDir = import.meta.dir;
-  // packages/cli/src/commands -> go up 4 levels to repo root
-  return path.resolve(cliDir, "../../../../templates");
+  // When installed via npm, templates are in the CLI package
+  const commandsDir = import.meta.dir;
+  // packages/cli/src/commands -> go up 2 levels to cli package root
+  return path.resolve(commandsDir, "../../templates");
 }
 
 export async function init(options: InitOptions = {}): Promise<boolean> {

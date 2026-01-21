@@ -1,6 +1,4 @@
-import { loadManifest } from "../../../core/src/spec/load";
-import { generateRoutes } from "../../../core/src/generator/generate";
-import { buildGenerateReport, printReportSummary, writeReport } from "../../../core/src/report/build";
+import { loadManifest, generateRoutes, buildGenerateReport, printReportSummary, writeReport } from "@mandu/core";
 import { resolveFromCwd, getRootDir } from "../util/fs";
 
 export async function generateApply(): Promise<boolean> {

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+apps/*/generated/
+spec/spec.lock.json
+mandu-report.json
+*.log

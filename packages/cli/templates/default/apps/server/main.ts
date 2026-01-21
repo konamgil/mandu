@@ -1,19 +1,12 @@
 import { loadManifest, startServer, registerApiHandler, registerPageLoader } from "@mandu/core";
-import { resolveFromCwd } from "../util/fs";
 import path from "path";
 
-export interface DevOptions {
-  port?: number;
-}
+const SPEC_PATH = path.resolve(import.meta.dir, "../../spec/routes.manifest.json");
 
-export async function dev(options: DevOptions = {}): Promise<void> {
-  const specPath = resolveFromCwd("spec/routes.manifest.json");
-  const rootDir = resolveFromCwd(".");
+async function main() {
+  console.log("🥟 Mandu Server Starting...\n");
 
-  console.log(`🥟 Mandu Dev Server`);
-  console.log(`📄 Spec 파일: ${specPath}\n`);
-
-  const result = await loadManifest(specPath);
+  const result = await loadManifest(SPEC_PATH);
 
   if (!result.success || !result.data) {
     console.error("❌ Spec 로드 실패:");
@@ -25,7 +18,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   for (const route of result.data.routes) {
     if (route.kind === "api") {
-      const modulePath = path.resolve(rootDir, route.module);
+      const modulePath = path.resolve(import.meta.dir, "../../", route.module);
       try {
         const module = await import(modulePath);
         registerApiHandler(route.id, module.default || module.handler);
@@ -33,8 +26,8 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       } catch (error) {
         console.error(`  ❌ API 핸들러 로드 실패: ${route.id}`, error);
       }
-    } else if (route.kind === "page" && route.componentModule) {
-      const componentPath = path.resolve(rootDir, route.componentModule);
+    } else if (route.kind === "page") {
+      const componentPath = path.resolve(import.meta.dir, "../../", route.componentModule!);
       registerPageLoader(route.id, () => import(componentPath));
       console.log(`  📄 Page: ${route.pattern} -> ${route.id}`);
     }
@@ -42,19 +35,15 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   console.log("");
 
-  const port = options.port || Number(process.env.PORT) || 3000;
-
-  const server = startServer(result.data, { port });
+  const server = startServer(result.data, {
+    port: Number(process.env.PORT) || 3000,
+  });
 
   process.on("SIGINT", () => {
     console.log("\n🛑 서버 종료 중...");
     server.stop();
     process.exit(0);
   });
-
-  process.on("SIGTERM", () => {
-    console.log("\n🛑 서버 종료 중...");
-    server.stop();
-    process.exit(0);
-  });
 }
+
+main().catch(console.error);

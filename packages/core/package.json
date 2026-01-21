@@ -1,11 +1,35 @@
 {
   "name": "@mandu/core",
   "version": "0.1.0",
+  "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*"
+  },
+  "files": [
+    "src/**/*"
+  ],
+  "keywords": [
+    "mandu",
+    "framework",
+    "agent",
+    "ai",
+    "code-generation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/konamgil/mandu.git",
+    "directory": "packages/core"
+  },
+  "author": "konamgil",
+  "license": "MIT",
+  "peerDependencies": {
+    "bun": ">=1.0.0",
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0",
+    "zod": ">=3.0.0"
   }
 }

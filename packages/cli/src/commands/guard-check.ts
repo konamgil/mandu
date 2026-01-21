@@ -1,6 +1,4 @@
-import { loadManifest } from "../../../core/src/spec/load";
-import { runGuardCheck } from "../../../core/src/guard/check";
-import { buildGuardReport, printReportSummary, writeReport } from "../../../core/src/report/build";
+import { loadManifest, runGuardCheck, buildGuardReport, printReportSummary, writeReport } from "@mandu/core";
 import { resolveFromCwd, getRootDir } from "../util/fs";
 
 export async function guardCheck(): Promise<boolean> {

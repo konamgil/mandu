@@ -1,5 +1,4 @@
-import { loadManifest } from "../../../core/src/spec/load";
-import { writeLock, readLock } from "../../../core/src/spec/lock";
+import { loadManifest, writeLock, readLock } from "@mandu/core";
 import { resolveFromCwd } from "../util/fs";
 import path from "path";
 
