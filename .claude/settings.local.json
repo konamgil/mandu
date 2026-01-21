@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd /c \"where bun\")",
+      "Bash(cmd /c \"bun --version\")",
+      "Bash(powershell -Command \"irm bun.sh/install.ps1 | iex\")",
+      "Bash(C:UsersUser.bunbinbun.exe install)",
+      "Bash(cmd /c \"C:\\\\Users\\\\User\\\\.bun\\\\bin\\\\bun.exe install\")",
+      "Bash(cmd /c \"set PATH=%USERPROFILE%\\\\.bun\\\\bin;%PATH% && bun install\")",
+      "Bash(powershell -Command \"$env:PATH = \"\"$env:USERPROFILE\\\\.bun\\\\bin;$env:PATH\"\"; bun install 2>&1\")",
+      "Bash(cmd /c \"C:\\\\Users\\\\User\\\\workspace\\\\mandu\\\\run-bun.bat install\")",
+      "Bash(\"/c/Users/User/.bun/bin/bun.exe\" --version)",
+      "Bash(\"/c/Users/User/.bun/bin/bun.exe\" install)",
+      "Bash(\"/c/Users/User/.bun/bin/bun.exe\" run packages/cli/src/main.ts spec-upsert)",
+      "Bash(\"/c/Users/User/.bun/bin/bun.exe\" run packages/cli/src/main.ts generate)",
+      "Bash(\"/c/Users/User/.bun/bin/bun.exe\" run packages/cli/src/main.ts guard)",
+      "Bash(\"/c/Users/User/.bun/bin/bun.exe\" test)",
+      "Bash(git init:*)"
+    ]
+  }
+}
