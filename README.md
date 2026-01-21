@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./mandu.png" alt="Mandu Logo" width="280" />
+  <img src="./mandu_only_simbol.png" alt="Mandu Logo" width="180" />
 </p>
 
 <h1 align="center">Mandu</h1>
