@@ -9,12 +9,12 @@
     "spec": "mandu spec-upsert"
   },
   "dependencies": {
-    "@mandu/core": "^0.1.0",
-    "@mandu/cli": "^0.1.0",
+    "@mandujs/core": "^0.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@mandujs/cli": "^0.1.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "typescript": "^5.0.0"

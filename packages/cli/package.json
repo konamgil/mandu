@@ -1,5 +1,5 @@
 {
-  "name": "mandu",
+  "name": "@mandujs/cli",
   "version": "0.1.0",
   "description": "Agent-Native Fullstack Framework - 에이전트가 코딩해도 아키텍처가 무너지지 않는 개발 OS",
   "type": "module",
@@ -28,8 +28,11 @@
   },
   "author": "konamgil",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
-    "@mandu/core": "workspace:*"
+    "@mandujs/core": "^0.1.0"
   },
   "peerDependencies": {
     "bun": ">=1.0.0"

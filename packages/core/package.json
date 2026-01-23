@@ -1,5 +1,5 @@
 {
-  "name": "@mandu/core",
+  "name": "@mandujs/core",
   "version": "0.1.0",
   "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
@@ -26,6 +26,9 @@
   },
   "author": "konamgil",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "bun": ">=1.0.0",
     "react": ">=18.0.0",
