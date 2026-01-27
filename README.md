@@ -146,14 +146,17 @@ http://localhost:3000/api/health → API 응답
 ```
 mandu/
 ├── packages/
-│   ├── core/                # @mandu/core
-│   │   ├── spec/           # 스키마, 로드, 락
+│   ├── core/                # @mandujs/core
+│   │   ├── spec/           # 스키마, 로드, 락, 트랜잭션
 │   │   ├── runtime/        # 서버, 라우터, SSR
 │   │   ├── generator/      # 코드 생성기
 │   │   ├── guard/          # 규칙 검사
 │   │   └── report/         # 리포트 빌더
-│   └── cli/                 # @mandu/cli
-│       └── commands/       # init, spec-upsert, generate, guard, dev
+│   ├── cli/                 # @mandujs/cli
+│   │   └── commands/       # init, spec-upsert, generate, guard, dev
+│   └── mcp/                 # @mandujs/mcp
+│       ├── tools/          # MCP 도구 (spec, generate, transaction, guard, slot)
+│       └── resources/      # MCP 리소스 (manifest, lock, map)
 ├── templates/
 │   └── default/            # 기본 프로젝트 템플릿
 └── tests/
@@ -187,6 +190,63 @@ my-app/
 | `mandu generate` | Spec에서 코드 생성 |
 | `mandu guard` | Guard 규칙 검사 |
 | `mandu dev` | 개발 서버 실행 |
+
+---
+
+## MCP 서버 (AI 에이전트 통합)
+
+Mandu는 MCP(Model Context Protocol) 서버를 통해 AI 에이전트가 프레임워크를 직접 조작할 수 있습니다.
+
+### 설치 및 설정
+
+`.mcp.json` 파일을 프로젝트 루트에 생성:
+
+```json
+{
+  "mcpServers": {
+    "mandu": {
+      "command": "bun",
+      "args": ["x", "@mandujs/mcp"],
+      "cwd": "/path/to/your/project"
+    }
+  }
+}
+```
+
+### MCP 도구
+
+| 도구 | 설명 |
+|------|------|
+| `mandu_list_routes` | 라우트 목록 조회 |
+| `mandu_add_route` | 새 라우트 추가 |
+| `mandu_generate` | 코드 생성 실행 |
+| `mandu_begin` | 트랜잭션 시작 |
+| `mandu_commit` | 변경 확정 |
+| `mandu_rollback` | 변경 취소 (스냅샷 복원) |
+| `mandu_guard_check` | Guard 규칙 검사 |
+| `mandu_read_slot` | 슬롯 파일 읽기 |
+| `mandu_write_slot` | 슬롯 파일 쓰기 |
+
+### 에이전트 워크플로우 예시
+
+```
+User: "사용자 목록 API를 만들어줘"
+
+Agent:
+1. mandu_begin({ message: "Add users API" })
+2. mandu_add_route({ id: "users-list", pattern: "/api/users", kind: "api", methods: ["GET"] })
+3. mandu_generate()
+4. mandu_write_slot({ routeId: "users-list", content: "..." })
+5. mandu_guard_check()
+6. mandu_commit()
+```
+
+### 트랜잭션 API
+
+모든 spec 변경은 트랜잭션으로 보호됩니다:
+- **begin**: 현재 상태의 스냅샷을 저장하고 트랜잭션 시작
+- **commit**: 변경 확정 및 스냅샷을 히스토리에 저장
+- **rollback**: 실패 시 스냅샷으로 완전 복원 (spec + 슬롯 파일)
 
 ---
 
@@ -241,17 +301,23 @@ Guard는 아키텍처 보존의 핵심입니다. 다음 규칙을 검사합니�
 
 ## 로드맵
 
-### MVP-0.1 (현재) ✅
+### MVP-0.1 ✅
 - Spec 기반 라우트 생성 + 최소 SSR
 - Guard: spec/generated 오염 방지
 - CLI: init / spec-upsert / generate / guard / dev
 
-### MVP-0.2
+### MVP-0.3 (현재) ✅
 - route-logic 슬롯 시스템
-- 기본 테스트 템플릿
-- Self-correction loop
+- **MCP 서버** (`@mandujs/mcp`)
+- **트랜잭션 API** (begin/commit/rollback)
+- **스냅샷 기반 히스토리**
+- **에러 분류 시스템** (SPEC_ERROR / LOGIC_ERROR / FRAMEWORK_BUG)
 
-### MVP-0.3
+### MVP-0.4
+- Self-correction loop
+- 기본 테스트 템플릿
+
+### MVP-0.5
 - WebSocket 플랫폼
 - channel-logic 슬롯
 - Contract-first API
