@@ -5,6 +5,7 @@ import { generateApply } from "./commands/generate-apply";
 import { guardCheck } from "./commands/guard-check";
 import { dev } from "./commands/dev";
 import { init } from "./commands/init";
+import { build } from "./commands/build";
 import {
   changeBegin,
   changeCommit,
@@ -24,6 +25,7 @@ Commands:
   spec-upsert    Spec 파일 검증 및 lock 갱신
   generate       Spec에서 코드 생성
   guard          Guard 규칙 검사
+  build          클라이언트 번들 빌드 (Hydration)
   dev            개발 서버 실행
 
   change begin   변경 트랜잭션 시작 (스냅샷 생성)
@@ -38,6 +40,9 @@ Options:
   --file <path>      spec-upsert 시 사용할 spec 파일 경로
   --port <port>      dev 서버 포트 (기본: 3000)
   --no-auto-correct  guard 시 자동 수정 비활성화
+  --minify           build 시 코드 압축
+  --sourcemap        build 시 소스맵 생성
+  --watch            build 시 파일 감시 모드
   --message <msg>    change begin 시 설명 메시지
   --id <id>          change rollback 시 특정 변경 ID
   --keep <n>         change prune 시 유지할 스냅샷 수 (기본: 5)
@@ -48,13 +53,15 @@ Examples:
   bunx mandu spec-upsert
   bunx mandu generate
   bunx mandu guard
+  bunx mandu build --minify
+  bunx mandu build --watch
   bunx mandu dev --port 3000
   bunx mandu change begin --message "Add new route"
   bunx mandu change commit
   bunx mandu change rollback
 
 Workflow:
-  1. init → 2. spec-upsert → 3. generate → 4. guard → 5. dev
+  1. init → 2. spec-upsert → 3. generate → 4. build → 5. guard → 6. dev
 `;
 
 function parseArgs(args: string[]): { command: string; options: Record<string, string> } {
@@ -107,6 +114,14 @@ async function main(): Promise<void> {
     case "guard":
       success = await guardCheck({
         autoCorrect: options["no-auto-correct"] !== "true",
+      });
+      break;
+
+    case "build":
+      success = await build({
+        minify: options.minify === "true",
+        sourcemap: options.sourcemap === "true",
+        watch: options.watch === "true",
       });
       break;
 
