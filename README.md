@@ -1,269 +1,255 @@
 <p align="center">
-  <img src="./mandu_only_simbol.png" alt="Mandu Logo" width="180" />
+  <img src="https://raw.githubusercontent.com/konamgil/mandu/main/mandu_only_simbol.png" alt="Mandu Logo" width="180" />
 </p>
 
 <h1 align="center">Mandu</h1>
 
 <p align="center">
   <strong>Agent-Native Fullstack Framework</strong><br/>
-  에이전트가 코딩해도 아키텍처가 무너지지 않는 개발 OS
+  Architecture that doesn't break even when AI agents write your code
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/@mandujs/core"><img src="https://img.shields.io/npm/v/@mandujs/core?label=core" alt="npm core" /></a>
+  <a href="https://www.npmjs.com/package/@mandujs/cli"><img src="https://img.shields.io/npm/v/@mandujs/cli?label=cli" alt="npm cli" /></a>
+  <a href="https://www.npmjs.com/package/@mandujs/mcp"><img src="https://img.shields.io/npm/v/@mandujs/mcp?label=mcp" alt="npm mcp" /></a>
   <img src="https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun" alt="Bun" />
   <img src="https://img.shields.io/badge/language-TypeScript-3178c6?logo=typescript" alt="TypeScript" />
   <img src="https://img.shields.io/badge/frontend-React-61dafb?logo=react" alt="React" />
-  <img src="https://img.shields.io/badge/version-0.1.0--alpha-orange" alt="Version" />
+</p>
+
+<p align="center">
+  <a href="./README.ko.md">한국어</a> | English
 </p>
 
 ---
 
-## 문제 정의
+## The Problem
 
-### AI 코딩의 구조적 문제
+### AI Coding's Structural Challenge
 
-현재 AI 에이전트를 활용한 개발에는 근본적인 문제가 있습니다:
+Current AI-assisted development has a fundamental problem:
 
-- **아키텍처 붕괴**: 에이전트가 코딩할수록 폴더 구조, 레이어 규칙, 코딩 패턴이 흔들림
-- **사후 수습의 한계**: Lint로 수습하려다 부작용(추가 오류)과 시간 손실 발생
-- **재현성 저하**: 프로젝트마다 아키텍처가 달라져 유지보수가 급격히 나빠짐
+- **Architecture Decay**: The more agents code, the more folder structures, layer rules, and patterns deteriorate
+- **Post-hoc Cleanup Fails**: Trying to fix with linters causes side effects and wasted time
+- **Reproducibility Loss**: Each project ends up with different architecture, making maintenance nightmarish
 
-### 우리가 해결하려는 본질
+### What We're Really Solving
 
-> "AI가 코딩해주는 속도"가 아니라,
-> **AI가 망가뜨리지 못하는 구조(Architecture Preservation)**를 강제하는 것
+> Not "how fast AI can code" but
+> **enforcing architecture that AI cannot break (Architecture Preservation)**
 
 ---
 
-## Mandu란?
+## What is Mandu?
 
-**자연어 → Spec → Generate → Slot → Guard → Report**까지 자동화하는,
-**Bun + TypeScript + React 기반 Agent-Native 풀스택 프레임워크**입니다.
+**Mandu** is a **Bun + TypeScript + React fullstack framework** that automates the entire flow from:
+
+**Natural Language → Spec → Generate → Slot → Guard → Report**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        Mandu Flow                           │
+│                        Mandu Flow                            │
 ├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│   📝 Spec (JSON)      단일 진실 원천 (SSOT)                  │
-│        ↓                                                    │
-│   ⚙️  Generate        뼈대 코드 자동 생성                    │
-│        ↓                                                    │
-│   🎯 Slot             에이전트가 작업하는 허용 영역           │
-│        ↓                                                    │
-│   🛡️  Guard           구조 보존 검사                         │
-│        ↓                                                    │
-│   📊 Report           결과 리포트 + 자동 수정 안내           │
-│                                                             │
+│                                                              │
+│   📝 Spec (JSON)      Single Source of Truth (SSOT)          │
+│        ↓                                                     │
+│   ⚙️  Generate        Auto-generate skeleton code            │
+│        ↓                                                     │
+│   🎯 Slot             Agent's permitted workspace            │
+│        ↓                                                     │
+│   🛡️  Guard           Architecture preservation check        │
+│        ↓                                                     │
+│   📊 Report           Results + auto-fix guidance            │
+│                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 핵심 철학 (불변 원칙)
+## Key Features
 
-| # | 원칙 | 설명 |
-|---|------|------|
-| 1 | **Spec = SSOT** | Spec(JSON)이 단일 진실 원천이다. 코드는 spec의 산출물이다. |
-| 2 | **Generated = 재생성 가능** | generated 코드는 언제든 날리고 다시 만들 수 있어야 한다. |
-| 3 | **Slot = 허용 영역** | 에이전트는 슬롯(허용된 영역)에서만 작업한다. |
-| 4 | **Guard > Lint** | Lint는 최소화하고, Guard가 구조 보존의 주인공이 된다. |
-| 5 | **Self-Correction** | 실패 시 자동 재시도 루프를 기본 탑재한다. |
+### Core Architecture
 
----
-
-## 타겟 사용자
-
-### Primary: 에이전트 + 감독자
-
-```
-┌──────────────────┐     ┌──────────────────┐
-│      Human       │     │      Agent       │
-│    (감독자)       │     │    (에이전트)     │
-├──────────────────┤     ├──────────────────┤
-│ • 승인/검토       │     │ • Spec 작성      │
-│ • 디버깅         │     │ • 슬롯 로직 구현   │
-│ • 운영 판단       │     │ • 테스트 작성     │
-└──────────────────┘     └──────────────────┘
-```
+| Feature | Description |
+|---------|-------------|
+| **Spec-Driven Development** | JSON manifest is the single source of truth |
+| **Code Generation** | Routes, handlers, and components auto-generated from spec |
+| **Slot System** | Isolated areas where agents safely write business logic |
+| **Guard System** | Enforces architecture rules and prevents contamination |
+| **Transaction API** | Atomic changes with snapshot-based rollback |
+| **MCP Server** | AI agents can directly manipulate the framework |
+| **Island Hydration** | Selective client-side JavaScript for performance |
+| **HMR Support** | Hot Module Replacement for rapid development |
+| **Error Classification** | Intelligent error categorization with fix suggestions |
 
 ---
 
-## 빠른 시작
+## Quick Start
 
-### 1. 새 프로젝트 생성
+### 1. Create a New Project
 
 ```bash
-# Bun 설치 (없는 경우)
+# Install Bun (if not installed)
 curl -fsSL https://bun.sh/install | bash
 
-# 새 프로젝트 생성
-bunx mandu init my-app
+# Create new project
+bunx @mandujs/cli init my-app
 cd my-app
 ```
 
-### 2. 의존성 설치 및 실행
+### 2. Install Dependencies & Run
 
 ```bash
 bun install
 
-# Spec 검증 및 lock 갱신
+# Validate spec and update lock
 bun run spec
 
-# 코드 생성
+# Generate code from spec
 bun run generate
 
-# 개발 서버 실행
+# Run development server
 bun run dev
 ```
 
-### 3. 브라우저에서 확인
+### 3. Open in Browser
 
 ```
-http://localhost:3000      → SSR 페이지
-http://localhost:3000/api/health → API 응답
+http://localhost:3000      → SSR Page
+http://localhost:3000/api/health → API Response
 ```
 
 ---
 
-## 기술 스택
+## Core Principles
 
-| 영역 | 기술 | 선택 이유 |
-|------|------|----------|
-| **Runtime** | Bun | 빠른 속도, 올인원 툴킷, TypeScript 네이티브 |
-| **Language** | TypeScript | 타입 안전성, 에이전트 친화적 |
-| **Frontend** | React | SSR 지원, 생태계 |
-| **Rendering** | SSR (renderToString) | MVP 단순화, 안정성 우선 |
-| **Validation** | Zod | 스키마 검증, 타입 추론 |
-| **DB** | Adapter Interface | 특정 DB/ORM 강제 없음 |
+| # | Principle | Description |
+|---|-----------|-------------|
+| 1 | **Spec = SSOT** | The spec (JSON) is the single source of truth. Code is derived from spec. |
+| 2 | **Generated = Disposable** | Generated code can be deleted and regenerated anytime. |
+| 3 | **Slot = Safe Zone** | Agents only work within designated slots. |
+| 4 | **Guard > Lint** | Minimize linting; Guard is the architecture gatekeeper. |
+| 5 | **Self-Correction** | Built-in auto-retry loops for failure recovery. |
 
 ---
 
-## 프로젝트 구조
+## Project Structure
 
-### 프레임워크 (이 저장소)
+### Framework (This Repository)
 
 ```
 mandu/
 ├── packages/
-│   ├── core/                # @mandujs/core
-│   │   ├── spec/           # 스키마, 로드, 락, 트랜잭션
-│   │   ├── runtime/        # 서버, 라우터, SSR
-│   │   ├── generator/      # 코드 생성기
-│   │   ├── guard/          # 규칙 검사
-│   │   └── report/         # 리포트 빌더
-│   ├── cli/                 # @mandujs/cli
-│   │   └── commands/       # init, spec-upsert, generate, guard, dev
-│   └── mcp/                 # @mandujs/mcp
-│       ├── tools/          # MCP 도구 (spec, generate, transaction, guard, slot)
-│       └── resources/      # MCP 리소스 (manifest, lock, map)
-├── templates/
-│   └── default/            # 기본 프로젝트 템플릿
-└── tests/
+│   ├── core/                 # @mandujs/core
+│   │   ├── spec/            # Schema, load, lock, validation
+│   │   ├── runtime/         # Server, router, SSR
+│   │   ├── generator/       # Code generation engine
+│   │   ├── guard/           # Architecture enforcement
+│   │   ├── bundler/         # Client-side bundling + HMR
+│   │   ├── filling/         # Business logic API (Mandu.filling())
+│   │   ├── error/           # Error classification system
+│   │   ├── change/          # Transaction & history management
+│   │   ├── slot/            # Slot validation & auto-correction
+│   │   └── client/          # Island hydration runtime
+│   │
+│   ├── cli/                  # @mandujs/cli
+│   │   └── commands/        # init, spec-upsert, generate, guard, build, dev
+│   │
+│   └── mcp/                  # @mandujs/mcp
+│       ├── tools/           # MCP tools (20+ tools)
+│       └── resources/       # MCP resources (5 resources)
+│
+└── tests/                    # Framework tests
 ```
 
-### 생성되는 프로젝트
+### Generated Project Structure
 
 ```
 my-app/
 ├── spec/
-│   └── routes.manifest.json    # 라우트 SSOT
+│   ├── routes.manifest.json     # Route definitions (SSOT)
+│   ├── spec.lock.json           # Hash verification
+│   ├── slots/                   # Business logic files
+│   │   ├── users.slot.ts       # Server-side logic
+│   │   └── users.client.ts     # Client-side interactive logic
+│   └── history/                 # Transaction snapshots
+│       ├── changes.json        # Change audit trail
+│       └── *.snapshot.json     # Rollback snapshots
+│
 ├── apps/
 │   ├── server/
-│   │   ├── main.ts             # 서버 엔트리
-│   │   └── generated/routes/   # 생성된 API 핸들러
+│   │   ├── main.ts              # Server entry point
+│   │   └── generated/routes/    # Auto-generated API handlers
+│   │       └── *.route.ts
+│   │
 │   └── web/
-│       ├── entry.tsx           # 웹 엔트리
-│       └── generated/routes/   # 생성된 페이지 컴포넌트
-├── package.json
-└── tsconfig.json
+│       ├── entry.tsx            # Web entry point
+│       ├── generated/routes/    # Auto-generated page components
+│       │   └── *.route.tsx
+│       └── components/          # Shared components
+│
+├── .mandu/
+│   ├── client/                  # Built client bundles
+│   │   ├── _runtime.js         # Hydration runtime
+│   │   ├── _vendor.js          # Shared dependencies (React)
+│   │   └── *.island.js         # Per-route island bundles
+│   └── manifest.json            # Bundle manifest
+│
+└── package.json
 ```
 
 ---
 
-## CLI 명령어
+## CLI Commands
 
-| 명령어 | 설명 |
-|--------|------|
-| `mandu init <name>` | 새 프로젝트 생성 |
-| `mandu spec-upsert` | Spec 파일 검증 및 lock 갱신 |
-| `mandu generate` | Spec에서 코드 생성 |
-| `mandu guard` | Guard 규칙 검사 |
-| `mandu dev` | 개발 서버 실행 |
+### Basic Commands
+
+| Command | Description |
+|---------|-------------|
+| `mandu init <name>` | Create a new project |
+| `mandu spec-upsert` | Validate spec and update lock file |
+| `mandu generate` | Generate code from spec |
+| `mandu guard` | Run architecture checks |
+| `mandu build` | Build client bundles for production |
+| `mandu dev` | Run development server with HMR |
+
+### Transaction Commands
+
+| Command | Description |
+|---------|-------------|
+| `mandu change begin` | Start a transaction (creates snapshot) |
+| `mandu change commit` | Finalize changes |
+| `mandu change rollback` | Restore from snapshot |
+| `mandu change status` | Show current transaction state |
+| `mandu change list` | View change history |
+| `mandu change prune` | Clean old snapshots |
+
+### Command Examples
+
+```bash
+# Initialize project
+bunx @mandujs/cli init my-app
+
+# Development workflow
+bunx mandu spec-upsert          # Validate spec
+bunx mandu generate             # Generate code
+bunx mandu guard                # Check architecture
+bunx mandu dev                  # Run dev server
+
+# Production build
+bunx mandu build --minify       # Build optimized bundles
+
+# Safe changes with transaction
+bunx mandu change begin --message "Add users API"
+# ... make changes ...
+bunx mandu change commit        # Success: finalize
+bunx mandu change rollback      # Failure: restore snapshot
+```
 
 ---
 
-## MCP 서버 (AI 에이전트 통합)
-
-Mandu는 MCP(Model Context Protocol) 서버를 통해 AI 에이전트가 프레임워크를 직접 조작할 수 있습니다.
-
-### 설치 및 설정
-
-`.mcp.json` 파일을 프로젝트 루트에 생성:
-
-```json
-{
-  "mcpServers": {
-    "mandu": {
-      "command": "bun",
-      "args": ["x", "@mandujs/mcp"],
-      "cwd": "/path/to/your/project"
-    }
-  }
-}
-```
-
-### MCP 도구
-
-| 도구 | 설명 |
-|------|------|
-| `mandu_list_routes` | 라우트 목록 조회 |
-| `mandu_add_route` | 새 라우트 추가 |
-| `mandu_generate` | 코드 생성 실행 |
-| `mandu_begin` | 트랜잭션 시작 |
-| `mandu_commit` | 변경 확정 |
-| `mandu_rollback` | 변경 취소 (스냅샷 복원) |
-| `mandu_guard_check` | Guard 규칙 검사 |
-| `mandu_read_slot` | 슬롯 파일 읽기 |
-| `mandu_write_slot` | 슬롯 파일 쓰기 |
-
-### 에이전트 워크플로우 예시
-
-```
-User: "사용자 목록 API를 만들어줘"
-
-Agent:
-1. mandu_begin({ message: "Add users API" })
-2. mandu_add_route({ id: "users-list", pattern: "/api/users", kind: "api", methods: ["GET"] })
-3. mandu_generate()
-4. mandu_write_slot({ routeId: "users-list", content: "..." })
-5. mandu_guard_check()
-6. mandu_commit()
-```
-
-### 트랜잭션 API
-
-모든 spec 변경은 트랜잭션으로 보호됩니다:
-- **begin**: 현재 상태의 스냅샷을 저장하고 트랜잭션 시작
-- **commit**: 변경 확정 및 스냅샷을 히스토리에 저장
-- **rollback**: 실패 시 스냅샷으로 완전 복원 (spec + 슬롯 파일)
-
----
-
-## Guard 시스템
-
-Guard는 아키텍처 보존의 핵심입니다. 다음 규칙을 검사합니다:
-
-| Rule ID | 검사 내용 | 실패 시 안내 |
-|---------|----------|-------------|
-| `SPEC_HASH_MISMATCH` | spec.lock.json 해시 불일치 | `mandu spec-upsert` 실행 |
-| `GENERATED_MANUAL_EDIT` | generated 파일 수동 변경 | `mandu generate` 재실행 |
-| `INVALID_GENERATED_IMPORT` | generated 파일 직접 import | 런타임 레지스트리 사용 |
-| `FORBIDDEN_IMPORT_IN_GENERATED` | generated에서 금지 모듈 import | slot에서 처리 |
-
----
-
-## SSOT Spec 체계
+## Spec System
 
 ### routes.manifest.json
 
@@ -279,83 +265,515 @@ Guard는 아키텍처 보존의 핵심입니다. 다음 규칙을 검사합니�
       "componentModule": "apps/web/generated/routes/home.route.tsx"
     },
     {
-      "id": "health",
-      "pattern": "/api/health",
+      "id": "users-api",
+      "pattern": "/api/users",
       "kind": "api",
-      "module": "apps/server/generated/routes/health.route.ts"
+      "methods": ["GET", "POST"],
+      "module": "apps/server/generated/routes/users-api.route.ts",
+      "slotModule": "spec/slots/users.slot.ts"
+    },
+    {
+      "id": "dashboard",
+      "pattern": "/dashboard",
+      "kind": "page",
+      "module": "apps/server/generated/routes/dashboard.route.ts",
+      "componentModule": "apps/web/generated/routes/dashboard.route.tsx",
+      "slotModule": "spec/slots/dashboard.slot.ts",
+      "clientModule": "spec/slots/dashboard.client.ts",
+      "hydration": {
+        "strategy": "island",
+        "priority": "visible",
+        "preload": true
+      }
     }
   ]
 }
 ```
 
-### spec.lock.json
+### Route Properties
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `id` | Yes | Unique route identifier |
+| `pattern` | Yes | URL pattern (e.g., `/api/users/:id`) |
+| `kind` | Yes | `"api"` or `"page"` |
+| `methods` | No | HTTP methods for API routes |
+| `module` | Yes | Server handler module path |
+| `componentModule` | Page only | React component module path |
+| `slotModule` | No | Business logic module path |
+| `clientModule` | No | Client-side interactive logic |
+| `hydration` | No | Hydration configuration |
+| `loader` | No | SSR data loading configuration |
+
+---
+
+## Slot System (Business Logic)
+
+### Writing Slot Logic
+
+Slots are where you write your business logic using the `Mandu.filling()` API:
+
+```typescript
+// spec/slots/users.slot.ts
+import { Mandu } from "@mandujs/core";
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export default Mandu.filling<{ users: User[] }>()
+  // Data loader (runs on SSR)
+  .loader(async (ctx) => {
+    const users = await fetchUsers();
+    return { users };
+  })
+
+  // Authentication guard
+  .guard(async (ctx) => {
+    if (!ctx.user) {
+      return ctx.unauthorized("Login required");
+    }
+    return ctx.next();
+  })
+
+  // GET /api/users
+  .get((ctx) => {
+    const { users } = ctx.loaderData;
+    return ctx.ok({ data: users });
+  })
+
+  // POST /api/users
+  .post(async (ctx) => {
+    const body = await ctx.body<{ name: string; email: string }>();
+
+    if (!body.name || !body.email) {
+      return ctx.badRequest("Name and email required");
+    }
+
+    const newUser = await createUser(body);
+    return ctx.created({ data: newUser });
+  })
+
+  // GET /api/users/:id
+  .get("/:id", async (ctx) => {
+    const user = await findUser(ctx.params.id);
+
+    if (!user) {
+      return ctx.notFound("User not found");
+    }
+
+    return ctx.ok({ data: user });
+  })
+
+  // DELETE /api/users/:id
+  .delete("/:id", async (ctx) => {
+    await deleteUser(ctx.params.id);
+    return ctx.noContent();
+  });
+```
+
+### Context API
+
+| Method | Description |
+|--------|-------------|
+| `ctx.ok(data)` | 200 OK response |
+| `ctx.created(data)` | 201 Created response |
+| `ctx.noContent()` | 204 No Content response |
+| `ctx.badRequest(message)` | 400 Bad Request |
+| `ctx.unauthorized(message)` | 401 Unauthorized |
+| `ctx.forbidden(message)` | 403 Forbidden |
+| `ctx.notFound(message)` | 404 Not Found |
+| `ctx.body<T>()` | Parse request body |
+| `ctx.params` | Route parameters |
+| `ctx.query` | Query string parameters |
+| `ctx.headers` | Request headers |
+| `ctx.user` | Authenticated user (if any) |
+| `ctx.loaderData` | Data from loader |
+
+---
+
+## Island Hydration
+
+### What are Islands?
+
+Islands are interactive components that get hydrated on the client while the rest of the page remains static HTML. This approach delivers:
+
+- **Faster Initial Load**: Most of the page is static HTML
+- **Better Performance**: Only interactive parts load JavaScript
+- **SEO Friendly**: Full HTML content for search engines
+
+### Hydration Strategies
+
+| Strategy | Description | Use Case |
+|----------|-------------|----------|
+| `none` | Pure static HTML, no JavaScript | SEO-critical, read-only pages |
+| `island` | Partial hydration (default) | Mixed static + interactive |
+| `full` | Entire page hydrated | SPA-like interactive pages |
+| `progressive` | Lazy sequential hydration | Large pages, performance |
+
+### Hydration Priorities
+
+| Priority | When JavaScript Loads | Use Case |
+|----------|----------------------|----------|
+| `immediate` | On page load | Critical interactions |
+| `visible` | When in viewport (default) | Below-the-fold content |
+| `idle` | During browser idle time | Non-critical features |
+| `interaction` | On user interaction | Lazy activation |
+
+### Creating an Island
+
+1. **Add client module to route:**
 
 ```json
 {
-  "routesHash": "sha256...",
-  "updatedAt": "2025-01-22T00:00:00.000Z"
+  "id": "counter",
+  "pattern": "/counter",
+  "kind": "page",
+  "module": "apps/server/generated/routes/counter.route.ts",
+  "componentModule": "apps/web/generated/routes/counter.route.tsx",
+  "clientModule": "spec/slots/counter.client.ts",
+  "hydration": {
+    "strategy": "island",
+    "priority": "visible"
+  }
+}
+```
+
+2. **Write the client component:**
+
+```typescript
+// spec/slots/counter.client.ts
+import React, { useState } from "react";
+
+export default function Counter({ initialCount = 0 }) {
+  const [count, setCount] = useState(initialCount);
+
+  return (
+    <div className="counter-island">
+      <h2>Interactive Counter</h2>
+      <p className="count">{count}</p>
+      <button onClick={() => setCount(count - 1)}>-</button>
+      <button onClick={() => setCount(count + 1)}>+</button>
+    </div>
+  );
+}
+```
+
+3. **Build and run:**
+
+```bash
+bunx mandu build       # Build client bundles
+bunx mandu dev         # Or run dev server with HMR
+```
+
+---
+
+## Hot Module Replacement (HMR)
+
+### How HMR Works
+
+During development, Mandu watches for changes to `.client.ts` files and automatically:
+
+1. Rebuilds the affected island bundle
+2. Notifies connected browsers via WebSocket
+3. Triggers a page reload (or targeted island update)
+
+### HMR Features
+
+- **WebSocket Server**: Runs on port + 1 (e.g., 3001 for dev server on 3000)
+- **Auto-Reconnection**: Reconnects automatically if connection lost
+- **Error Overlay**: Shows build errors directly in browser
+- **File Watching**: Watches `spec/slots/*.client.ts` files
+
+### Development Server Output
+
+```
+🥟 Mandu Dev Server
+📄 Spec file: /path/to/spec/routes.manifest.json
+
+✅ Spec loaded: 5 routes
+  📄 Page: / -> home
+  📡 API: /api/health -> health
+  📄 Page: /counter -> counter 🏝️    ← Island indicator
+
+🔥 HMR server running on ws://localhost:3001
+🔨 Initial client bundle build...
+✅ Built 1 island
+👀 Watching for client slot changes...
+🥟 Mandu Dev Server running at http://localhost:3000
+🔥 HMR enabled on port 3001
+```
+
+---
+
+## Guard System
+
+Guard enforces architecture preservation by checking:
+
+| Rule | What it Checks | Fix Command |
+|------|---------------|-------------|
+| `SPEC_HASH_MISMATCH` | spec.lock.json hash matches spec | `mandu spec-upsert` |
+| `GENERATED_MANUAL_EDIT` | "DO NOT EDIT" marker intact | `mandu generate` |
+| `INVALID_GENERATED_IMPORT` | No imports from /generated/ | Use runtime registry |
+| `FORBIDDEN_IMPORT_IN_GENERATED` | No fs, child_process, etc. | Move logic to slot |
+| `SLOT_NOT_FOUND` | Slot file exists if specified | `mandu generate` |
+
+### Running Guard
+
+```bash
+# Check all rules
+bunx mandu guard
+
+# Check with auto-correction
+bunx mandu guard --auto-correct
+```
+
+---
+
+## MCP Server (AI Agent Integration)
+
+Mandu includes a full MCP (Model Context Protocol) server that allows AI agents to directly interact with the framework.
+
+### Setup
+
+Create `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "mandu": {
+      "command": "bunx",
+      "args": ["@mandujs/mcp"],
+      "cwd": "/path/to/your/project"
+    }
+  }
+}
+```
+
+### Available MCP Tools
+
+#### Spec Management
+
+| Tool | Description |
+|------|-------------|
+| `mandu_list_routes` | List all routes |
+| `mandu_get_route` | Get specific route details |
+| `mandu_add_route` | Add a new route |
+| `mandu_update_route` | Modify existing route |
+| `mandu_delete_route` | Remove a route |
+| `mandu_validate_spec` | Validate manifest |
+
+#### Code Generation
+
+| Tool | Description |
+|------|-------------|
+| `mandu_generate` | Run code generation |
+
+#### Transaction Management
+
+| Tool | Description |
+|------|-------------|
+| `mandu_begin` | Start transaction with snapshot |
+| `mandu_commit` | Finalize changes |
+| `mandu_rollback` | Restore from snapshot |
+| `mandu_tx_status` | Get transaction state |
+
+#### Slot Management
+
+| Tool | Description |
+|------|-------------|
+| `mandu_read_slot` | Read slot file content |
+| `mandu_write_slot` | Write slot file (with auto-correction) |
+| `mandu_validate_slot` | Validate slot syntax |
+
+#### Guard & Validation
+
+| Tool | Description |
+|------|-------------|
+| `mandu_guard_check` | Run all guard checks |
+| `mandu_analyze_error` | Analyze error and get fix suggestions |
+
+#### Hydration & Build
+
+| Tool | Description |
+|------|-------------|
+| `mandu_build` | Build client bundles |
+| `mandu_build_status` | Get bundle statistics |
+| `mandu_list_islands` | List routes with hydration |
+| `mandu_set_hydration` | Configure hydration strategy |
+| `mandu_add_client_slot` | Create client slot for route |
+
+#### History
+
+| Tool | Description |
+|------|-------------|
+| `mandu_list_changes` | View change history |
+| `mandu_prune_history` | Clean old snapshots |
+
+### MCP Resources
+
+| URI | Description |
+|-----|-------------|
+| `mandu://spec/manifest` | Current routes.manifest.json |
+| `mandu://spec/lock` | Current spec.lock.json |
+| `mandu://generated/map` | Generated files mapping |
+| `mandu://transaction/active` | Active transaction state |
+| `mandu://slots/{routeId}` | Slot file content |
+
+### Agent Workflow Example
+
+```
+User: "Create a users list API with pagination"
+
+Agent:
+1. mandu_begin({ message: "Add users API with pagination" })
+   → Creates snapshot, returns changeId
+
+2. mandu_add_route({
+     id: "users-list",
+     pattern: "/api/users",
+     kind: "api",
+     methods: ["GET", "POST"],
+     slotModule: "spec/slots/users.slot.ts"
+   })
+   → Updates routes.manifest.json
+
+3. mandu_generate()
+   → Creates route handlers
+
+4. mandu_write_slot({
+     routeId: "users-list",
+     content: `
+       import { Mandu } from "@mandujs/core";
+
+       export default Mandu.filling()
+         .get(async (ctx) => {
+           const page = parseInt(ctx.query.page) || 1;
+           const limit = parseInt(ctx.query.limit) || 10;
+           const users = await getUsers({ page, limit });
+           return ctx.ok({ data: users, page, limit });
+         })
+         .post(async (ctx) => {
+           const body = await ctx.body();
+           const user = await createUser(body);
+           return ctx.created({ data: user });
+         });
+     `,
+     autoCorrect: true
+   })
+   → Writes business logic, auto-fixes issues
+
+5. mandu_guard_check()
+   → Validates architecture
+
+6. mandu_commit()
+   → Finalizes transaction
+
+Result: New API ready with full rollback capability
+```
+
+---
+
+## Error Handling System
+
+### Error Classification
+
+Mandu automatically classifies errors into three types:
+
+| Type | Description | Typical Cause |
+|------|-------------|---------------|
+| `SPEC_ERROR` | Manifest/validation issues | Invalid JSON, missing required fields |
+| `LOGIC_ERROR` | Slot runtime failures | Business logic bugs, database errors |
+| `FRAMEWORK_BUG` | Generated code errors | Should not occur; indicates framework issue |
+
+### Error Response Format
+
+```json
+{
+  "errorType": "LOGIC_ERROR",
+  "code": "SLOT_RUNTIME_ERROR",
+  "message": "Cannot read property 'id' of undefined",
+  "summary": "Null reference in users.slot.ts",
+  "fix": {
+    "file": "spec/slots/users.slot.ts",
+    "line": 15,
+    "suggestion": "Check that user object exists before accessing .id"
+  },
+  "route": {
+    "id": "users-api",
+    "pattern": "/api/users/:id"
+  },
+  "timestamp": "2025-01-28T12:00:00.000Z"
 }
 ```
 
 ---
 
-## 로드맵
+## Tech Stack
 
-### MVP-0.1 ✅
-- Spec 기반 라우트 생성 + 최소 SSR
-- Guard: spec/generated 오염 방지
-- CLI: init / spec-upsert / generate / guard / dev
-
-### MVP-0.3 (현재) ✅
-- route-logic 슬롯 시스템
-- **MCP 서버** (`@mandujs/mcp`)
-- **트랜잭션 API** (begin/commit/rollback)
-- **스냅샷 기반 히스토리**
-- **에러 분류 시스템** (SPEC_ERROR / LOGIC_ERROR / FRAMEWORK_BUG)
-
-### MVP-0.4
-- Self-correction loop
-- 기본 테스트 템플릿
-
-### MVP-0.5
-- WebSocket 플랫폼
-- channel-logic 슬롯
-- Contract-first API
-
-### MVP-1.0
-- ISR (public only)
-- CacheStore adapter
-- Distributed WS mode
+| Area | Technology | Reason |
+|------|------------|--------|
+| **Runtime** | Bun | Fast, all-in-one toolkit, native TypeScript |
+| **Language** | TypeScript | Type safety, agent-friendly |
+| **Frontend** | React | SSR support, ecosystem |
+| **Rendering** | SSR (renderToString) | SEO, performance |
+| **Validation** | Zod | Schema validation, type inference |
+| **Protocol** | MCP | AI agent integration |
 
 ---
 
-## 개발 (프레임워크 기여)
+## Roadmap
+
+### v0.4.x (Current)
+- [x] Island hydration system
+- [x] HMR (Hot Module Replacement)
+- [x] MCP server with 20+ tools
+- [x] Transaction API with snapshots
+- [x] Error classification system
+- [x] Slot auto-correction
+
+### v0.5.x (Next)
+- [ ] WebSocket platform
+- [ ] Channel-logic slots
+- [ ] Contract-first API
+- [ ] Improved test templates
+
+### v1.0.x
+- [ ] ISR (Incremental Static Regeneration)
+- [ ] CacheStore adapter
+- [ ] Distributed WebSocket mode
+- [ ] Production deployment guides
+
+---
+
+## Contributing
 
 ```bash
-# 저장소 클론
-git clone https://github.com/your-org/mandu.git
+# Clone repository
+git clone https://github.com/konamgil/mandu.git
 cd mandu
 
-# 의존성 설치
+# Install dependencies
 bun install
 
-# 테스트 실행
+# Run tests
 bun test
 
-# CLI 테스트
-bun run mandu --help
+# Test CLI locally
+bun run packages/cli/src/main.ts --help
 ```
 
 ---
 
-## 왜 "만두"인가?
+## Why "Mandu"?
 
-만두처럼 **겉(generated)은 일정하고, 속(slot)만 다양하게** 만들 수 있는 구조.
-에이전트가 아무리 코딩해도 만두 모양(아키텍처)은 유지됩니다. 🥟
+Like a dumpling (mandu), the **wrapper (generated code) stays consistent** while the **filling (slot) can vary infinitely**. No matter how much agents code, the dumpling shape (architecture) is preserved. 🥟
 
 ---
 
-## 라이선스
+## License
 
 MIT
 
