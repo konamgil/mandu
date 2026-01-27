@@ -220,12 +220,14 @@ export * as ReactDOMClient from 'react-dom/client';
  * Island 엔트리 래퍼 생성
  */
 function generateIslandEntry(routeId: string, clientModulePath: string): string {
+  // Windows 경로의 백슬래시를 슬래시로 변환 (JS escape 문제 방지)
+  const normalizedPath = clientModulePath.replace(/\\/g, "/");
   return `
 /**
  * Mandu Island Entry: ${routeId} (Generated)
  */
 
-import island from "${clientModulePath}";
+import island from "${normalizedPath}";
 import { registerIsland } from "./_runtime.js";
 
 registerIsland("${routeId}", () => island);
