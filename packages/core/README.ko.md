@@ -1,36 +1,36 @@
 # @mandujs/core
 
-> English | **[한국어](./README.ko.md)**
+> **[English](./README.md)** | 한국어
 
 Mandu Framework Core - Spec, Generator, Guard, Runtime
 
-## Installation
+## 설치
 
 ```bash
 bun add @mandujs/core
 ```
 
-> Typically used through `@mandujs/cli`. Direct usage is for advanced use cases.
+> 일반적으로 `@mandujs/cli`를 통해 사용합니다. 직접 사용은 고급 사용 사례입니다.
 
-## Module Structure
+## 모듈 구조
 
 ```
 @mandujs/core
-├── spec/      # Spec schema and loading
-├── generator/ # Code generation
-├── guard/     # Architecture checking and auto-correction
-├── runtime/   # Server and router
-└── report/    # Guard report generation
+├── spec/      # Spec 스키마 및 로딩
+├── generator/ # 코드 생성
+├── guard/     # 아키텍처 검사 및 자동 수정
+├── runtime/   # 서버 및 라우터
+└── report/    # Guard 리포트 생성
 ```
 
-## Spec Module
+## Spec 모듈
 
-Route manifest schema definition and loading.
+라우트 manifest 스키마 정의 및 로딩.
 
 ```typescript
 import { loadManifest, RoutesManifest, RouteSpec } from "@mandujs/core";
 
-// Load and validate manifest
+// manifest 로드 및 검증
 const result = await loadManifest("spec/routes.manifest.json");
 
 if (result.success && result.data) {
@@ -41,33 +41,33 @@ if (result.success && result.data) {
 }
 ```
 
-### Lock File
+### Lock 파일
 
 ```typescript
 import { writeLock, readLock } from "@mandujs/core";
 
-// Write lock file
+// lock 파일 쓰기
 const lock = await writeLock("spec/spec.lock.json", manifest);
 console.log(lock.routesHash);
 
-// Read lock file
+// lock 파일 읽기
 const existing = await readLock("spec/spec.lock.json");
 ```
 
-## Generator Module
+## Generator 모듈
 
-Spec-based code generation.
+Spec 기반 코드 생성.
 
 ```typescript
 import { generateRoutes, GenerateResult } from "@mandujs/core";
 
 const result: GenerateResult = await generateRoutes(manifest, "./");
 
-console.log("Created:", result.created);
-console.log("Skipped:", result.skipped);  // Existing slot files
+console.log("생성됨:", result.created);
+console.log("건너뜀:", result.skipped);  // 이미 존재하는 slot 파일
 ```
 
-### Template Functions
+### 템플릿 함수
 
 ```typescript
 import {
@@ -77,19 +77,19 @@ import {
   generatePageComponent
 } from "@mandujs/core";
 
-// Generate API handler
+// API 핸들러 생성
 const code = generateApiHandler(route);
 
-// API handler with slot
+// Slot이 있는 API 핸들러
 const codeWithSlot = generateApiHandlerWithSlot(route);
 
-// Slot logic file
+// Slot 로직 파일
 const slotCode = generateSlotLogic(route);
 ```
 
-## Guard Module
+## Guard 모듈
 
-Architecture rule checking and auto-correction.
+아키텍처 규칙 검사 및 자동 수정.
 
 ```typescript
 import {
@@ -99,7 +99,7 @@ import {
   GuardViolation
 } from "@mandujs/core";
 
-// Run check
+// 검사 실행
 const result: GuardResult = await runGuardCheck(manifest, "./");
 
 if (!result.passed) {
@@ -107,26 +107,26 @@ if (!result.passed) {
     console.log(`${v.rule}: ${v.message}`);
   });
 
-  // Run auto-correction
+  // 자동 수정 실행
   const corrected = await runAutoCorrect(result.violations, manifest, "./");
-  console.log("Fixed:", corrected.steps);
-  console.log("Remaining violations:", corrected.remainingViolations);
+  console.log("수정됨:", corrected.steps);
+  console.log("남은 위반:", corrected.remainingViolations);
 }
 ```
 
-### Guard Rules
+### Guard 규칙
 
-| Rule ID | Description | Auto-correctable |
-|---------|-------------|------------------|
-| `SPEC_HASH_MISMATCH` | Spec and lock hash mismatch | ✅ |
-| `GENERATED_MANUAL_EDIT` | Manual edit to generated file | ✅ |
-| `HANDLER_NOT_FOUND` | Handler file not found | ❌ |
-| `COMPONENT_NOT_FOUND` | Component file not found | ❌ |
-| `SLOT_NOT_FOUND` | Slot file not found | ✅ |
+| 규칙 ID | 설명 | 자동 수정 |
+|---------|------|----------|
+| `SPEC_HASH_MISMATCH` | spec과 lock 해시 불일치 | ✅ |
+| `GENERATED_MANUAL_EDIT` | generated 파일 수동 수정 | ✅ |
+| `HANDLER_NOT_FOUND` | 핸들러 파일 없음 | ❌ |
+| `COMPONENT_NOT_FOUND` | 컴포넌트 파일 없음 | ❌ |
+| `SLOT_NOT_FOUND` | slot 파일 없음 | ✅ |
 
-## Runtime Module
+## Runtime 모듈
 
-Server startup and routing.
+서버 시작 및 라우팅.
 
 ```typescript
 import {
@@ -135,33 +135,33 @@ import {
   registerPageLoader
 } from "@mandujs/core";
 
-// Register API handler
+// API 핸들러 등록
 registerApiHandler("getUsers", async (req) => {
   return { users: [] };
 });
 
-// Register page loader
+// 페이지 로더 등록
 registerPageLoader("homePage", () => import("./pages/Home"));
 
-// Start server
+// 서버 시작
 const server = startServer(manifest, { port: 3000 });
 
-// Stop
+// 종료
 server.stop();
 ```
 
-## Report Module
+## Report 모듈
 
-Guard result report generation.
+Guard 결과 리포트 생성.
 
 ```typescript
 import { buildGuardReport } from "@mandujs/core";
 
 const report = buildGuardReport(guardResult, lockPath);
-console.log(report);  // Formatted text report
+console.log(report);  // 포맷된 텍스트 리포트
 ```
 
-## Types
+## 타입
 
 ```typescript
 import type {
@@ -176,16 +176,16 @@ import type {
 } from "@mandujs/core";
 ```
 
-## Requirements
+## 요구 사항
 
 - Bun >= 1.0.0
 - React >= 18.0.0
 - Zod >= 3.0.0
 
-## Related Packages
+## 관련 패키지
 
-- [@mandujs/cli](https://www.npmjs.com/package/@mandujs/cli) - CLI tool
+- [@mandujs/cli](https://www.npmjs.com/package/@mandujs/cli) - CLI 도구
 
-## License
+## 라이선스
 
 MIT

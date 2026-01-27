@@ -1,61 +1,63 @@
 # @mandujs/cli
 
-Agent-Native Fullstack Framework CLI - 에이전트가 코딩해도 아키텍처가 무너지지 않는 개발 OS
+> English | **[한국어](./README.ko.md)**
 
-## 설치
+Agent-Native Fullstack Framework CLI - A development OS where architecture stays intact even when AI agents write your code
+
+## Installation
 
 ```bash
-# Bun 필수
+# Bun required
 bun add -D @mandujs/cli
 ```
 
-## 빠른 시작
+## Quick Start
 
 ```bash
-# 새 프로젝트 생성
+# Create a new project
 bunx @mandujs/cli init my-app
 cd my-app
 
-# 개발 서버 시작
+# Start development server
 bun run dev
 ```
 
-## 명령어
+## Commands
 
 ### `mandu init <project-name>`
 
-새 Mandu 프로젝트를 생성합니다.
+Creates a new Mandu project.
 
 ```bash
 bunx @mandujs/cli init my-app
 ```
 
-생성되는 구조:
+Generated structure:
 ```
 my-app/
 ├── apps/
-│   ├── server/main.ts    # 서버 진입점
-│   └── web/entry.tsx     # 클라이언트 진입점
+│   ├── server/main.ts    # Server entry point
+│   └── web/entry.tsx     # Client entry point
 ├── spec/
-│   └── routes.manifest.json  # SSOT - 라우트 정의
-├── tests/                # 테스트 템플릿
+│   └── routes.manifest.json  # SSOT - Route definitions
+├── tests/                # Test templates
 ├── package.json
 └── tsconfig.json
 ```
 
 ### `mandu dev`
 
-개발 서버를 시작합니다 (HMR 지원).
+Starts the development server (with HMR support).
 
 ```bash
 bun run dev
-# 또는
+# or
 bunx mandu dev
 ```
 
 ### `mandu spec`
 
-spec 파일을 검증하고 lock 파일을 갱신합니다.
+Validates the spec file and updates the lock file.
 
 ```bash
 bun run spec
@@ -63,7 +65,7 @@ bun run spec
 
 ### `mandu generate`
 
-spec 기반으로 코드를 생성합니다.
+Generates code based on the spec.
 
 ```bash
 bun run generate
@@ -71,23 +73,23 @@ bun run generate
 
 ### `mandu guard`
 
-아키텍처 규칙을 검사하고 위반 사항을 자동 수정합니다.
+Checks architecture rules and auto-corrects violations.
 
 ```bash
 bun run guard
 
-# 자동 수정 비활성화
+# Disable auto-correction
 bunx mandu guard --no-auto-correct
 ```
 
-자동 수정 가능한 규칙:
-- `SPEC_HASH_MISMATCH` → lock 파일 갱신
-- `GENERATED_MANUAL_EDIT` → 코드 재생성
-- `SLOT_NOT_FOUND` → slot 파일 생성
+Auto-correctable rules:
+- `SPEC_HASH_MISMATCH` → Updates lock file
+- `GENERATED_MANUAL_EDIT` → Regenerates code
+- `SLOT_NOT_FOUND` → Creates slot file
 
-## Spec 파일 작성
+## Writing Spec Files
 
-`spec/routes.manifest.json`이 모든 라우트의 단일 진실 공급원(SSOT)입니다.
+`spec/routes.manifest.json` is the Single Source of Truth (SSOT) for all routes.
 
 ```json
 {
@@ -110,9 +112,9 @@ bunx mandu guard --no-auto-correct
 }
 ```
 
-### Slot 시스템 (v0.2.0+)
+### Slot System (v0.2.0+)
 
-비즈니스 로직을 분리하려면 `slotModule`을 추가합니다:
+Add `slotModule` to separate business logic:
 
 ```json
 {
@@ -124,47 +126,47 @@ bunx mandu guard --no-auto-correct
 }
 ```
 
-- `*.generated.ts` - 프레임워크가 관리 (수정 금지)
-- `*.slot.ts` - 개발자가 작성하는 비즈니스 로직
+- `*.generated.ts` - Managed by framework (do not modify)
+- `*.slot.ts` - Business logic written by developers
 
-## 개발 워크플로우
+## Development Workflow
 
 ```bash
-# 1. spec 수정
-# 2. spec 검증 및 lock 갱신
+# 1. Edit spec
+# 2. Validate spec and update lock
 bun run spec
 
-# 3. 코드 생성
+# 3. Generate code
 bun run generate
 
-# 4. 아키텍처 검사
+# 4. Check architecture
 bun run guard
 
-# 5. 테스트
+# 5. Run tests
 bun test
 
-# 6. 개발 서버
+# 6. Start dev server
 bun run dev
 ```
 
-## 테스트
+## Testing
 
-Bun 테스트 프레임워크를 기본 지원합니다.
+Built-in support for Bun test framework.
 
 ```bash
-bun test           # 테스트 실행
-bun test --watch   # 감시 모드
+bun test           # Run tests
+bun test --watch   # Watch mode
 ```
 
-## 요구 사항
+## Requirements
 
 - Bun >= 1.0.0
 - React >= 18.0.0
 
-## 관련 패키지
+## Related Packages
 
-- [@mandujs/core](https://www.npmjs.com/package/@mandujs/core) - 핵심 런타임
+- [@mandujs/core](https://www.npmjs.com/package/@mandujs/core) - Core runtime
 
-## 라이선스
+## License
 
 MIT
