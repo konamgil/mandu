@@ -35,7 +35,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     return false;
   }
 
-  const manifest = specResult.manifest;
+  const manifest = specResult.data!;
   console.log(`✅ Spec 로드 완료: ${manifest.routes.length}개 라우트`);
 
   // 2. Hydration이 필요한 라우트 확인
