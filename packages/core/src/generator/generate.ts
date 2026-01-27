@@ -1,5 +1,6 @@
 import type { RoutesManifest, RouteSpec } from "../spec/schema";
 import { generateApiHandler, generatePageComponent, generateSlotLogic } from "./templates";
+import { computeHash } from "../spec/lock";
 import path from "path";
 import fs from "fs/promises";
 
@@ -20,10 +21,64 @@ export interface GenerateResult {
   errors: string[];
 }
 
+/**
+ * Spec 파일 정보
+ */
+export interface SpecSource {
+  /** Spec 파일 경로 */
+  path: string;
+  /** SHA256 해시 */
+  hash: string;
+}
+
+/**
+ * Spec 내 라우트 위치 정보
+ */
+export interface SpecLocation {
+  /** Spec 파일 경로 */
+  file: string;
+  /** routes 배열 내 인덱스 */
+  routeIndex: number;
+  /** JSON 경로 (예: "routes[0]") */
+  jsonPath: string;
+}
+
+/**
+ * Slot 파일 매핑 정보
+ */
+export interface SlotMapping {
+  /** Slot 파일 경로 */
+  slotPath: string;
+}
+
+/**
+ * Generated 파일 엔트리
+ */
+export interface GeneratedFileEntry {
+  /** 라우트 ID */
+  routeId: string;
+  /** 라우트 종류 */
+  kind: "api" | "page";
+  /** Spec 내 위치 */
+  specLocation: SpecLocation;
+  /** Slot 매핑 (있는 경우) */
+  slotMapping?: SlotMapping;
+}
+
+/**
+ * Generated Map 구조
+ */
 export interface GeneratedMap {
+  /** 버전 */
   version: number;
+  /** 생성 시각 */
   generatedAt: string;
-  files: Record<string, { routeId: string; kind: string }>;
+  /** Spec 소스 정보 */
+  specSource: SpecSource;
+  /** 생성된 파일 매핑 */
+  files: Record<string, GeneratedFileEntry>;
+  /** 프레임워크 내부 파일 패턴 */
+  frameworkPaths: string[];
 }
 
 async function ensureDir(dirPath: string): Promise<void> {
@@ -66,14 +121,37 @@ export async function generateRoutes(
   const generatedMap: GeneratedMap = {
     version: manifest.version,
     generatedAt: new Date().toISOString(),
+    specSource: {
+      path: "spec/routes.manifest.json",
+      hash: computeHash(manifest),
+    },
     files: {},
+    frameworkPaths: [
+      "@mandujs/core",
+      "packages/core/src",
+      "node_modules/@mandujs",
+    ],
   };
 
   const expectedServerFiles = new Set<string>();
   const expectedWebFiles = new Set<string>();
 
-  for (const route of manifest.routes) {
+  for (let routeIndex = 0; routeIndex < manifest.routes.length; routeIndex++) {
+    const route = manifest.routes[routeIndex];
+
     try {
+      // Spec 위치 정보
+      const specLocation: SpecLocation = {
+        file: "spec/routes.manifest.json",
+        routeIndex,
+        jsonPath: `routes[${routeIndex}]`,
+      };
+
+      // Slot 매핑 정보 (있는 경우)
+      const slotMapping: SlotMapping | undefined = route.slotModule
+        ? { slotPath: route.slotModule }
+        : undefined;
+
       // Server handler
       const serverFileName = `${route.id}.route.ts`;
       const serverFilePath = path.join(serverRoutesDir, serverFileName);
@@ -85,7 +163,9 @@ export async function generateRoutes(
 
       generatedMap.files[`apps/server/generated/routes/${serverFileName}`] = {
         routeId: route.id,
-        kind: route.kind,
+        kind: route.kind as "api" | "page",
+        specLocation,
+        slotMapping,
       };
 
       // Slot file (only if slotModule is specified)
@@ -119,6 +199,8 @@ export async function generateRoutes(
         generatedMap.files[`apps/web/generated/routes/${webFileName}`] = {
           routeId: route.id,
           kind: route.kind,
+          specLocation,
+          slotMapping,
         };
       }
     } catch (error) {

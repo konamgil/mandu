@@ -3,6 +3,13 @@ import type { RoutesManifest } from "../spec/schema";
 import { Router } from "./router";
 import { renderSSR } from "./ssr";
 import React from "react";
+import {
+  formatErrorResponse,
+  createNotFoundResponse,
+  createHandlerNotFoundResponse,
+  createPageLoadErrorResponse,
+  createSSRErrorResponse,
+} from "../error";
 
 export interface ServerOptions {
   port?: number;
@@ -70,7 +77,11 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
   const match = router.match(pathname);
 
   if (!match) {
-    return new Response("Not Found", { status: 404 });
+    const error = createNotFoundResponse(pathname);
+    const response = formatErrorResponse(error, {
+      isDev: process.env.NODE_ENV !== "production",
+    });
+    return Response.json(response, { status: 404 });
   }
 
   const { route, params } = match;
@@ -78,7 +89,11 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
   if (route.kind === "api") {
     const handler = apiHandlers.get(route.id);
     if (!handler) {
-      return Response.json({ error: "Handler not found" }, { status: 500 });
+      const error = createHandlerNotFoundResponse(route.id, route.pattern);
+      const response = formatErrorResponse(error, {
+        isDev: process.env.NODE_ENV !== "production",
+      });
+      return Response.json(response, { status: 500 });
     }
     return handler(req, params);
   }
@@ -89,23 +104,58 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
       try {
         const module = await loader();
         registerRouteComponent(route.id, module.default);
-      } catch (error) {
-        console.error(`Failed to load page module for ${route.id}:`, error);
-        return new Response("Internal Server Error", { status: 500 });
+      } catch (err) {
+        const pageError = createPageLoadErrorResponse(
+          route.id,
+          route.pattern,
+          err instanceof Error ? err : new Error(String(err))
+        );
+        console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
+        const response = formatErrorResponse(pageError, {
+          isDev: process.env.NODE_ENV !== "production",
+        });
+        return Response.json(response, { status: 500 });
       }
     }
 
     const appCreator = createAppFn || defaultCreateApp;
-    const app = appCreator({
-      routeId: route.id,
-      url: req.url,
-      params,
-    });
+    try {
+      const app = appCreator({
+        routeId: route.id,
+        url: req.url,
+        params,
+      });
 
-    return renderSSR(app, { title: `${route.id} - Mandu` });
+      return renderSSR(app, { title: `${route.id} - Mandu` });
+    } catch (err) {
+      const ssrError = createSSRErrorResponse(
+        route.id,
+        route.pattern,
+        err instanceof Error ? err : new Error(String(err))
+      );
+      console.error(`[Mandu] ${ssrError.errorType}:`, ssrError.message);
+      const response = formatErrorResponse(ssrError, {
+        isDev: process.env.NODE_ENV !== "production",
+      });
+      return Response.json(response, { status: 500 });
+    }
   }
 
-  return new Response("Unknown route kind", { status: 500 });
+  return Response.json({
+    errorType: "FRAMEWORK_BUG",
+    code: "MANDU_F003",
+    message: `Unknown route kind: ${route.kind}`,
+    summary: "알 수 없는 라우트 종류 - 프레임워크 버그",
+    fix: {
+      file: "spec/routes.manifest.json",
+      suggestion: "라우트의 kind는 'api' 또는 'page'여야 합니다",
+    },
+    route: {
+      id: route.id,
+      pattern: route.pattern,
+    },
+    timestamp: new Date().toISOString(),
+  }, { status: 500 });
 }
 
 export function startServer(manifest: RoutesManifest, options: ServerOptions = {}): ManduServer {
