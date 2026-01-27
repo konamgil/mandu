@@ -15,10 +15,14 @@ export type Guard = (ctx: ManduContext) => symbol | Response | Promise<symbol | 
 /** HTTP methods */
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
 
-interface FillingConfig {
+/** Loader function type - SSR 데이터 로딩 */
+export type Loader<T = unknown> = (ctx: ManduContext) => T | Promise<T>;
+
+interface FillingConfig<TLoaderData = unknown> {
   handlers: Map<HttpMethod, Handler>;
   guards: Guard[];
   methodGuards: Map<HttpMethod, Guard[]>;
+  loader?: Loader<TLoaderData>;
 }
 
 /**
@@ -30,13 +34,63 @@ interface FillingConfig {
  *   .get(ctx => ctx.ok({ message: 'Hello!' }))
  *   .post(ctx => ctx.created({ id: 1 }))
  * ```
+ *
+ * @example with loader
+ * ```typescript
+ * export default Mandu.filling<{ todos: Todo[] }>()
+ *   .loader(async (ctx) => {
+ *     const todos = await db.todos.findMany();
+ *     return { todos };
+ *   })
+ *   .get(ctx => ctx.ok(ctx.get('loaderData')))
+ * ```
  */
-export class ManduFilling {
-  private config: FillingConfig = {
+export class ManduFilling<TLoaderData = unknown> {
+  private config: FillingConfig<TLoaderData> = {
     handlers: new Map(),
     guards: [],
     methodGuards: new Map(),
   };
+
+  // ============================================
+  // 🥟 SSR Loader
+  // ============================================
+
+  /**
+   * Define SSR data loader
+   * 페이지 렌더링 전 서버에서 데이터를 로드합니다.
+   * 로드된 데이터는 클라이언트로 전달되어 hydration에 사용됩니다.
+   *
+   * @example
+   * ```typescript
+   * .loader(async (ctx) => {
+   *   const todos = await db.todos.findMany();
+   *   return { todos, user: ctx.get('user') };
+   * })
+   * ```
+   */
+  loader(loaderFn: Loader<TLoaderData>): this {
+    this.config.loader = loaderFn;
+    return this;
+  }
+
+  /**
+   * Execute loader and return data
+   * @internal Used by SSR runtime
+   */
+  async executeLoader(ctx: ManduContext): Promise<TLoaderData | undefined> {
+    if (!this.config.loader) {
+      return undefined;
+    }
+    return await this.config.loader(ctx);
+  }
+
+  /**
+   * Check if loader is defined
+   */
+  hasLoader(): boolean {
+    return !!this.config.loader;
+  }
 
   // ============================================
   // 🥟 HTTP Method Handlers
@@ -242,9 +296,26 @@ export const Mandu = {
    * export default Mandu.filling()
    *   .get(ctx => ctx.ok({ message: 'Hello!' }))
    * ```
+   *
+   * @example with loader data type
+   * ```typescript
+   * import { Mandu } from '@mandujs/core'
+   *
+   * interface LoaderData {
+   *   todos: Todo[];
+   *   user: User | null;
+   * }
+   *
+   * export default Mandu.filling<LoaderData>()
+   *   .loader(async (ctx) => {
+   *     const todos = await db.todos.findMany();
+   *     return { todos, user: null };
+   *   })
+   *   .get(ctx => ctx.ok(ctx.get('loaderData')))
+   * ```
    */
-  filling(): ManduFilling {
-    return new ManduFilling();
+  filling<TLoaderData = unknown>(): ManduFilling<TLoaderData> {
+    return new ManduFilling<TLoaderData>();
   },
 
   /**

@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "mandu dev",
+    "build": "mandu build",
     "generate": "mandu generate",
     "guard": "mandu guard",
     "spec": "mandu spec-upsert",
@@ -11,12 +12,12 @@
     "test:watch": "bun test --watch"
   },
   "dependencies": {
-    "@mandujs/core": "^0.3.4",
+    "@mandujs/core": "^0.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@mandujs/cli": "^0.3.6",
+    "@mandujs/cli": "^0.4.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "typescript": "^5.0.0"

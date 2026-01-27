@@ -7,3 +7,4 @@ export * from "./filling";
 export * from "./change";
 export * from "./error";
 export * from "./slot";
+export * from "./bundler";
