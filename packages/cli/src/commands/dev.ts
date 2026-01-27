@@ -1,4 +1,4 @@
-import { loadManifest, startServer, registerApiHandler, registerPageLoader } from "@mandu/core";
+import { loadManifest, startServer, registerApiHandler, registerPageLoader } from "@mandujs/core";
 import { resolveFromCwd } from "../util/fs";
 import path from "path";
 

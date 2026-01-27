@@ -1,12 +1,27 @@
-import { loadManifest, runGuardCheck, buildGuardReport, printReportSummary, writeReport } from "@mandu/core";
+import {
+  loadManifest,
+  runGuardCheck,
+  buildGuardReport,
+  printReportSummary,
+  writeReport,
+  runAutoCorrect,
+  isAutoCorrectableViolation,
+} from "@mandujs/core";
 import { resolveFromCwd, getRootDir } from "../util/fs";
 
-export async function guardCheck(): Promise<boolean> {
+export interface GuardCheckOptions {
+  autoCorrect?: boolean;
+}
+
+export async function guardCheck(options: GuardCheckOptions = {}): Promise<boolean> {
+  const { autoCorrect = true } = options;
+
   const specPath = resolveFromCwd("spec/routes.manifest.json");
   const rootDir = getRootDir();
 
   console.log(`🥟 Mandu Guard`);
-  console.log(`📄 Spec 파일: ${specPath}\n`);
+  console.log(`📄 Spec 파일: ${specPath}`);
+  console.log(`🔧 Auto-correct: ${autoCorrect ? "ON" : "OFF"}\n`);
 
   const result = await loadManifest(specPath);
 
@@ -19,7 +34,55 @@ export async function guardCheck(): Promise<boolean> {
   console.log(`✅ Spec 로드 완료`);
   console.log(`🔍 Guard 검사 중...\n`);
 
-  const checkResult = await runGuardCheck(result.data, rootDir);
+  let checkResult = await runGuardCheck(result.data, rootDir);
+
+  // Auto-correct 시도
+  if (!checkResult.passed && autoCorrect) {
+    const autoCorrectableCount = checkResult.violations.filter(isAutoCorrectableViolation).length;
+
+    if (autoCorrectableCount > 0) {
+      console.log(`⚠️  ${checkResult.violations.length}개 위반 감지 (자동 수정 가능: ${autoCorrectableCount}개)`);
+      console.log(`🔄 Auto-correct 실행 중...\n`);
+
+      const autoCorrectResult = await runAutoCorrect(
+        checkResult.violations,
+        result.data,
+        rootDir
+      );
+
+      // 수행된 단계 출력
+      for (const step of autoCorrectResult.steps) {
+        const icon = step.success ? "✅" : "❌";
+        console.log(`  ${icon} [${step.action}] ${step.message}`);
+      }
+
+      if (autoCorrectResult.fixed) {
+        console.log(`\n✅ Auto-correct 완료 (${autoCorrectResult.retriedCount}회 재시도)`);
+
+        // 최종 Guard 재검사
+        checkResult = await runGuardCheck(result.data, rootDir);
+      } else {
+        console.log(`\n⚠️  일부 위반은 수동 수정이 필요합니다:`);
+
+        const manualViolations = autoCorrectResult.remainingViolations.filter(
+          (v) => !isAutoCorrectableViolation(v)
+        );
+
+        for (const v of manualViolations) {
+          console.log(`  - [${v.ruleId}] ${v.file}`);
+          console.log(`    💡 ${v.suggestion}`);
+        }
+
+        // 남은 위반으로 업데이트
+        checkResult = {
+          passed: autoCorrectResult.remainingViolations.length === 0,
+          violations: autoCorrectResult.remainingViolations,
+        };
+      }
+
+      console.log("");
+    }
+  }
 
   const report = buildGuardReport(checkResult);
   printReportSummary(report);
@@ -29,11 +92,11 @@ export async function guardCheck(): Promise<boolean> {
   console.log(`📋 Report 저장: ${reportPath}`);
 
   if (!checkResult.passed) {
-    console.log(`\n❌ guard 실패: ${checkResult.violations.length}개 위반 발견`);
+    console.log(`\n❌ Guard 실패: ${checkResult.violations.length}개 위반 발견`);
     return false;
   }
 
-  console.log(`\n✅ guard 통과`);
+  console.log(`\n✅ Guard 통과`);
   console.log(`💡 다음 단계: bunx mandu dev`);
 
   return true;

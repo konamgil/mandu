@@ -1,4 +1,4 @@
-import { loadManifest, startServer, registerApiHandler, registerPageLoader } from "@mandu/core";
+import { loadManifest, startServer, registerApiHandler, registerPageLoader } from "@mandujs/core";
 import path from "path";
 
 const SPEC_PATH = path.resolve(import.meta.dir, "../../spec/routes.manifest.json");

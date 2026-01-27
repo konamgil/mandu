@@ -19,10 +19,11 @@ Commands:
   dev            개발 서버 실행
 
 Options:
-  --name <name>  init 시 프로젝트 이름 (기본: my-mandu-app)
-  --file <path>  spec-upsert 시 사용할 spec 파일 경로
-  --port <port>  dev 서버 포트 (기본: 3000)
-  --help, -h     도움말 표시
+  --name <name>      init 시 프로젝트 이름 (기본: my-mandu-app)
+  --file <path>      spec-upsert 시 사용할 spec 파일 경로
+  --port <port>      dev 서버 포트 (기본: 3000)
+  --no-auto-correct  guard 시 자동 수정 비활성화
+  --help, -h         도움말 표시
 
 Examples:
   bunx mandu init --name my-app
@@ -83,7 +84,9 @@ async function main(): Promise<void> {
       break;
 
     case "guard":
-      success = await guardCheck();
+      success = await guardCheck({
+        autoCorrect: options["no-auto-correct"] !== "true",
+      });
       break;
 
     case "dev":

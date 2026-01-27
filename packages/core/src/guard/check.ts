@@ -120,6 +120,32 @@ export async function checkInvalidGeneratedImport(
   return violations;
 }
 
+// Rule 5: Slot file existence check
+export async function checkSlotFileExists(
+  manifest: RoutesManifest,
+  rootDir: string
+): Promise<GuardViolation[]> {
+  const violations: GuardViolation[] = [];
+
+  for (const route of manifest.routes) {
+    if (route.slotModule) {
+      const slotPath = path.join(rootDir, route.slotModule);
+      const exists = await fileExists(slotPath);
+
+      if (!exists) {
+        violations.push({
+          ruleId: GUARD_RULES.SLOT_NOT_FOUND.id,
+          file: route.slotModule,
+          message: `Slot 파일을 찾을 수 없습니다 (routeId: ${route.id})`,
+          suggestion: "bunx mandu generate를 실행하여 slot 파일을 생성하세요",
+        });
+      }
+    }
+  }
+
+  return violations;
+}
+
 // Rule 4: Forbidden imports in generated files
 export async function checkForbiddenImportsInGenerated(
   rootDir: string,
@@ -217,6 +243,10 @@ export async function runGuardCheck(
   // Rule 3
   const importViolations = await checkInvalidGeneratedImport(rootDir);
   violations.push(...importViolations);
+
+  // Rule 5: Slot file existence
+  const slotViolations = await checkSlotFileExists(manifest, rootDir);
+  violations.push(...slotViolations);
 
   return {
     passed: violations.length === 0,

@@ -32,6 +32,11 @@ export const GUARD_RULES: Record<string, GuardRule> = {
     name: "Forbidden Import in Generated",
     description: "generated 파일에서 금지된 모듈을 import 했습니다",
   },
+  SLOT_NOT_FOUND: {
+    id: "SLOT_NOT_FOUND",
+    name: "Slot File Not Found",
+    description: "spec에 명시된 slotModule 파일을 찾을 수 없습니다",
+  },
 };
 
 export const FORBIDDEN_IMPORTS = ["fs", "child_process", "cluster", "worker_threads"];

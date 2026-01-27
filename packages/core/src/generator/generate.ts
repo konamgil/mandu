@@ -1,12 +1,22 @@
 import type { RoutesManifest, RouteSpec } from "../spec/schema";
-import { generateApiHandler, generatePageComponent } from "./templates";
+import { generateApiHandler, generatePageComponent, generateSlotLogic } from "./templates";
 import path from "path";
 import fs from "fs/promises";
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface GenerateResult {
   success: boolean;
   created: string[];
   deleted: string[];
+  skipped: string[];
   errors: string[];
 }
 
@@ -41,6 +51,7 @@ export async function generateRoutes(
     success: true,
     created: [],
     deleted: [],
+    skipped: [],
     errors: [],
   };
 
@@ -76,6 +87,24 @@ export async function generateRoutes(
         routeId: route.id,
         kind: route.kind,
       };
+
+      // Slot file (only if slotModule is specified)
+      if (route.slotModule) {
+        const slotFilePath = path.join(rootDir, route.slotModule);
+        const slotDir = path.dirname(slotFilePath);
+
+        await ensureDir(slotDir);
+
+        // slot 파일이 이미 존재하면 덮어쓰지 않음 (사용자 코드 보존)
+        const slotExists = await fileExists(slotFilePath);
+        if (!slotExists) {
+          const slotContent = generateSlotLogic(route);
+          await Bun.write(slotFilePath, slotContent);
+          result.created.push(slotFilePath);
+        } else {
+          result.skipped.push(slotFilePath);
+        }
+      }
 
       // Page component (only for page kind)
       if (route.kind === "page") {

@@ -10,6 +10,7 @@ export const RouteSpec = z
     kind: RouteKind,
     module: z.string().min(1, "module 경로는 필수입니다"),
     componentModule: z.string().optional(),
+    slotModule: z.string().optional(),
   })
   .refine(
     (route) => {
