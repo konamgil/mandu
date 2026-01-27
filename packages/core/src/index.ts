@@ -6,3 +6,4 @@ export * from "./report";
 export * from "./filling";
 export * from "./change";
 export * from "./error";
+export * from "./slot";

@@ -14,8 +14,9 @@
 - Bun.serve SSR 라우팅이 동작한다
 
 ### 1.2 컴포넌트
-- **Core**: runtime(서버/라우터/SSR), spec 스키마/로드/락, guard, report, map
-- **CLI**: spec‑upsert / generate / guard / dev
+- **Core** (`@mandujs/core`): runtime(서버/라우터/SSR), spec 스키마/로드/락/트랜잭션, guard, report, map
+- **CLI** (`@mandujs/cli`): init / spec‑upsert / generate / guard / dev
+- **MCP** (`@mandujs/mcp`): AI 에이전트 통합을 위한 MCP 서버 ✅
 - **Apps**:
   - server: Bun.serve 엔트리 + generated route handlers
   - web: SSR 엔트리 + generated React route modules
@@ -29,7 +30,8 @@ repo/
   spec/
     routes.manifest.json
     spec.lock.json
-    history/                       # optional
+    slots/                         # 슬롯 파일
+    history/                       # 스냅샷 히스토리
   apps/
     server/
       main.ts
@@ -45,6 +47,7 @@ repo/
       spec/schema.ts
       spec/load.ts
       spec/lock.ts
+      spec/transaction.ts          # 트랜잭션 API ✅
       guard/rules.ts
       guard/check.ts
       report/build.ts
@@ -56,6 +59,16 @@ repo/
       commands/guard-check.ts
       commands/dev.ts
       util/fs.ts
+    mcp/                           # MCP 서버 ✅
+      server.ts
+      tools/
+        spec.ts
+        generate.ts
+        transaction.ts
+        history.ts
+        guard.ts
+        slot.ts
+      resources/handlers.ts
   tests/
     smoke.spec.ts
   tsconfig.json
@@ -164,11 +177,115 @@ CLI는 report를 파일로 출력하고, 콘솔에 요약을 출력한다.
 
 ---
 
-## 10. MVP‑0.1 완료 기준(DoD 7개)
-1) spec-upsert 검증/lock 갱신  
-2) generate 생성  
-3) dev 서버 실행  
-4) `/` SSR 200  
-5) `/api/health` 200 JSON  
-6) generated 수정 시 guard fail + 설명  
+## 10. MVP‑0.1 완료 기준(DoD 7개) ✅
+1) spec-upsert 검증/lock 갱신
+2) generate 생성
+3) dev 서버 실행
+4) `/` SSR 200
+5) `/api/health` 200 JSON
+6) generated 수정 시 guard fail + 설명
 7) bun test 통과
+
+---
+
+## 11. MCP 서버 아키텍처 (`@mandujs/mcp`) ✅
+
+### 11.1 개요
+MCP(Model Context Protocol) 서버를 통해 AI 에이전트가 Mandu 프레임워크를 직접 조작할 수 있습니다.
+
+### 11.2 디렉토리 구조
+```
+packages/mcp/
+├── src/
+│   ├── index.ts              # 진입점
+│   ├── server.ts             # ManduMcpServer 클래스
+│   ├── tools/
+│   │   ├── spec.ts           # 라우트 CRUD
+│   │   ├── generate.ts       # 코드 생성
+│   │   ├── transaction.ts    # begin/commit/rollback
+│   │   ├── history.ts        # 스냅샷 관리
+│   │   ├── guard.ts          # 규칙 검사
+│   │   └── slot.ts           # 슬롯 읽기/쓰기
+│   ├── resources/
+│   │   └── handlers.ts       # 리소스 핸들러
+│   └── utils/
+│       └── project.ts        # 프로젝트 경로 유틸
+└── package.json
+```
+
+### 11.3 MCP 도구 목록
+
+| 카테고리 | 도구 | 설명 |
+|----------|------|------|
+| **Spec** | `mandu_list_routes` | 라우트 목록 조회 |
+| | `mandu_get_route` | 특정 라우트 조회 |
+| | `mandu_add_route` | 라우트 추가 |
+| | `mandu_update_route` | 라우트 수정 |
+| | `mandu_delete_route` | 라우트 삭제 |
+| | `mandu_validate_spec` | Spec 유효성 검사 |
+| **Generate** | `mandu_generate` | 코드 생성 |
+| | `mandu_generate_status` | 생성 상태 조회 |
+| **Transaction** | `mandu_begin` | 트랜잭션 시작 (스냅샷 생성) |
+| | `mandu_commit` | 변경 확정 |
+| | `mandu_rollback` | 변경 취소 (스냅샷 복원) |
+| | `mandu_tx_status` | 트랜잭션 상태 조회 |
+| **History** | `mandu_list_history` | 히스토리 조회 |
+| | `mandu_get_snapshot` | 스냅샷 조회 |
+| | `mandu_prune_history` | 오래된 히스토리 정리 |
+| **Guard** | `mandu_guard_check` | Guard 검사 |
+| | `mandu_analyze_error` | 에러 분석 |
+| **Slot** | `mandu_read_slot` | 슬롯 파일 읽기 |
+| | `mandu_write_slot` | 슬롯 파일 쓰기 |
+
+### 11.4 MCP 리소스
+
+| URI | 설명 |
+|-----|------|
+| `mandu://spec/manifest` | routes.manifest.json |
+| `mandu://spec/lock` | spec.lock.json |
+| `mandu://generated/map` | generated.map.json |
+| `mandu://transaction/active` | 활성 트랜잭션 정보 |
+
+### 11.5 트랜잭션 흐름
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Transaction Flow                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   1. mandu_begin         스냅샷 생성 (manifest + slots)      │
+│          ↓                                                  │
+│   2. mandu_add_route     Spec 수정                          │
+│          ↓                                                  │
+│   3. mandu_generate      코드 생성                          │
+│          ↓                                                  │
+│   4. mandu_write_slot    슬롯 로직 작성                     │
+│          ↓                                                  │
+│   5. mandu_guard_check   규칙 검사                          │
+│          ↓                                                  │
+│   6a. mandu_commit       ✅ 성공 → 히스토리에 저장           │
+│   6b. mandu_rollback     ❌ 실패 → 스냅샷으로 복원          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 11.6 에러 분류 시스템
+
+런타임 에러 발생 시 `generated.map.json`을 활용해 수정해야 할 위치를 안내:
+
+| 에러 타입 | 설명 | 수정 위치 |
+|-----------|------|-----------|
+| `SPEC_ERROR` | Spec 정의 문제 | `spec/routes.manifest.json` |
+| `LOGIC_ERROR` | 슬롯 로직 문제 | `spec/slots/{routeId}.slot.ts` |
+| `FRAMEWORK_BUG` | 프레임워크 버그 | 이슈 리포트 |
+
+---
+
+## 12. MVP‑0.3 완료 기준(DoD) ✅
+
+1) MVP‑0.1 전체 통과
+2) MCP 서버 설치 및 연결
+3) `mandu_add_route` → `mandu_generate` → `mandu_write_slot` 워크플로우 동작
+4) `mandu_begin` → 작업 → `mandu_rollback`으로 완전 복원
+5) `mandu_guard_check` 실패 시 수정 가이드 제공
+6) `mandu_analyze_error`로 에러 분류 및 수정 위치 안내

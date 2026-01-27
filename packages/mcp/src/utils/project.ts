@@ -1,0 +1,71 @@
+import path from "path";
+import fs from "fs/promises";
+
+/**
+ * Find the Mandu project root by looking for routes.manifest.json
+ */
+export async function findProjectRoot(startDir: string = process.cwd()): Promise<string | null> {
+  let currentDir = path.resolve(startDir);
+
+  while (currentDir !== path.dirname(currentDir)) {
+    const manifestPath = path.join(currentDir, "spec", "routes.manifest.json");
+    try {
+      await fs.access(manifestPath);
+      return currentDir;
+    } catch {
+      currentDir = path.dirname(currentDir);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get standard paths for a Mandu project
+ */
+export function getProjectPaths(rootDir: string) {
+  return {
+    root: rootDir,
+    specDir: path.join(rootDir, "spec"),
+    manifestPath: path.join(rootDir, "spec", "routes.manifest.json"),
+    lockPath: path.join(rootDir, "spec", "spec.lock.json"),
+    slotsDir: path.join(rootDir, "spec", "slots"),
+    historyDir: path.join(rootDir, "spec", "history"),
+    generatedMapPath: path.join(rootDir, "packages", "core", "map", "generated.map.json"),
+    serverRoutesDir: path.join(rootDir, "apps", "server", "generated", "routes"),
+    webRoutesDir: path.join(rootDir, "apps", "web", "generated", "routes"),
+  };
+}
+
+/**
+ * Check if a path is inside the project
+ */
+export function isInsideProject(filePath: string, rootDir: string): boolean {
+  const resolved = path.resolve(filePath);
+  const root = path.resolve(rootDir);
+  return resolved.startsWith(root);
+}
+
+/**
+ * Read JSON file safely
+ */
+export async function readJsonFile<T>(filePath: string): Promise<T | null> {
+  try {
+    const file = Bun.file(filePath);
+    if (!(await file.exists())) {
+      return null;
+    }
+    return await file.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write JSON file safely
+ */
+export async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
+  const dir = path.dirname(filePath);
+  await fs.mkdir(dir, { recursive: true });
+  await Bun.write(filePath, JSON.stringify(data, null, 2));
+}

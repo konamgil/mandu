@@ -70,9 +70,26 @@
 - `spec/spec.lock.json`: 적용된 스펙의 해시/메타
 - `spec/history/<timestamp>.snapshot.json`: 커밋 스냅샷(옵션→필수로 확장)
 
-### 5.3 변경 트랜잭션
-- `change.begin()` → (spec 변경/생성) → `guard.check()` + `tests.run()` → `change.commit()`  
+### 5.3 변경 트랜잭션 ✅ (구현 완료)
+- `change.begin()` → (spec 변경/생성) → `guard.check()` + `tests.run()` → `change.commit()`
 - 실패 시 `change.rollback()`으로 깨끗하게 복구
+
+**트랜잭션 API (SpecTransaction)**:
+```typescript
+const tx = new SpecTransaction(projectRoot);
+tx.begin("Add users API");           // 스냅샷 생성
+// ... spec 변경, 코드 생성, 슬롯 작성 ...
+tx.commit();                          // 히스토리에 저장
+// 또는
+tx.rollback();                        // 스냅샷으로 완전 복원
+```
+
+**스냅샷 구조**:
+- `timestamp`: 생성 시간
+- `message`: 변경 설명
+- `manifest`: routes.manifest.json 백업
+- `lock`: spec.lock.json 백업
+- `slotContents`: 슬롯 파일 전체 백업
 
 ---
 
@@ -145,17 +162,23 @@
 
 ## 12. 로드맵(MVP 재조정)
 
-### MVP‑0.1 (핵심 가설 1개 검증)
+### MVP‑0.1 ✅
 - Spec 기반 라우트 생성 + 최소 SSR 동작
 - Guard: spec/generated/슬롯 경계 오염 방지
 - CLI: spec‑upsert / generate / guard / dev
-- WS/ISR/Plan/슬롯/override/HMR 제외
 
-### MVP‑0.2
-- logic.patch.apply + route‑logic 슬롯
+### MVP‑0.3 ✅ (현재)
+- route‑logic 슬롯 시스템
+- **MCP 서버** (`@mandujs/mcp`) - AI 에이전트 통합
+- **트랜잭션 API** (begin/commit/rollback)
+- **스냅샷 기반 히스토리** - 완전 복원 지원
+- **에러 분류 시스템** (SPEC_ERROR / LOGIC_ERROR / FRAMEWORK_BUG)
+- **generated.map.json** - 런타임 에러 → spec/slot 매핑
+
+### MVP‑0.4
 - 기본 테스트 템플릿 + self‑correction loop
 
-### MVP‑0.3
+### MVP‑0.5
 - WS 플랫폼 + channel‑logic 슬롯 + contract-first
 
 ### MVP‑1
@@ -166,12 +189,29 @@
 
 ## 13. 오픈소스/설치 전략
 
-- UX 목표: express/next처럼 **`bunx create ...`**로 프로젝트 생성
-- 패키지 구성(권장):
-  - `@org/core` (runtime/ssr/ws/isr/guard foundations)
-  - `@org/cli` (create/spec/generate/guard/test/dev)
-  - `@org/mcp` (control plane)
-  - `@org/adapters-*` (redis/pubsub/session/cache reference)
+- UX 목표: express/next처럼 **`bunx @mandujs/cli init`**로 프로젝트 생성
+- 패키지 구성:
+  - `@mandujs/core` - 런타임, SSR, Guard, Spec 스키마, 트랜잭션 API ✅
+  - `@mandujs/cli` - init, spec-upsert, generate, guard, dev 명령어 ✅
+  - `@mandujs/mcp` - MCP 서버 (AI 에이전트 통합) ✅
+  - `@mandujs/adapters-*` - redis/pubsub/session/cache (후속)
+
+### MCP 서버 (`@mandujs/mcp`)
+AI 에이전트가 Mandu 프레임워크를 직접 조작하는 MCP 서버:
+
+**도구 (Tools)**:
+- Spec 관리: `mandu_list_routes`, `mandu_add_route`, `mandu_update_route`, `mandu_delete_route`, `mandu_validate_spec`
+- 코드 생성: `mandu_generate`, `mandu_generate_status`
+- 트랜잭션: `mandu_begin`, `mandu_commit`, `mandu_rollback`, `mandu_tx_status`
+- 히스토리: `mandu_list_history`, `mandu_get_snapshot`, `mandu_prune_history`
+- 가드: `mandu_guard_check`, `mandu_analyze_error`
+- 슬롯: `mandu_read_slot`, `mandu_write_slot`
+
+**리소스 (Resources)**:
+- `mandu://spec/manifest` - routes.manifest.json
+- `mandu://spec/lock` - spec.lock.json
+- `mandu://generated/map` - generated.map.json
+- `mandu://transaction/active` - 활성 트랜잭션 정보
 
 ---
 
