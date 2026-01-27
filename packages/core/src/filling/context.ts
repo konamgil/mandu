@@ -210,9 +210,18 @@ export class ManduContext {
 /** Symbol to indicate continue to next */
 export const NEXT_SYMBOL = Symbol("mandu:next");
 
+/** Route context for error reporting */
+export interface ValidationRouteContext {
+  routeId: string;
+  pattern: string;
+}
+
 /** Validation error with details */
 export class ValidationError extends Error {
-  constructor(public readonly errors: unknown[]) {
+  constructor(
+    public readonly errors: unknown[],
+    public readonly routeContext?: ValidationRouteContext
+  ) {
     super("Validation failed");
     this.name = "ValidationError";
   }

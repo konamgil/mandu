@@ -4,6 +4,7 @@
  */
 
 import { ManduContext, NEXT_SYMBOL, ValidationError } from "./context";
+import { ErrorClassifier, formatErrorResponse, ErrorCode } from "../error";
 
 /** Handler function type */
 export type Handler = (ctx: ManduContext) => Response | Promise<Response>;
@@ -127,8 +128,15 @@ export class ManduFilling {
   /**
    * Handle incoming request
    * Called by generated route handler
+   * @param request The incoming request
+   * @param params URL path parameters
+   * @param routeContext Route context for error reporting
    */
-  async handle(request: Request, params: Record<string, string> = {}): Promise<Response> {
+  async handle(
+    request: Request,
+    params: Record<string, string> = {},
+    routeContext?: { routeId: string; pattern: string }
+  ): Promise<Response> {
     const ctx = new ManduContext(request, params);
     const method = request.method.toUpperCase() as HttpMethod;
 
@@ -172,23 +180,37 @@ export class ManduFilling {
       // Execute handler
       return await handler(ctx);
     } catch (error) {
-      // Handle validation errors
+      // Handle validation errors with enhanced error format
       if (error instanceof ValidationError) {
         return ctx.json(
           {
-            status: "error",
+            errorType: "LOGIC_ERROR",
+            code: ErrorCode.SLOT_VALIDATION_ERROR,
             message: "Validation failed",
+            summary: "입력 검증 실패 - 요청 데이터 확인 필요",
+            fix: {
+              file: routeContext ? `spec/slots/${routeContext.routeId}.slot.ts` : "spec/slots/",
+              suggestion: "요청 데이터가 스키마와 일치하는지 확인하세요",
+            },
+            route: routeContext,
             errors: error.errors,
+            timestamp: new Date().toISOString(),
           },
           400
         );
       }
 
-      // Handle other errors
-      console.error(`[Mandu] Handler error:`, error);
-      return ctx.fail(
-        error instanceof Error ? error.message : "Internal Server Error"
-      );
+      // Handle other errors with error classification
+      const classifier = new ErrorClassifier(null, routeContext);
+      const manduError = classifier.classify(error);
+
+      console.error(`[Mandu] ${manduError.errorType}:`, manduError.message);
+
+      const response = formatErrorResponse(manduError, {
+        isDev: process.env.NODE_ENV !== "production",
+      });
+
+      return ctx.json(response, 500);
     }
   }
 
