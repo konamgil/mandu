@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../../mandu_only_simbol.png" alt="Mandu" width="200" />
+  <img src="https://raw.githubusercontent.com/konamgil/mandu/main/mandu_only_simbol.png" alt="Mandu" width="200" />
 </p>
 
 <h1 align="center">@mandujs/cli</h1>
