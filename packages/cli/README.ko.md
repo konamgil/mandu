@@ -1,8 +1,17 @@
-# @mandujs/cli
+<p align="center">
+  <img src="../../mandu_only_simbol.png" alt="Mandu" width="200" />
+</p>
 
-> **[English](./README.md)** | 한국어
+<h1 align="center">@mandujs/cli</h1>
 
-Agent-Native Fullstack Framework CLI - 에이전트가 코딩해도 아키텍처가 무너지지 않는 개발 OS
+<p align="center">
+  <strong>Agent-Native Fullstack Framework CLI</strong><br/>
+  에이전트가 코딩해도 아키텍처가 무너지지 않는 개발 OS
+</p>
+
+<p align="center">
+  <a href="./README.md"><strong>English</strong></a> | 한국어
+</p>
 
 ## 설치
 
