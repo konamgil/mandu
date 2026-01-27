@@ -4,3 +4,4 @@ export { transactionTools, transactionToolDefinitions } from "./transaction.js";
 export { historyTools, historyToolDefinitions } from "./history.js";
 export { guardTools, guardToolDefinitions } from "./guard.js";
 export { slotTools, slotToolDefinitions } from "./slot.js";
+export { hydrationTools, hydrationToolDefinitions } from "./hydration.js";
