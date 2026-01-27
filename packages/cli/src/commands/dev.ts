@@ -1,9 +1,19 @@
-import { loadManifest, startServer, registerApiHandler, registerPageLoader } from "@mandujs/core";
+import {
+  loadManifest,
+  startServer,
+  registerApiHandler,
+  registerPageLoader,
+  startDevBundler,
+  createHMRServer,
+  needsHydration,
+} from "@mandujs/core";
 import { resolveFromCwd } from "../util/fs";
 import path from "path";
 
 export interface DevOptions {
   port?: number;
+  /** HMR 비활성화 */
+  noHmr?: boolean;
 }
 
 export async function dev(options: DevOptions = {}): Promise<void> {
@@ -21,9 +31,11 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`✅ Spec 로드 완료: ${result.data.routes.length}개 라우트`);
+  const manifest = result.data;
+  console.log(`✅ Spec 로드 완료: ${manifest.routes.length}개 라우트`);
 
-  for (const route of result.data.routes) {
+  // 핸들러 등록
+  for (const route of manifest.routes) {
     if (route.kind === "api") {
       const modulePath = path.resolve(rootDir, route.module);
       try {
@@ -36,7 +48,8 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     } else if (route.kind === "page" && route.componentModule) {
       const componentPath = path.resolve(rootDir, route.componentModule);
       registerPageLoader(route.id, () => import(componentPath));
-      console.log(`  📄 Page: ${route.pattern} -> ${route.id}`);
+      const isIsland = needsHydration(route);
+      console.log(`  📄 Page: ${route.pattern} -> ${route.id}${isIsland ? " 🏝️" : ""}`);
     }
   }
 
@@ -44,17 +57,69 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   const port = options.port || Number(process.env.PORT) || 3000;
 
-  const server = startServer(result.data, { port });
+  // HMR 서버 시작 (클라이언트 슬롯이 있는 경우)
+  let hmrServer: ReturnType<typeof createHMRServer> | null = null;
+  let devBundler: Awaited<ReturnType<typeof startDevBundler>> | null = null;
 
-  process.on("SIGINT", () => {
-    console.log("\n🛑 서버 종료 중...");
-    server.stop();
-    process.exit(0);
+  const hasIslands = manifest.routes.some(
+    (r) => r.kind === "page" && r.clientModule && needsHydration(r)
+  );
+
+  if (hasIslands && !options.noHmr) {
+    // HMR 서버 시작
+    hmrServer = createHMRServer(port);
+
+    // Dev 번들러 시작 (파일 감시)
+    devBundler = await startDevBundler({
+      rootDir,
+      manifest,
+      onRebuild: (result) => {
+        if (result.success) {
+          hmrServer?.broadcast({
+            type: "island-update",
+            data: {
+              routeId: result.routeId,
+              timestamp: Date.now(),
+            },
+          });
+        } else {
+          hmrServer?.broadcast({
+            type: "error",
+            data: {
+              routeId: result.routeId,
+              message: result.error,
+            },
+          });
+        }
+      },
+      onError: (error, routeId) => {
+        hmrServer?.broadcast({
+          type: "error",
+          data: {
+            routeId,
+            message: error.message,
+          },
+        });
+      },
+    });
+  }
+
+  // 메인 서버 시작
+  const server = startServer(manifest, {
+    port,
+    isDev: true,
+    hmrPort: hmrServer ? port : undefined,
   });
 
-  process.on("SIGTERM", () => {
+  // 정리 함수
+  const cleanup = () => {
     console.log("\n🛑 서버 종료 중...");
     server.stop();
+    devBundler?.close();
+    hmrServer?.close();
     process.exit(0);
-  });
+  };
+
+  process.on("SIGINT", cleanup);
+  process.on("SIGTERM", cleanup);
 }

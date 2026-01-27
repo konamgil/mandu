@@ -14,6 +14,10 @@ import {
 export interface ServerOptions {
   port?: number;
   hostname?: string;
+  /** 개발 모드 여부 */
+  isDev?: boolean;
+  /** HMR 포트 (개발 모드에서 사용) */
+  hmrPort?: number;
 }
 
 export interface ManduServer {
@@ -39,6 +43,9 @@ const apiHandlers: Map<string, ApiHandler> = new Map();
 const pageLoaders: Map<string, PageLoader> = new Map();
 const routeComponents: Map<string, RouteComponent> = new Map();
 let createAppFn: CreateAppFn | null = null;
+
+// Dev mode settings (module-level for handleRequest access)
+let devModeSettings: { isDev: boolean; hmrPort?: number } = { isDev: false };
 
 export function registerApiHandler(routeId: string, handler: ApiHandler): void {
   apiHandlers.set(routeId, handler);
@@ -126,7 +133,11 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
         params,
       });
 
-      return renderSSR(app, { title: `${route.id} - Mandu` });
+      return renderSSR(app, {
+        title: `${route.id} - Mandu`,
+        isDev: devModeSettings.isDev,
+        hmrPort: devModeSettings.hmrPort,
+      });
     } catch (err) {
       const ssrError = createSSRErrorResponse(
         route.id,
@@ -159,7 +170,10 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
 }
 
 export function startServer(manifest: RoutesManifest, options: ServerOptions = {}): ManduServer {
-  const { port = 3000, hostname = "localhost" } = options;
+  const { port = 3000, hostname = "localhost", isDev = false, hmrPort } = options;
+
+  // Dev mode settings 저장
+  devModeSettings = { isDev, hmrPort };
 
   const router = new Router(manifest.routes);
 
@@ -169,7 +183,14 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     fetch: (req) => handleRequest(req, router),
   });
 
-  console.log(`🥟 Mandu server running at http://${hostname}:${port}`);
+  if (isDev) {
+    console.log(`🥟 Mandu Dev Server running at http://${hostname}:${port}`);
+    if (hmrPort) {
+      console.log(`🔥 HMR enabled on port ${hmrPort + 1}`);
+    }
+  } else {
+    console.log(`🥟 Mandu server running at http://${hostname}:${port}`);
+  }
 
   return {
     server,

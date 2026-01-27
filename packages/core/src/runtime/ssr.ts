@@ -18,6 +18,10 @@ export interface SSROptions {
   headTags?: string;
   /** 추가 body 끝 태그 */
   bodyEndTags?: string;
+  /** 개발 모드 여부 */
+  isDev?: boolean;
+  /** HMR 포트 (개발 모드에서 사용) */
+  hmrPort?: number;
 }
 
 /**
@@ -86,6 +90,8 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     routeId,
     headTags = "",
     bodyEndTags = "",
+    isDev = false,
+    hmrPort,
   } = options;
 
   let content = renderToString(element);
@@ -116,6 +122,12 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     hydrationScripts = generateHydrationScripts(routeId, bundleManifest);
   }
 
+  // HMR 스크립트 (개발 모드)
+  let hmrScript = "";
+  if (isDev && hmrPort) {
+    hmrScript = generateHMRScript(hmrPort);
+  }
+
   return `<!doctype html>
 <html lang="${lang}">
 <head>
@@ -128,9 +140,54 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   <div id="root">${content}</div>
   ${dataScript}
   ${hydrationScripts}
+  ${hmrScript}
   ${bodyEndTags}
 </body>
 </html>`;
+}
+
+/**
+ * HMR 스크립트 생성
+ */
+function generateHMRScript(port: number): string {
+  const hmrPort = port + 1;
+  return `<script>
+(function() {
+  var ws = null;
+  var reconnectAttempts = 0;
+  var maxReconnectAttempts = 10;
+
+  function connect() {
+    try {
+      ws = new WebSocket('ws://localhost:${hmrPort}');
+      ws.onopen = function() {
+        console.log('[Mandu HMR] Connected');
+        reconnectAttempts = 0;
+      };
+      ws.onmessage = function(e) {
+        try {
+          var msg = JSON.parse(e.data);
+          if (msg.type === 'reload' || msg.type === 'island-update') {
+            console.log('[Mandu HMR] Reloading...');
+            location.reload();
+          } else if (msg.type === 'error') {
+            console.error('[Mandu HMR] Build error:', msg.data?.message);
+          }
+        } catch(err) {}
+      };
+      ws.onclose = function() {
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          setTimeout(connect, 1000 * reconnectAttempts);
+        }
+      };
+    } catch(err) {
+      setTimeout(connect, 1000);
+    }
+  }
+  connect();
+})();
+</script>`;
 }
 
 export function createHTMLResponse(html: string, status: number = 200): Response {
