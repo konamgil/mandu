@@ -1,8 +1,17 @@
-# @mandujs/core
+<p align="center">
+  <img src="../../mandu_only_simbol.png" alt="Mandu" width="200" />
+</p>
 
-> English | **[한국어](./README.ko.md)**
+<h1 align="center">@mandujs/core</h1>
 
-Mandu Framework Core - Spec, Generator, Guard, Runtime
+<p align="center">
+  <strong>Mandu Framework Core</strong><br/>
+  Spec, Generator, Guard, Runtime, Filling
+</p>
+
+<p align="center">
+  English | <a href="./README.ko.md"><strong>한국어</strong></a>
+</p>
 
 ## Installation
 
