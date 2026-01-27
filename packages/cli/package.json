@@ -32,7 +32,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@mandujs/core": "^0.2.0"
+    "@mandujs/core": "workspace:*"
   },
   "peerDependencies": {
     "bun": ">=1.0.0"

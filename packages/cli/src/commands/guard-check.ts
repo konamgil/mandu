@@ -58,9 +58,36 @@ export async function guardCheck(options: GuardCheckOptions = {}): Promise<boole
 
       if (autoCorrectResult.fixed) {
         console.log(`\n✅ Auto-correct 완료 (${autoCorrectResult.retriedCount}회 재시도)`);
+        if (autoCorrectResult.changeId) {
+          console.log(`   트랜잭션: ${autoCorrectResult.changeId} (커밋됨)`);
+        }
 
         // 최종 Guard 재검사
         checkResult = await runGuardCheck(result.data, rootDir);
+      } else if (autoCorrectResult.rolledBack) {
+        console.log(`\n⚠️  Auto-correct 실패 - 롤백됨`);
+        if (autoCorrectResult.changeId) {
+          console.log(`   트랜잭션: ${autoCorrectResult.changeId} (롤백됨)`);
+        }
+        console.log(`   원래 상태로 복원되었습니다.`);
+
+        const manualViolations = autoCorrectResult.remainingViolations.filter(
+          (v) => !isAutoCorrectableViolation(v)
+        );
+
+        if (manualViolations.length > 0) {
+          console.log(`\n⚠️  수동 수정이 필요한 위반:`);
+          for (const v of manualViolations) {
+            console.log(`  - [${v.ruleId}] ${v.file}`);
+            console.log(`    💡 ${v.suggestion}`);
+          }
+        }
+
+        // 남은 위반으로 업데이트
+        checkResult = {
+          passed: false,
+          violations: autoCorrectResult.remainingViolations,
+        };
       } else {
         console.log(`\n⚠️  일부 위반은 수동 수정이 필요합니다:`);
 

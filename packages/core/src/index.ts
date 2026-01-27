@@ -4,3 +4,4 @@ export * from "./generator";
 export * from "./guard";
 export * from "./report";
 export * from "./filling";
+export * from "./change";

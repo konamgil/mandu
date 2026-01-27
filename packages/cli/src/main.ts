@@ -5,6 +5,14 @@ import { generateApply } from "./commands/generate-apply";
 import { guardCheck } from "./commands/guard-check";
 import { dev } from "./commands/dev";
 import { init } from "./commands/init";
+import {
+  changeBegin,
+  changeCommit,
+  changeRollback,
+  changeStatus,
+  changeList,
+  changePrune,
+} from "./commands/change";
 
 const HELP_TEXT = `
 🥟 Mandu CLI - Agent-Native Fullstack Framework
@@ -18,11 +26,21 @@ Commands:
   guard          Guard 규칙 검사
   dev            개발 서버 실행
 
+  change begin   변경 트랜잭션 시작 (스냅샷 생성)
+  change commit  변경 확정
+  change rollback 스냅샷으로 복원
+  change status  현재 트랜잭션 상태
+  change list    변경 이력 조회
+  change prune   오래된 스냅샷 정리
+
 Options:
   --name <name>      init 시 프로젝트 이름 (기본: my-mandu-app)
   --file <path>      spec-upsert 시 사용할 spec 파일 경로
   --port <port>      dev 서버 포트 (기본: 3000)
   --no-auto-correct  guard 시 자동 수정 비활성화
+  --message <msg>    change begin 시 설명 메시지
+  --id <id>          change rollback 시 특정 변경 ID
+  --keep <n>         change prune 시 유지할 스냅샷 수 (기본: 5)
   --help, -h         도움말 표시
 
 Examples:
@@ -31,6 +49,9 @@ Examples:
   bunx mandu generate
   bunx mandu guard
   bunx mandu dev --port 3000
+  bunx mandu change begin --message "Add new route"
+  bunx mandu change commit
+  bunx mandu change rollback
 
 Workflow:
   1. init → 2. spec-upsert → 3. generate → 4. guard → 5. dev
@@ -92,6 +113,37 @@ async function main(): Promise<void> {
     case "dev":
       await dev({ port: options.port ? Number(options.port) : undefined });
       break;
+
+    case "change": {
+      const subCommand = args[1];
+      switch (subCommand) {
+        case "begin":
+          success = await changeBegin({ message: options.message });
+          break;
+        case "commit":
+          success = await changeCommit();
+          break;
+        case "rollback":
+          success = await changeRollback({ id: options.id });
+          break;
+        case "status":
+          success = await changeStatus();
+          break;
+        case "list":
+          success = await changeList();
+          break;
+        case "prune":
+          success = await changePrune({
+            keep: options.keep ? Number(options.keep) : undefined,
+          });
+          break;
+        default:
+          console.error(`❌ Unknown change subcommand: ${subCommand}`);
+          console.log(`\nUsage: bunx mandu change <begin|commit|rollback|status|list|prune>`);
+          process.exit(1);
+      }
+      break;
+    }
 
     default:
       console.error(`❌ Unknown command: ${command}`);
