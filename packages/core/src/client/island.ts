@@ -167,6 +167,65 @@ export function useIslandEvent<T = unknown>(
 }
 
 /**
+ * 기존 React 컴포넌트를 Island로 래핑
+ *
+ * @example
+ * ```typescript
+ * // 기존 React 컴포넌트
+ * import DatePicker from 'react-datepicker';
+ *
+ * // Island로 래핑 (serverData가 그대로 props로 전달됨)
+ * export default Mandu.wrapComponent(DatePicker);
+ *
+ * // 또는 props 변환이 필요한 경우
+ * export default Mandu.wrapComponent(DatePicker, {
+ *   transformProps: (serverData) => ({
+ *     selected: new Date(serverData.selectedDate),
+ *     onChange: (date) => console.log(date),
+ *   })
+ * });
+ * ```
+ */
+export interface WrapComponentOptions<TServerData, TProps> {
+  /** 서버 데이터를 컴포넌트 props로 변환 */
+  transformProps?: (serverData: TServerData) => TProps;
+  /** 에러 시 표시할 UI */
+  errorBoundary?: (error: Error, reset: () => void) => ReactNode;
+  /** 로딩 중 표시할 UI */
+  loading?: () => ReactNode;
+}
+
+export function wrapComponent<TProps extends Record<string, any>>(
+  Component: React.ComponentType<TProps>,
+  options?: WrapComponentOptions<TProps, TProps>
+): CompiledIsland<TProps, TProps>;
+
+export function wrapComponent<TServerData, TProps>(
+  Component: React.ComponentType<TProps>,
+  options: WrapComponentOptions<TServerData, TProps> & { transformProps: (serverData: TServerData) => TProps }
+): CompiledIsland<TServerData, TProps>;
+
+export function wrapComponent<TServerData, TProps>(
+  Component: React.ComponentType<TProps>,
+  options?: WrapComponentOptions<TServerData, TProps>
+): CompiledIsland<TServerData, TProps> {
+  const { transformProps, errorBoundary, loading } = options || {};
+
+  return island({
+    setup: (serverData: TServerData) => {
+      return transformProps ? transformProps(serverData) : (serverData as unknown as TProps);
+    },
+    render: (props: TProps) => {
+      // React.createElement를 사용하여 Component 렌더링
+      const React = require("react");
+      return React.createElement(Component, props);
+    },
+    errorBoundary,
+    loading,
+  });
+}
+
+/**
  * API 호출 헬퍼
  */
 export interface FetchOptions extends Omit<RequestInit, "body"> {

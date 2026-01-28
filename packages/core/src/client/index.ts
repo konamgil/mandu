@@ -17,6 +17,7 @@
 // Island API
 export {
   island,
+  wrapComponent,
   useServerData,
   useHydrated,
   useIslandEvent,
@@ -25,6 +26,7 @@ export {
   type IslandMetadata,
   type CompiledIsland,
   type FetchOptions,
+  type WrapComponentOptions,
 } from "./island";
 
 // Runtime API
@@ -41,7 +43,7 @@ export {
 } from "./runtime";
 
 // Re-export as Mandu namespace for consistent API
-import { island } from "./island";
+import { island, wrapComponent } from "./island";
 import { hydrateIslands, initializeRuntime } from "./runtime";
 
 /**
@@ -53,6 +55,12 @@ export const Mandu = {
    * @see island
    */
   island,
+
+  /**
+   * Wrap existing React component as island
+   * @see wrapComponent
+   */
+  wrapComponent,
 
   /**
    * Hydrate all islands on the page
