@@ -80,6 +80,9 @@ export const RouteSpec = z
     // 클라이언트 슬롯 (interactive 로직) [NEW]
     clientModule: z.string().optional(),
 
+    // Contract 모듈 (API 스키마 정의) [NEW]
+    contractModule: z.string().optional(),
+
     // Hydration 설정 [NEW]
     hydration: HydrationConfig.optional(),
 

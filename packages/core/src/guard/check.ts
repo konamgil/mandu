@@ -1,5 +1,6 @@
 import { GUARD_RULES, FORBIDDEN_IMPORTS, type GuardViolation } from "./rules";
 import { verifyLock, computeHash } from "../spec/lock";
+import { runContractGuardCheck } from "./contract-guard";
 import type { RoutesManifest } from "../spec/schema";
 import type { GeneratedMap } from "../generator/generate";
 import path from "path";
@@ -247,6 +248,10 @@ export async function runGuardCheck(
   // Rule 5: Slot file existence
   const slotViolations = await checkSlotFileExists(manifest, rootDir);
   violations.push(...slotViolations);
+
+  // Rule 6-9: Contract-related checks
+  const contractViolations = await runContractGuardCheck(manifest, rootDir);
+  violations.push(...contractViolations);
 
   return {
     passed: violations.length === 0,

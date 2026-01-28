@@ -16,6 +16,7 @@ import { historyTools, historyToolDefinitions } from "./tools/history.js";
 import { guardTools, guardToolDefinitions } from "./tools/guard.js";
 import { slotTools, slotToolDefinitions } from "./tools/slot.js";
 import { hydrationTools, hydrationToolDefinitions } from "./tools/hydration.js";
+import { contractTools, contractToolDefinitions } from "./tools/contract.js";
 import { resourceHandlers, resourceDefinitions } from "./resources/handlers.js";
 import { findProjectRoot } from "./utils/project.js";
 
@@ -51,6 +52,7 @@ export class ManduMcpServer {
       ...guardToolDefinitions,
       ...slotToolDefinitions,
       ...hydrationToolDefinitions,
+      ...contractToolDefinitions,
     ];
   }
 
@@ -63,6 +65,7 @@ export class ManduMcpServer {
       ...guardTools(this.projectRoot),
       ...slotTools(this.projectRoot),
       ...hydrationTools(this.projectRoot),
+      ...contractTools(this.projectRoot),
     };
   }
 

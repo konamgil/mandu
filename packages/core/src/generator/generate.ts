@@ -1,5 +1,6 @@
 import type { RoutesManifest, RouteSpec } from "../spec/schema";
 import { generateApiHandler, generatePageComponent, generateSlotLogic } from "./templates";
+import { generateContractTypeGlue, generateContractTemplate, generateContractTypesIndex } from "./contract-glue";
 import { computeHash } from "../spec/lock";
 import path from "path";
 import fs from "fs/promises";
@@ -52,6 +53,16 @@ export interface SlotMapping {
 }
 
 /**
+ * Contract 파일 매핑 정보
+ */
+export interface ContractMapping {
+  /** Contract 파일 경로 */
+  contractPath: string;
+  /** Type glue 파일 경로 */
+  typeGluePath: string;
+}
+
+/**
  * Generated 파일 엔트리
  */
 export interface GeneratedFileEntry {
@@ -63,6 +74,8 @@ export interface GeneratedFileEntry {
   specLocation: SpecLocation;
   /** Slot 매핑 (있는 경우) */
   slotMapping?: SlotMapping;
+  /** Contract 매핑 (있는 경우) */
+  contractMapping?: ContractMapping;
 }
 
 /**
@@ -98,6 +111,15 @@ async function getExistingFiles(dir: string): Promise<string[]> {
   }
 }
 
+async function getTypeFiles(dir: string): Promise<string[]> {
+  try {
+    const files = await fs.readdir(dir);
+    return files.filter((f) => f.endsWith(".types.ts") || f === "index.ts");
+  } catch {
+    return [];
+  }
+}
+
 export async function generateRoutes(
   manifest: RoutesManifest,
   rootDir: string
@@ -112,10 +134,12 @@ export async function generateRoutes(
 
   const serverRoutesDir = path.join(rootDir, "apps/server/generated/routes");
   const webRoutesDir = path.join(rootDir, "apps/web/generated/routes");
+  const typesDir = path.join(rootDir, "apps/server/generated/types");
   const mapDir = path.join(rootDir, "packages/core/map");
 
   await ensureDir(serverRoutesDir);
   await ensureDir(webRoutesDir);
+  await ensureDir(typesDir);
   await ensureDir(mapDir);
 
   const generatedMap: GeneratedMap = {
@@ -135,6 +159,8 @@ export async function generateRoutes(
 
   const expectedServerFiles = new Set<string>();
   const expectedWebFiles = new Set<string>();
+  const expectedTypeFiles = new Set<string>();
+  const routesWithContracts: string[] = [];
 
   for (let routeIndex = 0; routeIndex < manifest.routes.length; routeIndex++) {
     const route = manifest.routes[routeIndex];
@@ -152,6 +178,9 @@ export async function generateRoutes(
         ? { slotPath: route.slotModule }
         : undefined;
 
+      // Contract 매핑 정보 (있는 경우)
+      let contractMapping: ContractMapping | undefined;
+
       // Server handler
       const serverFileName = `${route.id}.route.ts`;
       const serverFilePath = path.join(serverRoutesDir, serverFileName);
@@ -161,11 +190,46 @@ export async function generateRoutes(
       await Bun.write(serverFilePath, handlerContent);
       result.created.push(serverFilePath);
 
+      // Contract file (only if contractModule is specified)
+      if (route.contractModule) {
+        const contractFilePath = path.join(rootDir, route.contractModule);
+        const contractDir = path.dirname(contractFilePath);
+
+        await ensureDir(contractDir);
+
+        // contract 파일이 이미 존재하면 덮어쓰지 않음 (사용자 코드 보존)
+        const contractExists = await fileExists(contractFilePath);
+        if (!contractExists) {
+          const contractContent = generateContractTemplate(route);
+          await Bun.write(contractFilePath, contractContent);
+          result.created.push(contractFilePath);
+        } else {
+          result.skipped.push(contractFilePath);
+        }
+
+        // Generate type glue
+        const typeFileName = `${route.id}.types.ts`;
+        const typeFilePath = path.join(typesDir, typeFileName);
+        expectedTypeFiles.add(typeFileName);
+
+        const typeGlueContent = generateContractTypeGlue(route, "apps/server/generated/types");
+        await Bun.write(typeFilePath, typeGlueContent);
+        result.created.push(typeFilePath);
+
+        contractMapping = {
+          contractPath: route.contractModule,
+          typeGluePath: `apps/server/generated/types/${typeFileName}`,
+        };
+
+        routesWithContracts.push(route.id);
+      }
+
       generatedMap.files[`apps/server/generated/routes/${serverFileName}`] = {
         routeId: route.id,
         kind: route.kind as "api" | "page",
         specLocation,
         slotMapping,
+        contractMapping,
       };
 
       // Slot file (only if slotModule is specified)
@@ -201,6 +265,7 @@ export async function generateRoutes(
           kind: route.kind,
           specLocation,
           slotMapping,
+          contractMapping,
         };
       }
     } catch (error) {
@@ -209,6 +274,14 @@ export async function generateRoutes(
         `Failed to generate ${route.id}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+  }
+
+  // Generate types index if there are contracts
+  if (routesWithContracts.length > 0) {
+    const typesIndexContent = generateContractTypesIndex(routesWithContracts);
+    const typesIndexPath = path.join(typesDir, "index.ts");
+    await Bun.write(typesIndexPath, typesIndexContent);
+    result.created.push(typesIndexPath);
   }
 
   // Clean up stale files
@@ -225,6 +298,16 @@ export async function generateRoutes(
   for (const file of existingWebFiles) {
     if (!expectedWebFiles.has(file)) {
       const filePath = path.join(webRoutesDir, file);
+      await fs.unlink(filePath);
+      result.deleted.push(filePath);
+    }
+  }
+
+  // Clean up stale type files
+  const existingTypeFiles = await getTypeFiles(typesDir);
+  for (const file of existingTypeFiles) {
+    if (!expectedTypeFiles.has(file) && file !== "index.ts") {
+      const filePath = path.join(typesDir, file);
       await fs.unlink(filePath);
       result.deleted.push(filePath);
     }

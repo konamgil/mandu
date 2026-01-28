@@ -6,6 +6,8 @@ import { guardCheck } from "./commands/guard-check";
 import { dev } from "./commands/dev";
 import { init } from "./commands/init";
 import { build } from "./commands/build";
+import { contractCreate, contractValidate } from "./commands/contract";
+import { openAPIGenerate, openAPIServe } from "./commands/openapi";
 import {
   changeBegin,
   changeCommit,
@@ -28,6 +30,12 @@ Commands:
   build          클라이언트 번들 빌드 (Hydration)
   dev            개발 서버 실행
 
+  contract create <routeId>  라우트에 대한 Contract 생성
+  contract validate          Contract-Slot 일관성 검증
+
+  openapi generate           OpenAPI 3.0 스펙 생성
+  openapi serve              Swagger UI 로컬 서버 실행
+
   change begin   변경 트랜잭션 시작 (스냅샷 생성)
   change commit  변경 확정
   change rollback 스냅샷으로 복원
@@ -38,7 +46,7 @@ Commands:
 Options:
   --name <name>      init 시 프로젝트 이름 (기본: my-mandu-app)
   --file <path>      spec-upsert 시 사용할 spec 파일 경로
-  --port <port>      dev 서버 포트 (기본: 3000)
+  --port <port>      dev/openapi serve 포트 (기본: 3000/8080)
   --no-auto-correct  guard 시 자동 수정 비활성화
   --minify           build 시 코드 압축
   --sourcemap        build 시 소스맵 생성
@@ -46,6 +54,8 @@ Options:
   --message <msg>    change begin 시 설명 메시지
   --id <id>          change rollback 시 특정 변경 ID
   --keep <n>         change prune 시 유지할 스냅샷 수 (기본: 5)
+  --output <path>    openapi generate 시 출력 경로 (기본: openapi.json)
+  --verbose          contract validate 시 상세 출력
   --help, -h         도움말 표시
 
 Examples:
@@ -56,12 +66,19 @@ Examples:
   bunx mandu build --minify
   bunx mandu build --watch
   bunx mandu dev --port 3000
+  bunx mandu contract create users
+  bunx mandu contract validate --verbose
+  bunx mandu openapi generate --output docs/api.json
+  bunx mandu openapi serve --port 8080
   bunx mandu change begin --message "Add new route"
   bunx mandu change commit
   bunx mandu change rollback
 
 Workflow:
   1. init → 2. spec-upsert → 3. generate → 4. build → 5. guard → 6. dev
+
+Contract-first Workflow:
+  1. contract create → 2. Edit contract → 3. generate → 4. Edit slot → 5. contract validate
 `;
 
 function parseArgs(args: string[]): { command: string; options: Record<string, string> } {
@@ -128,6 +145,53 @@ async function main(): Promise<void> {
     case "dev":
       await dev({ port: options.port ? Number(options.port) : undefined });
       break;
+
+    case "contract": {
+      const subCommand = args[1];
+      switch (subCommand) {
+        case "create": {
+          const routeId = args[2] || options._positional;
+          if (!routeId) {
+            console.error("❌ Route ID is required");
+            console.log("\nUsage: bunx mandu contract create <routeId>");
+            process.exit(1);
+          }
+          success = await contractCreate({ routeId });
+          break;
+        }
+        case "validate":
+          success = await contractValidate({ verbose: options.verbose === "true" });
+          break;
+        default:
+          console.error(`❌ Unknown contract subcommand: ${subCommand}`);
+          console.log("\nUsage: bunx mandu contract <create|validate>");
+          process.exit(1);
+      }
+      break;
+    }
+
+    case "openapi": {
+      const subCommand = args[1];
+      switch (subCommand) {
+        case "generate":
+          success = await openAPIGenerate({
+            output: options.output,
+            title: options.title,
+            version: options.version,
+          });
+          break;
+        case "serve":
+          success = await openAPIServe({
+            port: options.port ? Number(options.port) : undefined,
+          });
+          break;
+        default:
+          console.error(`❌ Unknown openapi subcommand: ${subCommand}`);
+          console.log("\nUsage: bunx mandu openapi <generate|serve>");
+          process.exit(1);
+      }
+      break;
+    }
 
     case "change": {
       const subCommand = args[1];

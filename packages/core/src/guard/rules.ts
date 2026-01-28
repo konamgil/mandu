@@ -37,6 +37,27 @@ export const GUARD_RULES: Record<string, GuardRule> = {
     name: "Slot File Not Found",
     description: "spec에 명시된 slotModule 파일을 찾을 수 없습니다",
   },
+  // Contract-related rules
+  CONTRACT_MISSING: {
+    id: "CONTRACT_MISSING",
+    name: "Contract Missing",
+    description: "API 라우트에 contract가 정의되지 않았습니다",
+  },
+  CONTRACT_NOT_FOUND: {
+    id: "CONTRACT_NOT_FOUND",
+    name: "Contract File Not Found",
+    description: "spec에 명시된 contractModule 파일을 찾을 수 없습니다",
+  },
+  CONTRACT_METHOD_NOT_IMPLEMENTED: {
+    id: "CONTRACT_METHOD_NOT_IMPLEMENTED",
+    name: "Contract Method Not Implemented",
+    description: "Contract에 정의된 메서드가 Slot에 구현되지 않았습니다",
+  },
+  CONTRACT_METHOD_UNDOCUMENTED: {
+    id: "CONTRACT_METHOD_UNDOCUMENTED",
+    name: "Contract Method Undocumented",
+    description: "Slot에 구현된 메서드가 Contract에 문서화되지 않았습니다",
+  },
 };
 
 export const FORBIDDEN_IMPORTS = ["fs", "child_process", "cluster", "worker_threads"];
