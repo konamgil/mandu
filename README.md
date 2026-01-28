@@ -24,6 +24,12 @@
 
 ---
 
+## Docs
+
+- `docs/README.md` — Documentation index
+- `docs/api/api-reference.md` — API reference
+- `docs/status.md` — Implementation status
+
 ## The Problem
 
 ### AI Coding's Structural Challenge
@@ -379,7 +385,7 @@ export default Mandu.filling<{ users: User[] }>()
 
 ### API Reference
 
-See the full API reference: `docs/api-reference.md`
+See the full API reference: `docs/api/api-reference.md`
 
 ### Context API
 

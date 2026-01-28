@@ -4,7 +4,7 @@
 > **버전**: 1.1
 > **작성일**: 2026-01-28
 > **대상**: mandu 코어/플랫폼 팀
-> **참조**: `DNA/DNA_ADOPTION_PLAN.md`, `01_mandu_product_brief.md`, `02_mandu_technical_architecture.md`
+> **참조**: `DNA/DNA_ADOPTION_PLAN.md`, `docs/product/01_mandu_product_brief.md`, `docs/architecture/02_mandu_technical_architecture.md`
 
 ---
 
@@ -579,7 +579,7 @@ packages/core/src/
 ## 17. 부록
 
 - 상세 코드 예시는 `DNA/DNA_ADOPTION_PLAN.md` 참고
-- 관련 문서: `01_mandu_product_brief.md`, `02_mandu_technical_architecture.md`
+- 관련 문서: `docs/product/01_mandu_product_brief.md`, `docs/architecture/02_mandu_technical_architecture.md`
 
 ---
 
