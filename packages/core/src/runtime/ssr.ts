@@ -59,6 +59,7 @@ function generateImportMap(manifest: BundleManifest): string {
 
 /**
  * Hydration 스크립트 태그 생성
+ * v0.8.0: Island 직접 로드 제거 - Runtime이 data-mandu-src에서 dynamic import
  */
 function generateHydrationScripts(
   routeId: string,
@@ -72,15 +73,14 @@ function generateHydrationScripts(
     scripts.push(importMap);
   }
 
-  // Island 번들 먼저 로드 (등록)
-  // 주의: ES Module 병렬 로드로 인해 Island가 먼저 등록되어야 함
+  // Island 번들 modulepreload (성능 최적화 - prefetch only)
+  // v0.8.0: <script> 태그 제거 - Runtime이 dynamic import로 로드
   const bundle = manifest.bundles[routeId];
   if (bundle) {
     scripts.push(`<link rel="modulepreload" href="${bundle.js}">`);
-    scripts.push(`<script type="module" src="${bundle.js}"></script>`);
   }
 
-  // Runtime 나중에 로드 (hydrateIslands 실행)
+  // Runtime 로드 (hydrateIslands 실행 - dynamic import 사용)
   if (manifest.shared.runtime) {
     scripts.push(`<script type="module" src="${manifest.shared.runtime}"></script>`);
   }
@@ -90,13 +90,16 @@ function generateHydrationScripts(
 
 /**
  * Island 래퍼로 컨텐츠 감싸기
+ * v0.8.0: data-mandu-src 속성 추가 (Runtime이 dynamic import로 로드)
  */
 export function wrapWithIsland(
   content: string,
   routeId: string,
-  priority: HydrationPriority = "visible"
+  priority: HydrationPriority = "visible",
+  bundleSrc?: string
 ): string {
-  return `<div data-mandu-island="${routeId}" data-mandu-priority="${priority}">${content}</div>`;
+  const srcAttr = bundleSrc ? ` data-mandu-src="${bundleSrc}"` : "";
+  return `<div data-mandu-island="${routeId}"${srcAttr} data-mandu-priority="${priority}">${content}</div>`;
 }
 
 export function renderToHTML(element: ReactElement, options: SSROptions = {}): string {
@@ -122,7 +125,10 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     hydration && hydration.strategy !== "none" && routeId && bundleManifest;
 
   if (needsHydration) {
-    content = wrapWithIsland(content, routeId, hydration.priority);
+    // v0.8.0: bundleSrc를 data-mandu-src 속성으로 전달 (Runtime이 dynamic import로 로드)
+    const bundle = bundleManifest.bundles[routeId];
+    const bundleSrc = bundle?.js;
+    content = wrapWithIsland(content, routeId, hydration.priority, bundleSrc);
   }
 
   // 서버 데이터 스크립트

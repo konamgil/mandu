@@ -47,44 +47,34 @@ function getHydratedRoutes(manifest: RoutesManifest): RouteSpec[] {
 }
 
 /**
- * Runtime 번들 소스 생성
+ * Runtime 번들 소스 생성 (v0.8.0 재설계)
+ *
+ * 설계 원칙:
+ * - 글로벌 레지스트리 없음 (Island가 스스로 등록 안함)
+ * - Runtime이 Island를 dynamic import()로 로드
+ * - HTML의 data-mandu-src 속성에서 번들 URL 읽기
+ * - 실행 순서 문제 완전 해결
  */
 function generateRuntimeSource(): string {
   return `
 /**
- * Mandu Hydration Runtime (Generated)
+ * Mandu Hydration Runtime v0.8.0 (Generated)
+ * Fresh-style dynamic import architecture
  */
 
-// 글로벌 레지스트리 사용 (Island 번들과 공유)
-// 주의: 변수로 캐싱하면 번들러가 인라인 시 new Map()으로 대체함
-// 항상 window.__MANDU_ISLANDS__를 직접 참조해야 함
-window.__MANDU_ISLANDS__ = window.__MANDU_ISLANDS__ || new Map();
-window.__MANDU_ROOTS__ = window.__MANDU_ROOTS__ || new Map();
+// Hydrated roots 추적 (unmount용)
+const hydratedRoots = new Map();
 
 // 서버 데이터
-const serverData = window.__MANDU_DATA__ || {};
-
-/**
- * Island 등록
- */
-export function registerIsland(id, loader) {
-  window.__MANDU_ISLANDS__.set(id, loader);
-}
-
-/**
- * 서버 데이터 가져오기
- */
-export function getServerData(id) {
-  return serverData[id]?.serverData;
-}
+const getServerData = (id) => (window.__MANDU_DATA__ || {})[id]?.serverData || {};
 
 /**
  * Hydration 스케줄러
  */
-function scheduleHydration(element, id, priority, data) {
+function scheduleHydration(element, src, priority) {
   switch (priority) {
     case 'immediate':
-      hydrateIsland(element, id, data);
+      loadAndHydrate(element, src);
       break;
 
     case 'visible':
@@ -92,20 +82,20 @@ function scheduleHydration(element, id, priority, data) {
         const observer = new IntersectionObserver((entries) => {
           if (entries[0].isIntersecting) {
             observer.disconnect();
-            hydrateIsland(element, id, data);
+            loadAndHydrate(element, src);
           }
         }, { rootMargin: '50px' });
         observer.observe(element);
       } else {
-        hydrateIsland(element, id, data);
+        loadAndHydrate(element, src);
       }
       break;
 
     case 'idle':
       if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => hydrateIsland(element, id, data));
+        requestIdleCallback(() => loadAndHydrate(element, src));
       } else {
-        setTimeout(() => hydrateIsland(element, id, data), 200);
+        setTimeout(() => loadAndHydrate(element, src), 200);
       }
       break;
 
@@ -114,7 +104,7 @@ function scheduleHydration(element, id, priority, data) {
         element.removeEventListener('mouseenter', hydrate);
         element.removeEventListener('focusin', hydrate);
         element.removeEventListener('touchstart', hydrate);
-        hydrateIsland(element, id, data);
+        loadAndHydrate(element, src);
       };
       element.addEventListener('mouseenter', hydrate, { once: true, passive: true });
       element.addEventListener('focusin', hydrate, { once: true });
@@ -125,26 +115,26 @@ function scheduleHydration(element, id, priority, data) {
 }
 
 /**
- * 단일 Island hydrate (또는 mount)
- * SSR 플레이스홀더를 Island 컴포넌트로 교체
+ * Island 로드 및 hydrate (핵심 함수)
+ * Dynamic import로 Island 모듈 로드 후 렌더링
  */
-async function hydrateIsland(element, id, data) {
-  const loader = window.__MANDU_ISLANDS__.get(id);
-  if (!loader) {
-    console.warn('[Mandu] Island not found:', id);
-    return;
-  }
+async function loadAndHydrate(element, src) {
+  const id = element.getAttribute('data-mandu-island');
 
   try {
-    const island = await Promise.resolve(loader());
+    // Dynamic import - 이 시점에 Island 모듈 로드
+    const module = await import(src);
+    const island = module.default;
 
-    // Island 컴포넌트 가져오기
-    const islandDef = island.default || island;
-    if (!islandDef.__mandu_island) {
-      throw new Error('[Mandu] Invalid island: ' + id);
+    // Island 유효성 검사
+    if (!island || !island.__mandu_island) {
+      throw new Error('[Mandu] Invalid island module: ' + id);
     }
 
-    const { definition } = islandDef;
+    const { definition } = island;
+    const data = getServerData(id);
+
+    // React 동적 로드
     const { createRoot } = await import('react-dom/client');
     const React = await import('react');
 
@@ -154,11 +144,10 @@ async function hydrateIsland(element, id, data) {
       return definition.render(setupResult);
     }
 
-    // Mount (createRoot 사용 - SSR 플레이스홀더 교체)
-    // hydrateRoot 대신 createRoot 사용: Island는 SSR과 다른 컨텐츠를 렌더링할 수 있음
+    // Mount
     const root = createRoot(element);
     root.render(React.createElement(IslandComponent));
-    window.__MANDU_ROOTS__.set(id, root);
+    hydratedRoots.set(id, root);
 
     // 완료 표시
     element.setAttribute('data-mandu-hydrated', 'true');
@@ -173,6 +162,8 @@ async function hydrateIsland(element, id, data) {
       bubbles: true,
       detail: { id, data }
     }));
+
+    console.log('[Mandu] Hydrated:', id);
   } catch (error) {
     console.error('[Mandu] Hydration failed for', id, error);
     element.setAttribute('data-mandu-error', 'true');
@@ -180,34 +171,47 @@ async function hydrateIsland(element, id, data) {
 }
 
 /**
- * 모든 Island hydrate
+ * 모든 Island hydrate 시작
  */
-export async function hydrateIslands() {
+function hydrateIslands() {
   const islands = document.querySelectorAll('[data-mandu-island]');
 
   for (const el of islands) {
     const id = el.getAttribute('data-mandu-island');
-    if (!id) continue;
-
+    const src = el.getAttribute('data-mandu-src');
     const priority = el.getAttribute('data-mandu-priority') || 'visible';
-    const data = serverData[id]?.serverData || {};
 
-    scheduleHydration(el, id, priority, data);
+    if (!id || !src) {
+      console.warn('[Mandu] Island missing id or src:', el);
+      continue;
+    }
+
+    scheduleHydration(el, src, priority);
   }
 }
 
 /**
- * 자동 초기화
+ * Island unmount
  */
+function unmountIsland(id) {
+  const root = hydratedRoots.get(id);
+  if (root) {
+    root.unmount();
+    hydratedRoots.delete(id);
+    return true;
+  }
+  return false;
+}
+
+// 자동 초기화
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', hydrateIslands);
 } else {
   hydrateIslands();
 }
 
-// 글로벌 레지스트리 접근용 getter
-export const getIslandRegistry = () => window.__MANDU_ISLANDS__;
-export const getHydratedRoots = () => window.__MANDU_ROOTS__;
+// Export for external use
+export { hydrateIslands, unmountIsland, hydratedRoots };
 `;
 }
 
@@ -609,23 +613,22 @@ async function buildRouterRuntime(
 }
 
 /**
- * Island 엔트리 래퍼 생성
- * 주의: 글로벌 레지스트리 직접 사용 (번들러 인라인 문제 방지)
+ * Island 엔트리 래퍼 생성 (v0.8.0 재설계)
+ *
+ * 설계 원칙:
+ * - 순수 export만 (부작용 없음)
+ * - Runtime이 dynamic import로 로드
+ * - 등록/초기화 코드 없음
  */
 function generateIslandEntry(routeId: string, clientModulePath: string): string {
   // Windows 경로의 백슬래시를 슬래시로 변환 (JS escape 문제 방지)
   const normalizedPath = clientModulePath.replace(/\\/g, "/");
   return `
 /**
- * Mandu Island Entry: ${routeId} (Generated)
+ * Mandu Island: ${routeId} (Generated)
+ * Pure export - no side effects
  */
-
 import island from "${normalizedPath}";
-
-// 글로벌 레지스트리에 직접 등록 (런타임과 공유)
-window.__MANDU_ISLANDS__ = window.__MANDU_ISLANDS__ || new Map();
-window.__MANDU_ISLANDS__.set("${routeId}", () => island);
-
 export default island;
 `;
 }
