@@ -109,6 +109,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     port,
     isDev: true,
     hmrPort: hmrServer ? port : undefined,
+    bundleManifest: devBundler?.manifest,
   });
 
   // 정리 함수

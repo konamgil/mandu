@@ -1,5 +1,6 @@
 import type { Server } from "bun";
 import type { RoutesManifest } from "../spec/schema";
+import type { BundleManifest } from "../bundler/types";
 import { Router } from "./router";
 import { renderSSR } from "./ssr";
 import React from "react";
@@ -18,6 +19,8 @@ export interface ServerOptions {
   isDev?: boolean;
   /** HMR 포트 (개발 모드에서 사용) */
   hmrPort?: number;
+  /** 번들 매니페스트 (Island hydration용) */
+  bundleManifest?: BundleManifest;
 }
 
 export interface ManduServer {
@@ -45,7 +48,7 @@ const routeComponents: Map<string, RouteComponent> = new Map();
 let createAppFn: CreateAppFn | null = null;
 
 // Dev mode settings (module-level for handleRequest access)
-let devModeSettings: { isDev: boolean; hmrPort?: number } = { isDev: false };
+let devModeSettings: { isDev: boolean; hmrPort?: number; bundleManifest?: BundleManifest } = { isDev: false };
 
 export function registerApiHandler(routeId: string, handler: ApiHandler): void {
   apiHandlers.set(routeId, handler);
@@ -137,6 +140,9 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
         title: `${route.id} - Mandu`,
         isDev: devModeSettings.isDev,
         hmrPort: devModeSettings.hmrPort,
+        routeId: route.id,
+        hydration: route.hydration,
+        bundleManifest: devModeSettings.bundleManifest,
       });
     } catch (err) {
       const ssrError = createSSRErrorResponse(
@@ -170,10 +176,10 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
 }
 
 export function startServer(manifest: RoutesManifest, options: ServerOptions = {}): ManduServer {
-  const { port = 3000, hostname = "localhost", isDev = false, hmrPort } = options;
+  const { port = 3000, hostname = "localhost", isDev = false, hmrPort, bundleManifest } = options;
 
   // Dev mode settings 저장
-  devModeSettings = { isDev, hmrPort };
+  devModeSettings = { isDev, hmrPort, bundleManifest };
 
   const router = new Router(manifest.routes);
 
