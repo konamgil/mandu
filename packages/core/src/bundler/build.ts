@@ -62,6 +62,10 @@ function generateRuntimeSource(): string {
  * Fresh-style dynamic import architecture
  */
 
+// React 정적 import (Island와 같은 인스턴스 공유)
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+
 // Hydrated roots 추적 (unmount용)
 const hydratedRoots = new Map();
 
@@ -134,17 +138,13 @@ async function loadAndHydrate(element, src) {
     const { definition } = island;
     const data = getServerData(id);
 
-    // React 동적 로드
-    const { createRoot } = await import('react-dom/client');
-    const React = await import('react');
-
-    // Island 컴포넌트
+    // Island 컴포넌트 (정적 import된 React 사용)
     function IslandComponent() {
       const setupResult = definition.setup(data);
       return definition.render(setupResult);
     }
 
-    // Mount
+    // Mount (상단에서 import한 createRoot 사용)
     const root = createRoot(element);
     root.render(React.createElement(IslandComponent));
     hydratedRoots.set(id, root);

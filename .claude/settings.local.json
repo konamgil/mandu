@@ -15,7 +15,20 @@
       "Bash(\"/c/Users/User/.bun/bin/bun.exe\" run packages/cli/src/main.ts generate)",
       "Bash(\"/c/Users/User/.bun/bin/bun.exe\" run packages/cli/src/main.ts guard)",
       "Bash(\"/c/Users/User/.bun/bin/bun.exe\" test)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(npm view:*)",
+      "Bash(npm publish:*)",
+      "Bash(bun run:*)",
+      "Bash(curl:*)",
+      "Bash(bun update:*)",
+      "Bash(npm pkg:*)",
+      "Bash(bun build:*)",
+      "Bash(bun --eval:*)",
+      "Bash(npm version:*)",
+      "Bash(for dir in astro bun elysia fastapi fresh hono next.js phoenix qwik)",
+      "Bash(do echo \"=== $dir ===\" ls -la \"C:/Users/LamySolution/workspace/mandu/DNA/$dir\")",
+      "Bash(du -sh:*)",
+      "Bash(bunx tsc:*)"
     ]
   }
 }
