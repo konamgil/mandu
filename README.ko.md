@@ -24,6 +24,12 @@
 
 ---
 
+## 문서
+
+- `docs/README.ko.md` — 문서 인덱스
+- `docs/api/api-reference.ko.md` — API 레퍼런스
+- `docs/status.ko.md` — 구현 상태
+
 ## 문제 정의
 
 ### AI 코딩의 구조적 문제
@@ -376,6 +382,10 @@ export default Mandu.filling<{ users: User[] }>()
 
 > 참고: Path 파라미터는 `routes.manifest.json`의 pattern에서 결정됩니다.  
 > `/api/users/:id`는 별도의 route/slot 파일로 분리하세요.
+
+### API 레퍼런스
+
+전체 API 레퍼런스: `docs/api/api-reference.ko.md`
 
 ### Context API
 
