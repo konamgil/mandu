@@ -1,4 +1,10 @@
-import { loadManifest, startServer, registerApiHandler, registerPageLoader } from "@mandujs/core";
+import {
+  loadManifest,
+  startServer,
+  registerApiHandler,
+  registerPageLoader,
+  registerPageHandler,
+} from "@mandujs/core";
 import path from "path";
 
 const SPEC_PATH = path.resolve(import.meta.dir, "../../spec/routes.manifest.json");
@@ -28,8 +34,20 @@ async function main() {
       }
     } else if (route.kind === "page") {
       const componentPath = path.resolve(import.meta.dir, "../../", route.componentModule!);
-      registerPageLoader(route.id, () => import(componentPath));
-      console.log(`  📄 Page: ${route.pattern} -> ${route.id}`);
+
+      // slotModule이 있으면 PageHandler 사용 (filling.loader 지원)
+      if (route.slotModule) {
+        registerPageHandler(route.id, async () => {
+          const module = await import(componentPath);
+          // module.default = { component, filling }
+          return module.default;
+        });
+        console.log(`  📄 Page: ${route.pattern} -> ${route.id} (with loader)`);
+      } else {
+        // slotModule이 없으면 기존 PageLoader 사용
+        registerPageLoader(route.id, () => import(componentPath));
+        console.log(`  📄 Page: ${route.pattern} -> ${route.id}`);
+      }
     }
   }
 

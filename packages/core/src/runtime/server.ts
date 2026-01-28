@@ -1,6 +1,8 @@
 import type { Server } from "bun";
 import type { RoutesManifest } from "../spec/schema";
 import type { BundleManifest } from "../bundler/types";
+import type { ManduFilling } from "../filling/filling";
+import { ManduContext } from "../filling/context";
 import { Router } from "./router";
 import { renderSSR } from "./ssr";
 import React from "react";
@@ -103,18 +105,36 @@ export interface ManduServer {
 export type ApiHandler = (req: Request, params: Record<string, string>) => Response | Promise<Response>;
 export type PageLoader = () => Promise<{ default: React.ComponentType<{ params: Record<string, string> }> }>;
 
+/**
+ * Page 등록 정보
+ * - component: React 컴포넌트
+ * - filling: Slot의 ManduFilling 인스턴스 (loader 포함)
+ */
+export interface PageRegistration {
+  component: React.ComponentType<{ params: Record<string, string>; loaderData?: unknown }>;
+  filling?: ManduFilling<unknown>;
+}
+
+/**
+ * Page Handler - 컴포넌트와 filling을 함께 반환
+ */
+export type PageHandler = () => Promise<PageRegistration>;
+
 export interface AppContext {
   routeId: string;
   url: string;
   params: Record<string, string>;
+  /** SSR loader에서 로드한 데이터 */
+  loaderData?: unknown;
 }
 
-type RouteComponent = (props: { params: Record<string, string> }) => React.ReactElement;
+type RouteComponent = (props: { params: Record<string, string>; loaderData?: unknown }) => React.ReactElement;
 type CreateAppFn = (context: AppContext) => React.ReactElement;
 
 // Registry
 const apiHandlers: Map<string, ApiHandler> = new Map();
 const pageLoaders: Map<string, PageLoader> = new Map();
+const pageHandlers: Map<string, PageHandler> = new Map();
 const routeComponents: Map<string, RouteComponent> = new Map();
 let createAppFn: CreateAppFn | null = null;
 
@@ -141,6 +161,14 @@ export function registerPageLoader(routeId: string, loader: PageLoader): void {
   pageLoaders.set(routeId, loader);
 }
 
+/**
+ * Page Handler 등록 (컴포넌트 + filling)
+ * filling이 있으면 loader를 실행하여 serverData 전달
+ */
+export function registerPageHandler(routeId: string, handler: PageHandler): void {
+  pageHandlers.set(routeId, handler);
+}
+
 export function registerRouteComponent(routeId: string, component: RouteComponent): void {
   routeComponents.set(routeId, component);
 }
@@ -160,7 +188,10 @@ function defaultCreateApp(context: AppContext): React.ReactElement {
     );
   }
 
-  return React.createElement(Component, { params: context.params });
+  return React.createElement(Component, {
+    params: context.params,
+    loaderData: context.loaderData,
+  });
 }
 
 // ========== Static File Serving ==========
@@ -281,11 +312,22 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
   }
 
   if (route.kind === "page") {
-    const loader = pageLoaders.get(route.id);
-    if (loader) {
+    let loaderData: unknown;
+    let component: RouteComponent | undefined;
+
+    // 1. PageHandler 방식 (신규 - filling 포함)
+    const pageHandler = pageHandlers.get(route.id);
+    if (pageHandler) {
       try {
-        const module = await loader();
-        registerRouteComponent(route.id, module.default);
+        const registration = await pageHandler();
+        component = registration.component as RouteComponent;
+        registerRouteComponent(route.id, component);
+
+        // Filling의 loader 실행
+        if (registration.filling?.hasLoader()) {
+          const ctx = new ManduContext(req, params);
+          loaderData = await registration.filling.executeLoader(ctx);
+        }
       } catch (err) {
         const pageError = createPageLoadErrorResponse(
           route.id,
@@ -299,6 +341,27 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
         return Response.json(response, { status: 500 });
       }
     }
+    // 2. PageLoader 방식 (레거시 호환)
+    else {
+      const loader = pageLoaders.get(route.id);
+      if (loader) {
+        try {
+          const module = await loader();
+          registerRouteComponent(route.id, module.default);
+        } catch (err) {
+          const pageError = createPageLoadErrorResponse(
+            route.id,
+            route.pattern,
+            err instanceof Error ? err : new Error(String(err))
+          );
+          console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
+          const response = formatErrorResponse(pageError, {
+            isDev: process.env.NODE_ENV !== "production",
+          });
+          return Response.json(response, { status: 500 });
+        }
+      }
+    }
 
     const appCreator = createAppFn || defaultCreateApp;
     try {
@@ -306,7 +369,13 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
         routeId: route.id,
         url: req.url,
         params,
+        loaderData,
       });
+
+      // serverData 구조: { [routeId]: { serverData: loaderData } }
+      const serverData = loaderData
+        ? { [route.id]: { serverData: loaderData } }
+        : undefined;
 
       return renderSSR(app, {
         title: `${route.id} - Mandu`,
@@ -315,6 +384,7 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
         routeId: route.id,
         hydration: route.hydration,
         bundleManifest: serverSettings.bundleManifest,
+        serverData,
       });
     } catch (err) {
       const ssrError = createSSRErrorResponse(
@@ -418,8 +488,9 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
 export function clearRegistry(): void {
   apiHandlers.clear();
   pageLoaders.clear();
+  pageHandlers.clear();
   routeComponents.clear();
   createAppFn = null;
 }
 
-export { apiHandlers, pageLoaders, routeComponents };
+export { apiHandlers, pageLoaders, pageHandlers, routeComponents };

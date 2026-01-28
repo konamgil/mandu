@@ -3,6 +3,7 @@ import {
   startServer,
   registerApiHandler,
   registerPageLoader,
+  registerPageHandler,
   startDevBundler,
   createHMRServer,
   needsHydration,
@@ -59,9 +60,21 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       }
     } else if (route.kind === "page" && route.componentModule) {
       const componentPath = path.resolve(rootDir, route.componentModule);
-      registerPageLoader(route.id, () => import(componentPath));
       const isIsland = needsHydration(route);
-      console.log(`  📄 Page: ${route.pattern} -> ${route.id}${isIsland ? " 🏝️" : ""}`);
+
+      // slotModule이 있으면 PageHandler 사용 (filling.loader 지원)
+      if (route.slotModule) {
+        registerPageHandler(route.id, async () => {
+          const module = await import(componentPath);
+          // module.default = { component, filling }
+          return module.default;
+        });
+        console.log(`  📄 Page: ${route.pattern} -> ${route.id} (with loader)${isIsland ? " 🏝️" : ""}`);
+      } else {
+        // slotModule이 없으면 기존 PageLoader 사용
+        registerPageLoader(route.id, () => import(componentPath));
+        console.log(`  📄 Page: ${route.pattern} -> ${route.id}${isIsland ? " 🏝️" : ""}`);
+      }
     }
   }
 
