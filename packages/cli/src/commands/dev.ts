@@ -6,6 +6,7 @@ import {
   startDevBundler,
   createHMRServer,
   needsHydration,
+  loadEnv,
 } from "@mandujs/core";
 import { resolveFromCwd } from "../util/fs";
 import path from "path";
@@ -21,6 +22,17 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   const rootDir = resolveFromCwd(".");
 
   console.log(`🥟 Mandu Dev Server`);
+
+  // .env 파일 로드
+  const envResult = await loadEnv({
+    rootDir,
+    env: "development",
+  });
+
+  if (envResult.loaded.length > 0) {
+    console.log(`🔐 환경 변수 로드: ${envResult.loaded.join(", ")}`);
+  }
+
   console.log(`📄 Spec 파일: ${specPath}\n`);
 
   const result = await loadManifest(specPath);
@@ -107,9 +119,10 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   // 메인 서버 시작
   const server = startServer(manifest, {
     port,
+    rootDir,
     isDev: true,
     hmrPort: hmrServer ? port : undefined,
-    bundleManifest: devBundler?.manifest,
+    bundleManifest: devBundler?.initialBuild.manifest,
   });
 
   // 정리 함수
