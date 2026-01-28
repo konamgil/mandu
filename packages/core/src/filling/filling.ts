@@ -4,6 +4,7 @@
  */
 
 import { ManduContext, NEXT_SYMBOL, ValidationError } from "./context";
+import { AuthenticationError, AuthorizationError } from "./auth";
 import { ErrorClassifier, formatErrorResponse, ErrorCode } from "../error";
 import { createContract, type ContractDefinition, type ContractInstance } from "../contract";
 
@@ -284,6 +285,35 @@ export class ManduFilling<TLoaderData = unknown> {
       // Execute handler
       return await handler(ctx);
     } catch (error) {
+      // Handle authentication errors
+      if (error instanceof AuthenticationError) {
+        return ctx.json(
+          {
+            errorType: "AUTH_ERROR",
+            code: "AUTHENTICATION_REQUIRED",
+            message: error.message,
+            summary: "인증 필요 - 로그인 후 다시 시도하세요",
+            timestamp: new Date().toISOString(),
+          },
+          401
+        );
+      }
+
+      // Handle authorization errors
+      if (error instanceof AuthorizationError) {
+        return ctx.json(
+          {
+            errorType: "AUTH_ERROR",
+            code: "ACCESS_DENIED",
+            message: error.message,
+            summary: "권한 없음 - 접근 권한이 부족합니다",
+            requiredRoles: error.requiredRoles,
+            timestamp: new Date().toISOString(),
+          },
+          403
+        );
+      }
+
       // Handle validation errors with enhanced error format
       if (error instanceof ValidationError) {
         return ctx.json(
