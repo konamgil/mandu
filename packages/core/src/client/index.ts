@@ -103,8 +103,9 @@ import { Link, NavLink } from "./Link";
 /**
  * Mandu Client namespace
  * v0.8.0: Hydration은 자동으로 처리됨 (generateRuntimeSource에서 생성)
+ * Note: Use `ManduClient` to avoid conflict with other Mandu exports
  */
-export const Mandu = {
+export const ManduClient = {
   /**
    * Create an island component
    * @see island

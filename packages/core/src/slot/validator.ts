@@ -1,6 +1,13 @@
 /**
  * Slot Content Validator
  * 슬롯 파일 내용을 작성 전에 검증하고 문제를 식별합니다.
+ *
+ * 검증 항목:
+ * 1. 필수 import/export 패턴
+ * 2. Mandu.filling() 사용 여부
+ * 3. export default Mandu.filling() 형태 검증
+ * 4. 핸들러 반환 타입 검증 (ctx.ok(), ctx.json() 등)
+ * 5. 금지된 모듈 import 검사
  */
 
 export interface SlotValidationIssue {
@@ -29,12 +36,102 @@ const FORBIDDEN_IMPORTS = [
   "node:worker_threads",
 ];
 
-// 필수 패턴들
+// 필수 패턴들 (더 엄격한 검사)
 const REQUIRED_PATTERNS = {
   manduImport: /import\s+.*\bMandu\b.*from\s+['"]@mandujs\/core['"]/,
   fillingPattern: /Mandu\s*\.\s*filling\s*\(\s*\)/,
   defaultExport: /export\s+default\b/,
+  // export default Mandu.filling() 또는 export default 변수명
+  exportDefaultFilling: /export\s+default\s+(Mandu\s*\.\s*filling\s*\(\s*\)|[a-zA-Z_$][a-zA-Z0-9_$]*)/,
 };
+
+/**
+ * 주석을 제거한 코드 반환
+ * 한줄 주석(//)과 블록 주석 제거
+ */
+function stripComments(content: string): string {
+  // 문자열 내부는 보존하면서 주석만 제거
+  let result = "";
+  let i = 0;
+  let inString: string | null = null;
+  let inComment: "line" | "block" | null = null;
+
+  while (i < content.length) {
+    const char = content[i];
+    const nextChar = content[i + 1];
+
+    // 문자열 처리
+    if (!inComment) {
+      if (!inString && (char === '"' || char === "'" || char === "`")) {
+        inString = char;
+        result += char;
+        i++;
+        continue;
+      }
+      if (inString && char === inString && content[i - 1] !== "\\") {
+        inString = null;
+        result += char;
+        i++;
+        continue;
+      }
+      if (inString) {
+        result += char;
+        i++;
+        continue;
+      }
+    }
+
+    // 주석 시작 감지
+    if (!inString && !inComment) {
+      if (char === "/" && nextChar === "/") {
+        inComment = "line";
+        i += 2;
+        continue;
+      }
+      if (char === "/" && nextChar === "*") {
+        inComment = "block";
+        i += 2;
+        continue;
+      }
+    }
+
+    // 주석 종료 감지
+    if (inComment === "line" && char === "\n") {
+      inComment = null;
+      result += char; // 줄바꿈은 유지
+      i++;
+      continue;
+    }
+    if (inComment === "block" && char === "*" && nextChar === "/") {
+      inComment = null;
+      i += 2;
+      continue;
+    }
+
+    // 주석 내부면 스킵
+    if (inComment) {
+      i++;
+      continue;
+    }
+
+    result += char;
+    i++;
+  }
+
+  return result;
+}
+
+// 올바른 응답 패턴 (ctx 메서드 호출)
+const VALID_RESPONSE_PATTERNS = [
+  /return\s+ctx\s*\.\s*(ok|json|created|noContent|notFound|badRequest|error|html|redirect|stream)\s*\(/,
+  /return\s+new\s+Response\s*\(/,
+  /return\s+Response\s*\.\s*(json|redirect)\s*\(/,
+];
+
+// 잘못된 반환 패턴 (일반 객체 직접 반환)
+const INVALID_RETURN_PATTERNS = [
+  /return\s+\{\s*[^}]*\}\s*;?\s*$/m,  // return { ... }; (Response가 아닌 객체)
+];
 
 /**
  * 슬롯 내용을 검증합니다.
@@ -42,6 +139,9 @@ const REQUIRED_PATTERNS = {
 export function validateSlotContent(content: string): SlotValidationResult {
   const issues: SlotValidationIssue[] = [];
   const lines = content.split("\n");
+
+  // 주석 제거된 코드 (export default 등 패턴 검사용)
+  const codeWithoutComments = stripComments(content);
 
   // 1. 금지된 import 검사
   for (let i = 0; i < lines.length; i++) {
@@ -90,24 +190,53 @@ export function validateSlotContent(content: string): SlotValidationResult {
     });
   }
 
-  // 4. default export 검사
-  if (!REQUIRED_PATTERNS.defaultExport.test(content)) {
+  // 4. default export 검사 (강화됨) - 주석 제거된 코드에서 검사
+  const hasDefaultExport = REQUIRED_PATTERNS.defaultExport.test(codeWithoutComments);
+  const hasExportDefaultFilling = REQUIRED_PATTERNS.exportDefaultFilling.test(codeWithoutComments);
+
+  if (!hasDefaultExport) {
+    // Mandu.filling()이 있는데 export default가 없는 경우 - 변수에 할당만 함
+    const fillingVarMatch = codeWithoutComments.match(/(?:const|let|var)\s+(\w+)\s*=\s*Mandu\s*\.\s*filling\s*\(\s*\)/);
+    if (fillingVarMatch) {
+      const varName = fillingVarMatch[1];
+      issues.push({
+        code: "MISSING_DEFAULT_EXPORT",
+        severity: "error",
+        message: `default export가 없습니다. '${varName}'가 export 되지 않았습니다`,
+        suggestion: `'export default ${varName};' 를 파일 끝에 추가하거나, 'export default Mandu.filling()...' 형태로 작성하세요`,
+        autoFixable: true,
+      });
+    } else {
+      issues.push({
+        code: "MISSING_DEFAULT_EXPORT",
+        severity: "error",
+        message: "default export가 없습니다",
+        suggestion: "export default Mandu.filling()... 형태로 작성하세요",
+        autoFixable: true,
+      });
+    }
+  } else if (hasDefaultExport && REQUIRED_PATTERNS.fillingPattern.test(codeWithoutComments) && !hasExportDefaultFilling) {
+    // export default는 있지만 Mandu.filling()을 export하지 않는 경우
     issues.push({
-      code: "MISSING_DEFAULT_EXPORT",
-      severity: "error",
-      message: "default export가 없습니다",
-      suggestion: "export default Mandu.filling()... 형태로 작성하세요",
-      autoFixable: true,
+      code: "INVALID_DEFAULT_EXPORT",
+      severity: "warning",
+      message: "export default가 Mandu.filling()을 직접 export하지 않습니다",
+      suggestion: "export default Mandu.filling()... 형태로 작성하거나, 변수명을 export default로 내보내세요",
+      autoFixable: false,
     });
   }
 
-  // 5. 기본 문법 검사 (간단한 체크)
-  const syntaxIssues = checkBasicSyntax(content, lines);
+  // 5. 기본 문법 검사 (간단한 체크) - 주석 제거된 코드로 검사
+  const syntaxIssues = checkBasicSyntax(codeWithoutComments, codeWithoutComments.split("\n"));
   issues.push(...syntaxIssues);
 
-  // 6. HTTP 메서드 핸들러 검사
-  const methodIssues = checkHttpMethods(content);
+  // 6. HTTP 메서드 핸들러 검사 (강화됨)
+  const methodIssues = checkHttpMethods(content, lines);
   issues.push(...methodIssues);
+
+  // 7. 핸들러 반환 타입 검사 (신규)
+  const returnIssues = checkHandlerReturns(content, lines);
+  issues.push(...returnIssues);
 
   return {
     valid: issues.filter((i) => i.severity === "error").length === 0,
@@ -185,7 +314,7 @@ function checkBasicSyntax(
 /**
  * HTTP 메서드 핸들러 검사
  */
-function checkHttpMethods(content: string): SlotValidationIssue[] {
+function checkHttpMethods(content: string, lines: string[]): SlotValidationIssue[] {
   const issues: SlotValidationIssue[] = [];
 
   // .get(), .post() 등의 핸들러가 있는지 확인
@@ -204,19 +333,109 @@ function checkHttpMethods(content: string): SlotValidationIssue[] {
   }
 
   // ctx.ok(), ctx.json() 등 응답 패턴 확인
-  const responsePattern = /ctx\s*\.\s*(ok|json|created|noContent|error|html)\s*\(/;
+  const responsePattern = /ctx\s*\.\s*(ok|json|created|noContent|notFound|badRequest|error|html|redirect|stream)\s*\(/;
   if (hasMethod && !responsePattern.test(content)) {
     issues.push({
       code: "NO_RESPONSE_PATTERN",
-      severity: "warning",
-      message: "응답 패턴이 없습니다",
+      severity: "error",  // 에러로 승격 (warning → error)
+      message: "ctx 응답 메서드가 없습니다 (ctx.ok(), ctx.json() 등)",
       suggestion:
-        "핸들러에서 ctx.ok(), ctx.json() 등으로 응답을 반환하세요",
+        "핸들러에서 ctx.ok(), ctx.json(), ctx.created() 등으로 응답을 반환하세요. 일반 객체 { ... }를 직접 반환하면 안 됩니다.",
       autoFixable: false,
     });
   }
 
   return issues;
+}
+
+/**
+ * 핸들러 반환 타입 검사 (신규)
+ * 핸들러가 올바른 Response 객체를 반환하는지 검사
+ */
+function checkHandlerReturns(content: string, lines: string[]): SlotValidationIssue[] {
+  const issues: SlotValidationIssue[] = [];
+
+  // 핸들러 내부에서 일반 객체를 직접 반환하는 패턴 감지
+  // 예: return { data: [], status: "ok" };
+  const handlerBlockPattern = /\.(get|post|put|patch|delete)\s*\(\s*(?:async\s*)?\(?(?:ctx)?\)?\s*=>\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}/gs;
+
+  let match;
+  while ((match = handlerBlockPattern.exec(content)) !== null) {
+    const method = match[1].toUpperCase();
+    const handlerBody = match[2];
+
+    // 핸들러 본문에서 return 문 찾기
+    const returnStatements = handlerBody.match(/return\s+[^;]+;?/g) || [];
+
+    for (const returnStmt of returnStatements) {
+      // ctx.* 또는 new Response 또는 Response.* 패턴 확인
+      const isValidReturn =
+        /return\s+ctx\s*\./.test(returnStmt) ||
+        /return\s+new\s+Response/.test(returnStmt) ||
+        /return\s+Response\s*\./.test(returnStmt);
+
+      // 일반 객체 직접 반환 감지: return { ... }
+      const isObjectReturn = /return\s+\{/.test(returnStmt) && !isValidReturn;
+
+      // 문자열 직접 반환 감지: return "string" 또는 return 'string'
+      const isStringReturn = /return\s+['"`]/.test(returnStmt) && !isValidReturn;
+
+      // throw 문자열 감지 (Error 객체가 아닌 문자열)
+      const throwStringPattern = /throw\s+['"`][^'"`]+['"`]/;
+
+      if (isObjectReturn) {
+        // return 문이 있는 라인 번호 찾기
+        const lineNum = findLineNumber(lines, returnStmt.trim().substring(0, 30));
+        issues.push({
+          code: "INVALID_HANDLER_RETURN",
+          severity: "error",
+          message: `${method} 핸들러가 일반 객체를 직접 반환합니다`,
+          line: lineNum,
+          suggestion: "return { ... } 대신 return ctx.ok({ ... }) 또는 return ctx.json({ ... }) 을 사용하세요",
+          autoFixable: false,
+        });
+      }
+
+      if (isStringReturn) {
+        const lineNum = findLineNumber(lines, returnStmt.trim().substring(0, 30));
+        issues.push({
+          code: "INVALID_HANDLER_RETURN",
+          severity: "error",
+          message: `${method} 핸들러가 문자열을 직접 반환합니다`,
+          line: lineNum,
+          suggestion: "return 'text' 대신 return ctx.html('text') 또는 return ctx.ok({ message: 'text' }) 를 사용하세요",
+          autoFixable: false,
+        });
+      }
+    }
+
+    // throw 문자열 검사
+    if (/throw\s+['"`][^'"`]+['"`]/.test(handlerBody)) {
+      const lineNum = findLineNumber(lines, "throw");
+      issues.push({
+        code: "INVALID_THROW_PATTERN",
+        severity: "warning",
+        message: `${method} 핸들러에서 문자열을 직접 throw합니다`,
+        line: lineNum,
+        suggestion: "throw 'message' 대신 throw new Error('message') 를 사용하세요",
+        autoFixable: false,
+      });
+    }
+  }
+
+  return issues;
+}
+
+/**
+ * 특정 텍스트가 있는 라인 번호 찾기
+ */
+function findLineNumber(lines: string[], searchText: string): number | undefined {
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes(searchText)) {
+      return i + 1;
+    }
+  }
+  return undefined;
 }
 
 /**

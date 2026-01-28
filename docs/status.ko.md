@@ -23,7 +23,10 @@
 | Contract 스키마/검증 | 완료 | `packages/core/src/contract/*` |
 | OpenAPI 생성기 | 완료 | `packages/core/src/openapi/generator.ts` |
 | CLI OpenAPI generate/serve | 완료 | `packages/cli/src/commands/openapi.ts` |
-| Contract 타입 추론 | 미시작 | (`contract/infer.ts` 없음) |
+| Contract 타입 추론 | 완료 | `packages/core/src/contract/types.ts`, `handler.ts` |
+| Typed Handler | 완료 | `packages/core/src/contract/handler.ts` |
+| Typed Client | 완료 | `packages/core/src/contract/client.ts` |
+| Mandu Namespace API | 완료 | `Mandu.contract/handler/route/client/fetch` |
 | 스키마 정규화/coerce | 미시작 | (`contract/normalize.ts` 없음) |
 | OpenAPI examples/extra | 미시작 | (generator 미지원) |
 

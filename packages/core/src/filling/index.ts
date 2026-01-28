@@ -4,7 +4,7 @@
 
 export { ManduContext, ValidationError, CookieManager } from "./context";
 export type { CookieOptions } from "./context";
-export { ManduFilling, Mandu, LoaderTimeoutError } from "./filling";
+export { ManduFilling, ManduFillingFactory, LoaderTimeoutError } from "./filling";
 export type { Handler, Guard, HttpMethod, Loader, LoaderOptions } from "./filling";
 
 // Auth Guards

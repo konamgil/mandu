@@ -1,6 +1,7 @@
 import { GUARD_RULES, FORBIDDEN_IMPORTS, type GuardViolation } from "./rules";
 import { verifyLock, computeHash } from "../spec/lock";
 import { runContractGuardCheck } from "./contract-guard";
+import { validateSlotContent } from "../slot/validator";
 import type { RoutesManifest } from "../spec/schema";
 import type { GeneratedMap } from "../generator/generate";
 import path from "path";
@@ -147,6 +148,51 @@ export async function checkSlotFileExists(
   return violations;
 }
 
+// Rule 6: Slot content validation (신규)
+export async function checkSlotContentValidation(
+  manifest: RoutesManifest,
+  rootDir: string
+): Promise<GuardViolation[]> {
+  const violations: GuardViolation[] = [];
+
+  for (const route of manifest.routes) {
+    if (!route.slotModule) continue;
+
+    const slotPath = path.join(rootDir, route.slotModule);
+    const content = await readFileContent(slotPath);
+
+    if (!content) continue; // File doesn't exist, handled by checkSlotFileExists
+
+    const validationResult = validateSlotContent(content);
+
+    // Convert slot validation issues to guard violations
+    for (const issue of validationResult.issues) {
+      if (issue.severity === "error") {
+        // Map slot issue codes to guard rule IDs
+        let ruleId = "SLOT_VALIDATION_ERROR";
+        if (issue.code === "MISSING_DEFAULT_EXPORT") {
+          ruleId = GUARD_RULES.SLOT_MISSING_DEFAULT_EXPORT?.id ?? "SLOT_MISSING_DEFAULT_EXPORT";
+        } else if (issue.code === "NO_RESPONSE_PATTERN" || issue.code === "INVALID_HANDLER_RETURN") {
+          ruleId = GUARD_RULES.SLOT_INVALID_RETURN?.id ?? "SLOT_INVALID_RETURN";
+        } else if (issue.code === "MISSING_FILLING_PATTERN") {
+          ruleId = GUARD_RULES.SLOT_MISSING_FILLING_PATTERN?.id ?? "SLOT_MISSING_FILLING_PATTERN";
+        }
+
+        violations.push({
+          ruleId,
+          file: route.slotModule,
+          message: `[${route.id}] ${issue.message}`,
+          suggestion: issue.suggestion,
+          line: issue.line,
+          severity: issue.severity,
+        });
+      }
+    }
+  }
+
+  return violations;
+}
+
 // Rule 4: Forbidden imports in generated files
 export async function checkForbiddenImportsInGenerated(
   rootDir: string,
@@ -249,7 +295,11 @@ export async function runGuardCheck(
   const slotViolations = await checkSlotFileExists(manifest, rootDir);
   violations.push(...slotViolations);
 
-  // Rule 6-9: Contract-related checks
+  // Rule 6: Slot content validation (신규 - 강화된 검증)
+  const slotContentViolations = await checkSlotContentValidation(manifest, rootDir);
+  violations.push(...slotContentViolations);
+
+  // Rule 7-10: Contract-related checks
   const contractViolations = await runContractGuardCheck(manifest, rootDir);
   violations.push(...contractViolations);
 

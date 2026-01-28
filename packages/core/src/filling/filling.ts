@@ -293,7 +293,11 @@ export class ManduFilling<TLoaderData = unknown> {
   }
 }
 
-export const Mandu = {
+/**
+ * Mandu Filling factory functions
+ * Note: These are also available via the main `Mandu` namespace
+ */
+export const ManduFillingFactory = {
   filling<TLoaderData = unknown>(): ManduFilling<TLoaderData> {
     return new ManduFilling<TLoaderData>();
   },

@@ -1,6 +1,10 @@
 /**
  * Mandu Contract Validator
  * 런타임 요청/응답 검증
+ *
+ * 모드:
+ * - lenient (기본): 응답 검증 실패 시 경고만 출력
+ * - strict: 응답 검증 실패 시 에러 반환 (프로덕션 안전성)
  */
 
 import type { z } from "zod";
@@ -11,6 +15,21 @@ import type {
   ContractValidationIssue,
   MethodRequestSchema,
 } from "./schema";
+
+/**
+ * Validator 옵션
+ */
+export interface ContractValidatorOptions {
+  /**
+   * strict: 응답 검증 실패 시 에러 Response 반환
+   * lenient: 응답 검증 실패 시 경고만 출력 (기본값)
+   */
+  mode?: "strict" | "lenient";
+  /**
+   * 응답 검증 실패 시 커스텀 에러 핸들러
+   */
+  onResponseViolation?: (errors: ContractValidationError[], statusCode: number) => void;
+}
 
 /**
  * Parse query string from URL
@@ -53,7 +72,31 @@ function zodErrorToIssues(error: z.ZodError): ContractValidationIssue[] {
  * Validates requests and responses against contract schemas
  */
 export class ContractValidator {
-  constructor(private contract: ContractSchema) {}
+  private options: Required<ContractValidatorOptions>;
+
+  constructor(
+    private contract: ContractSchema,
+    options: ContractValidatorOptions = {}
+  ) {
+    this.options = {
+      mode: options.mode ?? "lenient",
+      onResponseViolation: options.onResponseViolation ?? (() => {}),
+    };
+  }
+
+  /**
+   * 현재 모드 확인
+   */
+  isStrictMode(): boolean {
+    return this.options.mode === "strict";
+  }
+
+  /**
+   * 모드 변경
+   */
+  setMode(mode: "strict" | "lenient"): void {
+    this.options.mode = mode;
+  }
 
   /**
    * Validate incoming request against contract
@@ -164,7 +207,7 @@ export class ContractValidator {
   }
 
   /**
-   * Validate response against contract (development mode)
+   * Validate response against contract
    * @param responseBody - The response body (already parsed)
    * @param statusCode - HTTP status code
    */
@@ -177,18 +220,80 @@ export class ContractValidator {
 
     const result = responseSchema.safeParse(responseBody);
     if (!result.success) {
+      const errors: ContractValidationError[] = [
+        {
+          type: "response",
+          issues: zodErrorToIssues(result.error),
+        },
+      ];
+
+      // 커스텀 핸들러 호출
+      this.options.onResponseViolation(errors, statusCode);
+
       return {
         success: false,
-        errors: [
-          {
-            type: "response",
-            issues: zodErrorToIssues(result.error),
-          },
-        ],
+        errors,
       };
     }
 
     return { success: true, data: result.data };
+  }
+
+  /**
+   * Validate response and return error Response in strict mode
+   * @param response - The original Response object
+   * @returns Original response or error response
+   */
+  async validateResponseStrict(response: Response): Promise<{
+    valid: boolean;
+    response: Response;
+    errors?: ContractValidationError[];
+  }> {
+    // Clone response to read body
+    const cloned = response.clone();
+    const contentType = response.headers.get("content-type") || "";
+
+    // Only validate JSON responses
+    if (!contentType.includes("application/json")) {
+      return { valid: true, response };
+    }
+
+    let body: unknown;
+    try {
+      body = await cloned.json();
+    } catch {
+      return { valid: true, response }; // Can't parse, skip validation
+    }
+
+    const result = this.validateResponse(body, response.status);
+
+    if (!result.success) {
+      if (this.options.mode === "strict") {
+        // strict 모드: 에러 응답 반환
+        const errorResponse = Response.json(
+          {
+            errorType: "CONTRACT_VIOLATION",
+            code: "MANDU_C001",
+            message: "Response does not match contract schema",
+            summary: "응답이 Contract 스키마와 일치하지 않습니다",
+            statusCode: response.status,
+            violations: result.errors,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 500 }
+        );
+        return { valid: false, response: errorResponse, errors: result.errors };
+      } else {
+        // lenient 모드: 경고만 출력하고 원래 응답 반환
+        console.warn(
+          "\x1b[33m[Mandu] Contract violation in response:\x1b[0m",
+          result.errors
+        );
+        return { valid: false, response, errors: result.errors };
+      }
+    }
+
+    return { valid: true, response };
   }
 
   /**

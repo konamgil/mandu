@@ -6,3 +6,4 @@ export { guardTools, guardToolDefinitions } from "./guard.js";
 export { slotTools, slotToolDefinitions } from "./slot.js";
 export { hydrationTools, hydrationToolDefinitions } from "./hydration.js";
 export { contractTools, contractToolDefinitions } from "./contract.js";
+export { brainTools, brainToolDefinitions } from "./brain.js";

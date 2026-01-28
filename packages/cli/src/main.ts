@@ -16,6 +16,9 @@ import {
   changeList,
   changePrune,
 } from "./commands/change";
+import { doctor } from "./commands/doctor";
+import { watch } from "./commands/watch";
+import { brainSetup, brainStatus } from "./commands/brain";
 
 const HELP_TEXT = `
 🥟 Mandu CLI - Agent-Native Fullstack Framework
@@ -29,6 +32,12 @@ Commands:
   guard          Guard 규칙 검사
   build          클라이언트 번들 빌드 (Hydration)
   dev            개발 서버 실행
+
+  doctor         Guard 실패 분석 + 패치 제안 (Brain)
+  watch          실시간 파일 감시 - 경고만 (Brain)
+
+  brain setup    sLLM 설정 (선택)
+  brain status   Brain 상태 확인
 
   contract create <routeId>  라우트에 대한 Contract 생성
   contract validate          Contract-Slot 일관성 검증
@@ -54,8 +63,12 @@ Options:
   --message <msg>    change begin 시 설명 메시지
   --id <id>          change rollback 시 특정 변경 ID
   --keep <n>         change prune 시 유지할 스냅샷 수 (기본: 5)
-  --output <path>    openapi generate 시 출력 경로 (기본: openapi.json)
-  --verbose          contract validate 시 상세 출력
+  --output <path>    openapi/doctor 출력 경로
+  --format <fmt>     doctor 출력 형식: console, json, markdown (기본: console)
+  --no-llm           doctor에서 LLM 사용 안 함 (템플릿 모드)
+  --model <name>     brain setup 시 모델 이름 (기본: llama3.2)
+  --url <url>        brain setup 시 Ollama URL
+  --verbose          상세 출력
   --help, -h         도움말 표시
 
 Examples:
@@ -66,6 +79,11 @@ Examples:
   bunx mandu build --minify
   bunx mandu build --watch
   bunx mandu dev --port 3000
+  bunx mandu doctor
+  bunx mandu doctor --format markdown --output report.md
+  bunx mandu watch
+  bunx mandu brain setup --model codellama
+  bunx mandu brain status
   bunx mandu contract create users
   bunx mandu contract validate --verbose
   bunx mandu openapi generate --output docs/api.json
@@ -79,6 +97,9 @@ Workflow:
 
 Contract-first Workflow:
   1. contract create → 2. Edit contract → 3. generate → 4. Edit slot → 5. contract validate
+
+Brain (sLLM) Workflow:
+  1. brain setup → 2. doctor (분석) → 3. watch (감시)
 `;
 
 function parseArgs(args: string[]): { command: string; options: Record<string, string> } {
@@ -219,6 +240,44 @@ async function main(): Promise<void> {
         default:
           console.error(`❌ Unknown change subcommand: ${subCommand}`);
           console.log(`\nUsage: bunx mandu change <begin|commit|rollback|status|list|prune>`);
+          process.exit(1);
+      }
+      break;
+    }
+
+    case "doctor":
+      success = await doctor({
+        format: (options.format as "console" | "json" | "markdown") || "console",
+        useLLM: options["no-llm"] !== "true",
+        output: options.output,
+      });
+      break;
+
+    case "watch":
+      success = await watch({
+        status: options.status === "true",
+        debounce: options.debounce ? Number(options.debounce) : undefined,
+      });
+      break;
+
+    case "brain": {
+      const subCommand = args[1];
+      switch (subCommand) {
+        case "setup":
+          success = await brainSetup({
+            model: options.model,
+            url: options.url,
+            skipCheck: options["skip-check"] === "true",
+          });
+          break;
+        case "status":
+          success = await brainStatus({
+            verbose: options.verbose === "true",
+          });
+          break;
+        default:
+          console.error(`❌ Unknown brain subcommand: ${subCommand}`);
+          console.log("\nUsage: bunx mandu brain <setup|status>");
           process.exit(1);
       }
       break;

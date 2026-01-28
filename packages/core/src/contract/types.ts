@@ -132,3 +132,86 @@ export type ContractMethods<T extends ContractSchema> = Extract<
  * Helper type to get all defined status codes in a contract
  */
 export type ContractStatusCodes<T extends ContractSchema> = keyof T["response"];
+
+/**
+ * Helper type to check if a method exists in contract
+ */
+export type HasMethod<
+  T extends ContractSchema,
+  M extends string
+> = M extends keyof T["request"] ? true : false;
+
+/**
+ * Extract all required fields from a method schema
+ */
+export type RequiredFields<
+  T extends ContractSchema,
+  M extends keyof T["request"]
+> = T["request"][M] extends MethodRequestSchema
+  ? {
+      query: T["request"][M]["query"] extends z.ZodTypeAny ? true : false;
+      body: T["request"][M]["body"] extends z.ZodTypeAny ? true : false;
+      params: T["request"][M]["params"] extends z.ZodTypeAny ? true : false;
+      headers: T["request"][M]["headers"] extends z.ZodTypeAny ? true : false;
+    }
+  : never;
+
+/**
+ * Get the success response type (200 or 201)
+ */
+export type SuccessResponse<T extends ContractSchema> = T["response"][200] extends z.ZodTypeAny
+  ? z.infer<T["response"][200]>
+  : T["response"][201] extends z.ZodTypeAny
+    ? z.infer<T["response"][201]>
+    : never;
+
+/**
+ * Get the error response type (400, 404, 500, etc.)
+ */
+export type ErrorResponse<T extends ContractSchema> =
+  | (T["response"][400] extends z.ZodTypeAny ? z.infer<T["response"][400]> : never)
+  | (T["response"][401] extends z.ZodTypeAny ? z.infer<T["response"][401]> : never)
+  | (T["response"][403] extends z.ZodTypeAny ? z.infer<T["response"][403]> : never)
+  | (T["response"][404] extends z.ZodTypeAny ? z.infer<T["response"][404]> : never)
+  | (T["response"][500] extends z.ZodTypeAny ? z.infer<T["response"][500]> : never);
+
+/**
+ * Utility type for strict contract enforcement
+ * Contract에 정의된 메서드만 허용
+ */
+export type StrictContractMethods<T extends ContractSchema> = {
+  [M in ContractMethods<T>]: true;
+};
+
+/**
+ * Type-safe fetch options derived from contract
+ * 클라이언트에서 Contract 기반 fetch 호출에 사용
+ */
+export type ContractFetchOptions<
+  T extends ContractSchema,
+  M extends keyof T["request"]
+> = T["request"][M] extends MethodRequestSchema
+  ? {
+      query?: T["request"][M]["query"] extends z.ZodTypeAny
+        ? z.input<T["request"][M]["query"]>
+        : never;
+      body?: T["request"][M]["body"] extends z.ZodTypeAny
+        ? z.input<T["request"][M]["body"]>
+        : never;
+      params?: T["request"][M]["params"] extends z.ZodTypeAny
+        ? z.input<T["request"][M]["params"]>
+        : never;
+      headers?: T["request"][M]["headers"] extends z.ZodTypeAny
+        ? z.input<T["request"][M]["headers"]>
+        : never;
+    }
+  : never;
+
+/**
+ * Response type union for a contract
+ */
+export type ContractResponseUnion<T extends ContractSchema> = {
+  [K in keyof T["response"]]: T["response"][K] extends z.ZodTypeAny
+    ? { status: K; data: z.infer<T["response"][K]> }
+    : never;
+}[keyof T["response"]];
