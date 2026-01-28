@@ -22,7 +22,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/konamgil/mandu.git",
+    "url": "git+https://github.com/konamgil/mandu.git",
     "directory": "packages/core"
   },
   "author": "konamgil",
