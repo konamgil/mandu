@@ -205,8 +205,8 @@ export class ContractValidator {
    */
   getStatusCodes(): number[] {
     return Object.keys(this.contract.response)
-      .map((k) => parseInt(k, 10))
-      .filter((n) => !isNaN(n));
+      .filter((k) => /^\d+$/.test(k))
+      .map((k) => parseInt(k, 10));
   }
 
   /**

@@ -49,7 +49,13 @@ export class CookieManager {
       for (const pair of pairs) {
         const [name, ...rest] = pair.trim().split("=");
         if (name) {
-          cookies.set(name, decodeURIComponent(rest.join("=")));
+          const rawValue = rest.join("=");
+          try {
+            cookies.set(name, decodeURIComponent(rawValue));
+          } catch {
+            // 잘못된 URL 인코딩 시 원본 값 사용
+            cookies.set(name, rawValue);
+          }
         }
       }
     }

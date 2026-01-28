@@ -25,12 +25,30 @@ export class Router {
   private compilePattern(pattern: string): { regex: RegExp; paramNames: string[] } {
     const paramNames: string[] = [];
 
-    const regexStr = pattern
-      .replace(/\//g, "\\/")
-      .replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, paramName) => {
-        paramNames.push(paramName);
+    // 파라미터 플레이스홀더를 임시 토큰으로 대체
+    const PARAM_PLACEHOLDER = "\x00PARAM\x00";
+    const paramMatches: string[] = [];
+
+    const withPlaceholders = pattern.replace(
+      /:([a-zA-Z_][a-zA-Z0-9_]*)/g,
+      (_, paramName) => {
+        paramMatches.push(paramName);
+        return PARAM_PLACEHOLDER;
+      }
+    );
+
+    // regex 특수문자 이스케이프 (/ 포함)
+    const escaped = withPlaceholders.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&");
+
+    // 플레이스홀더를 캡처 그룹으로 복원하고 paramNames 채우기
+    let paramIndex = 0;
+    const regexStr = escaped.replace(
+      new RegExp(PARAM_PLACEHOLDER.replace(/\x00/g, "\\x00"), "g"),
+      () => {
+        paramNames.push(paramMatches[paramIndex++]);
         return "([^/]+)";
-      });
+      }
+    );
 
     const regex = new RegExp(`^${regexStr}$`);
     return { regex, paramNames };

@@ -20,6 +20,8 @@ export interface GenerateResult {
   deleted: string[];
   skipped: string[];
   errors: string[];
+  /** 삭제 실패 등 치명적이지 않은 경고 */
+  warnings: string[];
 }
 
 /**
@@ -130,6 +132,7 @@ export async function generateRoutes(
     deleted: [],
     skipped: [],
     errors: [],
+    warnings: [],
   };
 
   const serverRoutesDir = path.join(rootDir, "apps/server/generated/routes");
@@ -289,8 +292,14 @@ export async function generateRoutes(
   for (const file of existingServerFiles) {
     if (!expectedServerFiles.has(file)) {
       const filePath = path.join(serverRoutesDir, file);
-      await fs.unlink(filePath);
-      result.deleted.push(filePath);
+      try {
+        await fs.unlink(filePath);
+        result.deleted.push(filePath);
+      } catch (error) {
+        result.warnings.push(
+          `Failed to delete ${filePath}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
   }
 
@@ -298,8 +307,14 @@ export async function generateRoutes(
   for (const file of existingWebFiles) {
     if (!expectedWebFiles.has(file)) {
       const filePath = path.join(webRoutesDir, file);
-      await fs.unlink(filePath);
-      result.deleted.push(filePath);
+      try {
+        await fs.unlink(filePath);
+        result.deleted.push(filePath);
+      } catch (error) {
+        result.warnings.push(
+          `Failed to delete ${filePath}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
   }
 
@@ -308,8 +323,14 @@ export async function generateRoutes(
   for (const file of existingTypeFiles) {
     if (!expectedTypeFiles.has(file) && file !== "index.ts") {
       const filePath = path.join(typesDir, file);
-      await fs.unlink(filePath);
-      result.deleted.push(filePath);
+      try {
+        await fs.unlink(filePath);
+        result.deleted.push(filePath);
+      } catch (error) {
+        result.warnings.push(
+          `Failed to delete ${filePath}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
   }
 

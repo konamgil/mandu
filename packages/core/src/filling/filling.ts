@@ -19,6 +19,22 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | 
 /** Loader function type - SSR 데이터 로딩 */
 export type Loader<T = unknown> = (ctx: ManduContext) => T | Promise<T>;
 
+/** Loader 실행 옵션 */
+export interface LoaderOptions<T = unknown> {
+  /** 타임아웃 (ms), 기본값 5000 */
+  timeout?: number;
+  /** 타임아웃 또는 에러 시 반환할 fallback 데이터 */
+  fallback?: T;
+}
+
+/** Loader 타임아웃 에러 */
+export class LoaderTimeoutError extends Error {
+  constructor(timeout: number) {
+    super(`Loader timed out after ${timeout}ms`);
+    this.name = "LoaderTimeoutError";
+  }
+}
+
 interface FillingConfig<TLoaderData = unknown> {
   handlers: Map<HttpMethod, Handler>;
   guards: Guard[];
@@ -78,12 +94,37 @@ export class ManduFilling<TLoaderData = unknown> {
   /**
    * Execute loader and return data
    * @internal Used by SSR runtime
+   * @param ctx ManduContext
+   * @param options Loader 실행 옵션 (timeout, fallback)
    */
-  async executeLoader(ctx: ManduContext): Promise<TLoaderData | undefined> {
+  async executeLoader(
+    ctx: ManduContext,
+    options: LoaderOptions<TLoaderData> = {}
+  ): Promise<TLoaderData | undefined> {
     if (!this.config.loader) {
       return undefined;
     }
-    return await this.config.loader(ctx);
+
+    const { timeout = 5000, fallback } = options;
+
+    try {
+      const loaderPromise = Promise.resolve(this.config.loader(ctx));
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new LoaderTimeoutError(timeout)), timeout);
+      });
+
+      return await Promise.race([loaderPromise, timeoutPromise]);
+    } catch (error) {
+      if (fallback !== undefined) {
+        console.warn(
+          `[Mandu] Loader failed, using fallback:`,
+          error instanceof Error ? error.message : String(error)
+        );
+        return fallback;
+      }
+      throw error;
+    }
   }
 
   /**
@@ -203,7 +244,11 @@ export class ManduFilling<TLoaderData = unknown> {
           return result as Response;
         }
         if (!ctx.shouldContinue) {
-          return ctx.getResponse()!;
+          const response = ctx.getResponse();
+          if (!response) {
+            throw new Error("Guard set shouldContinue=false but no response was provided");
+          }
+          return response;
         }
       }
 
@@ -215,7 +260,11 @@ export class ManduFilling<TLoaderData = unknown> {
           return result as Response;
         }
         if (!ctx.shouldContinue) {
-          return ctx.getResponse()!;
+          const response = ctx.getResponse();
+          if (!response) {
+            throw new Error("Guard set shouldContinue=false but no response was provided");
+          }
+          return response;
         }
       }
 
