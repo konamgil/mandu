@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "mandu": {
+      "command": "bun",
+      "args": ["run", "packages/mcp/src/index.ts"],
+      "cwd": "C:\\Users\\User\\workspace\\mandu"
+    }
+  }
+}
