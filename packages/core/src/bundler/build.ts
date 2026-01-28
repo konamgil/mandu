@@ -250,6 +250,36 @@ export default ReactDOMClient;
 }
 
 /**
+ * JSX Runtime shim 소스 생성
+ */
+function generateJsxRuntimeShimSource(): string {
+  return `
+/**
+ * Mandu JSX Runtime Shim (Generated)
+ * Production JSX 변환용
+ */
+import * as jsxRuntime from 'react/jsx-runtime';
+export * from 'react/jsx-runtime';
+export default jsxRuntime;
+`;
+}
+
+/**
+ * JSX Dev Runtime shim 소스 생성
+ */
+function generateJsxDevRuntimeShimSource(): string {
+  return `
+/**
+ * Mandu JSX Dev Runtime Shim (Generated)
+ * Development JSX 변환용
+ */
+import * as jsxDevRuntime from 'react/jsx-dev-runtime';
+export * from 'react/jsx-dev-runtime';
+export default jsxDevRuntime;
+`;
+}
+
+/**
  * Island 엔트리 래퍼 생성
  */
 function generateIslandEntry(routeId: string, clientModulePath: string): string {
@@ -332,6 +362,8 @@ interface VendorBuildResult {
   react: string;
   reactDom: string;
   reactDomClient: string;
+  jsxRuntime: string;
+  jsxDevRuntime: string;
   errors: string[];
 }
 
@@ -348,12 +380,16 @@ async function buildVendorShims(
     react: "",
     reactDom: "",
     reactDomClient: "",
+    jsxRuntime: "",
+    jsxDevRuntime: "",
   };
 
   const shims = [
     { name: "_react", source: generateReactShimSource(), key: "react" },
     { name: "_react-dom", source: generateReactDOMShimSource(), key: "reactDom" },
     { name: "_react-dom-client", source: generateReactDOMClientShimSource(), key: "reactDomClient" },
+    { name: "_jsx-runtime", source: generateJsxRuntimeShimSource(), key: "jsxRuntime" },
+    { name: "_jsx-dev-runtime", source: generateJsxDevRuntimeShimSource(), key: "jsxDevRuntime" },
   ];
 
   for (const shim of shims) {
@@ -394,6 +430,8 @@ async function buildVendorShims(
     react: results.react,
     reactDom: results.reactDom,
     reactDomClient: results.reactDomClient,
+    jsxRuntime: results.jsxRuntime,
+    jsxDevRuntime: results.jsxDevRuntime,
     errors,
   };
 }
@@ -494,6 +532,8 @@ function createBundleManifest(
         "react": vendorResult.react,
         "react-dom": vendorResult.reactDom,
         "react-dom/client": vendorResult.reactDomClient,
+        "react/jsx-runtime": vendorResult.jsxRuntime,
+        "react/jsx-dev-runtime": vendorResult.jsxDevRuntime,
       },
     },
   };
