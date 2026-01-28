@@ -72,17 +72,17 @@ function generateHydrationScripts(
     scripts.push(importMap);
   }
 
-  // Runtime 로드
-  if (manifest.shared.runtime) {
-    scripts.push(`<script type="module" src="${manifest.shared.runtime}"></script>`);
-  }
-
-  // Island 번들 로드
+  // Island 번들 먼저 로드 (등록)
+  // 주의: ES Module 병렬 로드로 인해 Island가 먼저 등록되어야 함
   const bundle = manifest.bundles[routeId];
   if (bundle) {
-    // Preload (선택적)
     scripts.push(`<link rel="modulepreload" href="${bundle.js}">`);
     scripts.push(`<script type="module" src="${bundle.js}"></script>`);
+  }
+
+  // Runtime 나중에 로드 (hydrateIslands 실행)
+  if (manifest.shared.runtime) {
+    scripts.push(`<script type="module" src="${manifest.shared.runtime}"></script>`);
   }
 
   return scripts.join("\n");

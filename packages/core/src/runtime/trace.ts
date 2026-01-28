@@ -30,6 +30,19 @@ export interface TraceCollector {
   records: TraceEntry[];
 }
 
+export interface TraceReportEntry {
+  event: TraceEvent;
+  name?: string;
+  start: number;
+  end: number;
+  duration: number;
+}
+
+export interface TraceReport {
+  entries: TraceReportEntry[];
+  errors: TraceEntry[];
+}
+
 export const TRACE_KEY = "__mandu_trace";
 
 const now = (): number => {
@@ -49,6 +62,52 @@ export function enableTrace(ctx: ManduContext): TraceCollector {
 
 export function getTrace(ctx: ManduContext): TraceCollector | undefined {
   return ctx.get<TraceCollector>(TRACE_KEY);
+}
+
+/**
+ * Build a normalized trace report with durations
+ */
+export function buildTraceReport(collector: TraceCollector): TraceReport {
+  const entries: TraceReportEntry[] = [];
+  const errors: TraceEntry[] = [];
+  const stacks = new Map<string, TraceEntry[]>();
+
+  for (const record of collector.records) {
+    if (record.phase === "error") {
+      errors.push(record);
+      continue;
+    }
+
+    const key = `${record.event}:${record.name ?? ""}`;
+    if (record.phase === "begin") {
+      const stack = stacks.get(key) ?? [];
+      stack.push(record);
+      stacks.set(key, stack);
+      continue;
+    }
+
+    if (record.phase === "end") {
+      const stack = stacks.get(key);
+      const begin = stack?.pop();
+      if (!begin) continue;
+      entries.push({
+        event: record.event,
+        name: record.name,
+        start: begin.time,
+        end: record.time,
+        duration: record.time - begin.time,
+      });
+    }
+  }
+
+  return { entries, errors };
+}
+
+/**
+ * Convert trace report to JSON string
+ */
+export function formatTraceReport(report: TraceReport): string {
+  return JSON.stringify(report, null, 2);
 }
 
 export interface Tracer {

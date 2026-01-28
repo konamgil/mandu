@@ -141,6 +141,9 @@ export class ManduFilling<TLoaderData = unknown> {
     return this;
   }
 
+  /**
+   * 요청 시작 훅
+   */
   onRequest(fn: OnRequestHandler): this {
     this.config.lifecycle.onRequest.push({ fn, scope: "local" });
     return this;
@@ -159,6 +162,10 @@ export class ManduFilling<TLoaderData = unknown> {
     return this;
   }
 
+  /**
+   * 바디 파싱 훅
+   * body를 읽을 때는 req.clone() 사용 권장
+   */
   onParse(fn: OnParseHandler): this {
     this.config.lifecycle.onParse.push({ fn, scope: "local" });
     return this;
@@ -184,21 +191,33 @@ export class ManduFilling<TLoaderData = unknown> {
     return this.guard(fn);
   }
 
+  /**
+   * 핸들러 후 훅
+   */
   afterHandle(fn: AfterHandleHandler): this {
     this.config.lifecycle.afterHandle.push({ fn, scope: "local" });
     return this;
   }
 
+  /**
+   * 최종 응답 매핑 훅
+   */
   mapResponse(fn: MapResponseHandler): this {
     this.config.lifecycle.mapResponse.push({ fn, scope: "local" });
     return this;
   }
 
+  /**
+   * 에러 핸들링 훅
+   */
   onError(fn: OnErrorHandler): this {
     this.config.lifecycle.onError.push({ fn, scope: "local" });
     return this;
   }
 
+  /**
+   * 응답 후 훅 (비동기)
+   */
   afterResponse(fn: AfterResponseHandler): this {
     this.config.lifecycle.afterResponse.push({ fn, scope: "local" });
     return this;
