@@ -6,3 +6,16 @@ export { ManduContext, NEXT_SYMBOL, ValidationError, CookieManager } from "./con
 export type { CookieOptions } from "./context";
 export { ManduFilling, Mandu, LoaderTimeoutError } from "./filling";
 export type { Handler, Guard, HttpMethod, Loader, LoaderOptions } from "./filling";
+
+// Auth Guards
+export {
+  AuthenticationError,
+  AuthorizationError,
+  requireUser,
+  requireRole,
+  requireAnyRole,
+  requireAllRoles,
+  createAuthGuard,
+  createRoleGuard,
+} from "./auth";
+export type { BaseUser, UserWithRole, UserWithRoles } from "./auth";
