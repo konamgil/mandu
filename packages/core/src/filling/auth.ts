@@ -1,8 +1,8 @@
 /**
  * Mandu Auth Guards - 인증/인가 헬퍼 🔐
  *
- * Guard에서 사용할 수 있는 타입-안전 인증 헬퍼
- * 인증 실패 시 적절한 에러를 throw하여 Guard 체인 중단
+ * beforeHandle에서 사용할 수 있는 타입-안전 인증 헬퍼
+ * 인증 실패 시 적절한 에러를 throw하여 체인 중단
  */
 
 import type { ManduContext } from "./context";
@@ -57,12 +57,12 @@ export interface UserWithRoles extends BaseUser {
 }
 
 // ============================================
-// 🔐 Auth Guard Helpers
+// 🔐 Auth Helpers
 // ============================================
 
 /**
  * 인증된 사용자 필수
- * Guard에서 user가 없으면 AuthenticationError throw
+ * beforeHandle에서 user가 없으면 AuthenticationError throw
  *
  * @param ctx ManduContext
  * @param key store에서 user를 찾을 키 (기본: 'user')
@@ -70,21 +70,21 @@ export interface UserWithRoles extends BaseUser {
  * @throws AuthenticationError
  *
  * @example
- * ```typescript
+ * typescript
  * import { requireUser } from '@mandujs/core'
  *
  * export default Mandu.filling()
- *   .guard(async (ctx) => {
+ *   .beforeHandle(async (ctx) => {
  *     // JWT 토큰 검증 후 user 저장
  *     const user = await verifyToken(ctx.headers.get('Authorization'));
  *     ctx.set('user', user);
- *     return ctx.next();
+ *     // void 반환 시 계속 진행
  *   })
  *   .get((ctx) => {
  *     const user = requireUser(ctx);  // User 타입 확정, 없으면 401
- *     return ctx.ok({ message: `Hello, ${user.id}!` });
+ *     return ctx.ok({ message: "Hello, " + user.id + "!" });
  *   })
- * ```
+ *
  */
 export function requireUser<T extends BaseUser = BaseUser>(
   ctx: ManduContext,
@@ -114,12 +114,12 @@ export function requireUser<T extends BaseUser = BaseUser>(
  * @throws AuthorizationError (역할 불일치)
  *
  * @example
- * ```typescript
- * .guard((ctx) => {
+ * typescript
+ * .beforeHandle((ctx) => {
  *   requireRole(ctx, 'admin', 'moderator');  // admin 또는 moderator만 허용
- *   return ctx.next();
+ *   // void 반환 시 계속 진행
  * })
- * ```
+ *
  */
 export function requireRole<T extends UserWithRole = UserWithRole>(
   ctx: ManduContext,
@@ -133,7 +133,7 @@ export function requireRole<T extends UserWithRole = UserWithRole>(
 
   if (!roles.includes(user.role)) {
     throw new AuthorizationError(
-      `Required role: ${roles.join(" or ")}`,
+      "Required role: " + roles.join(" or "),
       roles
     );
   }
@@ -152,12 +152,12 @@ export function requireRole<T extends UserWithRole = UserWithRole>(
  * @throws AuthorizationError (역할 불일치)
  *
  * @example
- * ```typescript
- * .guard((ctx) => {
+ * typescript
+ * .beforeHandle((ctx) => {
  *   requireAnyRole(ctx, 'editor', 'admin');  // editor 또는 admin 역할 필요
- *   return ctx.next();
+ *   // void 반환 시 계속 진행
  * })
- * ```
+ *
  */
 export function requireAnyRole<T extends UserWithRoles = UserWithRoles>(
   ctx: ManduContext,
@@ -173,7 +173,7 @@ export function requireAnyRole<T extends UserWithRoles = UserWithRoles>(
 
   if (!hasRole) {
     throw new AuthorizationError(
-      `Required one of roles: ${roles.join(", ")}`,
+      "Required one of roles: " + roles.join(", "),
       roles
     );
   }
@@ -191,12 +191,12 @@ export function requireAnyRole<T extends UserWithRoles = UserWithRoles>(
  * @throws AuthorizationError (역할 불일치)
  *
  * @example
- * ```typescript
- * .guard((ctx) => {
+ * typescript
+ * .beforeHandle((ctx) => {
  *   requireAllRoles(ctx, 'verified', 'premium');  // verified AND premium 필요
- *   return ctx.next();
+ *   // void 반환 시 계속 진행
  * })
- * ```
+ *
  */
 export function requireAllRoles<T extends UserWithRoles = UserWithRoles>(
   ctx: ManduContext,
@@ -212,7 +212,7 @@ export function requireAllRoles<T extends UserWithRoles = UserWithRoles>(
 
   if (missingRoles.length > 0) {
     throw new AuthorizationError(
-      `Missing required roles: ${missingRoles.join(", ")}`,
+      "Missing required roles: " + missingRoles.join(", "),
       roles
     );
   }
@@ -221,28 +221,28 @@ export function requireAllRoles<T extends UserWithRoles = UserWithRoles>(
 }
 
 // ============================================
-// 🔐 Auth Guard Factory
+// 🔐 Auth Handler Factory
 // ============================================
 
 /**
- * 인증 Guard 생성 팩토리
- * 반복되는 인증 로직을 Guard로 변환
+ * 인증 beforeHandle 생성 팩토리
+ * 반복되는 인증 로직을 beforeHandle로 변환
  *
  * @example
- * ```typescript
- * const authGuard = createAuthGuard(async (ctx) => {
+ * typescript
+ * const authHandler = createAuthGuard(async (ctx) => {
  *   const token = ctx.headers.get('Authorization')?.replace('Bearer ', '');
  *   if (!token) return null;
  *   return await verifyJwt(token);
  * });
  *
  * export default Mandu.filling()
- *   .guard(authGuard)
+ *   .beforeHandle(authHandler)
  *   .get((ctx) => {
  *     const user = requireUser(ctx);
  *     return ctx.ok({ user });
  *   })
- * ```
+ *
  */
 export function createAuthGuard<T extends BaseUser>(
   authenticator: (ctx: ManduContext) => T | null | Promise<T | null>,
@@ -253,13 +253,13 @@ export function createAuthGuard<T extends BaseUser>(
 ) {
   const { key = "user", onUnauthenticated } = options;
 
-  return async (ctx: ManduContext): Promise<symbol | Response> => {
+  return async (ctx: ManduContext): Promise<Response | void> => {
     try {
       const user = await authenticator(ctx);
 
       if (user) {
         ctx.set(key, user);
-        return ctx.next();
+        return; // void 반환 시 계속 진행
       }
 
       if (onUnauthenticated) {
@@ -277,24 +277,24 @@ export function createAuthGuard<T extends BaseUser>(
 }
 
 /**
- * 역할 기반 Guard 생성 팩토리
+ * 역할 기반 beforeHandle 생성 팩토리
  *
  * @example
- * ```typescript
+ * typescript
  * const adminOnly = createRoleGuard('admin');
  * const editorOrAdmin = createRoleGuard('editor', 'admin');
  *
  * export default Mandu.filling()
- *   .guard(authGuard)
- *   .guard(adminOnly)  // admin만 접근 가능
+ *   .beforeHandle(authHandler)
+ *   .beforeHandle(adminOnly)  // admin만 접근 가능
  *   .delete((ctx) => ctx.noContent())
- * ```
+ *
  */
 export function createRoleGuard(...allowedRoles: string[]) {
-  return (ctx: ManduContext): symbol | Response => {
+  return (ctx: ManduContext): Response | void => {
     try {
       requireRole(ctx, ...allowedRoles);
-      return ctx.next();
+      return; // void 반환 시 계속 진행
     } catch (error) {
       if (error instanceof AuthenticationError) {
         return ctx.unauthorized(error.message);

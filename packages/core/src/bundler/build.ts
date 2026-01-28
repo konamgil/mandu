@@ -55,8 +55,11 @@ function generateRuntimeSource(): string {
  * Mandu Hydration Runtime (Generated)
  */
 
-const islandRegistry = new Map();
-const hydratedRoots = new Map();
+// 글로벌 레지스트리 사용 (Island 번들과 공유)
+// 주의: 변수로 캐싱하면 번들러가 인라인 시 new Map()으로 대체함
+// 항상 window.__MANDU_ISLANDS__를 직접 참조해야 함
+window.__MANDU_ISLANDS__ = window.__MANDU_ISLANDS__ || new Map();
+window.__MANDU_ROOTS__ = window.__MANDU_ROOTS__ || new Map();
 
 // 서버 데이터
 const serverData = window.__MANDU_DATA__ || {};
@@ -65,7 +68,7 @@ const serverData = window.__MANDU_DATA__ || {};
  * Island 등록
  */
 export function registerIsland(id, loader) {
-  islandRegistry.set(id, loader);
+  window.__MANDU_ISLANDS__.set(id, loader);
 }
 
 /**
@@ -126,7 +129,7 @@ function scheduleHydration(element, id, priority, data) {
  * SSR 플레이스홀더를 Island 컴포넌트로 교체
  */
 async function hydrateIsland(element, id, data) {
-  const loader = islandRegistry.get(id);
+  const loader = window.__MANDU_ISLANDS__.get(id);
   if (!loader) {
     console.warn('[Mandu] Island not found:', id);
     return;
@@ -155,7 +158,7 @@ async function hydrateIsland(element, id, data) {
     // hydrateRoot 대신 createRoot 사용: Island는 SSR과 다른 컨텐츠를 렌더링할 수 있음
     const root = createRoot(element);
     root.render(React.createElement(IslandComponent));
-    hydratedRoots.set(id, root);
+    window.__MANDU_ROOTS__.set(id, root);
 
     // 완료 표시
     element.setAttribute('data-mandu-hydrated', 'true');
@@ -202,12 +205,15 @@ if (document.readyState === 'loading') {
   hydrateIslands();
 }
 
-export { islandRegistry, hydratedRoots };
+// 글로벌 레지스트리 접근용 getter
+export const getIslandRegistry = () => window.__MANDU_ISLANDS__;
+export const getHydratedRoots = () => window.__MANDU_ROOTS__;
 `;
 }
 
 /**
  * React shim 소스 생성 (import map용)
+ * 주의: export *는 Bun bundler에서 제대로 작동하지 않으므로 명시적 export 필요
  */
 function generateReactShimSource(): string {
   return `
@@ -215,42 +221,139 @@ function generateReactShimSource(): string {
  * Mandu React Shim (Generated)
  * import map을 통해 bare specifier 해결
  */
-import * as React from 'react';
-export * from 'react';
+import React, {
+  // Core
+  createElement,
+  cloneElement,
+  createContext,
+  createRef,
+  forwardRef,
+  isValidElement,
+  memo,
+  lazy,
+  // Hooks
+  useState,
+  useEffect,
+  useContext,
+  useReducer,
+  useCallback,
+  useMemo,
+  useRef,
+  useLayoutEffect,
+  useImperativeHandle,
+  useDebugValue,
+  useDeferredValue,
+  useTransition,
+  useId,
+  useSyncExternalStore,
+  useInsertionEffect,
+  // Components
+  Fragment,
+  Suspense,
+  StrictMode,
+  Profiler,
+  // Types
+  Component,
+  PureComponent,
+  Children,
+} from 'react';
+
+// Named exports
+export {
+  createElement,
+  cloneElement,
+  createContext,
+  createRef,
+  forwardRef,
+  isValidElement,
+  memo,
+  lazy,
+  useState,
+  useEffect,
+  useContext,
+  useReducer,
+  useCallback,
+  useMemo,
+  useRef,
+  useLayoutEffect,
+  useImperativeHandle,
+  useDebugValue,
+  useDeferredValue,
+  useTransition,
+  useId,
+  useSyncExternalStore,
+  useInsertionEffect,
+  Fragment,
+  Suspense,
+  StrictMode,
+  Profiler,
+  Component,
+  PureComponent,
+  Children,
+};
+
+// Default export
 export default React;
 `;
 }
 
 /**
  * React DOM shim 소스 생성
+ * 주의: export *는 Bun bundler에서 제대로 작동하지 않으므로 명시적 export 필요
  */
 function generateReactDOMShimSource(): string {
   return `
 /**
  * Mandu React DOM Shim (Generated)
  */
-import * as ReactDOM from 'react-dom';
-export * from 'react-dom';
+import ReactDOM, {
+  createPortal,
+  flushSync,
+  render,
+  unmountComponentAtNode,
+  findDOMNode,
+  hydrate,
+  version,
+} from 'react-dom';
+
+// Named exports
+export {
+  createPortal,
+  flushSync,
+  render,
+  unmountComponentAtNode,
+  findDOMNode,
+  hydrate,
+  version,
+};
+
+// Default export
 export default ReactDOM;
 `;
 }
 
 /**
  * React DOM Client shim 소스 생성
+ * 주의: export *는 Bun bundler에서 제대로 작동하지 않으므로 명시적 export 필요
  */
 function generateReactDOMClientShimSource(): string {
   return `
 /**
  * Mandu React DOM Client Shim (Generated)
  */
-import * as ReactDOMClient from 'react-dom/client';
-export * from 'react-dom/client';
-export default ReactDOMClient;
+import { createRoot, hydrateRoot } from 'react-dom/client';
+
+// Named exports (명시적으로 re-export)
+export { createRoot, hydrateRoot };
+
+// Default export
+export default { createRoot, hydrateRoot };
 `;
 }
 
 /**
  * JSX Runtime shim 소스 생성
+ * 주의: export *는 Bun bundler에서 제대로 작동하지 않으므로 명시적 export 필요
  */
 function generateJsxRuntimeShimSource(): string {
   return `
@@ -258,14 +361,19 @@ function generateJsxRuntimeShimSource(): string {
  * Mandu JSX Runtime Shim (Generated)
  * Production JSX 변환용
  */
-import * as jsxRuntime from 'react/jsx-runtime';
-export * from 'react/jsx-runtime';
-export default jsxRuntime;
+import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
+
+// Named exports
+export { jsx, jsxs, Fragment };
+
+// Default export
+export default { jsx, jsxs, Fragment };
 `;
 }
 
 /**
  * JSX Dev Runtime shim 소스 생성
+ * 주의: export *는 Bun bundler에서 제대로 작동하지 않으므로 명시적 export 필요
  */
 function generateJsxDevRuntimeShimSource(): string {
   return `
@@ -273,14 +381,236 @@ function generateJsxDevRuntimeShimSource(): string {
  * Mandu JSX Dev Runtime Shim (Generated)
  * Development JSX 변환용
  */
-import * as jsxDevRuntime from 'react/jsx-dev-runtime';
-export * from 'react/jsx-dev-runtime';
-export default jsxDevRuntime;
+import { jsxDEV, Fragment } from 'react/jsx-dev-runtime';
+
+// Named exports
+export { jsxDEV, Fragment };
+
+// Default export
+export default { jsxDEV, Fragment };
 `;
 }
 
 /**
+ * Client-side Router 런타임 소스 생성
+ */
+function generateRouterRuntimeSource(): string {
+  return `
+/**
+ * Mandu Client Router Runtime (Generated)
+ * Client-side Routing을 위한 런타임
+ */
+
+// 라우트 정보
+let currentRoute = window.__MANDU_ROUTE__ || null;
+let currentLoaderData = window.__MANDU_DATA__?.[currentRoute?.id]?.serverData;
+let navigationState = { state: 'idle' };
+const listeners = new Set();
+
+// 패턴 매칭 캐시
+const patternCache = new Map();
+
+function compilePattern(pattern) {
+  if (patternCache.has(pattern)) return patternCache.get(pattern);
+
+  const paramNames = [];
+  let paramIndex = 0;
+  const paramMatches = [];
+
+  const withPlaceholders = pattern.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, name) => {
+    paramMatches.push(name);
+    return '%%PARAM%%';
+  });
+
+  const escaped = withPlaceholders.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
+  const regexStr = escaped.replace(/%%PARAM%%/g, () => {
+    paramNames.push(paramMatches[paramIndex++]);
+    return '([^/]+)';
+  });
+
+  const compiled = { regex: new RegExp('^' + regexStr + '$'), paramNames };
+  patternCache.set(pattern, compiled);
+  return compiled;
+}
+
+function extractParams(pattern, pathname) {
+  const compiled = compilePattern(pattern);
+  const match = pathname.match(compiled.regex);
+  if (!match) return {};
+
+  const params = {};
+  compiled.paramNames.forEach((name, i) => { params[name] = match[i + 1]; });
+  return params;
+}
+
+function notifyListeners() {
+  const state = {
+    currentRoute,
+    loaderData: currentLoaderData,
+    navigation: navigationState
+  };
+  listeners.forEach(fn => { try { fn(state); } catch(e) {} });
+}
+
+export function subscribe(listener) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function getRouterState() {
+  return {
+    currentRoute,
+    loaderData: currentLoaderData,
+    navigation: navigationState
+  };
+}
+
+export async function navigate(to, options = {}) {
+  const { replace = false, scroll = true } = options;
+
+  try {
+    const url = new URL(to, location.origin);
+    if (url.origin !== location.origin) {
+      location.href = to;
+      return;
+    }
+
+    navigationState = { state: 'loading', location: to };
+    notifyListeners();
+
+    const dataUrl = url.pathname + (url.search ? url.search + '&' : '?') + '_data=1';
+    const res = await fetch(dataUrl);
+
+    if (!res.ok) {
+      location.href = to;
+      return;
+    }
+
+    const data = await res.json();
+
+    if (replace) {
+      history.replaceState({ routeId: data.routeId }, '', to);
+    } else {
+      history.pushState({ routeId: data.routeId }, '', to);
+    }
+
+    currentRoute = { id: data.routeId, pattern: data.pattern, params: data.params };
+    currentLoaderData = data.loaderData;
+    navigationState = { state: 'idle' };
+
+    window.__MANDU_DATA__ = window.__MANDU_DATA__ || {};
+    window.__MANDU_DATA__[data.routeId] = { serverData: data.loaderData };
+
+    notifyListeners();
+
+    if (scroll) window.scrollTo(0, 0);
+  } catch (err) {
+    console.error('[Mandu Router] Error:', err);
+    location.href = to;
+  }
+}
+
+// Link 클릭 핸들러
+function handleClick(e) {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.altKey || e.ctrlKey || e.shiftKey) return;
+
+  const anchor = e.target.closest('a[data-mandu-link]');
+  if (!anchor) return;
+
+  const href = anchor.getAttribute('href');
+  if (!href) return;
+
+  try {
+    const url = new URL(href, location.origin);
+    if (url.origin !== location.origin) return;
+  } catch { return; }
+
+  e.preventDefault();
+  navigate(href);
+}
+
+// Popstate 핸들러
+function handlePopState(e) {
+  if (e.state?.routeId) {
+    navigate(location.pathname + location.search, { replace: true, scroll: false });
+  }
+}
+
+// 초기화
+function init() {
+  if (currentRoute) {
+    currentRoute.params = extractParams(currentRoute.pattern, location.pathname);
+  }
+
+  window.addEventListener('popstate', handlePopState);
+  document.addEventListener('click', handleClick);
+  console.log('[Mandu Router] Initialized');
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
+export { currentRoute, currentLoaderData, navigationState };
+`;
+}
+
+/**
+ * Router 런타임 번들 빌드
+ */
+async function buildRouterRuntime(
+  outDir: string,
+  options: BundlerOptions
+): Promise<{ success: boolean; outputPath: string; errors: string[] }> {
+  const routerPath = path.join(outDir, "_router.src.js");
+  const outputName = "_router.js";
+
+  try {
+    await Bun.write(routerPath, generateRouterRuntimeSource());
+
+    const result = await Bun.build({
+      entrypoints: [routerPath],
+      outdir: outDir,
+      naming: outputName,
+      minify: options.minify ?? process.env.NODE_ENV === "production",
+      sourcemap: options.sourcemap ? "external" : "none",
+      target: "browser",
+      define: {
+        "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),
+        ...options.define,
+      },
+    });
+
+    await fs.unlink(routerPath).catch(() => {});
+
+    if (!result.success) {
+      return {
+        success: false,
+        outputPath: "",
+        errors: result.logs.map((l) => l.message),
+      };
+    }
+
+    return {
+      success: true,
+      outputPath: `/.mandu/client/${outputName}`,
+      errors: [],
+    };
+  } catch (error) {
+    await fs.unlink(routerPath).catch(() => {});
+    return {
+      success: false,
+      outputPath: "",
+      errors: [String(error)],
+    };
+  }
+}
+
+/**
  * Island 엔트리 래퍼 생성
+ * 주의: 글로벌 레지스트리 직접 사용 (번들러 인라인 문제 방지)
  */
 function generateIslandEntry(routeId: string, clientModulePath: string): string {
   // Windows 경로의 백슬래시를 슬래시로 변환 (JS escape 문제 방지)
@@ -291,9 +621,10 @@ function generateIslandEntry(routeId: string, clientModulePath: string): string 
  */
 
 import island from "${normalizedPath}";
-import { registerIsland } from "./_runtime.js";
 
-registerIsland("${routeId}", () => island);
+// 글로벌 레지스트리에 직접 등록 (런타임과 공유)
+window.__MANDU_ISLANDS__ = window.__MANDU_ISLANDS__ || new Map();
+window.__MANDU_ISLANDS__.set("${routeId}", () => island);
 
 export default island;
 `;
@@ -503,6 +834,7 @@ function createBundleManifest(
   routes: RouteSpec[],
   runtimePath: string,
   vendorResult: VendorBuildResult,
+  routerPath: string,
   env: "development" | "production"
 ): BundleManifest {
   const bundles: BundleManifest["bundles"] = {};
@@ -526,6 +858,7 @@ function createBundleManifest(
     shared: {
       runtime: runtimePath,
       vendor: vendorResult.react, // primary vendor for backwards compatibility
+      router: routerPath, // Client-side Router
     },
     importMap: {
       imports: {
@@ -623,6 +956,12 @@ export async function buildClientBundles(
     errors.push(...runtimeResult.errors.map((e) => `[Runtime] ${e}`));
   }
 
+  // 3.5. Client-side Router 런타임 빌드
+  const routerResult = await buildRouterRuntime(outDir, options);
+  if (!routerResult.success) {
+    errors.push(...routerResult.errors.map((e) => `[Router] ${e}`));
+  }
+
   // 4. Vendor shim 번들 빌드 (React, ReactDOM, ReactDOMClient)
   const vendorResult = await buildVendorShims(outDir, options);
   if (!vendorResult.success) {
@@ -645,6 +984,7 @@ export async function buildClientBundles(
     hydratedRoutes,
     runtimeResult.outputPath,
     vendorResult,
+    routerResult.outputPath,
     env
   );
 

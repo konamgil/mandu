@@ -15,14 +15,22 @@ import React from "react";
 export type IslandLoader = () => Promise<CompiledIsland<any, any>> | CompiledIsland<any, any>;
 
 /**
- * Island 레지스트리
+ * Island 레지스트리 (글로벌)
+ * 주의: 로컬 Map 사용 시 번들러 인라인 문제로 별도 인스턴스 생성됨
+ * 항상 window.__MANDU_ISLANDS__를 직접 참조해야 함
  */
-const islandRegistry = new Map<string, IslandLoader>();
+declare global {
+  interface Window {
+    __MANDU_ISLANDS__: Map<string, IslandLoader>;
+    __MANDU_ROOTS__: Map<string, Root>;
+  }
+}
 
-/**
- * Hydrated roots 추적
- */
-const hydratedRoots = new Map<string, Root>();
+// 글로벌 레지스트리 초기화
+if (typeof window !== "undefined") {
+  window.__MANDU_ISLANDS__ = window.__MANDU_ISLANDS__ || new Map<string, IslandLoader>();
+  window.__MANDU_ROOTS__ = window.__MANDU_ROOTS__ || new Map<string, Root>();
+}
 
 /**
  * Hydration 상태 추적
@@ -45,14 +53,14 @@ const hydrationState: HydrationState = {
  * Island 등록
  */
 export function registerIsland(id: string, loader: IslandLoader): void {
-  islandRegistry.set(id, loader);
+  window.__MANDU_ISLANDS__.set(id, loader);
 }
 
 /**
  * 등록된 모든 Island 가져오기
  */
 export function getRegisteredIslands(): string[] {
-  return Array.from(islandRegistry.keys());
+  return Array.from(window.__MANDU_ISLANDS__.keys());
 }
 
 /**
@@ -139,7 +147,7 @@ async function hydrateIsland(
   id: string,
   serverData: unknown
 ): Promise<void> {
-  const loader = islandRegistry.get(id);
+  const loader = window.__MANDU_ISLANDS__.get(id);
   if (!loader) {
     console.warn(`[Mandu] Island not registered: ${id}`);
     hydrationState.failed++;
@@ -179,7 +187,7 @@ async function hydrateIsland(
 
     // Hydrate
     const root = hydrateRoot(element, content);
-    hydratedRoots.set(id, root);
+    window.__MANDU_ROOTS__.set(id, root);
 
     // 상태 업데이트
     element.setAttribute("data-mandu-hydrated", "true");
@@ -252,13 +260,13 @@ export function getHydrationState(): Readonly<HydrationState> {
  * 특정 Island unmount
  */
 export function unmountIsland(id: string): boolean {
-  const root = hydratedRoots.get(id);
+  const root = window.__MANDU_ROOTS__.get(id);
   if (!root) {
     return false;
   }
 
   root.unmount();
-  hydratedRoots.delete(id);
+  window.__MANDU_ROOTS__.delete(id);
   return true;
 }
 
@@ -266,9 +274,9 @@ export function unmountIsland(id: string): boolean {
  * 모든 Island unmount
  */
 export function unmountAllIslands(): void {
-  for (const [id, root] of hydratedRoots) {
+  for (const [id, root] of window.__MANDU_ROOTS__) {
     root.unmount();
-    hydratedRoots.delete(id);
+    window.__MANDU_ROOTS__.delete(id);
   }
 }
 

@@ -59,6 +59,8 @@ export interface BundleManifest {
     runtime: string;
     /** React 번들 경로 */
     vendor: string;
+    /** Client-side Router 런타임 */
+    router?: string;
   };
   /** Import map for bare specifiers (react, react-dom, etc.) */
   importMap?: {

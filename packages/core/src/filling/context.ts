@@ -213,8 +213,6 @@ export class ManduContext {
   private store: Map<string, unknown> = new Map();
   private _params: Record<string, string>;
   private _query: Record<string, string>;
-  private _shouldContinue: boolean = true;
-  private _response: Response | null = null;
   private _cookies: CookieManager;
 
   constructor(
@@ -262,6 +260,11 @@ export class ManduContext {
   /** Request URL */
   get url(): string {
     return this.request.url;
+  }
+
+  /** Shorthand for request */
+  get req(): Request {
+    return this.request;
   }
 
   /**
@@ -398,7 +401,7 @@ export class ManduContext {
   }
 
   // ============================================
-  // 🥟 상태 저장 (Guard → Handler 전달)
+  // 🥟 상태 저장 (Lifecycle → Handler 전달)
   // ============================================
 
   /** Store value for later use */
@@ -415,36 +418,7 @@ export class ManduContext {
   has(key: string): boolean {
     return this.store.has(key);
   }
-
-  // ============================================
-  // 🥟 Guard 제어
-  // ============================================
-
-  /** Continue to next guard/handler */
-  next(): symbol {
-    this._shouldContinue = true;
-    return NEXT_SYMBOL;
-  }
-
-  /** Check if should continue */
-  get shouldContinue(): boolean {
-    return this._shouldContinue;
-  }
-
-  /** Set early response (from guard) */
-  setResponse(response: Response): void {
-    this._shouldContinue = false;
-    this._response = response;
-  }
-
-  /** Get early response */
-  getResponse(): Response | null {
-    return this._response;
-  }
 }
-
-/** Symbol to indicate continue to next */
-export const NEXT_SYMBOL = Symbol("mandu:next");
 
 /** Route context for error reporting */
 export interface ValidationRouteContext {

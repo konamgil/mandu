@@ -3,3 +3,6 @@ export * from "./router";
 export * from "./server";
 export * from "./cors";
 export * from "./env";
+export * from "./compose";
+export * from "./lifecycle";
+export * from "./trace";

@@ -315,6 +315,9 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
     let loaderData: unknown;
     let component: RouteComponent | undefined;
 
+    // Client-side Routing: 데이터 요청 감지
+    const isDataRequest = url.searchParams.has("_data");
+
     // 1. PageHandler 방식 (신규 - filling 포함)
     const pageHandler = pageHandlers.get(route.id);
     if (pageHandler) {
@@ -363,6 +366,18 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
       }
     }
 
+    // Client-side Routing: 데이터만 반환 (JSON)
+    if (isDataRequest) {
+      return Response.json({
+        routeId: route.id,
+        pattern: route.pattern,
+        params,
+        loaderData: loaderData ?? null,
+        timestamp: Date.now(),
+      });
+    }
+
+    // SSR 렌더링 (기존 로직)
     const appCreator = createAppFn || defaultCreateApp;
     try {
       const app = appCreator({
@@ -385,6 +400,9 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
         hydration: route.hydration,
         bundleManifest: serverSettings.bundleManifest,
         serverData,
+        // Client-side Routing 활성화 정보 전달
+        enableClientRouter: true,
+        routePattern: route.pattern,
       });
     } catch (err) {
       const ssrError = createSSRErrorResponse(

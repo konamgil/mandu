@@ -1,4 +1,5 @@
 import { renderToString } from "react-dom/server";
+import { serializeProps } from "../client/serialize";
 import type { ReactElement } from "react";
 import type { BundleManifest } from "../bundler/types";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
@@ -22,21 +23,26 @@ export interface SSROptions {
   isDev?: boolean;
   /** HMR 포트 (개발 모드에서 사용) */
   hmrPort?: number;
+  /** Client-side Routing 활성화 여부 */
+  enableClientRouter?: boolean;
+  /** 라우트 패턴 (Client-side Routing용) */
+  routePattern?: string;
 }
 
 /**
- * SSR 데이터를 안전하게 직렬화
+ * SSR 데이터를 안전하게 직렬화 (Fresh 스타일 고급 직렬화)
+ * Date, Map, Set, URL, RegExp, BigInt, 순환참조 지원
  */
 function serializeServerData(data: Record<string, unknown>): string {
-  // XSS 방지를 위한 이스케이프
-  const json = JSON.stringify(data)
+  // serializeProps로 고급 직렬화 (Date, Map, Set 등 지원)
+  const json = serializeProps(data)
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
     .replace(/&/g, "\\u0026")
     .replace(/'/g, "\\u0027");
 
   return `<script id="__MANDU_DATA__" type="application/json">${json}</script>
-<script>window.__MANDU_DATA__ = JSON.parse(document.getElementById('__MANDU_DATA__').textContent);</script>`;
+<script>window.__MANDU_DATA_RAW__ = document.getElementById('__MANDU_DATA__').textContent;</script>`;
 }
 
 /**
@@ -105,6 +111,8 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     bodyEndTags = "",
     isDev = false,
     hmrPort,
+    enableClientRouter = false,
+    routePattern,
   } = options;
 
   let content = renderToString(element);
@@ -129,10 +137,22 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     dataScript = serializeServerData(wrappedData);
   }
 
+  // Client-side Routing: 라우트 정보 주입
+  let routeScript = "";
+  if (enableClientRouter && routeId) {
+    routeScript = generateRouteScript(routeId, routePattern || "", serverData);
+  }
+
   // Hydration 스크립트
   let hydrationScripts = "";
   if (needsHydration && bundleManifest) {
     hydrationScripts = generateHydrationScripts(routeId, bundleManifest);
+  }
+
+  // Client-side Router 스크립트
+  let routerScript = "";
+  if (enableClientRouter && bundleManifest) {
+    routerScript = generateClientRouterScript(bundleManifest);
   }
 
   // HMR 스크립트 (개발 모드)
@@ -152,11 +172,58 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
 <body>
   <div id="root">${content}</div>
   ${dataScript}
+  ${routeScript}
   ${hydrationScripts}
+  ${routerScript}
   ${hmrScript}
   ${bodyEndTags}
 </body>
 </html>`;
+}
+
+/**
+ * Client-side Routing: 현재 라우트 정보 스크립트 생성
+ */
+function generateRouteScript(
+  routeId: string,
+  pattern: string,
+  serverData?: Record<string, unknown>
+): string {
+  const routeInfo = {
+    id: routeId,
+    pattern,
+    params: extractParamsFromUrl(pattern),
+  };
+
+  const json = JSON.stringify(routeInfo)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e");
+
+  return `<script>window.__MANDU_ROUTE__ = ${json};</script>`;
+}
+
+/**
+ * URL 패턴에서 파라미터 추출 (클라이언트에서 사용)
+ */
+function extractParamsFromUrl(pattern: string): Record<string, string> {
+  // 서버에서는 실제 params를 전달받으므로 빈 객체 반환
+  // 실제 params는 serverData나 별도 전달
+  return {};
+}
+
+/**
+ * Client-side Router 스크립트 로드
+ */
+function generateClientRouterScript(manifest: BundleManifest): string {
+  // Import map 먼저 (이미 hydration에서 추가되었을 수 있음)
+  const scripts: string[] = [];
+
+  // 라우터 번들이 있으면 로드
+  if (manifest.shared?.router) {
+    scripts.push(`<script type="module" src="${manifest.shared.router}"></script>`);
+  }
+
+  return scripts.join("\n");
 }
 
 /**
