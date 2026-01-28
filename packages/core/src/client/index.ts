@@ -42,15 +42,12 @@ export {
 
 // Runtime API
 export {
-  registerIsland,
-  getRegisteredIslands,
   getServerData,
-  hydrateIslands,
   getHydrationState,
   unmountIsland,
   unmountAllIslands,
-  initializeRuntime,
-  type IslandLoader,
+  type HydrationState,
+  type HydrationPriority,
 } from "./runtime";
 
 // Client-side Router API
@@ -100,12 +97,12 @@ export {
 
 // Re-export as Mandu namespace for consistent API
 import { island, wrapComponent } from "./island";
-import { hydrateIslands, initializeRuntime } from "./runtime";
 import { navigate, prefetch, initializeRouter } from "./router";
 import { Link, NavLink } from "./Link";
 
 /**
  * Mandu Client namespace
+ * v0.8.0: Hydration은 자동으로 처리됨 (generateRuntimeSource에서 생성)
  */
 export const Mandu = {
   /**
@@ -119,18 +116,6 @@ export const Mandu = {
    * @see wrapComponent
    */
   wrapComponent,
-
-  /**
-   * Hydrate all islands on the page
-   * @see hydrateIslands
-   */
-  hydrate: hydrateIslands,
-
-  /**
-   * Initialize the hydration runtime
-   * @see initializeRuntime
-   */
-  init: initializeRuntime,
 
   /**
    * Navigate to a URL (client-side)
