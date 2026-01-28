@@ -122,7 +122,8 @@ function scheduleHydration(element, id, priority, data) {
 }
 
 /**
- * 단일 Island hydrate
+ * 단일 Island hydrate (또는 mount)
+ * SSR 플레이스홀더를 Island 컴포넌트로 교체
  */
 async function hydrateIsland(element, id, data) {
   const loader = islandRegistry.get(id);
@@ -141,7 +142,7 @@ async function hydrateIsland(element, id, data) {
     }
 
     const { definition } = islandDef;
-    const { hydrateRoot } = await import('react-dom/client');
+    const { createRoot } = await import('react-dom/client');
     const React = await import('react');
 
     // Island 컴포넌트
@@ -150,8 +151,10 @@ async function hydrateIsland(element, id, data) {
       return definition.render(setupResult);
     }
 
-    // Hydrate
-    const root = hydrateRoot(element, React.createElement(IslandComponent));
+    // Mount (createRoot 사용 - SSR 플레이스홀더 교체)
+    // hydrateRoot 대신 createRoot 사용: Island는 SSR과 다른 컨텐츠를 렌더링할 수 있음
+    const root = createRoot(element);
+    root.render(React.createElement(IslandComponent));
     hydratedRoots.set(id, root);
 
     // 완료 표시
