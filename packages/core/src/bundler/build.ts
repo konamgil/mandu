@@ -262,6 +262,13 @@ import React, {
   Children,
 } from 'react';
 
+// JSX Runtime functions (JSX 변환에 필요)
+import { jsx, jsxs } from 'react/jsx-runtime';
+import { jsxDEV } from 'react/jsx-dev-runtime';
+
+// React internals (ReactDOM이 내부적으로 접근 필요)
+const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+
 // Named exports
 export {
   createElement,
@@ -294,6 +301,11 @@ export {
   Component,
   PureComponent,
   Children,
+  __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED,
+  // JSX Runtime exports
+  jsx,
+  jsxs,
+  jsxDEV,
 };
 
 // Default export
@@ -364,8 +376,9 @@ function generateJsxRuntimeShimSource(): string {
 /**
  * Mandu JSX Runtime Shim (Generated)
  * Production JSX 변환용
+ * 순환 참조 방지: 'react'에서 import (import map이 _react.js로 매핑)
  */
-import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
+import { jsx, jsxs, Fragment } from 'react';
 
 // Named exports
 export { jsx, jsxs, Fragment };
@@ -384,8 +397,9 @@ function generateJsxDevRuntimeShimSource(): string {
 /**
  * Mandu JSX Dev Runtime Shim (Generated)
  * Development JSX 변환용
+ * 순환 참조 방지: 'react'에서 import (import map이 _react.js로 매핑)
  */
-import { jsxDEV, Fragment } from 'react/jsx-dev-runtime';
+import { jsxDEV, Fragment } from 'react';
 
 // Named exports
 export { jsxDEV, Fragment };
@@ -733,6 +747,19 @@ async function buildVendorShims(
     try {
       await Bun.write(srcPath, shim.source);
 
+      // _react.js와 jsx-runtime들은 완전히 번들링 (external 없음)
+      // _react-dom*, jsx-runtime은 react를 external로 처리하여 동일한 React 인스턴스 공유
+      // jsx-runtime은 Fragment를 react에서 가져오므로 react만 external
+      let shimExternal: string[] = [];
+      if (shim.name === "_react-dom" || shim.name === "_react-dom-client") {
+        shimExternal = ["react"];
+      } else if (shim.name === "_jsx-runtime" || shim.name === "_jsx-dev-runtime") {
+        // jsx-runtime은 react를 external로 (Fragment 때문에),
+        // 하지만 react/jsx-runtime은 번들링되어야 함
+        shimExternal = ["react"];
+      }
+      // _react.js는 external 없이 React 전체를 번들링
+
       const result = await Bun.build({
         entrypoints: [srcPath],
         outdir: outDir,
@@ -740,6 +767,7 @@ async function buildVendorShims(
         minify: options.minify ?? process.env.NODE_ENV === "production",
         sourcemap: options.sourcemap ? "external" : "none",
         target: "browser",
+        external: shimExternal,
         define: {
           "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),
           ...options.define,
