@@ -122,6 +122,30 @@ http://localhost:3000/api/health → API Response
 
 ---
 
+## Who Does What
+
+| Task | 👤 Human | 🤖 Agent | 🔌 MCP | 🔧 CLI |
+|------|:--------:|:--------:|:------:|:------:|
+| Requirements | Define | Receive | - | - |
+| Project Init | Run | - | - | `init` |
+| Add Routes | Approve | Design | `add_route` | - |
+| Generate Code | - | Call | `generate` | `generate` |
+| Write Slots | Review | Write | `write_slot` | - |
+| Guard Check | Review | Call | `guard_check` | `guard` |
+| Build/Dev | Run | - | - | `build`/`dev` |
+
+```
+👤 Human ──→ 🤖 Agent ──→ 🔌 MCP ──→ 📦 Core ──→ 📁 Files
+                                       ↑
+👤 Human ─────────────→ 🔧 CLI ────────┘
+```
+
+> **MCP** = Agent's interface to Core
+> **CLI** = Human's interface to Core
+> Both call the same `@mandujs/core` functions
+
+---
+
 ## Core Principles
 
 | # | Principle | Description |
