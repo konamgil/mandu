@@ -348,23 +348,16 @@ interface User {
 }
 
 export default Mandu.filling<{ users: User[] }>()
-  // Data loader (runs on SSR)
-  .loader(async (ctx) => {
-    const users = await fetchUsers();
-    return { users };
-  })
-
   // Authentication guard
-  .guard(async (ctx) => {
-    if (!ctx.user) {
-      return ctx.unauthorized("Login required");
-    }
-    return ctx.next();
+  .guard((ctx) => {
+    const user = ctx.get<User>("user");
+    if (!user) return ctx.unauthorized("Login required");
+    // Return void to continue
   })
 
   // GET /api/users
-  .get((ctx) => {
-    const { users } = ctx.loaderData;
+  .get(async (ctx) => {
+    const users = await fetchUsers();
     return ctx.ok({ data: users });
   })
 
@@ -373,30 +366,20 @@ export default Mandu.filling<{ users: User[] }>()
     const body = await ctx.body<{ name: string; email: string }>();
 
     if (!body.name || !body.email) {
-      return ctx.badRequest("Name and email required");
+      return ctx.error("Name and email required");
     }
 
     const newUser = await createUser(body);
     return ctx.created({ data: newUser });
-  })
-
-  // GET /api/users/:id
-  .get("/:id", async (ctx) => {
-    const user = await findUser(ctx.params.id);
-
-    if (!user) {
-      return ctx.notFound("User not found");
-    }
-
-    return ctx.ok({ data: user });
-  })
-
-  // DELETE /api/users/:id
-  .delete("/:id", async (ctx) => {
-    await deleteUser(ctx.params.id);
-    return ctx.noContent();
   });
 ```
+
+> Note: Path parameters come from `routes.manifest.json` patterns.  
+> For `/api/users/:id`, define a separate route and slot file.
+
+### API Reference
+
+See the full API reference: `docs/api-reference.md`
 
 ### Context API
 
@@ -405,18 +388,112 @@ export default Mandu.filling<{ users: User[] }>()
 | `ctx.ok(data)` | 200 OK response |
 | `ctx.created(data)` | 201 Created response |
 | `ctx.noContent()` | 204 No Content response |
-| `ctx.badRequest(message)` | 400 Bad Request |
+| `ctx.error(message, details?)` | 400 Bad Request |
 | `ctx.unauthorized(message)` | 401 Unauthorized |
 | `ctx.forbidden(message)` | 403 Forbidden |
 | `ctx.notFound(message)` | 404 Not Found |
+| `ctx.fail(message)` | 500 Internal Server Error |
 | `ctx.body<T>()` | Parse request body |
 | `ctx.params` | Route parameters |
 | `ctx.query` | Query string parameters |
 | `ctx.headers` | Request headers |
-| `ctx.user` | Authenticated user (if any) |
-| `ctx.loaderData` | Data from loader |
+| `ctx.set(key, value)` | Store data in context |
+| `ctx.get<T>(key)` | Retrieve stored data |
 
 ---
+
+## Lifecycle Hooks & Middleware
+
+### Lifecycle Hooks
+
+Use lifecycle hooks to run logic before/after the handler:
+
+```typescript
+import { Mandu } from "@mandujs/core";
+
+export default Mandu.filling()
+  .onRequest((ctx) => {
+    // Runs at request start
+    ctx.set("requestId", crypto.randomUUID());
+  })
+  .onParse(async (ctx) => {
+    // Runs before handler for body methods
+    // Use req.clone() if you need to read body here
+    const raw = await ctx.req.clone().text();
+    ctx.set("rawBody", raw);
+  })
+  .beforeHandle((ctx) => {
+    // Guard: return Response to block
+    if (!ctx.get("user")) return ctx.unauthorized("Login required");
+  })
+  .afterHandle((ctx, res) => {
+    res.headers.set("X-Request-Id", ctx.get("requestId") as string);
+    return res;
+  })
+  .mapResponse((_ctx, res) => {
+    // Final response mapping
+    return res;
+  })
+  .afterResponse((ctx) => {
+    // Runs after response (async)
+    console.log("done", ctx.get("requestId"));
+  })
+  .get((ctx) => ctx.ok({ ok: true }));
+```
+
+### Compose-style Middleware
+
+Compose middleware runs around the handler (Koa/Hono style):
+
+```typescript
+export default Mandu.filling()
+  .middleware(async (_ctx, next) => {
+    console.log("before");
+    await next();
+    console.log("after");
+  })
+  .get((ctx) => ctx.ok({ ok: true }));
+```
+
+### Trace (Optional)
+
+Enable trace and inspect lifecycle events inside hooks:
+
+```typescript
+import { Mandu, enableTrace, TRACE_KEY } from "@mandujs/core";
+
+export default Mandu.filling()
+  .onRequest((ctx) => enableTrace(ctx))
+  .afterResponse((ctx) => {
+    const trace = ctx.get(TRACE_KEY);
+    console.log(trace?.records);
+  })
+  .get((ctx) => ctx.ok({ ok: true }));
+```
+
+#### Trace Report
+
+```typescript
+import { buildTraceReport, formatTraceReport } from "@mandujs/core";
+
+const report = buildTraceReport(trace);
+console.log(report.entries);
+console.log(formatTraceReport(report));
+```
+
+### Lifecycle/Middleware API Reference
+
+| Method | Purpose |
+|--------|---------|
+| `onRequest(fn)` | Runs at request start |
+| `onParse(fn)` | Runs before handler for body methods |
+| `beforeHandle(fn)` | Guard hook (return Response to block) |
+| `afterHandle(fn)` | Post-handler hook |
+| `mapResponse(fn)` | Final response mapping |
+| `afterResponse(fn)` | Runs after response (async) |
+| `guard(fn)` | Alias of `beforeHandle` |
+| `use(fn)` | Alias of `guard` |
+| `middleware(fn)` | Compose-style middleware |
 
 ## Island Hydration
 

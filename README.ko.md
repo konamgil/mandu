@@ -348,23 +348,16 @@ interface User {
 }
 
 export default Mandu.filling<{ users: User[] }>()
-  // 데이터 로더 (SSR 시 실행)
-  .loader(async (ctx) => {
-    const users = await fetchUsers();
-    return { users };
-  })
-
   // 인증 가드
-  .guard(async (ctx) => {
-    if (!ctx.user) {
-      return ctx.unauthorized("로그인이 필요합니다");
-    }
-    return ctx.next();
+  .guard((ctx) => {
+    const user = ctx.get<User>("user");
+    if (!user) return ctx.unauthorized("로그인이 필요합니다");
+    // void 반환 시 계속 진행
   })
 
   // GET /api/users
-  .get((ctx) => {
-    const { users } = ctx.loaderData;
+  .get(async (ctx) => {
+    const users = await fetchUsers();
     return ctx.ok({ data: users });
   })
 
@@ -373,30 +366,16 @@ export default Mandu.filling<{ users: User[] }>()
     const body = await ctx.body<{ name: string; email: string }>();
 
     if (!body.name || !body.email) {
-      return ctx.badRequest("이름과 이메일이 필요합니다");
+      return ctx.error("이름과 이메일이 필요합니다");
     }
 
     const newUser = await createUser(body);
     return ctx.created({ data: newUser });
-  })
-
-  // GET /api/users/:id
-  .get("/:id", async (ctx) => {
-    const user = await findUser(ctx.params.id);
-
-    if (!user) {
-      return ctx.notFound("사용자를 찾을 수 없습니다");
-    }
-
-    return ctx.ok({ data: user });
-  })
-
-  // DELETE /api/users/:id
-  .delete("/:id", async (ctx) => {
-    await deleteUser(ctx.params.id);
-    return ctx.noContent();
   });
 ```
+
+> 참고: Path 파라미터는 `routes.manifest.json`의 pattern에서 결정됩니다.  
+> `/api/users/:id`는 별도의 route/slot 파일로 분리하세요.
 
 ### Context API
 
@@ -405,18 +384,112 @@ export default Mandu.filling<{ users: User[] }>()
 | `ctx.ok(data)` | 200 OK 응답 |
 | `ctx.created(data)` | 201 Created 응답 |
 | `ctx.noContent()` | 204 No Content 응답 |
-| `ctx.badRequest(message)` | 400 Bad Request |
+| `ctx.error(message, details?)` | 400 Bad Request |
 | `ctx.unauthorized(message)` | 401 Unauthorized |
 | `ctx.forbidden(message)` | 403 Forbidden |
 | `ctx.notFound(message)` | 404 Not Found |
+| `ctx.fail(message)` | 500 Internal Server Error |
 | `ctx.body<T>()` | 요청 본문 파싱 |
 | `ctx.params` | 라우트 파라미터 |
 | `ctx.query` | 쿼리 스트링 파라미터 |
 | `ctx.headers` | 요청 헤더 |
-| `ctx.user` | 인증된 사용자 (있는 경우) |
-| `ctx.loaderData` | 로더에서 가져온 데이터 |
+| `ctx.set(key, value)` | 컨텍스트에 데이터 저장 |
+| `ctx.get<T>(key)` | 저장된 데이터 조회 |
 
 ---
+
+## 라이프사이클 훅 & 미들웨어
+
+### 라이프사이클 훅
+
+핸들러 전/후에 로직을 실행합니다:
+
+```typescript
+import { Mandu } from "@mandujs/core";
+
+export default Mandu.filling()
+  .onRequest((ctx) => {
+    // 요청 시작 시
+    ctx.set("requestId", crypto.randomUUID());
+  })
+  .onParse(async (ctx) => {
+    // 바디가 있는 메서드에서 실행
+    // 여기서 body를 읽을 때는 req.clone() 사용 권장
+    const raw = await ctx.req.clone().text();
+    ctx.set("rawBody", raw);
+  })
+  .beforeHandle((ctx) => {
+    // Guard 역할: Response 반환 시 차단
+    if (!ctx.get("user")) return ctx.unauthorized("로그인이 필요합니다");
+  })
+  .afterHandle((ctx, res) => {
+    res.headers.set("X-Request-Id", ctx.get("requestId") as string);
+    return res;
+  })
+  .mapResponse((_ctx, res) => {
+    // 최종 응답 매핑
+    return res;
+  })
+  .afterResponse((ctx) => {
+    // 응답 이후 실행 (비동기)
+    console.log("done", ctx.get("requestId"));
+  })
+  .get((ctx) => ctx.ok({ ok: true }));
+```
+
+### Compose 스타일 미들웨어
+
+Koa/Hono 스타일의 미들웨어 체인:
+
+```typescript
+export default Mandu.filling()
+  .middleware(async (_ctx, next) => {
+    console.log("before");
+    await next();
+    console.log("after");
+  })
+  .get((ctx) => ctx.ok({ ok: true }));
+```
+
+### Trace (선택)
+
+trace를 활성화하고 훅에서 이벤트를 확인할 수 있습니다:
+
+```typescript
+import { Mandu, enableTrace, TRACE_KEY } from "@mandujs/core";
+
+export default Mandu.filling()
+  .onRequest((ctx) => enableTrace(ctx))
+  .afterResponse((ctx) => {
+    const trace = ctx.get(TRACE_KEY);
+    console.log(trace?.records);
+  })
+  .get((ctx) => ctx.ok({ ok: true }));
+```
+
+#### Trace 리포트
+
+```typescript
+import { buildTraceReport, formatTraceReport } from "@mandujs/core";
+
+const report = buildTraceReport(trace);
+console.log(report.entries);
+console.log(formatTraceReport(report));
+```
+
+### 라이프사이클/미들웨어 API 레퍼런스
+
+| 메서드 | 설명 |
+|--------|------|
+| `onRequest(fn)` | 요청 시작 시 실행 |
+| `onParse(fn)` | 바디 메서드에서 핸들러 전 실행 |
+| `beforeHandle(fn)` | 가드 훅 (Response 반환 시 차단) |
+| `afterHandle(fn)` | 핸들러 후 실행 |
+| `mapResponse(fn)` | 최종 응답 매핑 |
+| `afterResponse(fn)` | 응답 후 실행 (비동기) |
+| `guard(fn)` | `beforeHandle` 별칭 |
+| `use(fn)` | `guard` 별칭 |
+| `middleware(fn)` | compose 스타일 미들웨어 |
 
 ## Island Hydration
 
