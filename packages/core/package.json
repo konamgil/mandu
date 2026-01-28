@@ -13,6 +13,14 @@
   "files": [
     "src/**/*"
   ],
+  "scripts": {
+    "test": "bun test",
+    "test:hydration": "bun test tests/hydration",
+    "test:watch": "bun test --watch"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^15.0.0"
+  },
   "keywords": [
     "mandu",
     "framework",
