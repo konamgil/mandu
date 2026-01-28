@@ -40,7 +40,6 @@ export interface DevBundler {
  */
 export async function startDevBundler(options: DevBundlerOptions): Promise<DevBundler> {
   const { rootDir, manifest, onRebuild, onError } = options;
-  const slotsDir = path.join(rootDir, "spec", "slots");
 
   // 초기 빌드
   console.log("🔨 Initial client bundle build...");
@@ -55,69 +54,116 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     console.error("⚠️  Initial build had errors:", initialBuild.errors);
   }
 
-  // 파일 감시 설정
-  let watcher: fs.FSWatcher | null = null;
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // clientModule 경로에서 routeId 매핑 생성
+  const clientModuleToRoute = new Map<string, string>();
+  const watchDirs = new Set<string>();
 
+  for (const route of manifest.routes) {
+    if (route.clientModule) {
+      const absPath = path.resolve(rootDir, route.clientModule);
+      const normalizedPath = absPath.replace(/\\/g, "/");
+      clientModuleToRoute.set(normalizedPath, route.id);
+
+      // 감시할 디렉토리 추가
+      const dir = path.dirname(absPath);
+      watchDirs.add(dir);
+    }
+  }
+
+  // spec/slots 디렉토리도 추가
+  const slotsDir = path.join(rootDir, "spec", "slots");
   try {
     await fs.promises.access(slotsDir);
-
-    watcher = fs.watch(slotsDir, { recursive: true }, async (event, filename) => {
-      if (!filename) return;
-
-      // .client.ts 파일만 감시
-      if (!filename.endsWith(".client.ts")) return;
-
-      // Debounce - 연속 변경 무시
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
-      }
-
-      debounceTimer = setTimeout(async () => {
-        const routeId = filename.replace(".client.ts", "").replace(/\\/g, "/").split("/").pop();
-        if (!routeId) return;
-
-        const route = manifest.routes.find((r) => r.id === routeId);
-        if (!route || !route.clientModule) return;
-
-        console.log(`\n🔄 Rebuilding: ${routeId}`);
-        const startTime = performance.now();
-
-        try {
-          const result = await buildClientBundles(manifest, rootDir, {
-            minify: false,
-            sourcemap: true,
-          });
-
-          const buildTime = performance.now() - startTime;
-
-          if (result.success) {
-            console.log(`✅ Rebuilt in ${buildTime.toFixed(0)}ms`);
-            onRebuild?.({
-              routeId,
-              success: true,
-              buildTime,
-            });
-          } else {
-            console.error(`❌ Build failed:`, result.errors);
-            onRebuild?.({
-              routeId,
-              success: false,
-              buildTime,
-              error: result.errors.join(", "),
-            });
-          }
-        } catch (error) {
-          const err = error instanceof Error ? error : new Error(String(error));
-          console.error(`❌ Build error:`, err.message);
-          onError?.(err, routeId);
-        }
-      }, 100); // 100ms debounce
-    });
-
-    console.log("👀 Watching for client slot changes...");
+    watchDirs.add(slotsDir);
   } catch {
-    console.warn(`⚠️  Slots directory not found: ${slotsDir}`);
+    // slots 디렉토리 없으면 무시
+  }
+
+  // 파일 감시 설정
+  const watchers: fs.FSWatcher[] = [];
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const handleFileChange = async (changedFile: string) => {
+    const normalizedPath = changedFile.replace(/\\/g, "/");
+
+    // clientModule 매핑에서 routeId 찾기
+    let routeId = clientModuleToRoute.get(normalizedPath);
+
+    // .client.ts 파일인 경우 파일명에서 routeId 추출
+    if (!routeId && changedFile.endsWith(".client.ts")) {
+      const basename = path.basename(changedFile, ".client.ts");
+      const route = manifest.routes.find((r) => r.id === basename);
+      if (route) {
+        routeId = route.id;
+      }
+    }
+
+    if (!routeId) return;
+
+    const route = manifest.routes.find((r) => r.id === routeId);
+    if (!route || !route.clientModule) return;
+
+    console.log(`\n🔄 Rebuilding: ${routeId}`);
+    const startTime = performance.now();
+
+    try {
+      const result = await buildClientBundles(manifest, rootDir, {
+        minify: false,
+        sourcemap: true,
+      });
+
+      const buildTime = performance.now() - startTime;
+
+      if (result.success) {
+        console.log(`✅ Rebuilt in ${buildTime.toFixed(0)}ms`);
+        onRebuild?.({
+          routeId,
+          success: true,
+          buildTime,
+        });
+      } else {
+        console.error(`❌ Build failed:`, result.errors);
+        onRebuild?.({
+          routeId,
+          success: false,
+          buildTime,
+          error: result.errors.join(", "),
+        });
+      }
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`❌ Build error:`, err.message);
+      onError?.(err, routeId);
+    }
+  };
+
+  // 각 디렉토리에 watcher 설정
+  for (const dir of watchDirs) {
+    try {
+      const watcher = fs.watch(dir, { recursive: true }, async (event, filename) => {
+        if (!filename) return;
+
+        // TypeScript/TSX 파일만 감시
+        if (!filename.endsWith(".ts") && !filename.endsWith(".tsx")) return;
+
+        const fullPath = path.join(dir, filename);
+
+        // Debounce - 연속 변경 무시
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
+
+        debounceTimer = setTimeout(() => handleFileChange(fullPath), 100);
+      });
+
+      watchers.push(watcher);
+    } catch {
+      console.warn(`⚠️  Cannot watch directory: ${dir}`);
+    }
+  }
+
+  if (watchers.length > 0) {
+    console.log(`👀 Watching ${watchers.length} directories for changes...`);
   }
 
   return {
@@ -126,7 +172,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
       if (debounceTimer) {
         clearTimeout(debounceTimer);
       }
-      if (watcher) {
+      for (const watcher of watchers) {
         watcher.close();
       }
     },
