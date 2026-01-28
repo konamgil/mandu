@@ -28,6 +28,9 @@ function createEmptyManifest(env: "development" | "production"): BundleManifest 
       runtime: "",
       vendor: "",
     },
+    importMap: {
+      imports: {},
+    },
   };
 }
 
@@ -201,18 +204,45 @@ export { islandRegistry, hydratedRoots };
 }
 
 /**
- * Vendor 번들 소스 생성 (React 등 공유 의존성)
+ * React shim 소스 생성 (import map용)
  */
-function generateVendorSource(): string {
+function generateReactShimSource(): string {
   return `
 /**
- * Mandu Vendor Bundle (Generated)
- * 공유 의존성
+ * Mandu React Shim (Generated)
+ * import map을 통해 bare specifier 해결
  */
+import * as React from 'react';
+export * from 'react';
+export default React;
+`;
+}
 
-export * as React from 'react';
-export * as ReactDOM from 'react-dom';
-export * as ReactDOMClient from 'react-dom/client';
+/**
+ * React DOM shim 소스 생성
+ */
+function generateReactDOMShimSource(): string {
+  return `
+/**
+ * Mandu React DOM Shim (Generated)
+ */
+import * as ReactDOM from 'react-dom';
+export * from 'react-dom';
+export default ReactDOM;
+`;
+}
+
+/**
+ * React DOM Client shim 소스 생성
+ */
+function generateReactDOMClientShimSource(): string {
+  return `
+/**
+ * Mandu React DOM Client Shim (Generated)
+ */
+import * as ReactDOMClient from 'react-dom/client';
+export * from 'react-dom/client';
+export default ReactDOMClient;
 `;
 }
 
@@ -292,57 +322,77 @@ async function buildRuntime(
 }
 
 /**
- * Vendor 번들 빌드
+ * Vendor shim 번들 빌드 결과
  */
-async function buildVendor(
+interface VendorBuildResult {
+  success: boolean;
+  react: string;
+  reactDom: string;
+  reactDomClient: string;
+  errors: string[];
+}
+
+/**
+ * Vendor shim 번들 빌드
+ * React, ReactDOM, ReactDOMClient를 각각의 shim으로 빌드
+ */
+async function buildVendorShims(
   outDir: string,
   options: BundlerOptions
-): Promise<{ success: boolean; outputPath: string; errors: string[] }> {
-  const vendorPath = path.join(outDir, "_vendor.src.js");
-  const outputName = "_vendor.js";
+): Promise<VendorBuildResult> {
+  const errors: string[] = [];
+  const results: Record<string, string> = {
+    react: "",
+    reactDom: "",
+    reactDomClient: "",
+  };
 
-  try {
-    // 벤더 소스 작성
-    await Bun.write(vendorPath, generateVendorSource());
+  const shims = [
+    { name: "_react", source: generateReactShimSource(), key: "react" },
+    { name: "_react-dom", source: generateReactDOMShimSource(), key: "reactDom" },
+    { name: "_react-dom-client", source: generateReactDOMClientShimSource(), key: "reactDomClient" },
+  ];
 
-    // 빌드
-    const result = await Bun.build({
-      entrypoints: [vendorPath],
-      outdir: outDir,
-      naming: outputName,
-      minify: options.minify ?? process.env.NODE_ENV === "production",
-      sourcemap: options.sourcemap ? "external" : "none",
-      target: "browser",
-      define: {
-        "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),
-        ...options.define,
-      },
-    });
+  for (const shim of shims) {
+    const srcPath = path.join(outDir, `${shim.name}.src.js`);
+    const outputName = `${shim.name}.js`;
 
-    // 소스 파일 정리
-    await fs.unlink(vendorPath).catch(() => {});
+    try {
+      await Bun.write(srcPath, shim.source);
 
-    if (!result.success) {
-      return {
-        success: false,
-        outputPath: "",
-        errors: result.logs.map((l) => l.message),
-      };
+      const result = await Bun.build({
+        entrypoints: [srcPath],
+        outdir: outDir,
+        naming: outputName,
+        minify: options.minify ?? process.env.NODE_ENV === "production",
+        sourcemap: options.sourcemap ? "external" : "none",
+        target: "browser",
+        define: {
+          "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),
+          ...options.define,
+        },
+      });
+
+      await fs.unlink(srcPath).catch(() => {});
+
+      if (!result.success) {
+        errors.push(`[${shim.name}] ${result.logs.map((l) => l.message).join(", ")}`);
+      } else {
+        results[shim.key] = `/.mandu/client/${outputName}`;
+      }
+    } catch (error) {
+      await fs.unlink(srcPath).catch(() => {});
+      errors.push(`[${shim.name}] ${String(error)}`);
     }
-
-    return {
-      success: true,
-      outputPath: `/.mandu/client/${outputName}`,
-      errors: [],
-    };
-  } catch (error) {
-    await fs.unlink(vendorPath).catch(() => {});
-    return {
-      success: false,
-      outputPath: "",
-      errors: [String(error)],
-    };
   }
+
+  return {
+    success: errors.length === 0,
+    react: results.react,
+    reactDom: results.reactDom,
+    reactDomClient: results.reactDomClient,
+    errors,
+  };
 }
 
 /**
@@ -411,7 +461,7 @@ function createBundleManifest(
   outputs: BundleOutput[],
   routes: RouteSpec[],
   runtimePath: string,
-  vendorPath: string,
+  vendorResult: VendorBuildResult,
   env: "development" | "production"
 ): BundleManifest {
   const bundles: BundleManifest["bundles"] = {};
@@ -422,7 +472,7 @@ function createBundleManifest(
 
     bundles[output.routeId] = {
       js: output.outputPath,
-      dependencies: ["_runtime", "_vendor"],
+      dependencies: ["_runtime", "_react"],
       priority: hydration?.priority || "visible",
     };
   }
@@ -434,7 +484,14 @@ function createBundleManifest(
     bundles,
     shared: {
       runtime: runtimePath,
-      vendor: vendorPath,
+      vendor: vendorResult.react, // primary vendor for backwards compatibility
+    },
+    importMap: {
+      imports: {
+        "react": vendorResult.react,
+        "react-dom": vendorResult.reactDom,
+        "react-dom/client": vendorResult.reactDomClient,
+      },
     },
   };
 }
@@ -523,10 +580,10 @@ export async function buildClientBundles(
     errors.push(...runtimeResult.errors.map((e) => `[Runtime] ${e}`));
   }
 
-  // 4. Vendor 번들 빌드
-  const vendorResult = await buildVendor(outDir, options);
+  // 4. Vendor shim 번들 빌드 (React, ReactDOM, ReactDOMClient)
+  const vendorResult = await buildVendorShims(outDir, options);
   if (!vendorResult.success) {
-    errors.push(...vendorResult.errors.map((e) => `[Vendor] ${e}`));
+    errors.push(...vendorResult.errors);
   }
 
   // 5. 각 Island 번들 빌드
@@ -544,7 +601,7 @@ export async function buildClientBundles(
     outputs,
     hydratedRoutes,
     runtimeResult.outputPath,
-    vendorResult.outputPath,
+    vendorResult,
     env
   );
 

@@ -40,6 +40,18 @@ function serializeServerData(data: Record<string, unknown>): string {
 }
 
 /**
+ * Import map 생성 (bare specifier 해결용)
+ */
+function generateImportMap(manifest: BundleManifest): string {
+  if (!manifest.importMap || Object.keys(manifest.importMap.imports).length === 0) {
+    return "";
+  }
+
+  const importMapJson = JSON.stringify(manifest.importMap, null, 2);
+  return `<script type="importmap">${importMapJson}</script>`;
+}
+
+/**
  * Hydration 스크립트 태그 생성
  */
 function generateHydrationScripts(
@@ -48,14 +60,15 @@ function generateHydrationScripts(
 ): string {
   const scripts: string[] = [];
 
+  // Import map 먼저 (반드시 module scripts 전에 위치해야 함)
+  const importMap = generateImportMap(manifest);
+  if (importMap) {
+    scripts.push(importMap);
+  }
+
   // Runtime 로드
   if (manifest.shared.runtime) {
     scripts.push(`<script type="module" src="${manifest.shared.runtime}"></script>`);
-  }
-
-  // Vendor 로드
-  if (manifest.shared.vendor) {
-    scripts.push(`<script type="module" src="${manifest.shared.vendor}"></script>`);
   }
 
   // Island 번들 로드

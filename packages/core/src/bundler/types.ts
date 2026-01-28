@@ -57,8 +57,12 @@ export interface BundleManifest {
   shared: {
     /** Hydration 런타임 */
     runtime: string;
-    /** 벤더 번들 (React 등) */
+    /** React 번들 경로 */
     vendor: string;
+  };
+  /** Import map for bare specifiers (react, react-dom, etc.) */
+  importMap?: {
+    imports: Record<string, string>;
   };
 }
 
