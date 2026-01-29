@@ -20,6 +20,7 @@ import { contractTools, contractToolDefinitions } from "./tools/contract.js";
 import { brainTools, brainToolDefinitions } from "./tools/brain.js";
 import { resourceHandlers, resourceDefinitions } from "./resources/handlers.js";
 import { findProjectRoot } from "./utils/project.js";
+import { applyWarningInjection } from "./utils/withWarnings.js";
 import { ActivityMonitor } from "./activity-monitor.js";
 import { startWatcher } from "../../core/src/index.js";
 
@@ -64,7 +65,7 @@ export class ManduMcpServer {
   }
 
   private getAllToolHandlers(): Record<string, (args: Record<string, unknown>) => Promise<unknown>> {
-    return {
+    const handlers = {
       ...specTools(this.projectRoot),
       ...generateTools(this.projectRoot),
       ...transactionTools(this.projectRoot),
@@ -75,6 +76,8 @@ export class ManduMcpServer {
       ...contractTools(this.projectRoot),
       ...brainTools(this.projectRoot, this.server, this.monitor),
     };
+
+    return applyWarningInjection(handlers);
   }
 
   private registerToolHandlers(): void {

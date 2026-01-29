@@ -318,8 +318,8 @@ export function hydrationTools(projectRoot: string) {
         };
       }
 
-      // Create client slot file
-      const clientModulePath = `spec/slots/${routeId}.client.ts`;
+      // Create client slot file in apps/web/components/ (not spec/slots/)
+      const clientModulePath = `apps/web/components/${routeId}.client.tsx`;
       const clientFilePath = path.join(projectRoot, clientModulePath);
 
       // Check if file already exists

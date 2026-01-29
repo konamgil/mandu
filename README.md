@@ -85,6 +85,7 @@ Current AI-assisted development has a fundamental problem:
 | **Guard System** | Enforces architecture rules and prevents contamination |
 | **Transaction API** | Atomic changes with snapshot-based rollback |
 | **MCP Server** | AI agents can directly manipulate the framework |
+| **Real-Time Watch** | MCP push notifications on architecture violations |
 | **Island Hydration** | Selective client-side JavaScript for performance |
 | **HMR Support** | Hot Module Replacement for rapid development |
 | **Error Classification** | Intelligent error categorization with fix suggestions |
@@ -712,6 +713,18 @@ Create `.mcp.json` in your project root:
 | `mandu_set_hydration` | Configure hydration strategy |
 | `mandu_add_client_slot` | Create client slot for route |
 
+#### Real-Time Watch (Brain v0.1)
+
+| Tool | Description |
+|------|-------------|
+| `mandu_watch_start` | Start file watcher with MCP push notifications |
+| `mandu_watch_status` | Get watcher status and recent warnings |
+| `mandu_watch_stop` | Stop watcher and clean up subscriptions |
+| `mandu_doctor` | Analyze Guard failures and suggest patches |
+| `mandu_check_location` | Check if a file follows architecture rules |
+| `mandu_check_import` | Validate imports against architecture rules |
+| `mandu_get_architecture` | Get project architecture rules and folder structure |
+
 #### History
 
 | Tool | Description |
@@ -728,6 +741,8 @@ Create `.mcp.json` in your project root:
 | `mandu://generated/map` | Generated files mapping |
 | `mandu://transaction/active` | Active transaction state |
 | `mandu://slots/{routeId}` | Slot file content |
+| `mandu://watch/warnings` | Recent architecture violation warnings |
+| `mandu://watch/status` | Watcher status (active, uptime, file count) |
 
 ### Agent Workflow Example
 
@@ -781,6 +796,60 @@ Agent:
 Result: New API ready with full rollback capability
 ```
 
+### Real-Time Architecture Monitoring
+
+Mandu's MCP server pushes real-time notifications to AI agents when architecture violations are detected. Unlike traditional lint-on-save approaches, the agent is **proactively notified** without polling.
+
+```
+File change (fs.watch)
+  → FileWatcher detects change
+    → validateFile() checks architecture rules
+      → MCP push notification:
+          1. sendLoggingMessage()      → Agent receives warning in real-time
+          2. sendResourceUpdated()     → Agent knows to re-read warnings resource
+```
+
+#### How It Works
+
+1. **Start the watcher** — call `mandu_watch_start`
+2. **Develop normally** — the watcher monitors all file changes
+3. **Violation detected** — e.g., a generated file is manually edited
+4. **Agent receives push** — MCP `notifications/message` delivered instantly
+5. **Agent can respond** — read `mandu://watch/warnings` for details and take action
+
+#### Architecture Rules (Watched)
+
+| Rule | Detects |
+|------|---------|
+| `GENERATED_DIRECT_EDIT` | Manual edits to generated files (should use `mandu generate`) |
+| `WRONG_SLOT_LOCATION` | Slot files outside `spec/slots/` directory |
+| `SLOT_NAMING` | Slot files not ending with `.slot.ts` |
+| `CONTRACT_NAMING` | Contract files not ending with `.contract.ts` |
+| `FORBIDDEN_IMPORT` | Dangerous imports (`fs`, `child_process`) in generated files |
+
+#### Notification Format (JSON-RPC)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "notifications/message",
+  "params": {
+    "level": "warning",
+    "logger": "mandu-watch",
+    "data": {
+      "type": "watch_warning",
+      "ruleId": "GENERATED_DIRECT_EDIT",
+      "file": "apps/server/generated/routes/home.handler.ts",
+      "message": "Generated file was directly modified",
+      "event": "modify",
+      "timestamp": "2026-01-30T10:15:00.000Z"
+    }
+  }
+}
+```
+
+> **Why this matters**: No other web framework provides MCP-level real-time architecture monitoring for AI agents. The agent doesn't just write code — it watches the project and prevents architecture decay as it happens.
+
 ---
 
 ## Error Handling System
@@ -833,24 +902,22 @@ Mandu automatically classifies errors into three types:
 
 ## Roadmap
 
-### v0.4.x (Current)
+### v0.9.x (Current)
 - [x] Island hydration system
 - [x] HMR (Hot Module Replacement)
 - [x] MCP server with 20+ tools
 - [x] Transaction API with snapshots
 - [x] Error classification system
 - [x] Slot auto-correction
+- [x] Contract-first API with type inference
+- [x] Real-time architecture watch via MCP push notifications
+- [x] Brain v0.1 (Doctor, Architecture analyzer, File watcher)
+- [x] Client-side router with NavLink
 
-### v0.5.x (Next)
+### v1.0.x (Next)
 - [ ] WebSocket platform
-- [ ] Channel-logic slots
-- [ ] Contract-first API
-- [ ] Improved test templates
-
-### v1.0.x
 - [ ] ISR (Incremental Static Regeneration)
 - [ ] CacheStore adapter
-- [ ] Distributed WebSocket mode
 - [ ] Production deployment guides
 
 ---

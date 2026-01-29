@@ -85,6 +85,7 @@
 | **Guard 시스템** | 아키텍처 규칙 강제 및 오염 방지 |
 | **트랜잭션 API** | 스냅샷 기반 롤백이 가능한 원자적 변경 |
 | **MCP 서버** | AI 에이전트가 프레임워크를 직접 조작 가능 |
+| **실시간 Watch** | 아키텍처 위반 시 MCP push notification으로 에이전트에 실시간 알림 |
 | **Island Hydration** | 선택적 클라이언트 JavaScript로 성능 최적화 |
 | **HMR 지원** | 빠른 개발을 위한 핫 모듈 교체 |
 | **에러 분류 시스템** | 지능적 에러 분류와 수정 가이드 제공 |
@@ -712,6 +713,18 @@ Mandu는 AI 에이전트가 프레임워크와 직접 상호작용할 수 있는
 | `mandu_set_hydration` | hydration 전략 설정 |
 | `mandu_add_client_slot` | 라우트용 클라이언트 슬롯 생성 |
 
+#### 실시간 Watch (Brain v0.1)
+
+| 도구 | 설명 |
+|------|------|
+| `mandu_watch_start` | 파일 감시 시작 + MCP push notification 활성화 |
+| `mandu_watch_status` | 감시 상태 및 최근 경고 조회 |
+| `mandu_watch_stop` | 감시 중지 및 구독 정리 |
+| `mandu_doctor` | Guard 실패 분석 및 패치 제안 |
+| `mandu_check_location` | 파일 위치가 아키텍처 규칙에 맞는지 검사 |
+| `mandu_check_import` | import가 아키텍처 규칙에 맞는지 검사 |
+| `mandu_get_architecture` | 프로젝트 아키텍처 규칙 및 폴더 구조 조회 |
+
 #### 히스토리
 
 | 도구 | 설명 |
@@ -728,6 +741,8 @@ Mandu는 AI 에이전트가 프레임워크와 직접 상호작용할 수 있는
 | `mandu://generated/map` | 생성된 파일 매핑 |
 | `mandu://transaction/active` | 활성 트랜잭션 상태 |
 | `mandu://slots/{routeId}` | 슬롯 파일 내용 |
+| `mandu://watch/warnings` | 최근 아키텍처 위반 경고 목록 |
+| `mandu://watch/status` | Watch 상태 (활성여부, 업타임, 파일 수) |
 
 ### 에이전트 워크플로우 예시
 
@@ -781,6 +796,60 @@ Agent:
 결과: 완전한 롤백 가능한 새 API 준비 완료
 ```
 
+### 실시간 아키텍처 모니터링
+
+Mandu의 MCP 서버는 아키텍처 위반을 감지하면 AI 에이전트에게 **실시간 push notification**을 보냅니다. 기존의 lint-on-save 방식과 달리, 에이전트가 폴링 없이 **능동적으로 알림을 수신**합니다.
+
+```
+파일 변경 (fs.watch)
+  → FileWatcher 감지
+    → validateFile() 아키텍처 규칙 검사
+      → MCP push notification:
+          1. sendLoggingMessage()      → 에이전트가 실시간으로 경고 수신
+          2. sendResourceUpdated()     → 경고 리소스 갱신 알림
+```
+
+#### 작동 방식
+
+1. **감시 시작** — `mandu_watch_start` 호출
+2. **평소처럼 개발** — watcher가 모든 파일 변경을 모니터링
+3. **위반 감지** — 예: generated 파일을 수동으로 수정
+4. **에이전트가 push 수신** — MCP `notifications/message`가 즉시 전달
+5. **에이전트가 대응** — `mandu://watch/warnings` 리소스를 읽고 조치
+
+#### 감시 규칙
+
+| 규칙 | 감지 대상 |
+|------|----------|
+| `GENERATED_DIRECT_EDIT` | generated 파일 수동 수정 (`mandu generate` 사용 권장) |
+| `WRONG_SLOT_LOCATION` | `spec/slots/` 외부의 슬롯 파일 |
+| `SLOT_NAMING` | `.slot.ts`로 끝나지 않는 슬롯 파일 |
+| `CONTRACT_NAMING` | `.contract.ts`로 끝나지 않는 계약 파일 |
+| `FORBIDDEN_IMPORT` | generated 파일의 위험한 import (`fs`, `child_process`) |
+
+#### Notification 메시지 포맷 (JSON-RPC)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "notifications/message",
+  "params": {
+    "level": "warning",
+    "logger": "mandu-watch",
+    "data": {
+      "type": "watch_warning",
+      "ruleId": "GENERATED_DIRECT_EDIT",
+      "file": "apps/server/generated/routes/home.handler.ts",
+      "message": "Generated 파일이 직접 수정되었습니다",
+      "event": "modify",
+      "timestamp": "2026-01-30T10:15:00.000Z"
+    }
+  }
+}
+```
+
+> **왜 이게 중요한가**: MCP 수준에서 AI 에이전트에게 실시간 아키텍처 모니터링을 제공하는 웹 프레임워크는 없습니다. 에이전트가 코드만 작성하는 게 아니라, 프로젝트를 감시하면서 아키텍처 붕괴를 실시간으로 방지합니다.
+
 ---
 
 ## 에러 처리 시스템
@@ -833,24 +902,22 @@ Mandu는 자동으로 에러를 세 가지 유형으로 분류합니다:
 
 ## 로드맵
 
-### v0.4.x (현재)
+### v0.9.x (현재)
 - [x] Island hydration 시스템
 - [x] HMR (Hot Module Replacement)
 - [x] 20개 이상의 도구를 포함한 MCP 서버
 - [x] 스냅샷 포함 트랜잭션 API
 - [x] 에러 분류 시스템
 - [x] 슬롯 자동 수정
+- [x] Contract-first API + 타입 추론
+- [x] MCP push notification 기반 실시간 아키텍처 감시
+- [x] Brain v0.1 (Doctor, Architecture analyzer, File watcher)
+- [x] 클라이언트 라우터 + NavLink
 
-### v0.5.x (다음)
+### v1.0.x (다음)
 - [ ] WebSocket 플랫폼
-- [ ] Channel-logic 슬롯
-- [ ] Contract-first API
-- [ ] 개선된 테스트 템플릿
-
-### v1.0.x
 - [ ] ISR (Incremental Static Regeneration)
 - [ ] CacheStore 어댑터
-- [ ] 분산 WebSocket 모드
 - [ ] 프로덕션 배포 가이드
 
 ---
