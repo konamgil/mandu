@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "generatedAt": "2026-01-29T20:23:20.592Z",
+  "specSource": {
+    "path": "spec/routes.manifest.json",
+    "hash": "09d377164caf372d6352fdc1ee670a755e1f9be28280885d5eb20800fe145c53"
+  },
+  "files": {
+    "apps/server/generated/routes/counter-page.route.ts": {
+      "routeId": "counter-page",
+      "kind": "page",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 0,
+        "jsonPath": "routes[0]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/counter-page.slot.ts"
+      }
+    },
+    "apps/web/generated/routes/counter-page.route.tsx": {
+      "routeId": "counter-page",
+      "kind": "page",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 0,
+        "jsonPath": "routes[0]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/counter-page.slot.ts"
+      }
+    },
+    "apps/server/generated/routes/about-page.route.ts": {
+      "routeId": "about-page",
+      "kind": "page",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 1,
+        "jsonPath": "routes[1]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/about-page.slot.ts"
+      }
+    },
+    "apps/web/generated/routes/about-page.route.tsx": {
+      "routeId": "about-page",
+      "kind": "page",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 1,
+        "jsonPath": "routes[1]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/about-page.slot.ts"
+      }
+    },
+    "apps/server/generated/routes/counter-api.route.ts": {
+      "routeId": "counter-api",
+      "kind": "api",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 2,
+        "jsonPath": "routes[2]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/counter-api.slot.ts"
+      }
+    },
+    "apps/server/generated/routes/todos-api.route.ts": {
+      "routeId": "todos-api",
+      "kind": "api",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 3,
+        "jsonPath": "routes[3]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/todos-api.slot.ts"
+      },
+      "contractMapping": {
+        "contractPath": "spec/contracts/todos-api.contract.ts",
+        "typeGluePath": "apps/server/generated/types/todos-api.types.ts"
+      }
+    },
+    "apps/server/generated/routes/todos-page.route.ts": {
+      "routeId": "todos-page",
+      "kind": "page",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 4,
+        "jsonPath": "routes[4]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/todos-page.slot.ts"
+      }
+    },
+    "apps/web/generated/routes/todos-page.route.tsx": {
+      "routeId": "todos-page",
+      "kind": "page",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 4,
+        "jsonPath": "routes[4]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/todos-page.slot.ts"
+      }
+    },
+    "apps/server/generated/routes/blacklist-api.route.ts": {
+      "routeId": "blacklist-api",
+      "kind": "api",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 5,
+        "jsonPath": "routes[5]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/blacklist-api.slot.ts"
+      },
+      "contractMapping": {
+        "contractPath": "spec/contracts/blacklist-api.contract.ts",
+        "typeGluePath": "apps/server/generated/types/blacklist-api.types.ts"
+      }
+    },
+    "apps/server/generated/routes/blacklist-page.route.ts": {
+      "routeId": "blacklist-page",
+      "kind": "page",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 6,
+        "jsonPath": "routes[6]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/blacklist-page.slot.ts"
+      }
+    },
+    "apps/web/generated/routes/blacklist-page.route.tsx": {
+      "routeId": "blacklist-page",
+      "kind": "page",
+      "specLocation": {
+        "file": "spec/routes.manifest.json",
+        "routeIndex": 6,
+        "jsonPath": "routes[6]"
+      },
+      "slotMapping": {
+        "slotPath": "spec/slots/blacklist-page.slot.ts"
+      }
+    }
+  },
+  "frameworkPaths": [
+    "@mandujs/core",
+    "packages/core/src",
+    "node_modules/@mandujs"
+  ]
+}

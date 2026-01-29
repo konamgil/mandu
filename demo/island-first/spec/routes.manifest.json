@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "routes": [
+    {
+      "id": "counter-page",
+      "pattern": "/counter",
+      "kind": "page",
+      "module": "apps/server/generated/routes/counter-page.route.ts",
+      "componentModule": "apps/web/generated/routes/counter-page.route.tsx",
+      "slotModule": "spec/slots/counter-page.slot.ts",
+      "clientModule": "apps/web/components/Counter.client.tsx",
+      "hydration": {
+        "strategy": "island",
+        "priority": "immediate",
+        "preload": false
+      }
+    },
+    {
+      "id": "about-page",
+      "pattern": "/about",
+      "kind": "page",
+      "module": "apps/server/generated/routes/about-page.route.ts",
+      "componentModule": "apps/web/generated/routes/about-page.route.tsx",
+      "slotModule": "spec/slots/about-page.slot.ts"
+    },
+    {
+      "id": "counter-api",
+      "pattern": "/api/counter",
+      "kind": "api",
+      "module": "apps/server/generated/routes/counter-api.route.ts",
+      "slotModule": "spec/slots/counter-api.slot.ts"
+    },
+    {
+      "id": "todos-api",
+      "pattern": "/api/todos",
+      "kind": "api",
+      "module": "apps/server/generated/routes/todos-api.route.ts",
+      "slotModule": "spec/slots/todos-api.slot.ts",
+      "contractModule": "spec/contracts/todos-api.contract.ts"
+    },
+    {
+      "id": "todos-page",
+      "pattern": "/todos",
+      "kind": "page",
+      "module": "apps/server/generated/routes/todos-page.route.ts",
+      "componentModule": "apps/web/generated/routes/todos-page.route.tsx",
+      "slotModule": "spec/slots/todos-page.slot.ts"
+    },
+    {
+      "id": "blacklist-api",
+      "pattern": "/api/blacklist",
+      "kind": "api",
+      "module": "apps/server/generated/routes/blacklist-api.route.ts",
+      "slotModule": "spec/slots/blacklist-api.slot.ts",
+      "contractModule": "spec/contracts/blacklist-api.contract.ts"
+    },
+    {
+      "id": "blacklist-page",
+      "pattern": "/blacklist",
+      "kind": "page",
+      "module": "apps/server/generated/routes/blacklist-page.route.ts",
+      "componentModule": "apps/web/generated/routes/blacklist-page.route.tsx",
+      "slotModule": "spec/slots/blacklist-page.slot.ts",
+      "clientModule": "apps/web/components/Blacklist.client.tsx",
+      "hydration": {
+        "strategy": "island",
+        "priority": "visible",
+        "preload": false
+      }
+    }
+  ]
+}

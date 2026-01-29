@@ -1,0 +1,46 @@
+{
+  "id": "20260129-185048-xbj",
+  "timestamp": "2026-01-29T18:50:48.895Z",
+  "manifest": {
+    "version": 1,
+    "routes": [
+      {
+        "id": "counter-page",
+        "pattern": "/counter",
+        "kind": "page",
+        "module": "apps/server/generated/routes/counter-page.route.ts",
+        "componentModule": "apps/web/generated/routes/counter-page.route.tsx",
+        "slotModule": "spec/slots/counter-page.slot.ts",
+        "clientModule": "apps/web/components/Counter.client.tsx",
+        "hydration": {
+          "strategy": "island",
+          "priority": "immediate"
+        }
+      },
+      {
+        "id": "about-page",
+        "pattern": "/about",
+        "kind": "page",
+        "module": "apps/server/generated/routes/about-page.route.ts",
+        "componentModule": "apps/web/generated/routes/about-page.route.tsx",
+        "slotModule": "spec/slots/about-page.slot.ts"
+      },
+      {
+        "id": "counter-api",
+        "pattern": "/api/counter",
+        "kind": "api",
+        "module": "apps/server/generated/routes/counter-api.route.ts",
+        "slotModule": "spec/slots/counter-api.slot.ts"
+      }
+    ]
+  },
+  "lock": {
+    "routesHash": "c922daf54de1b96725d12b011fba0e5400aab7ac99944915b659e911b567c14f",
+    "updatedAt": "2026-01-29T17:35:06.688Z"
+  },
+  "slotContents": {
+    "about-page.slot.ts": "import { Mandu } from \"@mandujs/core\";\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({\n      title: \"About\",\n      description: \"Island-First Demo App\",\n    });\n  });\n",
+    "counter-api.slot.ts": "import { Mandu } from \"@mandujs/core\";\n\nlet counter = 0;\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({ count: counter });\n  })\n  .post(async (ctx) => {\n    const body = await ctx.body();\n    if (body.action === \"increment\") counter++;\n    else if (body.action === \"decrement\") counter--;\n    return ctx.ok({ count: counter });\n  });\n",
+    "counter-page.slot.ts": "import { Mandu } from \"@mandujs/core\";\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({\n      count: 0,\n      title: \"Counter Demo\",\n    });\n  });\n"
+  }
+}

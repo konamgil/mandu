@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__mandu__mandu_get_architecture",
+      "mcp__mandu__mandu_watch_status",
+      "mcp__mandu__mandu_guard_check",
+      "Bash(bun add:*)",
+      "mcp__mandu__mandu_watch_start",
+      "mcp__mandu__mandu_watch_stop",
+      "Bash(npm publish:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "mcp__mandu__mandu_begin",
+      "mcp__mandu__mandu_add_route",
+      "mcp__mandu__mandu_create_contract",
+      "mcp__mandu__mandu_generate",
+      "mcp__mandu__mandu_validate_contracts",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(git -C \"C:\\\\Users\\\\User\\\\workspace\\\\mandu\" diff --stat)",
+      "Bash(git -C \"C:\\\\Users\\\\User\\\\workspace\\\\mandu\" add packages/core/package.json packages/core/src/brain/types.ts packages/core/src/watcher/rules.ts packages/core/src/watcher/watcher.ts packages/mcp/package.json packages/mcp/src/activity-monitor.ts packages/mcp/src/server.ts packages/mcp/src/tools/brain.ts)",
+      "Bash(bun run:*)",
+      "Bash(git -C \"C:\\\\Users\\\\User\\\\workspace\\\\mandu\" commit -m \"$\\(cat <<''EOF''\nfeat: suppress watcher during generate to avoid false positives \\(v0.9.14\\)\n\n- Add suppress\\(\\)/resume\\(\\) to FileWatcher for temporary warning suppression\n- generateRoutes\\(\\) now suppresses watcher while writing generated files\n- Prevents false ISLAND_FIRST_MODIFIED warnings during mandu generate\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "mcp__mandu__mandu_list_contracts",
+      "mcp__mandu__mandu_read_slot",
+      "mcp__mandu__mandu_get_contract",
+      "mcp__mandu__mandu_write_slot",
+      "WebSearch"
+    ]
+  }
+}

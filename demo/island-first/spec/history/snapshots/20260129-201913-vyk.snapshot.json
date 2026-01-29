@@ -1,0 +1,65 @@
+{
+  "id": "20260129-201913-vyk",
+  "timestamp": "2026-01-29T20:19:13.336Z",
+  "manifest": {
+    "version": 1,
+    "routes": [
+      {
+        "id": "counter-page",
+        "pattern": "/counter",
+        "kind": "page",
+        "module": "apps/server/generated/routes/counter-page.route.ts",
+        "componentModule": "apps/web/generated/routes/counter-page.route.tsx",
+        "slotModule": "spec/slots/counter-page.slot.ts",
+        "clientModule": "apps/web/components/Counter.client.tsx",
+        "hydration": {
+          "strategy": "island",
+          "priority": "immediate",
+          "preload": false
+        }
+      },
+      {
+        "id": "about-page",
+        "pattern": "/about",
+        "kind": "page",
+        "module": "apps/server/generated/routes/about-page.route.ts",
+        "componentModule": "apps/web/generated/routes/about-page.route.tsx",
+        "slotModule": "spec/slots/about-page.slot.ts"
+      },
+      {
+        "id": "counter-api",
+        "pattern": "/api/counter",
+        "kind": "api",
+        "module": "apps/server/generated/routes/counter-api.route.ts",
+        "slotModule": "spec/slots/counter-api.slot.ts"
+      },
+      {
+        "id": "todos-api",
+        "pattern": "/api/todos",
+        "kind": "api",
+        "module": "apps/server/generated/routes/todos-api.route.ts",
+        "slotModule": "spec/slots/todos-api.slot.ts",
+        "contractModule": "spec/contracts/todos-api.contract.ts"
+      },
+      {
+        "id": "todos-page",
+        "pattern": "/todos",
+        "kind": "page",
+        "module": "apps/server/generated/routes/todos-page.route.ts",
+        "componentModule": "apps/web/generated/routes/todos-page.route.tsx",
+        "slotModule": "spec/slots/todos-page.slot.ts"
+      }
+    ]
+  },
+  "lock": {
+    "routesHash": "3afff3390751bedebf27770df79649198ccab3bd1ab1ac5123d1ba8541ea4e33",
+    "updatedAt": "2026-01-29T18:51:23.226Z"
+  },
+  "slotContents": {
+    "counter-api.slot.ts": "import { Mandu } from \"@mandujs/core\";\n\nlet counter = 0;\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({ count: counter });\n  })\n  .post(async (ctx) => {\n    const body = await ctx.body();\n    if (body.action === \"increment\") counter++;\n    else if (body.action === \"decrement\") counter--;\n    return ctx.ok({ count: counter });\n  });\n",
+    "about-page.slot.ts": "import { Mandu } from \"@mandujs/core\";\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({\n      title: \"About\",\n      description: \"Island-First Demo App\",\n    });\n  });\n",
+    "counter-page.slot.ts": "import { Mandu } from \"@mandujs/core\";\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({\n      count: 0,\n      title: \"Counter Demo\",\n    });\n  });\n",
+    "todos-api.slot.ts": "// 🥟 Mandu Filling - todos-api\n// Pattern: /api/todos\n\nimport { Mandu } from \"@mandujs/core\";\n\ninterface Todo {\n  id: number;\n  title: string;\n  completed: boolean;\n}\n\nconst todos: Todo[] = [\n  { id: 1, title: \"Mandu 프레임워크 배우기\", completed: true },\n  { id: 2, title: \"Activity Monitor 테스트\", completed: false },\n  { id: 3, title: \"Slot 직접 편집 워크플로우 확인\", completed: false },\n];\n\nlet nextId = 4;\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({ todos, total: todos.length });\n  })\n\n  .post(async (ctx) => {\n    const body = await ctx.body();\n    const todo: Todo = {\n      id: nextId++,\n      title: body.title || \"Untitled\",\n      completed: false,\n    };\n    todos.push(todo);\n    return ctx.created({ todo });\n  });\n",
+    "todos-page.slot.ts": "// 🥟 Mandu Filling - todos-page\n// Pattern: /todos\n\nimport { Mandu } from \"@mandujs/core\";\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({\n      title: \"할 일 목록\",\n      description: \"Mandu Todos Demo\",\n    });\n  });\n"
+  }
+}

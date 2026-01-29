@@ -1,0 +1,43 @@
+{
+  "id": "20260129-173506-0nm",
+  "timestamp": "2026-01-29T17:35:06.627Z",
+  "manifest": {
+    "version": 1,
+    "routes": [
+      {
+        "id": "counter-page",
+        "pattern": "/counter",
+        "kind": "page",
+        "module": "apps/server/generated/routes/counter-page.route.ts",
+        "componentModule": "apps/web/generated/routes/counter-page.route.tsx",
+        "slotModule": "spec/slots/counter-page.slot.ts",
+        "clientModule": "apps/web/components/Counter.client.tsx",
+        "hydration": {
+          "strategy": "island",
+          "priority": "immediate"
+        }
+      },
+      {
+        "id": "about-page",
+        "pattern": "/about",
+        "kind": "page",
+        "module": "apps/server/generated/routes/about-page.route.ts",
+        "componentModule": "apps/web/generated/routes/about-page.route.tsx",
+        "slotModule": "spec/slots/about-page.slot.ts"
+      },
+      {
+        "id": "counter-api",
+        "pattern": "/api/counter",
+        "kind": "api",
+        "module": "apps/server/generated/routes/counter-api.route.ts",
+        "slotModule": "spec/slots/counter-api.slot.ts"
+      }
+    ]
+  },
+  "lock": null,
+  "slotContents": {
+    "counter-page.slot.ts": "import { Mandu } from \"@mandujs/core\";\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({\n      count: 0,\n      title: \"Counter Demo\",\n    });\n  });\n",
+    "about-page.slot.ts": "import { Mandu } from \"@mandujs/core\";\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({\n      title: \"About\",\n      description: \"Island-First Demo App\",\n    });\n  });\n",
+    "counter-api.slot.ts": "import { Mandu } from \"@mandujs/core\";\n\nlet counter = 0;\n\nexport default Mandu.filling()\n  .get((ctx) => {\n    return ctx.ok({ count: counter });\n  })\n  .post(async (ctx) => {\n    const body = await ctx.body();\n    if (body.action === \"increment\") counter++;\n    else if (body.action === \"decrement\") counter--;\n    return ctx.ok({ count: counter });\n  });\n"
+  }
+}
