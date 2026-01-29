@@ -146,6 +146,12 @@ export interface ArchRule {
   forbiddenImports?: string[];
   /** Optional: required patterns in content */
   requiredPatterns?: RegExp[];
+  /** Optional: exclude paths matching this pattern */
+  excludePattern?: string;
+  /** Recommended action for the agent */
+  agentAction?: "regenerate" | "move" | "rename" | "remove_import" | "validate" | "none";
+  /** MCP tool to execute */
+  agentCommand?: string;
 }
 
 /**
@@ -164,6 +170,10 @@ export interface WatchWarning {
   event: "create" | "modify" | "delete";
   /** Warning level */
   level?: "info" | "warn";
+  /** Recommended action for the agent */
+  agentAction?: string;
+  /** MCP tool to execute */
+  agentCommand?: string;
 }
 
 /**

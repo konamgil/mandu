@@ -221,10 +221,13 @@ export class ManduMcpServer {
           logger: "mandu-watch",
           data: {
             type: "watch_warning",
+            severity: warning.level || "warn",
             ruleId: warning.ruleId,
             file: warning.file,
             message: warning.message,
             event: warning.event,
+            agentAction: warning.agentAction || null,
+            agentCommand: warning.agentCommand || null,
           },
         }).catch(() => {});
       });

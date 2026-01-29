@@ -262,11 +262,14 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
               logger: "mandu-watch",
               data: {
                 type: "watch_warning",
+                severity: warning.level || "warn",
                 ruleId: warning.ruleId,
                 file: warning.file,
                 message: warning.message,
                 event: warning.event,
                 timestamp: warning.timestamp.toISOString(),
+                agentAction: warning.agentAction || null,
+                agentCommand: warning.agentCommand || null,
               },
             }).catch(() => {});
 

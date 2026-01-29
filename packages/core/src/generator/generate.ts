@@ -5,6 +5,7 @@ import { computeHash } from "../spec/lock";
 import { getWatcher } from "../watcher/watcher";
 import path from "path";
 import fs from "fs/promises";
+import fsSync from "fs";
 
 async function fileExists(filePath: string): Promise<boolean> {
   try {
@@ -345,6 +346,12 @@ export async function generateRoutes(
 
   // Resume watcher after generation
   watcher?.resume();
+  // Cross-process timestamp: watcher skips warnings if generate finished recently
+  const stampDir = path.join(rootDir, ".mandu");
+  if (!fsSync.existsSync(stampDir)) {
+    fsSync.mkdirSync(stampDir, { recursive: true });
+  }
+  fsSync.writeFileSync(path.join(stampDir, "generate.stamp"), Date.now().toString());
 
   return result;
 }

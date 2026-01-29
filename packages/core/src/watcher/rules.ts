@@ -27,14 +27,19 @@ export const MVP_RULES: ArchRule[] = [
     pattern: "generated/**",
     action: "warn",
     message: "Generated 파일이 직접 수정되었습니다. 이 파일은 `mandu generate`로 재생성됩니다.",
+    agentAction: "regenerate",
+    agentCommand: "mandu_generate",
   },
   {
     id: "WRONG_SLOT_LOCATION",
     name: "Wrong Slot Location",
     description: "Slot 파일은 spec/slots/ 디렉토리에 있어야 합니다",
-    pattern: "src/**/*.slot.ts",
+    pattern: "**/*.slot.ts",
     action: "warn",
     message: "Slot 파일이 잘못된 위치에 있습니다. spec/slots/ 디렉토리로 이동하세요.",
+    excludePattern: "spec/slots/**",
+    agentAction: "move",
+    agentCommand: "mandu_check_location",
   },
   {
     id: "SLOT_NAMING",
@@ -44,6 +49,8 @@ export const MVP_RULES: ArchRule[] = [
     action: "warn",
     message: "Slot 파일명이 .slot.ts로 끝나야 합니다.",
     mustEndWith: ".slot.ts",
+    agentAction: "rename",
+    agentCommand: "mandu_check_location",
   },
   {
     id: "CONTRACT_NAMING",
@@ -53,6 +60,8 @@ export const MVP_RULES: ArchRule[] = [
     action: "warn",
     message: "Contract 파일명이 .contract.ts로 끝나야 합니다.",
     mustEndWith: ".contract.ts",
+    agentAction: "rename",
+    agentCommand: "mandu_check_location",
   },
   {
     id: "FORBIDDEN_IMPORT",
@@ -62,6 +71,8 @@ export const MVP_RULES: ArchRule[] = [
     action: "warn",
     message: "Generated 파일에서 금지된 모듈이 import되었습니다.",
     forbiddenImports: ["fs", "child_process", "cluster", "worker_threads"],
+    agentAction: "remove_import",
+    agentCommand: "mandu_guard_check",
   },
   {
     id: "SLOT_MODIFIED",
@@ -70,6 +81,8 @@ export const MVP_RULES: ArchRule[] = [
     pattern: "spec/slots/*.slot.ts",
     action: "warn",
     message: "Slot 수정 감지. mandu_validate_slot 또는 mandu_guard_check로 검증하세요.",
+    agentAction: "validate",
+    agentCommand: "mandu_validate_slot",
   },
   {
     id: "ISLAND_FIRST_MODIFIED",
@@ -78,6 +91,8 @@ export const MVP_RULES: ArchRule[] = [
     pattern: "apps/web/generated/routes/**",
     action: "warn",
     message: "Island-First componentModule이 수동 수정되었습니다. mandu generate를 실행하세요.",
+    agentAction: "regenerate",
+    agentCommand: "mandu_generate",
   },
 ];
 
@@ -123,6 +138,10 @@ export function matchRules(filePath: string): ArchRule[] {
 
   for (const rule of MVP_RULES) {
     if (matchGlob(rule.pattern, filePath)) {
+      // Skip if excluded
+      if (rule.excludePattern && matchGlob(rule.excludePattern, filePath)) {
+        continue;
+      }
       matched.push(rule);
     }
   }
@@ -193,15 +212,19 @@ export async function validateFile(
       continue;
     }
 
+    // Base warning fields reused across all branches
+    const base = {
+      ruleId: rule.id,
+      file: relativePath,
+      timestamp: new Date(),
+      event,
+      agentAction: rule.agentAction,
+      agentCommand: rule.agentCommand,
+    } as const;
+
     // Check naming convention
     if (rule.mustEndWith && !checkNamingConvention(relativePath, rule)) {
-      warnings.push({
-        ruleId: rule.id,
-        file: relativePath,
-        message: rule.message,
-        timestamp: new Date(),
-        event,
-      });
+      warnings.push({ ...base, message: rule.message });
       continue;
     }
 
@@ -221,11 +244,8 @@ export async function validateFile(
 
         if (forbidden.length > 0) {
           warnings.push({
-            ruleId: rule.id,
-            file: relativePath,
+            ...base,
             message: `${rule.message} (${forbidden.join(", ")})`,
-            timestamp: new Date(),
-            event,
           });
         }
       } catch {
@@ -236,25 +256,12 @@ export async function validateFile(
 
     // Default: generate warning for pattern match
     if (rule.id === "GENERATED_DIRECT_EDIT" || rule.id === "WRONG_SLOT_LOCATION" || rule.id === "ISLAND_FIRST_MODIFIED") {
-      warnings.push({
-        ruleId: rule.id,
-        file: relativePath,
-        message: rule.message,
-        timestamp: new Date(),
-        event,
-      });
+      warnings.push({ ...base, message: rule.message });
     }
 
     // Slot modified: info level notification
     if (rule.id === "SLOT_MODIFIED" && event !== "delete") {
-      warnings.push({
-        ruleId: rule.id,
-        file: relativePath,
-        message: rule.message,
-        timestamp: new Date(),
-        event,
-        level: "info",
-      });
+      warnings.push({ ...base, message: rule.message, level: "info" as const });
     }
   }
 

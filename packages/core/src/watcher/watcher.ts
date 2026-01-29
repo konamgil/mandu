@@ -285,6 +285,20 @@ export class FileWatcher {
 
     const { rootDir } = this.config;
 
+    // Cross-process: skip if generate finished within last 2 seconds
+    // Walk up from the changed file to find nearest .mandu/generate.stamp
+    let stampDir = path.dirname(filePath);
+    while (stampDir !== path.dirname(stampDir)) {
+      const stampFile = path.join(stampDir, ".mandu", "generate.stamp");
+      try {
+        const stamp = parseInt(fs.readFileSync(stampFile, "utf-8"), 10);
+        if (Date.now() - stamp < 2000) return;
+        break;
+      } catch {}
+      stampDir = path.dirname(stampDir);
+    }
+
+
     // Validate file against rules
     try {
       const warnings = await validateFile(filePath, event, rootDir);
