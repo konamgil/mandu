@@ -67,6 +67,7 @@ export class FileWatcher {
   private logFile: string | null = null;
   private logStream: fs.WriteStream | null = null;
   private tailProcess: ChildProcess | null = null;
+  private _suppressed: boolean = false;
 
   constructor(config: WatcherConfig) {
     this.config = {
@@ -230,6 +231,20 @@ export class FileWatcher {
   }
 
   /**
+   * Suppress warnings (e.g. during generate)
+   */
+  suppress(): void {
+    this._suppressed = true;
+  }
+
+  /**
+   * Resume warnings after suppression
+   */
+  resume(): void {
+    this._suppressed = false;
+  }
+
+  /**
    * Open a new terminal window tailing the log file
    */
   private openLogTerminal(logFile: string, cwd: string): void {
@@ -266,6 +281,8 @@ export class FileWatcher {
     event: "create" | "modify" | "delete",
     filePath: string
   ): Promise<void> {
+    if (this._suppressed) return;
+
     const { rootDir } = this.config;
 
     // Validate file against rules

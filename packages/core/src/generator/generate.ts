@@ -2,6 +2,7 @@ import type { RoutesManifest, RouteSpec } from "../spec/schema";
 import { generateApiHandler, generatePageComponent, generateSlotLogic } from "./templates";
 import { generateContractTypeGlue, generateContractTemplate, generateContractTypesIndex } from "./contract-glue";
 import { computeHash } from "../spec/lock";
+import { getWatcher } from "../watcher/watcher";
 import path from "path";
 import fs from "fs/promises";
 
@@ -134,6 +135,10 @@ export async function generateRoutes(
     errors: [],
     warnings: [],
   };
+
+  // Suppress watcher during generation to avoid false positives
+  const watcher = getWatcher();
+  watcher?.suppress();
 
   const serverRoutesDir = path.join(rootDir, "apps/server/generated/routes");
   const webRoutesDir = path.join(rootDir, "apps/web/generated/routes");
@@ -337,6 +342,9 @@ export async function generateRoutes(
   // Write generated map
   const mapPath = path.join(mapDir, "generated.map.json");
   await Bun.write(mapPath, JSON.stringify(generatedMap, null, 2));
+
+  // Resume watcher after generation
+  watcher?.resume();
 
   return result;
 }
