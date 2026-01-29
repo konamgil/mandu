@@ -64,6 +64,14 @@ export const MVP_RULES: ArchRule[] = [
     forbiddenImports: ["fs", "child_process", "cluster", "worker_threads"],
   },
   {
+    id: "SLOT_MODIFIED",
+    name: "Slot File Modified",
+    description: "Slot 파일이 수정되었습니다",
+    pattern: "spec/slots/*.slot.ts",
+    action: "warn",
+    message: "Slot 수정 감지. mandu_validate_slot 또는 mandu_guard_check로 검증하세요.",
+  },
+  {
     id: "ISLAND_FIRST_MODIFIED",
     name: "Island-First ComponentModule Modified",
     description: "Island-First 방식으로 생성된 componentModule이 수동으로 변경되었습니다",
@@ -234,6 +242,18 @@ export async function validateFile(
         message: rule.message,
         timestamp: new Date(),
         event,
+      });
+    }
+
+    // Slot modified: info level notification
+    if (rule.id === "SLOT_MODIFIED" && event !== "delete") {
+      warnings.push({
+        ruleId: rule.id,
+        file: relativePath,
+        message: rule.message,
+        timestamp: new Date(),
+        event,
+        level: "info",
       });
     }
   }

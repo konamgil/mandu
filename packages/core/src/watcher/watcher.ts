@@ -21,7 +21,7 @@ import chokidar, { type FSWatcher } from "chokidar";
  */
 function formatWarning(warning: WatchWarning): string {
   const time = new Date().toLocaleTimeString("ko-KR", { hour12: false });
-  const icon = warning.event === "delete" ? "[DEL]" : "[WARN]";
+  const icon = warning.level === "info" ? "[INFO]" : warning.event === "delete" ? "[DEL]" : "[WARN]";
   return `${time} ${icon} ${warning.ruleId}\n       ${warning.file}\n       ${warning.message}\n`;
 }
 
@@ -105,8 +105,7 @@ export class FileWatcher {
       `${"=".repeat(50)}\n\n`
     );
 
-    // Auto-open terminal window to tail the log
-    this.openLogTerminal(this.logFile, rootDir);
+    // Terminal is now handled by ActivityMonitor in MCP server
 
     // Build sets for fast lookup
     const ignoredSet = new Set(ignoreDirs || []);

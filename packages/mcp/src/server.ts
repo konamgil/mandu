@@ -20,13 +20,17 @@ import { contractTools, contractToolDefinitions } from "./tools/contract.js";
 import { brainTools, brainToolDefinitions } from "./tools/brain.js";
 import { resourceHandlers, resourceDefinitions } from "./resources/handlers.js";
 import { findProjectRoot } from "./utils/project.js";
+import { ActivityMonitor } from "./activity-monitor.js";
+import { startWatcher } from "../../core/src/index.js";
 
 export class ManduMcpServer {
   private server: Server;
   private projectRoot: string;
+  private monitor: ActivityMonitor;
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
+    this.monitor = new ActivityMonitor(projectRoot);
     this.server = new Server(
       {
         name: "mandu-mcp",
@@ -69,7 +73,7 @@ export class ManduMcpServer {
       ...slotTools(this.projectRoot),
       ...hydrationTools(this.projectRoot),
       ...contractTools(this.projectRoot),
-      ...brainTools(this.projectRoot, this.server),
+      ...brainTools(this.projectRoot, this.server, this.monitor),
     };
   }
 
@@ -87,6 +91,7 @@ export class ManduMcpServer {
 
       const handler = toolHandlers[name];
       if (!handler) {
+        this.monitor.logTool(name, args, null, "Unknown tool");
         return {
           content: [
             {
@@ -99,7 +104,9 @@ export class ManduMcpServer {
       }
 
       try {
+        this.monitor.logTool(name, args);
         const result = await handler(args || {});
+        this.monitor.logResult(name, result);
         return {
           content: [
             {
@@ -109,13 +116,13 @@ export class ManduMcpServer {
           ],
         };
       } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.monitor.logTool(name, args, null, msg);
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({
-                error: error instanceof Error ? error.message : String(error),
-              }),
+              text: JSON.stringify({ error: msg }),
             },
           ],
           isError: true,
@@ -196,6 +203,36 @@ export class ManduMcpServer {
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
+    this.monitor.start();
+
+    // Auto-start watcher with activity monitor integration
+    try {
+      const watcher = await startWatcher({ rootDir: this.projectRoot });
+      watcher.onWarning((warning) => {
+        this.monitor.logWatch(
+          warning.level || "warn",
+          warning.ruleId,
+          warning.file,
+          warning.message,
+        );
+        // Also notify Claude Code via MCP
+        this.server.sendLoggingMessage({
+          level: "warning",
+          logger: "mandu-watch",
+          data: {
+            type: "watch_warning",
+            ruleId: warning.ruleId,
+            file: warning.file,
+            message: warning.message,
+            event: warning.event,
+          },
+        }).catch(() => {});
+      });
+      this.monitor.logEvent("SYSTEM", "Watcher auto-started");
+    } catch {
+      this.monitor.logEvent("SYSTEM", "Watcher auto-start failed (non-critical)");
+    }
+
     console.error(`Mandu MCP Server running for project: ${this.projectRoot}`);
   }
 }

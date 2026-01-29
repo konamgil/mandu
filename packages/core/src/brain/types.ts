@@ -162,6 +162,8 @@ export interface WatchWarning {
   timestamp: Date;
   /** Event type that triggered the warning */
   event: "create" | "modify" | "delete";
+  /** Warning level */
+  level?: "info" | "warn";
 }
 
 /**
