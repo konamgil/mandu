@@ -108,6 +108,18 @@ export const GUARD_RULES: Record<string, GuardRule> = {
     description: "spec에 명시된 clientModule 파일을 찾을 수 없습니다",
     severity: "error",
   },
+  SLOT_DIR_INVALID_FILE: {
+    id: "SLOT_DIR_INVALID_FILE",
+    name: "Invalid File in Slots Directory",
+    description: "spec/slots/ 디렉토리에 .slot.ts가 아닌 파일이 있습니다",
+    severity: "error",
+  },
+  CONTRACT_DIR_INVALID_FILE: {
+    id: "CONTRACT_DIR_INVALID_FILE",
+    name: "Invalid File in Contracts Directory",
+    description: "spec/contracts/ 디렉토리에 .contract.ts가 아닌 파일이 있습니다",
+    severity: "error",
+  },
 };
 
 export const FORBIDDEN_IMPORTS = ["fs", "child_process", "cluster", "worker_threads"];

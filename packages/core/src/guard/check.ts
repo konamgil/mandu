@@ -291,6 +291,47 @@ async function scanTsFiles(dir: string): Promise<string[]> {
   return files;
 }
 
+// Rule: spec/ directory naming convention scan
+export async function checkSpecDirNaming(
+  rootDir: string
+): Promise<GuardViolation[]> {
+  const violations: GuardViolation[] = [];
+
+  // Check spec/slots/ — only .slot.ts allowed
+  const slotsDir = path.join(rootDir, "spec/slots");
+  try {
+    const files = await fs.readdir(slotsDir);
+    for (const file of files) {
+      if (file.endsWith(".ts") && !file.endsWith(".slot.ts")) {
+        violations.push({
+          ruleId: GUARD_RULES.SLOT_DIR_INVALID_FILE.id,
+          file: `spec/slots/${file}`,
+          message: `spec/slots/에 .slot.ts가 아닌 파일: ${file}`,
+          suggestion: `.slot.ts로 이름을 바꾸거나, 이 파일이 client slot이면 apps/web/components/로 이동하세요`,
+        });
+      }
+    }
+  } catch {}
+
+  // Check spec/contracts/ — only .contract.ts allowed
+  const contractsDir = path.join(rootDir, "spec/contracts");
+  try {
+    const files = await fs.readdir(contractsDir);
+    for (const file of files) {
+      if (file.endsWith(".ts") && !file.endsWith(".contract.ts")) {
+        violations.push({
+          ruleId: GUARD_RULES.CONTRACT_DIR_INVALID_FILE.id,
+          file: `spec/contracts/${file}`,
+          message: `spec/contracts/에 .contract.ts가 아닌 파일: ${file}`,
+          suggestion: `.contract.ts로 이름을 바꾸세요`,
+        });
+      }
+    }
+  } catch {}
+
+  return violations;
+}
+
 export async function runGuardCheck(
   manifest: RoutesManifest,
   rootDir: string
@@ -346,6 +387,10 @@ export async function runGuardCheck(
   // Rule: Island-First Integrity
   const islandViolations = await checkIslandFirstIntegrity(manifest, rootDir);
   violations.push(...islandViolations);
+
+  // Rule: spec/ directory naming convention
+  const specDirViolations = await checkSpecDirNaming(rootDir);
+  violations.push(...specDirViolations);
 
   return {
     passed: violations.length === 0,
