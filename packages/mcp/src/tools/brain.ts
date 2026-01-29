@@ -12,6 +12,7 @@
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import type { ActivityMonitor } from "../activity-monitor.js";
 import {
   loadManifest,
   runGuardCheck,
@@ -140,12 +141,12 @@ export const brainToolDefinitions: Tool[] = [
 /** Module-level unsubscribe handle for MCP warning notifications */
 let mcpWarningUnsubscribe: (() => void) | null = null;
 
-export function brainTools(projectRoot: string, server?: Server) {
+export function brainTools(projectRoot: string, server?: Server, monitor?: ActivityMonitor) {
   const paths = getProjectPaths(projectRoot);
 
   return {
     mandu_doctor: async (args: Record<string, unknown>) => {
-      const { useLLM = true } = args as { useLLM?: boolean };
+      const { useLLM = false } = args as { useLLM?: boolean };
 
       try {
         // Initialize Brain
@@ -245,6 +246,16 @@ export function brainTools(projectRoot: string, server?: Server) {
           }
 
           mcpWarningUnsubscribe = watcher.onWarning((warning) => {
+            // Log to activity monitor
+            if (monitor) {
+              monitor.logWatch(
+                warning.level || "warn",
+                warning.ruleId,
+                warning.file,
+                warning.message,
+              );
+            }
+
             // Push logging message (Claude Code receives in real-time)
             server.sendLoggingMessage({
               level: "warning",
@@ -286,6 +297,7 @@ export function brainTools(projectRoot: string, server?: Server) {
             "SLOT_NAMING - Slot 파일 네이밍 규칙",
             "CONTRACT_NAMING - Contract 파일 네이밍 규칙",
             "FORBIDDEN_IMPORT - Generated 파일의 금지된 import 감지",
+            "SLOT_MODIFIED - Slot 파일 수정 감지 (info)",
           ],
           logFile: ".mandu/watch.log",
           tip: "Run `tail -f .mandu/watch.log` in another terminal for real-time warnings.",
