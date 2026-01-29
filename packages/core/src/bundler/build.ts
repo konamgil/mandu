@@ -269,6 +269,12 @@ import { jsxDEV } from 'react/jsx-dev-runtime';
 // React internals (ReactDOM이 내부적으로 접근 필요)
 const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
 
+// 전역 React 설정 (모든 모듈에서 동일 인스턴스 공유)
+if (typeof window !== 'undefined') {
+  window.React = React;
+  window.__MANDU_REACT__ = React;
+}
+
 // Named exports
 export {
   createElement,
@@ -417,16 +423,39 @@ function generateRouterRuntimeSource(): string {
 /**
  * Mandu Client Router Runtime (Generated)
  * Client-side Routing을 위한 런타임
+ * 전역 상태를 사용하여 모든 모듈에서 동일 인스턴스 공유
  */
 
-// 라우트 정보
-let currentRoute = window.__MANDU_ROUTE__ || null;
-let currentLoaderData = window.__MANDU_DATA__?.[currentRoute?.id]?.serverData;
-let navigationState = { state: 'idle' };
-const listeners = new Set();
+// 전역 상태 초기화 (Island와 공유)
+(function initGlobalState() {
+  if (window.__MANDU_ROUTER_STATE__) return;
+  var route = window.__MANDU_ROUTE__;
+  window.__MANDU_ROUTER_STATE__ = {
+    currentRoute: route ? {
+      id: route.id,
+      pattern: route.pattern,
+      params: route.params || {}
+    } : null,
+    loaderData: window.__MANDU_DATA__ && window.__MANDU_DATA__[route && route.id] ? window.__MANDU_DATA__[route.id].serverData : undefined,
+    navigation: { state: 'idle' }
+  };
+  window.__MANDU_ROUTER_LISTENERS__ = window.__MANDU_ROUTER_LISTENERS__ || new Set();
+})();
+
+function getGlobalState() {
+  return window.__MANDU_ROUTER_STATE__;
+}
+
+function setGlobalState(state) {
+  window.__MANDU_ROUTER_STATE__ = state;
+}
+
+function getListeners() {
+  return window.__MANDU_ROUTER_LISTENERS__;
+}
 
 // 패턴 매칭 캐시
-const patternCache = new Map();
+var patternCache = new Map();
 
 function compilePattern(pattern) {
   if (patternCache.has(pattern)) return patternCache.get(pattern);
@@ -462,25 +491,17 @@ function extractParams(pattern, pathname) {
 }
 
 function notifyListeners() {
-  const state = {
-    currentRoute,
-    loaderData: currentLoaderData,
-    navigation: navigationState
-  };
-  listeners.forEach(fn => { try { fn(state); } catch(e) {} });
+  const state = getGlobalState();
+  getListeners().forEach(fn => { try { fn(state); } catch(e) {} });
 }
 
 export function subscribe(listener) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+  getListeners().add(listener);
+  return () => getListeners().delete(listener);
 }
 
 export function getRouterState() {
-  return {
-    currentRoute,
-    loaderData: currentLoaderData,
-    navigation: navigationState
-  };
+  return getGlobalState();
 }
 
 export async function navigate(to, options = {}) {
@@ -493,7 +514,9 @@ export async function navigate(to, options = {}) {
       return;
     }
 
-    navigationState = { state: 'loading', location: to };
+    // 로딩 상태로 전환
+    const state = getGlobalState();
+    setGlobalState({ ...state, navigation: { state: 'loading', location: to } });
     notifyListeners();
 
     const dataUrl = url.pathname + (url.search ? url.search + '&' : '?') + '_data=1';
@@ -512,9 +535,12 @@ export async function navigate(to, options = {}) {
       history.pushState({ routeId: data.routeId }, '', to);
     }
 
-    currentRoute = { id: data.routeId, pattern: data.pattern, params: data.params };
-    currentLoaderData = data.loaderData;
-    navigationState = { state: 'idle' };
+    // 전역 상태 업데이트
+    setGlobalState({
+      currentRoute: { id: data.routeId, pattern: data.pattern, params: data.params },
+      loaderData: data.loaderData,
+      navigation: { state: 'idle' }
+    });
 
     window.__MANDU_DATA__ = window.__MANDU_DATA__ || {};
     window.__MANDU_DATA__[data.routeId] = { serverData: data.loaderData };
@@ -556,8 +582,10 @@ function handlePopState(e) {
 
 // 초기화
 function init() {
-  if (currentRoute) {
-    currentRoute.params = extractParams(currentRoute.pattern, location.pathname);
+  var state = getGlobalState();
+  if (state.currentRoute) {
+    state.currentRoute.params = extractParams(state.currentRoute.pattern, location.pathname);
+    setGlobalState(state);
   }
 
   window.addEventListener('popstate', handlePopState);
@@ -570,8 +598,6 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
-
-export { currentRoute, currentLoaderData, navigationState };
 `;
 }
 

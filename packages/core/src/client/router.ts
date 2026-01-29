@@ -33,15 +33,57 @@ export interface NavigateOptions {
 
 type RouterListener = (state: RouterState) => void;
 
-// ========== Router State ==========
+// ========== Global Router State (모든 모듈에서 동일 인스턴스 공유) ==========
 
-let routerState: RouterState = {
-  currentRoute: null,
-  loaderData: undefined,
-  navigation: { state: "idle" },
-};
+declare global {
+  interface Window {
+    __MANDU_ROUTER_STATE__?: RouterState;
+    __MANDU_ROUTER_LISTENERS__?: Set<RouterListener>;
+  }
+}
 
-const listeners = new Set<RouterListener>();
+function getGlobalRouterState(): RouterState {
+  if (typeof window === "undefined") {
+    return { currentRoute: null, loaderData: undefined, navigation: { state: "idle" } };
+  }
+  if (!window.__MANDU_ROUTER_STATE__) {
+    // SSR에서 주입된 __MANDU_ROUTE__에서 초기화
+    const route = (window as any).__MANDU_ROUTE__;
+    const data = (window as any).__MANDU_DATA__;
+
+    window.__MANDU_ROUTER_STATE__ = {
+      currentRoute: route ? {
+        id: route.id,
+        pattern: route.pattern,
+        params: route.params || {},
+      } : null,
+      loaderData: route && data?.[route.id]?.serverData,
+      navigation: { state: "idle" },
+    };
+  }
+  return window.__MANDU_ROUTER_STATE__;
+}
+
+function setGlobalRouterState(state: RouterState): void {
+  if (typeof window !== "undefined") {
+    window.__MANDU_ROUTER_STATE__ = state;
+  }
+}
+
+function getGlobalListeners(): Set<RouterListener> {
+  if (typeof window === "undefined") {
+    return new Set();
+  }
+  if (!window.__MANDU_ROUTER_LISTENERS__) {
+    window.__MANDU_ROUTER_LISTENERS__ = new Set();
+  }
+  return window.__MANDU_ROUTER_LISTENERS__;
+}
+
+// Getter for routerState (전역 상태 참조)
+const getRouterStateInternal = () => getGlobalRouterState();
+const setRouterStateInternal = (state: RouterState) => setGlobalRouterState(state);
+const listeners = { get current() { return getGlobalListeners(); } };
 
 /**
  * 초기화: 서버에서 전달된 라우트 정보로 상태 설정
@@ -56,7 +98,7 @@ function initializeFromServer(): void {
     // URL에서 실제 params 추출
     const params = extractParamsFromPath(route.pattern, window.location.pathname);
 
-    routerState = {
+    setRouterStateInternal({
       currentRoute: {
         id: route.id,
         pattern: route.pattern,
@@ -64,7 +106,7 @@ function initializeFromServer(): void {
       },
       loaderData: data?.[route.id]?.serverData,
       navigation: { state: "idle" },
-    };
+    });
   }
 }
 
@@ -157,10 +199,10 @@ export async function navigate(
     }
 
     // 로딩 상태 시작
-    routerState = {
-      ...routerState,
+    setRouterStateInternal({
+      ...getRouterStateInternal(),
       navigation: { state: "loading", location: to },
-    };
+    });
     notifyListeners();
 
     // 데이터 fetch
@@ -184,7 +226,7 @@ export async function navigate(
     }
 
     // 상태 업데이트
-    routerState = {
+    setRouterStateInternal({
       currentRoute: {
         id: data.routeId,
         pattern: data.pattern,
@@ -192,7 +234,7 @@ export async function navigate(
       },
       loaderData: data.loaderData,
       navigation: { state: "idle" },
-    };
+    });
 
     // __MANDU_DATA__ 업데이트
     if (typeof window !== "undefined") {
@@ -222,11 +264,24 @@ function handlePopState(event: PopStateEvent): void {
   const state = event.state;
 
   if (state?.routeId) {
-    // 이미 방문한 페이지 - 데이터 다시 fetch
+    // Mandu로 방문한 페이지 - 데이터 다시 fetch
     navigate(window.location.pathname + window.location.search, {
       replace: true,
       scroll: false,
     });
+  } else {
+    // 직접 URL 입력 등으로 방문한 페이지 - 상태만 업데이트
+    const route = (window as any).__MANDU_ROUTE__;
+    setGlobalRouterState({
+      currentRoute: route ? {
+        id: route.id,
+        pattern: route.pattern,
+        params: route.params || {},
+      } : null,
+      loaderData: getGlobalRouterState().loaderData,
+      navigation: { state: "idle" },
+    });
+    notifyListeners();
   }
 }
 
@@ -236,9 +291,10 @@ function handlePopState(event: PopStateEvent): void {
  * 리스너에게 상태 변경 알림
  */
 function notifyListeners(): void {
-  for (const listener of listeners) {
+  const state = getRouterStateInternal();
+  for (const listener of listeners.current) {
     try {
-      listener(routerState);
+      listener(state);
     } catch (error) {
       console.error("[Mandu Router] Listener error:", error);
     }
@@ -249,36 +305,36 @@ function notifyListeners(): void {
  * 상태 변경 구독
  */
 export function subscribe(listener: RouterListener): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+  listeners.current.add(listener);
+  return () => listeners.current.delete(listener);
 }
 
 /**
  * 현재 라우터 상태 가져오기
  */
 export function getRouterState(): RouterState {
-  return routerState;
+  return getRouterStateInternal();
 }
 
 /**
  * 현재 라우트 정보 가져오기
  */
 export function getCurrentRoute(): RouteInfo | null {
-  return routerState.currentRoute;
+  return getRouterStateInternal().currentRoute;
 }
 
 /**
  * 현재 loader 데이터 가져오기
  */
 export function getLoaderData<T = unknown>(): T | undefined {
-  return routerState.loaderData as T | undefined;
+  return getRouterStateInternal().loaderData as T | undefined;
 }
 
 /**
  * 네비게이션 상태 가져오기
  */
 export function getNavigationState(): NavigationState {
-  return routerState.navigation;
+  return getRouterStateInternal().navigation;
 }
 
 // ========== Link Click Handler ==========
