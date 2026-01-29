@@ -171,6 +171,10 @@ export interface NavLinkProps extends Omit<LinkProps, "className" | "style"> {
   style?:
     | React.CSSProperties
     | ((props: { isActive: boolean }) => React.CSSProperties);
+  /** 활성 상태일 때 적용할 style (style과 병합됨) */
+  activeStyle?: React.CSSProperties;
+  /** 활성 상태일 때 추가할 className */
+  activeClassName?: string;
   /** 정확히 일치해야 활성화 (기본: false) */
   exact?: boolean;
 }
@@ -179,6 +183,8 @@ export function NavLink({
   href,
   className,
   style,
+  activeStyle,
+  activeClassName,
   exact = false,
   ...rest
 }: NavLinkProps): React.ReactElement {
@@ -190,11 +196,23 @@ export function NavLink({
         : window.location.pathname.startsWith(href)
       : false;
 
-  const resolvedClassName =
+  // className 처리
+  let resolvedClassName =
     typeof className === "function" ? className({ isActive }) : className;
 
-  const resolvedStyle =
+  if (isActive && activeClassName) {
+    resolvedClassName = resolvedClassName
+      ? `${resolvedClassName} ${activeClassName}`
+      : activeClassName;
+  }
+
+  // style 처리
+  let resolvedStyle =
     typeof style === "function" ? style({ isActive }) : style;
+
+  if (isActive && activeStyle) {
+    resolvedStyle = { ...resolvedStyle, ...activeStyle };
+  }
 
   return (
     <Link
