@@ -193,6 +193,46 @@ export async function checkSlotContentValidation(
   return violations;
 }
 
+// Rule: Island-First Integrity
+export async function checkIslandFirstIntegrity(
+  manifest: RoutesManifest,
+  rootDir: string
+): Promise<GuardViolation[]> {
+  const violations: GuardViolation[] = [];
+
+  for (const route of manifest.routes) {
+    if (route.kind !== "page" || !route.clientModule) continue;
+
+    // 1. clientModule 파일 존재 여부
+    const clientPath = path.join(rootDir, route.clientModule);
+    if (!(await fileExists(clientPath))) {
+      violations.push({
+        ruleId: "CLIENT_MODULE_NOT_FOUND",
+        file: route.clientModule,
+        message: `clientModule 파일을 찾을 수 없습니다 (routeId: ${route.id})`,
+        suggestion: "clientModule 경로를 확인하거나 파일을 생성하세요",
+      });
+      continue;
+    }
+
+    // 2. componentModule이 island을 import하는지 확인
+    if (route.componentModule) {
+      const componentPath = path.join(rootDir, route.componentModule);
+      const content = await readFileContent(componentPath);
+      if (content && !content.includes("islandModule") && !content.includes("Island-First")) {
+        violations.push({
+          ruleId: "ISLAND_FIRST_INTEGRITY",
+          file: route.componentModule,
+          message: `componentModule이 island을 import하지 않습니다 (routeId: ${route.id})`,
+          suggestion: "mandu generate를 실행하여 Island-First 템플릿으로 재생성하세요",
+        });
+      }
+    }
+  }
+
+  return violations;
+}
+
 // Rule 4: Forbidden imports in generated files
 export async function checkForbiddenImportsInGenerated(
   rootDir: string,
@@ -302,6 +342,10 @@ export async function runGuardCheck(
   // Rule 7-10: Contract-related checks
   const contractViolations = await runContractGuardCheck(manifest, rootDir);
   violations.push(...contractViolations);
+
+  // Rule: Island-First Integrity
+  const islandViolations = await checkIslandFirstIntegrity(manifest, rootDir);
+  violations.push(...islandViolations);
 
   return {
     passed: violations.length === 0,

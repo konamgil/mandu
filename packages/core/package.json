@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/core",
-  "version": "0.9.10",
+  "version": "0.9.12",
   "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
   "main": "./src/index.ts",
@@ -47,6 +47,7 @@
     "zod": ">=3.0.0"
   },
   "dependencies": {
+    "chokidar": "^5.0.0",
     "ollama": "^0.6.3"
   }
 }

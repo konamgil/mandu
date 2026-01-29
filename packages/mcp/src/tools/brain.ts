@@ -11,6 +11,7 @@
  */
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   loadManifest,
   runGuardCheck,
@@ -63,6 +64,16 @@ export const brainToolDefinitions: Tool[] = [
     name: "mandu_watch_status",
     description:
       "Get the current watch status including recent warnings and active rules.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "mandu_watch_stop",
+    description:
+      "Stop file watching and clean up MCP notification subscriptions.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -126,7 +137,10 @@ export const brainToolDefinitions: Tool[] = [
   },
 ];
 
-export function brainTools(projectRoot: string) {
+/** Module-level unsubscribe handle for MCP warning notifications */
+let mcpWarningUnsubscribe: (() => void) | null = null;
+
+export function brainTools(projectRoot: string, server?: Server) {
   const paths = getProjectPaths(projectRoot);
 
   return {
@@ -221,11 +235,45 @@ export function brainTools(projectRoot: string) {
           debounceMs,
         });
 
+        // Register MCP notification handler
+        let notifications = false;
+        if (server) {
+          // Clean up previous subscription
+          if (mcpWarningUnsubscribe) {
+            mcpWarningUnsubscribe();
+            mcpWarningUnsubscribe = null;
+          }
+
+          mcpWarningUnsubscribe = watcher.onWarning((warning) => {
+            // Push logging message (Claude Code receives in real-time)
+            server.sendLoggingMessage({
+              level: "warning",
+              logger: "mandu-watch",
+              data: {
+                type: "watch_warning",
+                ruleId: warning.ruleId,
+                file: warning.file,
+                message: warning.message,
+                event: warning.event,
+                timestamp: warning.timestamp.toISOString(),
+              },
+            }).catch(() => {});
+
+            // Resource update notification
+            server.sendResourceUpdated({
+              uri: "mandu://watch/warnings",
+            }).catch(() => {});
+          });
+
+          notifications = true;
+        }
+
         const status = watcher.getStatus();
 
         return {
           success: true,
           message: "Watch started successfully",
+          notifications: notifications ? "enabled" : "disabled",
           status: {
             active: status.active,
             rootDir: status.rootDir,
@@ -239,7 +287,8 @@ export function brainTools(projectRoot: string) {
             "CONTRACT_NAMING - Contract 파일 네이밍 규칙",
             "FORBIDDEN_IMPORT - Generated 파일의 금지된 import 감지",
           ],
-          tip: "Watch emits warnings only - it never blocks operations",
+          logFile: ".mandu/watch.log",
+          tip: "Run `tail -f .mandu/watch.log` in another terminal for real-time warnings.",
         };
       } catch (error) {
         return {
@@ -283,6 +332,28 @@ export function brainTools(projectRoot: string) {
       } catch (error) {
         return {
           error: "Failed to get watch status",
+          details: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    },
+
+    mandu_watch_stop: async () => {
+      try {
+        // Clean up MCP notification subscription
+        if (mcpWarningUnsubscribe) {
+          mcpWarningUnsubscribe();
+          mcpWarningUnsubscribe = null;
+        }
+
+        stopWatcher();
+
+        return {
+          success: true,
+          message: "Watch stopped and notifications cleaned up",
+        };
+      } catch (error) {
+        return {
+          error: "Failed to stop watch",
           details: error instanceof Error ? error.message : "Unknown error",
         };
       }

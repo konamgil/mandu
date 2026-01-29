@@ -36,6 +36,7 @@ export class ManduMcpServer {
         capabilities: {
           tools: {},
           resources: {},
+          logging: {},
         },
       }
     );
@@ -68,7 +69,7 @@ export class ManduMcpServer {
       ...slotTools(this.projectRoot),
       ...hydrationTools(this.projectRoot),
       ...contractTools(this.projectRoot),
-      ...brainTools(this.projectRoot),
+      ...brainTools(this.projectRoot, this.server),
     };
   }
 

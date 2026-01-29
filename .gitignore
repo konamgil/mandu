@@ -25,6 +25,9 @@ bun.lock
 # Generated (in user projects, not templates)
 # apps/*/generated/
 
+# Mandu runtime
+.mandu/
+
 # Temporary files
 *.log
 *.tmp

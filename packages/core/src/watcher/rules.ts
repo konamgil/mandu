@@ -63,6 +63,14 @@ export const MVP_RULES: ArchRule[] = [
     message: "Generated 파일에서 금지된 모듈이 import되었습니다.",
     forbiddenImports: ["fs", "child_process", "cluster", "worker_threads"],
   },
+  {
+    id: "ISLAND_FIRST_MODIFIED",
+    name: "Island-First ComponentModule Modified",
+    description: "Island-First 방식으로 생성된 componentModule이 수동으로 변경되었습니다",
+    pattern: "apps/web/generated/routes/**",
+    action: "warn",
+    message: "Island-First componentModule이 수동 수정되었습니다. mandu generate를 실행하세요.",
+  },
 ];
 
 /**
@@ -219,7 +227,7 @@ export async function validateFile(
     }
 
     // Default: generate warning for pattern match
-    if (rule.id === "GENERATED_DIRECT_EDIT" || rule.id === "WRONG_SLOT_LOCATION") {
+    if (rule.id === "GENERATED_DIRECT_EDIT" || rule.id === "WRONG_SLOT_LOCATION" || rule.id === "ISLAND_FIRST_MODIFIED") {
       warnings.push({
         ruleId: rule.id,
         file: relativePath,

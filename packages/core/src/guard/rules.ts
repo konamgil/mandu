@@ -95,6 +95,19 @@ export const GUARD_RULES: Record<string, GuardRule> = {
     description: "Slot에 구현된 메서드가 Contract에 문서화되지 않았습니다",
     severity: "warning",
   },
+  // Island-First Rendering rules
+  ISLAND_FIRST_INTEGRITY: {
+    id: "ISLAND_FIRST_INTEGRITY",
+    name: "Island-First Integrity",
+    description: "clientModule이 있는 page route의 componentModule이 island을 import하지 않습니다",
+    severity: "error",
+  },
+  CLIENT_MODULE_NOT_FOUND: {
+    id: "CLIENT_MODULE_NOT_FOUND",
+    name: "Client Module Not Found",
+    description: "spec에 명시된 clientModule 파일을 찾을 수 없습니다",
+    severity: "error",
+  },
 };
 
 export const FORBIDDEN_IMPORTS = ["fs", "child_process", "cluster", "worker_threads"];

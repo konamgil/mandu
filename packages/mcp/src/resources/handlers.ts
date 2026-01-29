@@ -2,6 +2,7 @@ import type { Resource } from "@modelcontextprotocol/sdk/types.js";
 import {
   loadManifest,
   getTransactionStatus,
+  getWatcher,
   type GeneratedMap,
   type SpecLock,
 } from "@mandujs/core";
@@ -38,6 +39,18 @@ export const resourceDefinitions: Resource[] = [
     name: "Route Slot",
     description: "Slot file content for a specific route",
     mimeType: "text/typescript",
+  },
+  {
+    uri: "mandu://watch/warnings",
+    name: "Watch Warnings",
+    description: "Recent file watcher warnings (architecture rule violations)",
+    mimeType: "application/json",
+  },
+  {
+    uri: "mandu://watch/status",
+    name: "Watch Status",
+    description: "File watcher status (active/inactive, uptime, rule count)",
+    mimeType: "application/json",
   },
 ];
 
@@ -170,6 +183,45 @@ export function resourceHandlers(
         kind: route.kind,
         pattern: route.pattern,
         content,
+      };
+    },
+
+    "mandu://watch/warnings": async () => {
+      const watcher = getWatcher();
+      if (!watcher) {
+        return { active: false, warnings: [] };
+      }
+
+      const warnings = watcher.getRecentWarnings(50);
+      return {
+        active: true,
+        count: warnings.length,
+        warnings: warnings.map((w) => ({
+          ruleId: w.ruleId,
+          file: w.file,
+          message: w.message,
+          event: w.event,
+          timestamp: w.timestamp.toISOString(),
+        })),
+      };
+    },
+
+    "mandu://watch/status": async () => {
+      const watcher = getWatcher();
+      if (!watcher) {
+        return { active: false };
+      }
+
+      const status = watcher.getStatus();
+      return {
+        active: status.active,
+        rootDir: status.rootDir,
+        fileCount: status.fileCount,
+        warningCount: status.recentWarnings.length,
+        uptime: status.startedAt
+          ? Math.floor((Date.now() - status.startedAt.getTime()) / 1000)
+          : 0,
+        startedAt: status.startedAt?.toISOString() || null,
       };
     },
   };

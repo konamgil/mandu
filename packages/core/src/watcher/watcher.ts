@@ -2,7 +2,7 @@
  * Brain v0.1 - File Watcher
  *
  * Watches for file changes and triggers warnings (no blocking).
- * Uses native file system watching for efficiency.
+ * Uses chokidar for reliable cross-platform file system watching.
  */
 
 import type {
@@ -13,6 +13,17 @@ import type {
 import { validateFile, MVP_RULES } from "./rules";
 import path from "path";
 import fs from "fs";
+import { spawn, type ChildProcess } from "child_process";
+import chokidar, { type FSWatcher } from "chokidar";
+
+/**
+ * Format a warning for log output
+ */
+function formatWarning(warning: WatchWarning): string {
+  const time = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+  const icon = warning.event === "delete" ? "[DEL]" : "[WARN]";
+  return `${time} ${icon} ${warning.ruleId}\n       ${warning.file}\n       ${warning.message}\n`;
+}
 
 /**
  * Watcher configuration
@@ -47,13 +58,15 @@ const DEFAULT_CONFIG: Partial<WatcherConfig> = {
  */
 export class FileWatcher {
   private config: WatcherConfig;
-  private watchers: Map<string, fs.FSWatcher> = new Map();
+  private chokidarWatcher: FSWatcher | null = null;
   private handlers: Set<WatchEventHandler> = new Set();
   private recentWarnings: WatchWarning[] = [];
-  private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
   private _active: boolean = false;
   private _startedAt: Date | null = null;
   private _fileCount: number = 0;
+  private logFile: string | null = null;
+  private logStream: fs.WriteStream | null = null;
+  private tailProcess: ChildProcess | null = null;
 
   constructor(config: WatcherConfig) {
     this.config = {
@@ -70,15 +83,83 @@ export class FileWatcher {
       return;
     }
 
-    const { rootDir } = this.config;
+    const { rootDir, ignoreDirs, watchExtensions, debounceMs } = this.config;
 
     // Verify root directory exists
     if (!fs.existsSync(rootDir)) {
       throw new Error(`Root directory does not exist: ${rootDir}`);
     }
 
-    // Watch the root directory and subdirectories
-    await this.watchDirectory(rootDir);
+    // Setup log file at .mandu/watch.log
+    const manduDir = path.join(rootDir, ".mandu");
+    if (!fs.existsSync(manduDir)) {
+      fs.mkdirSync(manduDir, { recursive: true });
+    }
+    this.logFile = path.join(manduDir, "watch.log");
+    this.logStream = fs.createWriteStream(this.logFile, { flags: "w" });
+    const startTime = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+    this.logStream.write(
+      `${"=".repeat(50)}\n` +
+      `  Mandu Watch - ${startTime}\n` +
+      `  Root: ${rootDir}\n` +
+      `${"=".repeat(50)}\n\n`
+    );
+
+    // Auto-open terminal window to tail the log
+    this.openLogTerminal(this.logFile, rootDir);
+
+    // Build sets for fast lookup
+    const ignoredSet = new Set(ignoreDirs || []);
+    const extSet = new Set(watchExtensions || []);
+
+    // Start chokidar watcher
+    this.chokidarWatcher = chokidar.watch(rootDir, {
+      ignored: (filePath, stats) => {
+        const basename = path.basename(filePath);
+        // Ignore directories in the ignore list
+        if (ignoredSet.has(basename)) return true;
+        // For files, only watch matching extensions
+        if (stats?.isFile() && extSet.size > 0) {
+          const ext = path.extname(filePath);
+          return !extSet.has(ext);
+        }
+        return false;
+      },
+      ignoreInitial: true,
+      awaitWriteFinish: {
+        stabilityThreshold: debounceMs ?? 300,
+        pollInterval: 100,
+      },
+    });
+
+    // Count initial files
+    this.chokidarWatcher.on("ready", () => {
+      const watched = this.chokidarWatcher?.getWatched() ?? {};
+      let count = 0;
+      for (const files of Object.values(watched)) {
+        count += files.length;
+      }
+      this._fileCount = count;
+    });
+
+    // Handle events (v5 passes absolute paths when watching absolute rootDir)
+    this.chokidarWatcher.on("change", (filePath) => {
+      this.processFileEvent("modify", filePath);
+    });
+
+    this.chokidarWatcher.on("add", (filePath) => {
+      this._fileCount++;
+      this.processFileEvent("create", filePath);
+    });
+
+    this.chokidarWatcher.on("unlink", (filePath) => {
+      this._fileCount = Math.max(0, this._fileCount - 1);
+      this.processFileEvent("delete", filePath);
+    });
+
+    this.chokidarWatcher.on("error", (error) => {
+      console.error(`[Watch] Error:`, error.message);
+    });
 
     this._active = true;
     this._startedAt = new Date();
@@ -87,22 +168,28 @@ export class FileWatcher {
   /**
    * Stop watching
    */
-  stop(): void {
+  async stop(): Promise<void> {
     if (!this._active) {
       return;
     }
 
-    // Close all watchers
-    for (const [, watcher] of this.watchers) {
-      watcher.close();
+    // Close tail terminal process
+    if (this.tailProcess) {
+      this.tailProcess.kill();
+      this.tailProcess = null;
     }
-    this.watchers.clear();
 
-    // Clear debounce timers
-    for (const [, timer] of this.debounceTimers) {
-      clearTimeout(timer);
+    // Close log stream
+    if (this.logStream) {
+      this.logStream.end();
+      this.logStream = null;
     }
-    this.debounceTimers.clear();
+
+    // Close chokidar watcher (async in v5)
+    if (this.chokidarWatcher) {
+      await this.chokidarWatcher.close();
+      this.chokidarWatcher = null;
+    }
 
     this._active = false;
     this._fileCount = 0;
@@ -144,93 +231,43 @@ export class FileWatcher {
   }
 
   /**
-   * Watch a directory recursively
+   * Open a new terminal window tailing the log file
    */
-  private async watchDirectory(dir: string): Promise<void> {
-    const { ignoreDirs } = this.config;
-
-    // Skip ignored directories
-    const dirName = path.basename(dir);
-    if (ignoreDirs?.includes(dirName)) {
-      return;
-    }
-
+  private openLogTerminal(logFile: string, cwd: string): void {
     try {
-      // Watch this directory
-      const watcher = fs.watch(dir, (eventType, filename) => {
-        if (filename) {
-          this.handleFileEvent(eventType, path.join(dir, filename));
-        }
-      });
-
-      watcher.on("error", (error) => {
-        console.error(`[Watch] Error watching ${dir}:`, error.message);
-      });
-
-      this.watchers.set(dir, watcher);
-      this._fileCount++;
-
-      // Recursively watch subdirectories
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (entry.isDirectory() && !ignoreDirs?.includes(entry.name)) {
-          await this.watchDirectory(path.join(dir, entry.name));
-        }
+      if (process.platform === "win32") {
+        // Windows: open new cmd window with PowerShell Get-Content -Wait
+        this.tailProcess = spawn("cmd", [
+          "/c", "start",
+          "Mandu Watch",
+          "powershell", "-NoExit", "-Command",
+          `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; chcp 65001 | Out-Null; Get-Content '${logFile}' -Wait -Encoding UTF8`,
+        ], { cwd, detached: true, stdio: "ignore" });
+      } else if (process.platform === "darwin") {
+        // macOS: open new Terminal.app tab
+        this.tailProcess = spawn("osascript", [
+          "-e", `tell application "Terminal" to do script "tail -f '${logFile}'"`,
+        ], { detached: true, stdio: "ignore" });
+      } else {
+        // Linux: try common terminal emulators
+        this.tailProcess = spawn("x-terminal-emulator", [
+          "-e", `tail -f '${logFile}'`,
+        ], { cwd, detached: true, stdio: "ignore" });
       }
-    } catch (error) {
-      // Directory might not exist or be accessible
-      console.error(
-        `[Watch] Failed to watch ${dir}:`,
-        error instanceof Error ? error.message : error
-      );
+      this.tailProcess?.unref();
+    } catch {
+      // Terminal auto-open failed silently — user can still tail manually
     }
   }
 
   /**
-   * Handle a file system event
-   */
-  private handleFileEvent(eventType: string, filePath: string): void {
-    const { debounceMs, watchExtensions } = this.config;
-
-    // Check file extension
-    const ext = path.extname(filePath);
-    if (watchExtensions && !watchExtensions.includes(ext)) {
-      return;
-    }
-
-    // Debounce events for the same file
-    const existingTimer = this.debounceTimers.get(filePath);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-
-    const timer = setTimeout(() => {
-      this.debounceTimers.delete(filePath);
-      this.processFileEvent(eventType, filePath);
-    }, debounceMs);
-
-    this.debounceTimers.set(filePath, timer);
-  }
-
-  /**
-   * Process a debounced file event
+   * Process a file event
    */
   private async processFileEvent(
-    eventType: string,
+    event: "create" | "modify" | "delete",
     filePath: string
   ): Promise<void> {
     const { rootDir } = this.config;
-
-    // Determine event type
-    let event: "create" | "modify" | "delete";
-
-    if (eventType === "rename") {
-      // Check if file exists to determine create vs delete
-      event = fs.existsSync(filePath) ? "create" : "delete";
-    } else {
-      event = "modify";
-    }
 
     // Validate file against rules
     try {
@@ -251,6 +288,11 @@ export class FileWatcher {
    * Emit a warning to all handlers
    */
   private emitWarning(warning: WatchWarning): void {
+    // Write to log file
+    if (this.logStream) {
+      this.logStream.write(formatWarning(warning));
+    }
+
     // Add to recent warnings
     this.recentWarnings.push(warning);
 
@@ -322,9 +364,9 @@ export async function startWatcher(config: WatcherConfig): Promise<FileWatcher> 
 /**
  * Stop the global watcher
  */
-export function stopWatcher(): void {
+export async function stopWatcher(): Promise<void> {
   if (globalWatcher) {
-    globalWatcher.stop();
+    await globalWatcher.stop();
     globalWatcher = null;
   }
 }

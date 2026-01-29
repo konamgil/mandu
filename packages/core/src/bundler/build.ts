@@ -64,7 +64,7 @@ function generateRuntimeSource(): string {
 
 // React 정적 import (Island와 같은 인스턴스 공유)
 import React from 'react';
-import { createRoot } from 'react-dom/client';
+import { hydrateRoot } from 'react-dom/client';
 
 // Hydrated roots 추적 (unmount용)
 const hydratedRoots = new Map();
@@ -144,9 +144,8 @@ async function loadAndHydrate(element, src) {
       return definition.render(setupResult);
     }
 
-    // Mount (상단에서 import한 createRoot 사용)
-    const root = createRoot(element);
-    root.render(React.createElement(IslandComponent));
+    // Hydrate (SSR DOM 재사용 + 이벤트 연결)
+    const root = hydrateRoot(element, React.createElement(IslandComponent));
     hydratedRoots.set(id, root);
 
     // 완료 표시
