@@ -8,6 +8,12 @@ import type { z } from "zod";
 /** HTTP Methods supported in contracts */
 export type ContractMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+/** Example data for request/response documentation */
+export interface SchemaExamples {
+  /** Example name → example data */
+  [name: string]: unknown;
+}
+
 /** Request schema for a specific HTTP method */
 export interface MethodRequestSchema {
   /** Query parameters schema */
@@ -18,6 +24,8 @@ export interface MethodRequestSchema {
   params?: z.ZodTypeAny;
   /** Request headers schema */
   headers?: z.ZodTypeAny;
+  /** Example request data for documentation */
+  examples?: SchemaExamples;
 }
 
 /** Nested route schema (e.g., ":id" for /users/:id) */
@@ -40,18 +48,29 @@ export interface ContractRequestSchema {
   [key: string]: MethodRequestSchema | NestedRouteSchema | undefined;
 }
 
+/** Response schema with optional examples */
+export interface ResponseSchemaWithExamples {
+  /** Response body schema */
+  schema: z.ZodTypeAny;
+  /** Example response data for documentation */
+  examples?: SchemaExamples;
+}
+
 /** Response schemas by status code */
 export interface ContractResponseSchema {
-  200?: z.ZodTypeAny;
-  201?: z.ZodTypeAny;
-  204?: z.ZodTypeAny;
-  400?: z.ZodTypeAny;
-  401?: z.ZodTypeAny;
-  403?: z.ZodTypeAny;
-  404?: z.ZodTypeAny;
-  500?: z.ZodTypeAny;
-  [statusCode: number]: z.ZodTypeAny | undefined;
+  200?: z.ZodTypeAny | ResponseSchemaWithExamples;
+  201?: z.ZodTypeAny | ResponseSchemaWithExamples;
+  204?: z.ZodTypeAny | ResponseSchemaWithExamples;
+  400?: z.ZodTypeAny | ResponseSchemaWithExamples;
+  401?: z.ZodTypeAny | ResponseSchemaWithExamples;
+  403?: z.ZodTypeAny | ResponseSchemaWithExamples;
+  404?: z.ZodTypeAny | ResponseSchemaWithExamples;
+  500?: z.ZodTypeAny | ResponseSchemaWithExamples;
+  [statusCode: number]: z.ZodTypeAny | ResponseSchemaWithExamples | undefined;
 }
+
+/** Normalize mode for request data sanitization */
+export type ContractNormalizeMode = "strip" | "strict" | "passthrough";
 
 /** Full contract schema definition */
 export interface ContractSchema {
@@ -63,6 +82,18 @@ export interface ContractSchema {
   request: ContractRequestSchema;
   /** Response schemas by status code */
   response: ContractResponseSchema;
+  /**
+   * Normalize mode for request data sanitization
+   * - strip (default): Remove undefined fields (Mass Assignment prevention)
+   * - strict: Error on undefined fields
+   * - passthrough: Allow all fields
+   */
+  normalize?: ContractNormalizeMode;
+  /**
+   * Coerce query/params string values to proper types
+   * @default true
+   */
+  coerceQueryParams?: boolean;
 }
 
 /** Contract definition input (what user provides) */
@@ -71,6 +102,10 @@ export interface ContractDefinition {
   tags?: string[];
   request: ContractRequestSchema;
   response: ContractResponseSchema;
+  /** Normalize mode for request data */
+  normalize?: ContractNormalizeMode;
+  /** Coerce query/params to proper types */
+  coerceQueryParams?: boolean;
 }
 
 /** Contract instance with metadata */

@@ -13,6 +13,7 @@ export * from "./types";
 export * from "./validator";
 export * from "./handler";
 export * from "./client";
+export * from "./normalize";
 
 import type { ContractDefinition, ContractInstance, ContractSchema } from "./schema";
 import type { ContractHandlers, RouteDefinition } from "./handler";

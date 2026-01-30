@@ -1,10 +1,15 @@
 /**
  * Mandu Contract Validator
- * 런타임 요청/응답 검증
+ * 런타임 요청/응답 검증 + 정규화
  *
  * 모드:
  * - lenient (기본): 응답 검증 실패 시 경고만 출력
  * - strict: 응답 검증 실패 시 에러 반환 (프로덕션 안전성)
+ *
+ * 정규화:
+ * - strip (기본): 정의되지 않은 필드 제거 (Mass Assignment 방지)
+ * - strict: 정의되지 않은 필드 있으면 에러
+ * - passthrough: 모든 필드 허용
  */
 
 import type { z } from "zod";
@@ -14,7 +19,15 @@ import type {
   ContractValidationError,
   ContractValidationIssue,
   MethodRequestSchema,
+  ContractNormalizeMode,
 } from "./schema";
+import {
+  type NormalizeMode,
+  type NormalizeOptions,
+  normalizeSchema,
+  createCoerceSchema,
+} from "./normalize";
+import { ZodObject } from "zod";
 
 /**
  * Validator 옵션
@@ -29,6 +42,33 @@ export interface ContractValidatorOptions {
    * 응답 검증 실패 시 커스텀 에러 핸들러
    */
   onResponseViolation?: (errors: ContractValidationError[], statusCode: number) => void;
+  /**
+   * 정규화 모드
+   * - strip (기본): 정의되지 않은 필드 제거
+   * - strict: 정의되지 않은 필드 있으면 에러
+   * - passthrough: 모든 필드 허용 (정규화 안 함)
+   */
+  normalize?: NormalizeMode;
+  /**
+   * Query/Params의 타입 자동 변환 (coerce)
+   * URL의 query string과 path params는 항상 문자열이므로
+   * 스키마에 정의된 타입으로 자동 변환
+   * @default true
+   */
+  coerceQueryParams?: boolean;
+}
+
+/**
+ * 검증 및 정규화 결과
+ */
+export interface ValidateAndNormalizeResult extends ContractValidationResult {
+  /** 정규화된 데이터 */
+  data?: {
+    query?: unknown;
+    body?: unknown;
+    params?: unknown;
+    headers?: unknown;
+  };
 }
 
 /**
@@ -78,10 +118,27 @@ export class ContractValidator {
     private contract: ContractSchema,
     options: ContractValidatorOptions = {}
   ) {
+    // Contract의 normalize/coerceQueryParams 설정을 우선 적용
     this.options = {
       mode: options.mode ?? "lenient",
       onResponseViolation: options.onResponseViolation ?? (() => {}),
+      normalize: options.normalize ?? contract.normalize ?? "strip",
+      coerceQueryParams: options.coerceQueryParams ?? contract.coerceQueryParams ?? true,
     };
+  }
+
+  /**
+   * 정규화 모드 변경
+   */
+  setNormalizeMode(mode: NormalizeMode): void {
+    this.options.normalize = mode;
+  }
+
+  /**
+   * 현재 정규화 모드 확인
+   */
+  getNormalizeMode(): NormalizeMode {
+    return this.options.normalize;
   }
 
   /**
@@ -204,6 +261,180 @@ export class ContractValidator {
     }
 
     return { success: true };
+  }
+
+  /**
+   * Validate and normalize incoming request against contract
+   * 검증 + 정규화를 동시에 수행하고 정규화된 데이터 반환
+   *
+   * @param req - The incoming request
+   * @param method - HTTP method
+   * @param pathParams - Path parameters extracted by router
+   * @returns Validation result with normalized data
+   *
+   * @example
+   * ```typescript
+   * const result = await validator.validateAndNormalizeRequest(req, "POST", { id: "123" });
+   * if (result.success) {
+   *   // result.data.body는 정의된 필드만 포함 (strip 모드)
+   *   // result.data.query.page는 숫자로 변환됨 (coerce)
+   *   console.log(result.data.body);
+   * }
+   * ```
+   */
+  async validateAndNormalizeRequest(
+    req: Request,
+    method: string,
+    pathParams: Record<string, string> = {}
+  ): Promise<ValidateAndNormalizeResult> {
+    const methodSchema = this.contract.request[method] as MethodRequestSchema | undefined;
+    if (!methodSchema) {
+      return { success: true, data: {} };
+    }
+
+    const errors: ContractValidationError[] = [];
+    const normalizedData: ValidateAndNormalizeResult["data"] = {};
+    const normalizeOpts: NormalizeOptions = { mode: this.options.normalize };
+
+    // Query: coerce + normalize
+    if (methodSchema.query) {
+      const query = parseQueryString(req.url);
+      try {
+        let querySchema = methodSchema.query;
+
+        // coerce 적용 (query string은 항상 문자열)
+        if (this.options.coerceQueryParams && querySchema instanceof ZodObject) {
+          querySchema = createCoerceSchema(querySchema);
+        }
+
+        // normalize 적용 (strip/strict)
+        querySchema = normalizeSchema(querySchema, normalizeOpts);
+
+        const result = querySchema.safeParse(query);
+        if (!result.success) {
+          errors.push({
+            type: "query",
+            issues: zodErrorToIssues(result.error),
+          });
+        } else {
+          normalizedData.query = result.data;
+        }
+      } catch (error) {
+        errors.push({
+          type: "query",
+          issues: [{ path: [], message: String(error), code: "custom" }],
+        });
+      }
+    }
+
+    // Params: coerce + normalize
+    if (methodSchema.params) {
+      try {
+        let paramsSchema = methodSchema.params;
+
+        // coerce 적용 (path params도 항상 문자열)
+        if (this.options.coerceQueryParams && paramsSchema instanceof ZodObject) {
+          paramsSchema = createCoerceSchema(paramsSchema);
+        }
+
+        // normalize 적용
+        paramsSchema = normalizeSchema(paramsSchema, normalizeOpts);
+
+        const result = paramsSchema.safeParse(pathParams);
+        if (!result.success) {
+          errors.push({
+            type: "params",
+            issues: zodErrorToIssues(result.error),
+          });
+        } else {
+          normalizedData.params = result.data;
+        }
+      } catch (error) {
+        errors.push({
+          type: "params",
+          issues: [{ path: [], message: String(error), code: "custom" }],
+        });
+      }
+    }
+
+    // Headers: normalize only (no coerce)
+    if (methodSchema.headers) {
+      const headers: Record<string, string> = {};
+      req.headers.forEach((value, key) => {
+        headers[key.toLowerCase()] = value;
+      });
+
+      try {
+        const headersSchema = normalizeSchema(methodSchema.headers, normalizeOpts);
+        const result = headersSchema.safeParse(headers);
+        if (!result.success) {
+          errors.push({
+            type: "headers",
+            issues: zodErrorToIssues(result.error),
+          });
+        } else {
+          normalizedData.headers = result.data;
+        }
+      } catch (error) {
+        errors.push({
+          type: "headers",
+          issues: [{ path: [], message: String(error), code: "custom" }],
+        });
+      }
+    }
+
+    // Body: normalize only (JSON은 타입 보존됨, coerce 불필요)
+    if (methodSchema.body) {
+      try {
+        const contentType = req.headers.get("content-type") || "";
+        let body: unknown;
+
+        if (contentType.includes("application/json")) {
+          body = await req.clone().json();
+        } else if (contentType.includes("application/x-www-form-urlencoded")) {
+          const formData = await req.clone().formData();
+          body = Object.fromEntries(formData.entries());
+        } else if (contentType.includes("multipart/form-data")) {
+          const formData = await req.clone().formData();
+          body = Object.fromEntries(formData.entries());
+        } else {
+          try {
+            body = await req.clone().json();
+          } catch {
+            body = await req.clone().text();
+          }
+        }
+
+        // normalize 적용 (strip으로 정의 안 한 필드 제거)
+        const bodySchema = normalizeSchema(methodSchema.body, normalizeOpts);
+        const result = bodySchema.safeParse(body);
+        if (!result.success) {
+          errors.push({
+            type: "body",
+            issues: zodErrorToIssues(result.error),
+          });
+        } else {
+          normalizedData.body = result.data;
+        }
+      } catch (error) {
+        errors.push({
+          type: "body",
+          issues: [
+            {
+              path: [],
+              message: `Failed to parse request body: ${error instanceof Error ? error.message : "Unknown error"}`,
+              code: "invalid_type",
+            },
+          ],
+        });
+      }
+    }
+
+    if (errors.length > 0) {
+      return { success: false, errors };
+    }
+
+    return { success: true, data: normalizedData };
   }
 
   /**

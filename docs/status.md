@@ -2,6 +2,8 @@
 
 Legend: **done** = implemented, **partial** = implemented but incomplete, **not started** = not implemented, **untested** = implemented but tests not runnable.
 
+> Last updated: 2026-01-30
+
 ---
 
 ## Core Runtime
@@ -14,6 +16,7 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Filling hooks (onRequest/onParse/before/after/map/onError/afterResponse) | done | `packages/core/src/filling/filling.ts` |
 | guard/use aliases | done | `packages/core/src/filling/filling.ts` |
 | compose middleware integration | done | `ManduFilling.middleware()` |
+| Streaming SSR | done | `packages/core/src/runtime/streaming-ssr.ts` |
 | Runtime tests | done (untested) | `tests/runtime/*` (Bun crash) |
 
 ## Contracts & OpenAPI
@@ -23,7 +26,10 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Contract schema & validator | done | `packages/core/src/contract/*` |
 | OpenAPI generator | done | `packages/core/src/openapi/generator.ts` |
 | CLI OpenAPI generate/serve | done | `packages/cli/src/commands/openapi.ts` |
-| Contract type inference | not started | (no `contract/infer.ts`) |
+| Contract type inference | done | `packages/core/src/contract/types.ts`, `handler.ts` |
+| Typed Handler | done | `packages/core/src/contract/handler.ts` |
+| Typed Client | done | `packages/core/src/contract/client.ts` |
+| Mandu Namespace API | done | `Mandu.contract/handler/route/client/fetch` |
 | Schema normalize/coerce | not started | (no `contract/normalize.ts`) |
 | OpenAPI examples/extra | not started | (not in generator) |
 
@@ -33,8 +39,18 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 |------|--------|----------|
 | Props serialize/deserialize | done | `packages/core/src/client/serialize.ts` |
 | Island definition API | done | `packages/core/src/client/island.ts` |
-| SSR island wrapper/scripts | partial | `packages/core/src/runtime/ssr.ts` |
-| Client reviver / partials / slots | not started | (no `client/reviver.ts`) |
+| SSR island wrapper/scripts | done | `packages/core/src/runtime/ssr.ts`, `streaming-ssr.ts` |
+| Client Hydration Runtime | done | `packages/core/src/bundler/build.ts` generateRuntimeSource() |
+| Client partials/slots | not started | (not implemented) |
+
+## Client-side Routing
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| Client router | done | `packages/core/src/client/router.ts` |
+| Router hooks (useRouter, useParams, etc) | done | `packages/core/src/client/hooks.ts` |
+| Link/NavLink components | done | `packages/core/src/client/Link.tsx` |
+| Router runtime bundle | done | `packages/core/src/bundler/build.ts` generateRouterRuntimeSource() |
 
 ## Data & Content
 
@@ -46,6 +62,8 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 
 | Item | Status | Evidence |
 |------|--------|----------|
+| Client Bundler | done | `packages/core/src/bundler/build.ts` |
+| Dev Server | done | `packages/core/src/bundler/dev.ts` |
 | Integration hooks/logger | not started | (no `packages/core/src/integrations`) |
 | Build hooks/plugins/analyzer | not started | (no `packages/core/src/bundler/hooks.ts`) |
 
@@ -53,6 +71,7 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 
 | Item | Status | Evidence |
 |------|--------|----------|
+| Server router | done | `packages/core/src/runtime/router.ts` |
 | FS routes command layer | not started | (no `packages/core/src/router/fs-*`) |
 
 ## Realtime / Resumable
@@ -68,3 +87,20 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 |------|--------|----------|
 | Runtime logger | not started | (no `packages/core/src/runtime/logger.ts`) |
 | Perf tests | not started | (no `tests/perf`) |
+
+---
+
+## Summary
+
+| Category | Done | Not Started |
+|----------|------|-------------|
+| Core Runtime | 8 | 0 |
+| Contracts & OpenAPI | 7 | 2 |
+| Hydration & Islands | 4 | 1 |
+| Client-side Routing | 4 | 0 |
+| Data & Content | 0 | 1 |
+| Integrations & Build | 2 | 2 |
+| Routing | 1 | 1 |
+| Realtime / Resumable | 0 | 2 |
+| Observability & Perf | 0 | 2 |
+| **Total** | **26** | **11** |

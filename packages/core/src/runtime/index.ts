@@ -6,3 +6,4 @@ export * from "./env";
 export * from "./compose";
 export * from "./lifecycle";
 export * from "./trace";
+export * from "./logger";

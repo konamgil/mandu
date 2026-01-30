@@ -18,6 +18,7 @@ import { slotTools, slotToolDefinitions } from "./tools/slot.js";
 import { hydrationTools, hydrationToolDefinitions } from "./tools/hydration.js";
 import { contractTools, contractToolDefinitions } from "./tools/contract.js";
 import { brainTools, brainToolDefinitions } from "./tools/brain.js";
+import { runtimeTools, runtimeToolDefinitions } from "./tools/runtime.js";
 import { resourceHandlers, resourceDefinitions } from "./resources/handlers.js";
 import { findProjectRoot } from "./utils/project.js";
 import { applyWarningInjection } from "./utils/withWarnings.js";
@@ -61,6 +62,7 @@ export class ManduMcpServer {
       ...hydrationToolDefinitions,
       ...contractToolDefinitions,
       ...brainToolDefinitions,
+      ...runtimeToolDefinitions,
     ];
   }
 
@@ -75,6 +77,7 @@ export class ManduMcpServer {
       ...hydrationTools(this.projectRoot),
       ...contractTools(this.projectRoot),
       ...brainTools(this.projectRoot, this.server, this.monitor),
+      ...runtimeTools(this.projectRoot),
     };
 
     return applyWarningInjection(handlers);

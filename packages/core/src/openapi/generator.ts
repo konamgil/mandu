@@ -5,7 +5,12 @@
 
 import type { z } from "zod";
 import type { RoutesManifest, RouteSpec } from "../spec/schema";
-import type { ContractSchema, MethodRequestSchema } from "../contract/schema";
+import type {
+  ContractSchema,
+  MethodRequestSchema,
+  ResponseSchemaWithExamples,
+  SchemaExamples,
+} from "../contract/schema";
 import path from "path";
 
 // ============================================
@@ -31,12 +36,19 @@ export interface OpenAPIParameter {
   schema: OpenAPISchema;
 }
 
+export interface OpenAPIExample {
+  summary?: string;
+  description?: string;
+  value: unknown;
+}
+
 export interface OpenAPIRequestBody {
   required?: boolean;
   description?: string;
   content: {
     [mediaType: string]: {
       schema: OpenAPISchema;
+      examples?: Record<string, OpenAPIExample>;
     };
   };
 }
@@ -46,6 +58,7 @@ export interface OpenAPIResponse {
   content?: {
     [mediaType: string]: {
       schema: OpenAPISchema;
+      examples?: Record<string, OpenAPIExample>;
     };
   };
 }
@@ -238,6 +251,34 @@ export function zodToOpenAPISchema(zodSchema: z.ZodTypeAny): OpenAPISchema {
 }
 
 // ============================================
+// Helpers
+// ============================================
+
+/**
+ * Convert SchemaExamples to OpenAPI examples format
+ */
+function convertExamples(examples: SchemaExamples): Record<string, OpenAPIExample> {
+  const result: Record<string, OpenAPIExample> = {};
+  for (const [name, value] of Object.entries(examples)) {
+    result[name] = { value };
+  }
+  return result;
+}
+
+/**
+ * Check if response schema has examples (ResponseSchemaWithExamples type)
+ */
+function isResponseSchemaWithExamples(
+  schema: z.ZodTypeAny | ResponseSchemaWithExamples | undefined
+): schema is ResponseSchemaWithExamples {
+  return (
+    schema !== undefined &&
+    typeof schema === "object" &&
+    "schema" in schema
+  );
+}
+
+// ============================================
 // OpenAPI Generation
 // ============================================
 
@@ -336,32 +377,55 @@ function generateOperation(
 
     // Request body
     if (methodSchema.body) {
+      const requestBodyContent: OpenAPIRequestBody["content"]["application/json"] = {
+        schema: zodToOpenAPISchema(methodSchema.body),
+      };
+
+      // Add examples if provided
+      if (methodSchema.examples) {
+        requestBodyContent.examples = convertExamples(methodSchema.examples);
+      }
+
       operation.requestBody = {
         required: true,
         content: {
-          "application/json": {
-            schema: zodToOpenAPISchema(methodSchema.body),
-          },
+          "application/json": requestBodyContent,
         },
       };
     }
   }
 
   // Responses
-  for (const [statusCode, responseSchema] of Object.entries(contract.response)) {
+  for (const [statusCode, responseSchemaOrWithExamples] of Object.entries(contract.response)) {
     const status = parseInt(statusCode, 10);
     if (isNaN(status)) continue;
 
-    const schema = zodToOpenAPISchema(responseSchema as z.ZodTypeAny);
+    // Handle ResponseSchemaWithExamples or plain ZodTypeAny
+    let zodSchema: z.ZodTypeAny;
+    let examples: SchemaExamples | undefined;
+
+    if (isResponseSchemaWithExamples(responseSchemaOrWithExamples)) {
+      zodSchema = responseSchemaOrWithExamples.schema;
+      examples = responseSchemaOrWithExamples.examples;
+    } else {
+      zodSchema = responseSchemaOrWithExamples as z.ZodTypeAny;
+    }
+
+    const schema = zodToOpenAPISchema(zodSchema);
     const hasContent = Object.keys(schema).length > 0;
+
+    const responseContent: OpenAPIResponse["content"] = hasContent
+      ? {
+          "application/json": {
+            schema,
+            ...(examples && { examples: convertExamples(examples) }),
+          },
+        }
+      : undefined;
 
     operation.responses[statusCode] = {
       description: getStatusDescription(status),
-      ...(hasContent && {
-        content: {
-          "application/json": { schema },
-        },
-      }),
+      ...(responseContent && { content: responseContent }),
     };
   }
 
