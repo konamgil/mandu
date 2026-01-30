@@ -88,6 +88,12 @@ export const RouteSpec = z
 
     // Loader 설정 [NEW]
     loader: LoaderConfig.optional(),
+
+    // Streaming SSR 설정 [NEW v0.9.18]
+    // - true: 이 라우트에 Streaming SSR 적용
+    // - false: 이 라우트에 전통적 SSR 적용
+    // - undefined: 서버 설정 따름
+    streaming: z.boolean().optional(),
   })
   .refine(
     (route) => {

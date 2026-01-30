@@ -4,6 +4,21 @@ import type { ReactElement } from "react";
 import type { BundleManifest } from "../bundler/types";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 
+// Re-export streaming SSR utilities
+export {
+  renderToStream,
+  renderStreamingResponse,
+  renderWithDeferredData,
+  SuspenseIsland,
+  DeferredData,
+  createStreamingLoader,
+  defer,
+  type StreamingSSROptions,
+  type StreamingLoaderResult,
+  type StreamingError,
+  type StreamingMetrics,
+} from "./streaming-ssr";
+
 export interface SSROptions {
   title?: string;
   lang?: string;

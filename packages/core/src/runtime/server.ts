@@ -4,7 +4,7 @@ import type { BundleManifest } from "../bundler/types";
 import type { ManduFilling } from "../filling/filling";
 import { ManduContext } from "../filling/context";
 import { Router } from "./router";
-import { renderSSR } from "./ssr";
+import { renderSSR, renderStreamingResponse } from "./ssr";
 import React from "react";
 import path from "path";
 import {
@@ -94,6 +94,12 @@ export interface ServerOptions {
    * - CorsOptions: 세부 설정
    */
   cors?: boolean | CorsOptions;
+  /**
+   * Streaming SSR 활성화
+   * - true: 모든 페이지에 Streaming SSR 적용
+   * - false: 기존 renderToString 사용 (기본값)
+   */
+  streaming?: boolean;
 }
 
 export interface ManduServer {
@@ -146,11 +152,13 @@ let serverSettings: {
   rootDir: string;
   publicDir: string;
   cors?: CorsOptions | false;
+  streaming: boolean;
 } = {
   isDev: false,
   rootDir: process.cwd(),
   publicDir: "public",
   cors: false,
+  streaming: false,
 };
 
 export function registerApiHandler(routeId: string, handler: ApiHandler): void {
@@ -377,7 +385,7 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
       });
     }
 
-    // SSR 렌더링 (기존 로직)
+    // SSR 렌더링
     const appCreator = createAppFn || defaultCreateApp;
     try {
       const app = appCreator({
@@ -392,6 +400,41 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
         ? { [route.id]: { serverData: loaderData } }
         : undefined;
 
+      // Streaming SSR 모드 결정
+      // 우선순위: route.streaming > serverSettings.streaming
+      const useStreaming = route.streaming !== undefined
+        ? route.streaming
+        : serverSettings.streaming;
+
+      if (useStreaming) {
+        return await renderStreamingResponse(app, {
+          title: `${route.id} - Mandu`,
+          isDev: serverSettings.isDev,
+          hmrPort: serverSettings.hmrPort,
+          routeId: route.id,
+          routePattern: route.pattern,
+          hydration: route.hydration,
+          bundleManifest: serverSettings.bundleManifest,
+          criticalData: loaderData as Record<string, unknown> | undefined,
+          enableClientRouter: true,
+          onShellReady: () => {
+            if (serverSettings.isDev) {
+              console.log(`[Mandu Streaming] Shell ready: ${route.id}`);
+            }
+          },
+          onMetrics: (metrics) => {
+            if (serverSettings.isDev) {
+              console.log(`[Mandu Streaming] Metrics for ${route.id}:`, {
+                shellReadyTime: `${metrics.shellReadyTime}ms`,
+                allReadyTime: `${metrics.allReadyTime}ms`,
+                hasError: metrics.hasError,
+              });
+            }
+          },
+        });
+      }
+
+      // 기존 renderToString 방식
       return renderSSR(app, {
         title: `${route.id} - Mandu`,
         isDev: serverSettings.isDev,
@@ -447,6 +490,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     bundleManifest,
     publicDir = "public",
     cors = false,
+    streaming = false,
   } = options;
 
   // CORS 옵션 파싱
@@ -460,6 +504,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     rootDir,
     publicDir,
     cors: corsOptions,
+    streaming,
   };
 
   const router = new Router(manifest.routes);
@@ -491,8 +536,14 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     if (corsOptions) {
       console.log(`🌐 CORS enabled`);
     }
+    if (streaming) {
+      console.log(`🌊 Streaming SSR enabled`);
+    }
   } else {
     console.log(`🥟 Mandu server running at http://${hostname}:${port}`);
+    if (streaming) {
+      console.log(`🌊 Streaming SSR enabled`);
+    }
   }
 
   return {
