@@ -890,3 +890,60 @@ describe("Streaming Core Value Tests", () => {
     expect(collectedMetrics.deferredChunkCount).toBe(2); // fast1, fast2만 성공
   });
 });
+
+describe("Stream Timeout", () => {
+  it("should terminate stream and include timeout error script", async () => {
+    function NeverResolve(): React.ReactElement {
+      throw new Promise(() => {});
+    }
+
+    const element = React.createElement(
+      Suspense,
+      { fallback: React.createElement("div", null, "Loading...") },
+      React.createElement(NeverResolve)
+    );
+
+    const stream = await renderToStream(element, {
+      routeId: "timeout-test",
+      streamTimeout: 100,
+    });
+
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    const start = Date.now();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(1500);
+
+    const html = new TextDecoder().decode(Buffer.concat(chunks.map(c => Buffer.from(c))));
+    expect(html).toContain("__MANDU_STREAMING_ERROR__");
+    expect(html).toContain("Stream timeout");
+    expect(html).toContain("</html>");
+  });
+
+  it("should not wait beyond streamTimeout for deferred flush", async () => {
+    const slowDeferred = new Promise((resolve) => setTimeout(() => resolve({ slow: true }), 5000));
+    const element = React.createElement(SimpleComponent, { message: "Timeout Deferred" });
+
+    const start = Date.now();
+    const response = await renderWithDeferredData(element, {
+      routeId: "timeout-deferred",
+      deferredPromises: { slow: slowDeferred },
+      deferredTimeout: 2000,
+      streamTimeout: 100,
+    });
+
+    const html = await response.text();
+    const elapsed = Date.now() - start;
+
+    expect(elapsed).toBeLessThan(1000);
+    expect(html).toContain("Timeout Deferred");
+    expect(html).not.toContain("__MANDU_DEFERRED__");
+  });
+});
