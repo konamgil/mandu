@@ -3,6 +3,10 @@
 > MVP‑0.1 목표: **구조 보존(Architecture Preservation)** 가설 1개만 검증한다.  
 > 범위 제외: WS/ISR/Plan/Logic Slot/HMR/Streaming SSR/Hydration.
 
+> 구현 현황 노트 (2026-01-30): 이 문서는 MVP‑0.1 기준이다.  
+> 현재 코드에는 Hydration 스펙/번들러/런타임, Client Router, Streaming SSR, HMR, Router v5, CLI 확장, MCP 확장 도구가 구현되어 있다.  
+> 최신 구현 상태는 `docs/status.md` / `docs/status.ko.md`를 기준으로 본다.
+
 ---
 
 ## 1. 아키텍처 개요
@@ -15,7 +19,8 @@
 
 ### 1.2 컴포넌트
 - **Core** (`@mandujs/core`): runtime(서버/라우터/SSR), spec 스키마/로드/락/트랜잭션, guard, report, map
-- **CLI** (`@mandujs/cli`): init / spec‑upsert / generate / guard / dev
+- **CLI** (`@mandujs/cli`): init / spec‑upsert / generate / guard / build / dev  
+  (추가 구현: contract, openapi, change, doctor, watch, brain)
 - **MCP** (`@mandujs/mcp`): AI 에이전트 통합을 위한 MCP 서버 ✅
 - **Apps**:
   - server: Bun.serve 엔트리 + generated route handlers
@@ -41,34 +46,42 @@ repo/
       generated/routes/
   packages/
     core/
-      runtime/server.ts
-      runtime/router.ts
-      runtime/ssr.ts
-      spec/schema.ts
-      spec/load.ts
-      spec/lock.ts
-      spec/transaction.ts          # 트랜잭션 API ✅
-      guard/rules.ts
-      guard/check.ts
-      report/build.ts
-      map/generate.ts
+      src/
+        runtime/server.ts
+        runtime/router.ts
+        runtime/ssr.ts
+        spec/schema.ts
+        spec/load.ts
+        spec/lock.ts
+        change/transaction.ts        # 트랜잭션 API ✅
+        guard/rules.ts
+        guard/check.ts
+        report/build.ts
+        generator/generate.ts
     cli/
-      main.ts
-      commands/spec-upsert.ts
-      commands/generate-apply.ts
-      commands/guard-check.ts
-      commands/dev.ts
-      util/fs.ts
+      src/
+        main.ts
+        commands/spec-upsert.ts
+        commands/generate-apply.ts
+        commands/guard-check.ts
+        commands/dev.ts
+        util/fs.ts
     mcp/                           # MCP 서버 ✅
-      server.ts
-      tools/
-        spec.ts
-        generate.ts
-        transaction.ts
-        history.ts
-        guard.ts
-        slot.ts
-      resources/handlers.ts
+      src/
+        server.ts
+        tools/
+          spec.ts
+          generate.ts
+          transaction.ts
+          history.ts
+          guard.ts
+          slot.ts
+          hydration.ts
+          contract.ts
+          brain.ts
+        resources/handlers.ts
+        utils/
+          project.ts
   tests/
     smoke.spec.ts
   tsconfig.json
@@ -91,7 +104,7 @@ repo/
 
 ### 3.2 lock 파일(spec.lock.json)
 - `routesHash`(sha256), `updatedAt`(ISO)
-- spec 변경은 `ax spec-upsert`로만 반영되도록 사용
+- spec 변경은 `mandu spec-upsert`로만 반영되도록 사용
 
 ---
 
@@ -103,12 +116,13 @@ repo/
 3) kind == api → `import(route.module)` → handler 실행
 4) kind == page → SSR 렌더링:
    - `apps/web/entry.tsx`의 `createApp({ routeId, url, params })`
-   - `packages/core/runtime/ssr.ts`로 `renderToString`
+   - `packages/core/src/runtime/ssr.ts`로 `renderToString`
    - HTML Response 반환
 
 ### 4.2 SSR 범위 제한(중요)
 - `renderToString` 기반
 - Streaming/Hydration/Client bundle/HMR은 MVP‑0.1 제외
+  - 구현 현황: Streaming SSR/Hydration/Client bundle/HMR가 코드에 포함됨 (실험적/확장 기능)
 
 ---
 
@@ -162,10 +176,13 @@ CLI는 report를 파일로 출력하고, 콘솔에 요약을 출력한다.
 
 ## 8. CLI 커맨드(사용자 경험)
 
-- `bunx ax spec-upsert --file spec/routes.manifest.json`
-- `bunx ax generate`
-- `bunx ax guard`
-- `bunx ax dev`
+- `bunx mandu spec-upsert --file spec/routes.manifest.json`
+- `bunx mandu generate`
+- `bunx mandu guard`
+- `bunx mandu build`
+- `bunx mandu dev`
+
+> 현재 CLI는 contract/openapi/change/doctor/watch/brain 명령도 제공한다.
 
 ---
 
@@ -205,7 +222,10 @@ packages/mcp/
 │   │   ├── transaction.ts    # begin/commit/rollback
 │   │   ├── history.ts        # 스냅샷 관리
 │   │   ├── guard.ts          # 규칙 검사
-│   │   └── slot.ts           # 슬롯 읽기/쓰기
+│   │   ├── slot.ts           # 슬롯 읽기/쓰기
+│   │   ├── hydration.ts      # Hydration/번들 빌드
+│   │   ├── contract.ts       # Contract 관리
+│   │   └── brain.ts          # Doctor/Watch/Architecture
 │   ├── resources/
 │   │   └── handlers.ts       # 리소스 핸들러
 │   └── utils/
@@ -236,6 +256,25 @@ packages/mcp/
 | | `mandu_analyze_error` | 에러 분석 |
 | **Slot** | `mandu_read_slot` | 슬롯 파일 읽기 |
 | | `mandu_write_slot` | 슬롯 파일 쓰기 |
+| **Hydration** | `mandu_build` | 클라이언트 번들 빌드 |
+| | `mandu_build_status` | 번들 상태/매니페스트 조회 |
+| | `mandu_list_islands` | Hydration 대상 라우트 목록 |
+| | `mandu_set_hydration` | 라우트 Hydration 설정 |
+| | `mandu_add_client_slot` | 클라이언트 슬롯 추가 |
+| **Contract** | `mandu_list_contracts` | Contract 목록 조회 |
+| | `mandu_get_contract` | Contract 조회 |
+| | `mandu_create_contract` | Contract 생성 |
+| | `mandu_update_route_contract` | 라우트에 Contract 연결 |
+| | `mandu_validate_contracts` | Contract-Slot 검증 |
+| | `mandu_sync_contract_slot` | Contract/Slot 동기화 |
+| | `mandu_generate_openapi` | OpenAPI 생성 |
+| **Brain** | `mandu_doctor` | Guard 실패 분석 |
+| | `mandu_watch_start` | Watch 시작 |
+| | `mandu_watch_status` | Watch 상태 조회 |
+| | `mandu_watch_stop` | Watch 중지 |
+| | `mandu_check_location` | 파일 위치 규칙 검사 |
+| | `mandu_check_import` | import 규칙 검사 |
+| | `mandu_get_architecture` | 아키텍처 규칙 조회 |
 
 ### 11.4 MCP 리소스
 

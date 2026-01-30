@@ -138,6 +138,39 @@ type Middleware = (ctx: ManduContext, next: () => Promise<void>) =>
 
 ---
 
+## Mandu Client (`@mandujs/core/client`)
+
+### Islands
+
+| API | 설명 |
+|-----|------|
+| `ManduClient.island(definition)` | 클라이언트 Island 정의 (setup + render) |
+| `ManduClient.wrapComponent(Component, options?)` | 기존 React 컴포넌트를 Island로 래핑 |
+| `useServerData(key, fallback)` | SSR 데이터 안전 조회 |
+| `useHydrated()` | 하이드레이션 여부 (클라이언트 전용) |
+| `useIslandEvent(name, handler)` | Island 이벤트 훅 |
+
+### Client-side Router
+
+| API | 설명 |
+|-----|------|
+| `Link`, `NavLink` | 클라이언트 내비게이션 컴포넌트 |
+| `useRouter()` | 라우터 상태 + 네비게이션 헬퍼 |
+| `useParams()` | 현재 라우트 파라미터 |
+| `usePathname()`, `useSearchParams()` | URL 헬퍼 |
+| `navigate(url, options?)` | 명령형 네비게이션 |
+| `prefetch(url)` | 라우트 데이터 프리로드 |
+
+### 런타임 헬퍼
+
+| API | 설명 |
+|-----|------|
+| `getHydrationState()` | Island 하이드레이션 상태 집계 |
+| `unmountIsland(id)` | 특정 Island 언마운트 |
+| `unmountAllIslands()` | 전체 Island 언마운트 |
+
+---
+
 ## 에러
 
 | 에러 | 설명 |

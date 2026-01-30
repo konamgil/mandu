@@ -68,7 +68,7 @@
 
 ### 5.2 버전/락/롤백(필수)
 - `spec/spec.lock.json`: 적용된 스펙의 해시/메타
-- `spec/history/<timestamp>.snapshot.json`: 커밋 스냅샷(옵션→필수로 확장)
+- `spec/history/snapshots/<id>.snapshot.json`: 커밋 스냅샷(옵션→필수로 확장)
 
 ### 5.3 변경 트랜잭션 ✅ (구현 완료)
 - `change.begin()` → (spec 변경/생성) → `guard.check()` + `tests.run()` → `change.commit()`
@@ -165,7 +165,7 @@ tx.rollback();                        // 스냅샷으로 완전 복원
 ### MVP‑0.1 ✅
 - Spec 기반 라우트 생성 + 최소 SSR 동작
 - Guard: spec/generated/슬롯 경계 오염 방지
-- CLI: spec‑upsert / generate / guard / dev
+- CLI: spec‑upsert / generate / guard / build / dev
 
 ### MVP‑0.3 ✅ (현재)
 - route‑logic 슬롯 시스템
@@ -174,6 +174,8 @@ tx.rollback();                        // 스냅샷으로 완전 복원
 - **스냅샷 기반 히스토리** - 완전 복원 지원
 - **에러 분류 시스템** (SPEC_ERROR / LOGIC_ERROR / FRAMEWORK_BUG)
 - **generated.map.json** - 런타임 에러 → spec/slot 매핑
+
+> 구현 현황 노트 (2026-01-30): Hydration 스펙/번들러/런타임, Client Router, Streaming SSR, HMR, Router v5가 코드에 포함됨 (실험적/확장 기능).
 
 ### MVP‑0.4
 - 기본 테스트 템플릿 + self‑correction loop
@@ -189,10 +191,10 @@ tx.rollback();                        // 스냅샷으로 완전 복원
 
 ## 13. 오픈소스/설치 전략
 
-- UX 목표: express/next처럼 **`bunx @mandujs/cli init`**로 프로젝트 생성
+- UX 목표: express/next처럼 **`bunx mandu init`** (또는 **`bunx @mandujs/cli init`**)로 프로젝트 생성
 - 패키지 구성:
   - `@mandujs/core` - 런타임, SSR, Guard, Spec 스키마, 트랜잭션 API ✅
-  - `@mandujs/cli` - init, spec-upsert, generate, guard, dev 명령어 ✅
+  - `@mandujs/cli` - init, spec-upsert, generate, guard, build, dev, contract, openapi, change, doctor, watch, brain ✅
   - `@mandujs/mcp` - MCP 서버 (AI 에이전트 통합) ✅
   - `@mandujs/adapters-*` - redis/pubsub/session/cache (후속)
 
@@ -206,6 +208,9 @@ AI 에이전트가 Mandu 프레임워크를 직접 조작하는 MCP 서버:
 - 히스토리: `mandu_list_history`, `mandu_get_snapshot`, `mandu_prune_history`
 - 가드: `mandu_guard_check`, `mandu_analyze_error`
 - 슬롯: `mandu_read_slot`, `mandu_write_slot`
+- Hydration: `mandu_build`, `mandu_build_status`, `mandu_list_islands`, `mandu_set_hydration`, `mandu_add_client_slot`
+- Contract: `mandu_list_contracts`, `mandu_get_contract`, `mandu_create_contract`, `mandu_update_route_contract`, `mandu_validate_contracts`, `mandu_sync_contract_slot`, `mandu_generate_openapi`
+- Brain: `mandu_doctor`, `mandu_watch_start`, `mandu_watch_status`, `mandu_watch_stop`, `mandu_check_location`, `mandu_check_import`, `mandu_get_architecture`
 
 **리소스 (Resources)**:
 - `mandu://spec/manifest` - routes.manifest.json

@@ -30,8 +30,8 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Typed Handler | done | `packages/core/src/contract/handler.ts` |
 | Typed Client | done | `packages/core/src/contract/client.ts` |
 | Mandu Namespace API | done | `Mandu.contract/handler/route/client/fetch` |
-| Schema normalize/coerce | not started | (no `contract/normalize.ts`) |
-| OpenAPI examples/extra | not started | (not in generator) |
+| Schema normalize/coerce | done | `packages/core/src/contract/normalize.ts` |
+| OpenAPI examples/extra | done | `packages/core/src/openapi/generator.ts` |
 
 ## Hydration & Islands
 
@@ -85,7 +85,7 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Runtime logger | not started | (no `packages/core/src/runtime/logger.ts`) |
+| Runtime logger | done | `packages/core/src/runtime/logger.ts` |
 | Perf tests | not started | (no `tests/perf`) |
 
 ---
@@ -95,12 +95,12 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Category | Done | Not Started |
 |----------|------|-------------|
 | Core Runtime | 8 | 0 |
-| Contracts & OpenAPI | 7 | 2 |
+| Contracts & OpenAPI | 9 | 0 |
 | Hydration & Islands | 4 | 1 |
 | Client-side Routing | 4 | 0 |
 | Data & Content | 0 | 1 |
 | Integrations & Build | 2 | 2 |
 | Routing | 1 | 1 |
 | Realtime / Resumable | 0 | 2 |
-| Observability & Perf | 0 | 2 |
-| **Total** | **26** | **11** |
+| Observability & Perf | 1 | 1 |
+| **Total** | **29** | **8** |

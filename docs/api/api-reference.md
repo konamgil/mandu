@@ -138,6 +138,39 @@ type Middleware = (ctx: ManduContext, next: () => Promise<void>) =>
 
 ---
 
+## Mandu Client (`@mandujs/core/client`)
+
+### Islands
+
+| API | Description |
+|-----|-------------|
+| `ManduClient.island(definition)` | Define a client island (setup + render) |
+| `ManduClient.wrapComponent(Component, options?)` | Wrap existing React component as island |
+| `useServerData(key, fallback)` | Read SSR data safely |
+| `useHydrated()` | Hydration state (client-only) |
+| `useIslandEvent(name, handler)` | Simple island event bus |
+
+### Client-side Router
+
+| API | Description |
+|-----|-------------|
+| `Link`, `NavLink` | Client-side navigation components |
+| `useRouter()` | Router state + navigation helpers |
+| `useParams()` | Current route params |
+| `usePathname()`, `useSearchParams()` | URL helpers |
+| `navigate(url, options?)` | Imperative navigation |
+| `prefetch(url)` | Preload route data |
+
+### Runtime helpers
+
+| API | Description |
+|-----|-------------|
+| `getHydrationState()` | Aggregate island hydration status |
+| `unmountIsland(id)` | Unmount a specific island |
+| `unmountAllIslands()` | Unmount all islands |
+
+---
+
 ## Errors
 
 | Error | Description |
