@@ -4,6 +4,9 @@
 > **버전**: MVP-0.4 ~ MVP-1.0
 > **작성일**: 2025-01-28
 
+> 구현 현황 노트 (2026-01-30): Spec 스키마 확장, 클라이언트 번들러/런타임, SSR 통합, CLI build, MCP Hydration 도구가 코드에 반영됨.  
+> 미구현/실험적 항목(예: client reviver/partials, 고급 Guard/분석)은 `docs/status.md` 기준으로 본다.
+
 ---
 
 ## 1. 문제 정의
@@ -150,7 +153,6 @@ my-app/
 │   ├── spec.lock.json
 │   └── slots/
 │       ├── todos.slot.ts         # 서버 로직 (API, loader)
-│       └── todos.client.ts       # 클라이언트 로직 (React hooks) [NEW]
 │
 ├── apps/
 │   ├── server/
@@ -160,6 +162,8 @@ my-app/
 │   │           └── todos.route.ts
 │   └── web/
 │       ├── entry.tsx
+│       ├── components/
+│       │   └── todos.client.tsx  # 클라이언트 로직 (React hooks)
 │       └── generated/
 │           └── routes/
 │               └── todos.route.tsx
@@ -167,7 +171,12 @@ my-app/
 ├── .mandu/                        # [NEW] 빌드 결과물
 │   ├── client/
 │   │   ├── _runtime.js           # Hydration runtime
-│   │   ├── _shared.js            # 공통 의존성 (React 등)
+│   │   ├── _router.js            # Client-side Router runtime
+│   │   ├── _react.js             # React shim
+│   │   ├── _react-dom.js         # ReactDOM shim
+│   │   ├── _react-dom-client.js  # ReactDOM Client shim
+│   │   ├── _jsx-runtime.js       # JSX runtime shim
+│   │   ├── _jsx-dev-runtime.js   # JSX dev runtime shim
 │   │   ├── todos.island.js       # todos 페이지 island 번들
 │   │   └── users.island.js       # users 페이지 island 번들
 │   └── manifest.json             # 번들 매핑 정보
@@ -190,71 +199,38 @@ interface RouteSpec {
   kind: "page" | "api";
   methods?: HttpMethod[];
 
-  // 서버 슬롯 (기존)
+  // generated module paths
+  module: string;
+  componentModule?: string;
+
+  // slot modules
   slotModule?: string;
-
-  // 클라이언트 슬롯 [NEW]
   clientModule?: string;
+  contractModule?: string;
 
-  // Hydration 설정 [NEW]
+  // hydration + loader
   hydration?: HydrationConfig;
-
-  // SSR 데이터 로딩 설정 [NEW]
   loader?: LoaderConfig;
+
+  // Streaming SSR (route override)
+  streaming?: boolean;
 }
 
 interface HydrationConfig {
-  /**
-   * Hydration 전략
-   * - none: 순수 Static HTML (JS 없음)
-   * - island: Slot 영역만 hydrate (기본값)
-   * - full: 전체 페이지 hydrate
-   * - progressive: 점진적 hydrate (복잡한 페이지용)
-   */
   strategy: "none" | "island" | "full" | "progressive";
-
-  /**
-   * Hydration 우선순위
-   * - immediate: 페이지 로드 즉시
-   * - visible: 뷰포트에 보일 때 (기본값)
-   * - idle: 브라우저 idle 시
-   * - interaction: 사용자 상호작용 시
-   */
   priority?: "immediate" | "visible" | "idle" | "interaction";
-
-  /**
-   * 번들 preload 여부
-   * true면 <link rel="modulepreload"> 추가
-   */
   preload?: boolean;
-
-  /**
-   * 클라이언트 의존성 (외부 라이브러리)
-   * 자동 감지되지만 명시적 선언 가능
-   */
-  dependencies?: string[];
 }
 
 interface LoaderConfig {
-  /**
-   * SSR 시 데이터 로딩 타임아웃 (ms)
-   */
   timeout?: number;
-
-  /**
-   * 로딩 실패 시 fallback 데이터
-   */
   fallback?: Record<string, unknown>;
-
-  /**
-   * 캐시 설정
-   */
-  cache?: {
-    ttl: number;        // 초 단위
-    staleWhileRevalidate?: boolean;
-  };
 }
 ```
+
+> 실제 스키마 제약:
+> - `kind: "page"`이면 `componentModule`은 필수
+> - `clientModule`이 있으면 `hydration.strategy`는 `"none"`일 수 없음
 
 ### 3.2 Spec 예시
 
@@ -266,6 +242,8 @@ interface LoaderConfig {
       "id": "home",
       "pattern": "/",
       "kind": "page",
+      "module": "apps/server/generated/routes/home.route.ts",
+      "componentModule": "apps/web/generated/routes/home.route.tsx",
       "hydration": {
         "strategy": "none"
       }
@@ -274,8 +252,10 @@ interface LoaderConfig {
       "id": "todos",
       "pattern": "/todos",
       "kind": "page",
+      "module": "apps/server/generated/routes/todos.route.ts",
+      "componentModule": "apps/web/generated/routes/todos.route.tsx",
       "slotModule": "spec/slots/todos.slot.ts",
-      "clientModule": "spec/slots/todos.client.ts",
+      "clientModule": "apps/web/components/todos.client.tsx",
       "hydration": {
         "strategy": "island",
         "priority": "visible",
@@ -290,8 +270,10 @@ interface LoaderConfig {
       "id": "dashboard",
       "pattern": "/dashboard",
       "kind": "page",
+      "module": "apps/server/generated/routes/dashboard.route.ts",
+      "componentModule": "apps/web/generated/routes/dashboard.route.tsx",
       "slotModule": "spec/slots/dashboard.slot.ts",
-      "clientModule": "spec/slots/dashboard.client.ts",
+      "clientModule": "apps/web/components/dashboard.client.tsx",
       "hydration": {
         "strategy": "progressive",
         "priority": "immediate"
@@ -302,7 +284,9 @@ interface LoaderConfig {
       "pattern": "/api/todos",
       "kind": "api",
       "methods": ["GET", "POST", "PUT", "DELETE"],
-      "slotModule": "spec/slots/todos.slot.ts"
+      "module": "apps/server/generated/routes/todos-api.route.ts",
+      "slotModule": "spec/slots/todos.slot.ts",
+      "contractModule": "spec/contracts/todos.contract.ts"
     }
   ]
 }
@@ -395,8 +379,8 @@ export default Mandu.filling<TodosLoaderData>()
 ### 4.2 Client Slot (신규)
 
 ```typescript
-// spec/slots/todos.client.ts
-import { Mandu } from "@mandujs/core/client";
+// apps/web/components/todos.client.tsx
+import { ManduClient } from "@mandujs/core/client";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { TodosLoaderData, Todo } from "./todos.slot";
 
@@ -406,7 +390,7 @@ import type { TodosLoaderData, Todo } from "./todos.slot";
  * setup: 서버 데이터를 받아 클라이언트 상태 초기화
  * render: React 컴포넌트 렌더링
  */
-export default Mandu.island<TodosLoaderData>({
+export default ManduClient.island<TodosLoaderData>({
   /**
    * Setup Phase
    * - 서버에서 전달된 데이터로 상태 초기화
@@ -675,101 +659,59 @@ function TodoList({ todos, onToggle, onDelete, loading }: {
 ### 4.3 Slot API 정의
 
 ```typescript
-// packages/core/src/client/island.ts
+// packages/core/src/client/island.ts (발췌)
 
-import { hydrateRoot } from "react-dom/client";
 import type { ReactNode } from "react";
 
-interface IslandDefinition<TServerData, TSetupResult> {
+export interface IslandDefinition<TServerData, TSetupResult> {
   /**
-   * Setup 함수
+   * Setup Phase
    * - 서버 데이터를 받아 클라이언트 상태 초기화
    * - React hooks 사용 가능
-   * - 반환값이 render에 전달됨
+   * - 반환값이 render 함수에 전달됨
    */
   setup: (serverData: TServerData) => TSetupResult;
 
   /**
-   * Render 함수
+   * Render Phase
    * - setup 반환값을 props로 받음
-   * - JSX 반환
    */
   render: (props: TSetupResult) => ReactNode;
 
   /**
-   * Hydration 전 실행 (선택)
-   * - DOM 조작, 이벤트 리스너 등
+   * Optional: 에러 UI
    */
-  beforeHydrate?: (element: HTMLElement, serverData: TServerData) => void;
+  errorBoundary?: (error: Error, reset: () => void) => ReactNode;
 
   /**
-   * Hydration 후 실행 (선택)
-   * - Analytics, 성능 측정 등
+   * Optional: 로딩 UI
    */
-  afterHydrate?: (element: HTMLElement) => void;
-
-  /**
-   * 에러 발생 시 fallback (선택)
-   */
-  errorBoundary?: (error: Error) => ReactNode;
+  loading?: () => ReactNode;
 }
 
-/**
- * Island 컴포넌트 생성
- */
-export function island<TServerData = any, TSetupResult = any>(
+export interface CompiledIsland<TServerData, TSetupResult> {
+  definition: IslandDefinition<TServerData, TSetupResult>;
+  __mandu_island: true;
+  __mandu_island_id?: string;
+}
+
+export function island<TServerData, TSetupResult = TServerData>(
   definition: IslandDefinition<TServerData, TSetupResult>
-) {
-  // Island 컴포넌트
-  function IslandComponent({ serverData }: { serverData: TServerData }) {
-    const setupResult = definition.setup(serverData);
-    return <>{definition.render(setupResult)}</>;
+): CompiledIsland<TServerData, TSetupResult> {
+  if (typeof definition.setup !== "function") {
+    throw new Error("[Mandu Island] setup must be a function");
   }
-
-  // Hydration 함수 (runtime에서 호출)
-  function hydrate(element: HTMLElement, serverData: TServerData) {
-    if (definition.beforeHydrate) {
-      definition.beforeHydrate(element, serverData);
-    }
-
-    try {
-      const root = hydrateRoot(
-        element,
-        definition.errorBoundary ? (
-          <ErrorBoundary fallback={definition.errorBoundary}>
-            <IslandComponent serverData={serverData} />
-          </ErrorBoundary>
-        ) : (
-          <IslandComponent serverData={serverData} />
-        )
-      );
-
-      if (definition.afterHydrate) {
-        definition.afterHydrate(element);
-      }
-
-      return root;
-    } catch (error) {
-      console.error("[Mandu] Hydration failed:", error);
-      if (definition.errorBoundary) {
-        element.innerHTML = "";
-        const root = hydrateRoot(
-          element,
-          <>{definition.errorBoundary(error as Error)}</>
-        );
-        return root;
-      }
-      throw error;
-    }
+  if (typeof definition.render !== "function") {
+    throw new Error("[Mandu Island] render must be a function");
   }
-
   return {
-    Component: IslandComponent,
-    hydrate,
-    __mandu_island: true
+    definition,
+    __mandu_island: true,
   };
 }
 ```
+
+> 현재 런타임(v0.8.0)은 `setup`/`render`만 사용하며, `errorBoundary`/`loading`은 정의만 존재하는 예약 필드입니다.
 
 ---
 
@@ -778,341 +720,203 @@ export function island<TServerData = any, TSetupResult = any>(
 ### 5.1 Bun.build 기반 번들러
 
 ```typescript
-// packages/core/src/bundler/build.ts
+// packages/core/src/bundler/build.ts (v0.8.0 핵심)
 
 import type { RoutesManifest, RouteSpec } from "../spec/schema";
-import type { BuildOutput } from "bun";
+import { needsHydration, getRouteHydration } from "../spec/schema";
+import type { BundleResult, BundleOutput, BundlerOptions } from "./types";
 import path from "path";
 import fs from "fs/promises";
 
-export interface BundleResult {
-  success: boolean;
-  outputs: BundleOutput[];
-  errors: string[];
-  manifest: BundleManifest;
-  stats: BundleStats;
-}
-
-export interface BundleOutput {
-  routeId: string;
-  entrypoint: string;
-  outputPath: string;
-  size: number;
-  gzipSize: number;
-}
-
-export interface BundleManifest {
-  version: number;
-  buildTime: string;
-  bundles: Record<string, {
-    js: string;
-    css?: string;
-    dependencies: string[];
-  }>;
-  shared: {
-    runtime: string;
-    vendor: string;
-  };
-}
-
-export interface BundleStats {
-  totalSize: number;
-  totalGzipSize: number;
-  largestBundle: { routeId: string; size: number };
-  buildTime: number;
-}
-
 /**
- * 클라이언트 번들 빌드
+ * Runtime 번들 소스 생성 (v0.8.0)
+ * - data-mandu-src 기반 dynamic import
+ * - 글로벌 registry 없음
  */
-export async function buildClientBundles(
-  manifest: RoutesManifest,
-  rootDir: string,
-  options: {
-    minify?: boolean;
-    sourcemap?: boolean;
-    watch?: boolean;
-  } = {}
-): Promise<BundleResult> {
-  const startTime = performance.now();
-  const outputs: BundleOutput[] = [];
-  const errors: string[] = [];
+function generateRuntimeSource(): string {
+  return `
+import React from 'react';
+import { hydrateRoot } from 'react-dom/client';
 
-  // 1. Hydration이 필요한 라우트 필터링
-  const hydratedRoutes = manifest.routes.filter(route =>
-    route.kind === "page" &&
-    route.clientModule &&
-    route.hydration?.strategy !== "none"
-  );
+const hydratedRoots = new Map();
+const getServerData = (id) => (window.__MANDU_DATA__ || {})[id]?.serverData || {};
 
-  if (hydratedRoutes.length === 0) {
-    return {
-      success: true,
-      outputs: [],
-      errors: [],
-      manifest: createEmptyManifest(),
-      stats: { totalSize: 0, totalGzipSize: 0, largestBundle: { routeId: "", size: 0 }, buildTime: 0 }
-    };
-  }
-
-  // 2. 출력 디렉토리 생성
-  const outDir = path.join(rootDir, ".mandu/client");
-  await fs.mkdir(outDir, { recursive: true });
-
-  // 3. Runtime 번들 빌드
-  const runtimeResult = await buildRuntime(outDir, options);
-  if (!runtimeResult.success) {
-    errors.push(...runtimeResult.errors);
-  }
-
-  // 4. 공유 의존성 번들 빌드 (React 등)
-  const vendorResult = await buildVendor(outDir, options);
-  if (!vendorResult.success) {
-    errors.push(...vendorResult.errors);
-  }
-
-  // 5. 각 Island 번들 빌드
-  for (const route of hydratedRoutes) {
-    try {
-      const result = await buildIsland(route, rootDir, outDir, options);
-      outputs.push(result);
-    } catch (error) {
-      errors.push(`Failed to build island for ${route.id}: ${error}`);
+function scheduleHydration(element, src, priority) {
+  switch (priority) {
+    case 'immediate':
+      loadAndHydrate(element, src);
+      break;
+    case 'visible':
+      if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting) {
+            observer.disconnect();
+            loadAndHydrate(element, src);
+          }
+        }, { rootMargin: '50px' });
+        observer.observe(element);
+      } else {
+        loadAndHydrate(element, src);
+      }
+      break;
+    case 'idle':
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => loadAndHydrate(element, src));
+      } else {
+        setTimeout(() => loadAndHydrate(element, src), 200);
+      }
+      break;
+    case 'interaction': {
+      const hydrate = () => {
+        element.removeEventListener('mouseenter', hydrate);
+        element.removeEventListener('focusin', hydrate);
+        element.removeEventListener('touchstart', hydrate);
+        loadAndHydrate(element, src);
+      };
+      element.addEventListener('mouseenter', hydrate, { once: true, passive: true });
+      element.addEventListener('focusin', hydrate, { once: true });
+      element.addEventListener('touchstart', hydrate, { once: true, passive: true });
+      break;
     }
   }
+}
 
-  // 6. 번들 매니페스트 생성
-  const bundleManifest = createBundleManifest(outputs, runtimeResult, vendorResult);
-  await fs.writeFile(
-    path.join(rootDir, ".mandu/manifest.json"),
-    JSON.stringify(bundleManifest, null, 2)
-  );
+async function loadAndHydrate(element, src) {
+  const id = element.getAttribute('data-mandu-island');
+  const module = await import(src);
+  const island = module.default;
+  if (!island || !island.__mandu_island) throw new Error('[Mandu] Invalid island: ' + id);
 
-  // 7. 통계 계산
-  const stats = calculateStats(outputs, startTime);
+  const { definition } = island;
+  const data = getServerData(id);
+  function IslandComponent() {
+    const setupResult = definition.setup(data);
+    return definition.render(setupResult);
+  }
 
+  const root = hydrateRoot(element, React.createElement(IslandComponent));
+  hydratedRoots.set(id, root);
+  element.setAttribute('data-mandu-hydrated', 'true');
+}
+
+function hydrateIslands() {
+  const islands = document.querySelectorAll('[data-mandu-island]');
+  for (const el of islands) {
+    const id = el.getAttribute('data-mandu-island');
+    const src = el.getAttribute('data-mandu-src');
+    const priority = el.getAttribute('data-mandu-priority') || 'visible';
+    if (!id || !src) continue;
+    scheduleHydration(el, src, priority);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', hydrateIslands);
+} else {
+  hydrateIslands();
+}
+`;
+}
+
+function generateIslandEntry(routeId: string, clientModulePath: string): string {
+  const normalizedPath = clientModulePath.replace(/\\/g, "/");
+  return `
+/**
+ * Mandu Island: ${routeId} (Generated)
+ * Pure export - no side effects
+ */
+import island from "${normalizedPath}";
+export default island;
+`;
+}
+
+async function buildRuntime(outDir: string, options: BundlerOptions) {
+  const runtimePath = path.join(outDir, "_runtime.src.js");
+  const outputName = "_runtime.js";
+  await Bun.write(runtimePath, generateRuntimeSource());
+  const result = await Bun.build({
+    entrypoints: [runtimePath],
+    outdir: outDir,
+    naming: outputName,
+    target: "browser",
+    external: ["react", "react-dom", "react-dom/client"],
+    minify: options.minify ?? process.env.NODE_ENV === "production",
+    sourcemap: options.sourcemap ? "external" : "none",
+  });
+  await fs.unlink(runtimePath).catch(() => {});
   return {
-    success: errors.length === 0,
-    outputs,
-    errors,
-    manifest: bundleManifest,
-    stats
+    success: result.success,
+    outputPath: result.success ? `/.mandu/client/${outputName}` : "",
+    errors: result.success ? [] : result.logs.map((l) => l.message),
   };
 }
 
-/**
- * 단일 Island 번들 빌드
- */
 async function buildIsland(
   route: RouteSpec,
   rootDir: string,
   outDir: string,
-  options: { minify?: boolean; sourcemap?: boolean }
+  options: BundlerOptions
 ): Promise<BundleOutput> {
-  const entrypoint = path.join(rootDir, route.clientModule!);
-  const outputName = `${route.id}.island.js`;
+  const entryPath = path.join(outDir, `_entry_${route.id}.js`);
+  await Bun.write(entryPath, generateIslandEntry(route.id, path.join(rootDir, route.clientModule!)));
 
-  // Island wrapper 생성
-  const wrapperContent = `
-    import island from "${entrypoint}";
-    import { registerIsland } from "./_runtime.js";
-
-    registerIsland("${route.id}", () => island);
-
-    export default island;
-  `;
-
-  const wrapperPath = path.join(outDir, `_entry_${route.id}.ts`);
-  await Bun.write(wrapperPath, wrapperContent);
-
-  // Bun.build 실행
   const result = await Bun.build({
-    entrypoints: [wrapperPath],
+    entrypoints: [entryPath],
     outdir: outDir,
-    naming: outputName,
+    naming: `${route.id}.island.js`,
+    target: "browser",
+    splitting: false,
+    external: ["react", "react-dom", "react-dom/client", ...(options.external || [])],
     minify: options.minify ?? process.env.NODE_ENV === "production",
     sourcemap: options.sourcemap ? "external" : "none",
-    target: "browser",
-    splitting: false, // Island 단위로 이미 분리됨
-    external: ["react", "react-dom"], // vendor에서 제공
-    define: {
-      "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development")
-    }
   });
-
-  // wrapper 파일 정리
-  await fs.unlink(wrapperPath);
-
-  if (!result.success) {
-    throw new Error(result.logs.map(l => l.message).join("\n"));
-  }
-
-  const outputPath = path.join(outDir, outputName);
-  const outputFile = Bun.file(outputPath);
+  await fs.unlink(entryPath).catch(() => {});
+  if (!result.success) throw new Error(result.logs.map((l) => l.message).join("\n"));
+  const outputFile = Bun.file(path.join(outDir, `${route.id}.island.js`));
   const content = await outputFile.text();
   const gzipped = Bun.gzipSync(Buffer.from(content));
-
   return {
     routeId: route.id,
     entrypoint: route.clientModule!,
-    outputPath: `/.mandu/client/${outputName}`,
+    outputPath: `/.mandu/client/${route.id}.island.js`,
     size: outputFile.size,
-    gzipSize: gzipped.length
+    gzipSize: gzipped.length,
   };
 }
 
-/**
- * Runtime 번들 빌드
- */
-async function buildRuntime(
-  outDir: string,
-  options: { minify?: boolean; sourcemap?: boolean }
-): Promise<{ success: boolean; errors: string[] }> {
-  const runtimeSource = `
-    // Mandu Hydration Runtime
+export async function buildClientBundles(
+  manifest: RoutesManifest,
+  rootDir: string,
+  options: BundlerOptions = {}
+): Promise<BundleResult> {
+  const startTime = performance.now();
+  const errors: string[] = [];
+  const env = process.env.NODE_ENV === "production" ? "production" : "development";
+  const hydratedRoutes = manifest.routes.filter((r) => r.kind === "page" && r.clientModule && needsHydration(r));
+  const outDir = options.outDir || path.join(rootDir, ".mandu/client");
+  await fs.mkdir(outDir, { recursive: true });
 
-    const islandRegistry = new Map();
-    const islandData = window.__MANDU_DATA__ || {};
+  const runtimeResult = await buildRuntime(outDir, options);
+  const routerResult = await buildRouterRuntime(outDir, options);
+  const vendorResult = await buildVendorShims(outDir, options);
 
-    export function registerIsland(id, loader) {
-      islandRegistry.set(id, loader);
-    }
+  const outputs: BundleOutput[] = [];
+  for (const route of hydratedRoutes) {
+    outputs.push(await buildIsland(route, rootDir, outDir, options));
+  }
 
-    export async function hydrateIslands() {
-      const islands = document.querySelectorAll('[data-mandu-island]');
+  const bundleManifest = createBundleManifest(
+    outputs,
+    hydratedRoutes,
+    runtimeResult.outputPath,
+    vendorResult,
+    routerResult.outputPath,
+    env
+  );
 
-      for (const el of islands) {
-        const id = el.getAttribute('data-mandu-island');
-        const priority = el.getAttribute('data-mandu-priority') || 'visible';
-        const data = islandData[id];
-
-        scheduleHydration(el, id, data, priority);
-      }
-    }
-
-    function scheduleHydration(el, id, data, priority) {
-      switch (priority) {
-        case 'immediate':
-          hydrateIsland(el, id, data);
-          break;
-
-        case 'visible':
-          if ('IntersectionObserver' in window) {
-            const observer = new IntersectionObserver((entries) => {
-              if (entries[0].isIntersecting) {
-                observer.disconnect();
-                hydrateIsland(el, id, data);
-              }
-            }, { rootMargin: '50px' });
-            observer.observe(el);
-          } else {
-            hydrateIsland(el, id, data);
-          }
-          break;
-
-        case 'idle':
-          if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => hydrateIsland(el, id, data));
-          } else {
-            setTimeout(() => hydrateIsland(el, id, data), 200);
-          }
-          break;
-
-        case 'interaction':
-          const hydrate = () => {
-            el.removeEventListener('mouseenter', hydrate);
-            el.removeEventListener('focusin', hydrate);
-            el.removeEventListener('touchstart', hydrate);
-            hydrateIsland(el, id, data);
-          };
-          el.addEventListener('mouseenter', hydrate, { once: true, passive: true });
-          el.addEventListener('focusin', hydrate, { once: true });
-          el.addEventListener('touchstart', hydrate, { once: true, passive: true });
-          break;
-      }
-    }
-
-    async function hydrateIsland(el, id, data) {
-      const loader = islandRegistry.get(id);
-      if (!loader) {
-        console.warn('[Mandu] Island not found:', id);
-        return;
-      }
-
-      try {
-        const island = await loader();
-        await island.hydrate(el, data?.serverData || {});
-        el.setAttribute('data-mandu-hydrated', 'true');
-
-        // 성능 마커
-        if (performance.mark) {
-          performance.mark('mandu-hydrated-' + id);
-        }
-      } catch (error) {
-        console.error('[Mandu] Hydration failed for', id, error);
-        el.setAttribute('data-mandu-hydrated', 'error');
-      }
-    }
-
-    // 자동 시작
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', hydrateIslands);
-    } else {
-      hydrateIslands();
-    }
-  `;
-
-  const runtimePath = path.join(outDir, "_runtime.ts");
-  await Bun.write(runtimePath, runtimeSource);
-
-  const result = await Bun.build({
-    entrypoints: [runtimePath],
-    outdir: outDir,
-    naming: "_runtime.js",
-    minify: options.minify ?? process.env.NODE_ENV === "production",
-    sourcemap: options.sourcemap ? "external" : "none",
-    target: "browser"
-  });
-
-  await fs.unlink(runtimePath);
-
-  return {
-    success: result.success,
-    errors: result.success ? [] : result.logs.map(l => l.message)
-  };
-}
-
-/**
- * Vendor (React) 번들 빌드
- */
-async function buildVendor(
-  outDir: string,
-  options: { minify?: boolean; sourcemap?: boolean }
-): Promise<{ success: boolean; errors: string[] }> {
-  const vendorSource = `
-    export * from "react";
-    export * as ReactDOM from "react-dom";
-    export * as ReactDOMClient from "react-dom/client";
-  `;
-
-  const vendorPath = path.join(outDir, "_vendor.ts");
-  await Bun.write(vendorPath, vendorSource);
-
-  const result = await Bun.build({
-    entrypoints: [vendorPath],
-    outdir: outDir,
-    naming: "_vendor.js",
-    minify: options.minify ?? process.env.NODE_ENV === "production",
-    sourcemap: options.sourcemap ? "external" : "none",
-    target: "browser"
-  });
-
-  await fs.unlink(vendorPath);
-
-  return {
-    success: result.success,
-    errors: result.success ? [] : result.logs.map(l => l.message)
-  };
+  await fs.writeFile(path.join(rootDir, ".mandu/manifest.json"), JSON.stringify(bundleManifest, null, 2));
+  const stats = calculateStats(outputs, startTime);
+  return { success: errors.length === 0, outputs, errors, manifest: bundleManifest, stats };
 }
 ```
 
@@ -1126,96 +930,120 @@ import { buildClientBundles } from "./build";
 import path from "path";
 import fs from "fs";
 
-interface DevServerOptions {
+export interface DevBundlerOptions {
   rootDir: string;
   manifest: RoutesManifest;
-  port: number;
-  onRebuild?: (routeId: string) => void;
+  onRebuild?: (result: RebuildResult) => void;
+  onError?: (error: Error, routeId?: string) => void;
 }
 
-/**
- * 개발 모드 번들 감시
- */
-export async function startDevBundler(options: DevServerOptions) {
-  const { rootDir, manifest, onRebuild } = options;
-  const slotsDir = path.join(rootDir, "spec/slots");
+export async function startDevBundler(options: DevBundlerOptions) {
+  const { rootDir, manifest, onRebuild, onError } = options;
 
   // 초기 빌드
-  console.log("🔨 Building client bundles...");
-  const initialResult = await buildClientBundles(manifest, rootDir, {
+  const initialBuild = await buildClientBundles(manifest, rootDir, {
     minify: false,
-    sourcemap: true
+    sourcemap: true,
   });
 
-  if (!initialResult.success) {
-    console.error("❌ Initial build failed:", initialResult.errors);
-  } else {
-    console.log(`✅ Built ${initialResult.outputs.length} islands`);
+  // clientModule → routeId 매핑 & 감시 디렉토리 수집
+  const clientModuleToRoute = new Map<string, string>();
+  const watchDirs = new Set<string>();
+  for (const route of manifest.routes) {
+    if (!route.clientModule) continue;
+    const absPath = path.resolve(rootDir, route.clientModule);
+    clientModuleToRoute.set(absPath.replace(/\\/g, "/"), route.id);
+    watchDirs.add(path.dirname(absPath));
   }
 
-  // 파일 감시
-  const watcher = fs.watch(slotsDir, { recursive: true }, async (event, filename) => {
-    if (!filename || !filename.endsWith(".client.ts")) return;
+  // spec/slots 감시
+  const slotsDir = path.join(rootDir, "spec", "slots");
+  try { await fs.promises.access(slotsDir); watchDirs.add(slotsDir); } catch {}
 
-    const routeId = filename.replace(".client.ts", "");
-    console.log(`🔄 Rebuilding island: ${routeId}`);
-
-    try {
-      // 해당 island만 재빌드
-      const route = manifest.routes.find(r => r.id === routeId);
-      if (route && route.clientModule) {
-        await buildIsland(route, rootDir, path.join(rootDir, ".mandu/client"), {
-          minify: false,
-          sourcemap: true
-        });
-        console.log(`✅ Rebuilt: ${routeId}`);
-        onRebuild?.(routeId);
-      }
-    } catch (error) {
-      console.error(`❌ Rebuild failed for ${routeId}:`, error);
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const handleFileChange = async (changedFile: string) => {
+    const normalizedPath = changedFile.replace(/\\/g, "/");
+    let routeId = clientModuleToRoute.get(normalizedPath);
+    if (!routeId && changedFile.endsWith(".client.ts")) {
+      const basename = path.basename(changedFile, ".client.ts");
+      const route = manifest.routes.find((r) => r.id === basename);
+      if (route) routeId = route.id;
     }
-  });
+    if (!routeId) return;
+
+    const start = performance.now();
+    try {
+      const result = await buildClientBundles(manifest, rootDir, {
+        minify: false,
+        sourcemap: true,
+      });
+      const buildTime = performance.now() - start;
+      onRebuild?.({ routeId, success: result.success, buildTime, error: result.errors.join(", ") });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      onError?.(err, routeId);
+    }
+  };
+
+  const watchers: fs.FSWatcher[] = [];
+  for (const dir of watchDirs) {
+    try {
+      const watcher = fs.watch(dir, { recursive: true }, async (_event, filename) => {
+        if (!filename) return;
+        if (!filename.endsWith(".ts") && !filename.endsWith(".tsx")) return;
+        const fullPath = path.join(dir, filename);
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => handleFileChange(fullPath), 100);
+      });
+      watchers.push(watcher);
+    } catch {}
+  }
 
   return {
-    close: () => watcher.close()
+    initialBuild,
+    close: () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      watchers.forEach((w) => w.close());
+    },
   };
 }
 
-/**
- * HMR WebSocket 서버
- */
 export function createHMRServer(port: number) {
-  const clients = new Set<WebSocket>();
+  const clients = new Set<any>();
+  const hmrPort = port + 1;
 
   const server = Bun.serve({
-    port: port + 1, // HMR은 메인 서버 + 1 포트
+    port: hmrPort,
     fetch(req, server) {
       if (server.upgrade(req)) return;
-      return new Response("HMR Server", { status: 200 });
+      return new Response(
+        JSON.stringify({ status: "ok", clients: clients.size, port: hmrPort }),
+        { headers: { "Content-Type": "application/json" } }
+      );
     },
     websocket: {
       open(ws) {
         clients.add(ws);
+        ws.send(JSON.stringify({ type: "connected", data: { timestamp: Date.now() } }));
       },
-      close(ws) {
-        clients.delete(ws);
-      },
+      close(ws) { clients.delete(ws); },
       message(ws, message) {
-        // 클라이언트 메시지 처리
-      }
-    }
+        try {
+          const data = JSON.parse(String(message));
+          if (data.type === "ping") {
+            ws.send(JSON.stringify({ type: "pong", data: { timestamp: Date.now() } }));
+          }
+        } catch {}
+      },
+    },
   });
 
   return {
     broadcast(message: { type: string; data: any }) {
       const json = JSON.stringify(message);
-      for (const client of clients) {
-        client.send(json);
-      }
+      for (const client of clients) client.send(json);
     },
-    close() {
-      server.stop();
-    }
+    close() { server.stop(); },
   };
 }
 ```
@@ -1227,171 +1055,93 @@ export function createHMRServer(port: number) {
 ### 6.1 SSR 렌더러 확장
 
 ```typescript
-// packages/core/src/runtime/ssr.ts (확장)
+// packages/core/src/runtime/ssr.ts (핵심)
 
 import { renderToString } from "react-dom/server";
-import type { RoutesManifest, RouteSpec } from "../spec/schema";
-import type { BundleManifest } from "../bundler/build";
-import type { Context } from "./context";
-
-export interface SSRResult {
-  html: string;
-  data: Record<string, any>;
-  head: string[];
-  scripts: string[];
-}
+import { serializeProps } from "../client/serialize";
+import type { HydrationConfig, HydrationPriority } from "../spec/schema";
+import type { BundleManifest } from "../bundler/types";
+import type { ReactElement } from "react";
 
 export interface SSROptions {
-  route: RouteSpec;
-  manifest: RoutesManifest;
-  bundleManifest: BundleManifest;
-  context: Context;
-  component: React.ComponentType<any>;
+  title?: string;
+  lang?: string;
+  serverData?: Record<string, unknown>;
+  hydration?: HydrationConfig;
+  bundleManifest?: BundleManifest;
+  routeId?: string;
+  routePattern?: string;
+  isDev?: boolean;
+  hmrPort?: number;
+  enableClientRouter?: boolean;
 }
 
-/**
- * 확장된 SSR 렌더링
- */
-export async function renderPage(options: SSROptions): Promise<SSRResult> {
-  const { route, manifest, bundleManifest, context, component: Component } = options;
-
-  // 1. Loader 데이터 로딩
-  let loaderData = {};
-  if (route.slotModule) {
-    const slot = await import(route.slotModule);
-    if (slot.default?.loader) {
-      try {
-        loaderData = await slot.default.loader(context);
-      } catch (error) {
-        console.error(`[Mandu] Loader failed for ${route.id}:`, error);
-        loaderData = route.loader?.fallback || {};
-      }
-    }
-  }
-
-  // 2. 컴포넌트 렌더링
-  const componentHtml = renderToString(<Component data={loaderData} />);
-
-  // 3. Island 마커로 감싸기
-  const islandHtml = wrapWithIslandMarker(componentHtml, route);
-
-  // 4. 데이터 스크립트 생성
-  const dataScript = generateDataScript(route.id, loaderData);
-
-  // 5. 번들 스크립트 태그 생성
-  const scripts = generateScriptTags(route, bundleManifest);
-
-  // 6. Head 태그 생성 (preload 등)
-  const head = generateHeadTags(route, bundleManifest);
-
-  return {
-    html: islandHtml,
-    data: { [route.id]: loaderData },
-    head,
-    scripts: [dataScript, ...scripts]
-  };
-}
-
-/**
- * Island 마커로 감싸기
- */
-function wrapWithIslandMarker(html: string, route: RouteSpec): string {
-  if (route.hydration?.strategy === "none") {
-    return html;
-  }
-
-  const priority = route.hydration?.priority || "visible";
-
-  return `<div data-mandu-island="${route.id}" data-mandu-priority="${priority}">${html}</div>`;
-}
-
-/**
- * 데이터 스크립트 생성
- */
-function generateDataScript(routeId: string, data: any): string {
-  const serialized = JSON.stringify(data)
-    .replace(/</g, "\\u003c")  // XSS 방지
+function serializeServerData(data: Record<string, unknown>): string {
+  const json = serializeProps(data)
+    .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026");
+    .replace(/&/g, "\\u0026")
+    .replace(/'/g, "\\u0027");
 
-  return `<script>window.__MANDU_DATA__=window.__MANDU_DATA__||{};window.__MANDU_DATA__["${routeId}"]={serverData:${serialized}}</script>`;
+  return `<script id="__MANDU_DATA__" type="application/json">${json}</script>
+<script>window.__MANDU_DATA_RAW__ = document.getElementById('__MANDU_DATA__').textContent;</script>`;
 }
 
-/**
- * 스크립트 태그 생성
- */
-function generateScriptTags(route: RouteSpec, bundleManifest: BundleManifest): string[] {
-  if (route.hydration?.strategy === "none") {
-    return [];
-  }
-
+function generateHydrationScripts(routeId: string, manifest: BundleManifest): string {
   const scripts: string[] = [];
-
-  // Vendor (React)
-  scripts.push(`<script type="module" src="${bundleManifest.shared.vendor}"></script>`);
-
-  // Runtime
-  scripts.push(`<script type="module" src="${bundleManifest.shared.runtime}"></script>`);
-
-  // Island 번들
-  const bundle = bundleManifest.bundles[route.id];
+  if (manifest.importMap && Object.keys(manifest.importMap.imports).length > 0) {
+    scripts.push(`<script type="importmap">${JSON.stringify(manifest.importMap, null, 2)}</script>`);
+  }
+  const bundle = manifest.bundles[routeId];
   if (bundle) {
-    scripts.push(`<script type="module" src="${bundle.js}"></script>`);
-    if (bundle.css) {
-      scripts.push(`<link rel="stylesheet" href="${bundle.css}">`);
-    }
+    scripts.push(`<link rel="modulepreload" href="${bundle.js}">`);
   }
-
-  return scripts;
+  if (manifest.shared.runtime) {
+    scripts.push(`<script type="module" src="${manifest.shared.runtime}"></script>`);
+  }
+  return scripts.join("\n");
 }
 
-/**
- * Head 태그 생성 (preload)
- */
-function generateHeadTags(route: RouteSpec, bundleManifest: BundleManifest): string[] {
-  const head: string[] = [];
-
-  if (route.hydration?.preload) {
-    // Vendor preload
-    head.push(`<link rel="modulepreload" href="${bundleManifest.shared.vendor}">`);
-
-    // Runtime preload
-    head.push(`<link rel="modulepreload" href="${bundleManifest.shared.runtime}">`);
-
-    // Island preload
-    const bundle = bundleManifest.bundles[route.id];
-    if (bundle) {
-      head.push(`<link rel="modulepreload" href="${bundle.js}">`);
-    }
-  }
-
-  return head;
-}
-
-/**
- * 전체 HTML 문서 생성
- */
-export function generateHTMLDocument(
-  ssrResult: SSRResult,
-  options: {
-    title?: string;
-    lang?: string;
-    charset?: string;
-  } = {}
+export function wrapWithIsland(
+  content: string,
+  routeId: string,
+  priority: HydrationPriority = "visible",
+  bundleSrc?: string
 ): string {
-  const { title = "Mandu App", lang = "ko", charset = "utf-8" } = options;
+  const srcAttr = bundleSrc ? ` data-mandu-src="${bundleSrc}"` : "";
+  return `<div data-mandu-island="${routeId}"${srcAttr} data-mandu-priority="${priority}">${content}</div>`;
+}
 
-  return `<!DOCTYPE html>
+export function renderToHTML(element: ReactElement, options: SSROptions = {}): string {
+  const { title = "Mandu App", lang = "ko", serverData, hydration, bundleManifest, routeId } = options;
+
+  let content = renderToString(element);
+  const needsHydration = hydration && hydration.strategy !== "none" && routeId && bundleManifest;
+
+  if (needsHydration) {
+    const bundle = bundleManifest!.bundles[routeId!];
+    content = wrapWithIsland(content, routeId!, hydration!.priority, bundle?.js);
+  }
+
+  const dataScript = serverData && routeId
+    ? serializeServerData({ [routeId]: { serverData, timestamp: Date.now() } })
+    : "";
+
+  const hydrationScripts = needsHydration
+    ? generateHydrationScripts(routeId!, bundleManifest!)
+    : "";
+
+  return `<!doctype html>
 <html lang="${lang}">
 <head>
-  <meta charset="${charset}">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
-  ${ssrResult.head.join("\n  ")}
 </head>
 <body>
-  <div id="root">${ssrResult.html}</div>
-  ${ssrResult.scripts.join("\n  ")}
+  <div id="root">${content}</div>
+  ${dataScript}
+  ${hydrationScripts}
 </body>
 </html>`;
 }
@@ -1404,196 +1154,61 @@ export function generateHTMLDocument(
 ### 7.1 클라이언트 코드 Guard 규칙
 
 ```typescript
-// packages/core/src/guard/rules.ts (확장)
+// packages/core/src/guard/rules.ts (발췌)
 
 export const GUARD_RULES = {
-  // 기존 규칙들...
+  SPEC_HASH_MISMATCH: { id: "SPEC_HASH_MISMATCH", severity: "error" },
+  GENERATED_MANUAL_EDIT: { id: "GENERATED_MANUAL_EDIT", severity: "error" },
+  INVALID_GENERATED_IMPORT: { id: "INVALID_GENERATED_IMPORT", severity: "error" },
+  FORBIDDEN_IMPORT_IN_GENERATED: { id: "FORBIDDEN_IMPORT_IN_GENERATED", severity: "error" },
+  SLOT_NOT_FOUND: { id: "SLOT_NOT_FOUND", severity: "error" },
 
-  // ========== 클라이언트 전용 규칙 ==========
-
-  /**
-   * 클라이언트 슬롯에서 서버 전용 모듈 import 금지
-   */
-  CLIENT_SERVER_IMPORT: {
-    id: "CLIENT_SERVER_IMPORT",
-    description: "클라이언트 슬롯에서 서버 전용 모듈 import 금지",
+  // Hydration 관련 무결성
+  ISLAND_FIRST_INTEGRITY: {
+    id: "ISLAND_FIRST_INTEGRITY",
+    description: "clientModule이 있는 page route의 componentModule이 island을 import하지 않습니다",
     severity: "error",
-    appliesTo: "client",
-    forbiddenPatterns: [
-      /import\s+.*from\s+['"]fs['"]/,
-      /import\s+.*from\s+['"]path['"]/,
-      /import\s+.*from\s+['"]child_process['"]/,
-      /import\s+.*from\s+['"]crypto['"]/,
-      /import\s+.*from\s+['"]node:/,
-      /require\s*\(\s*['"]fs['"]\s*\)/,
-    ],
-    suggestion: "클라이언트 코드에서는 브라우저 API만 사용하세요",
-    autoFixable: false
   },
-
-  /**
-   * 클라이언트에서 직접 DB 접근 금지
-   */
-  CLIENT_DIRECT_DB: {
-    id: "CLIENT_DIRECT_DB",
-    description: "클라이언트에서 직접 데이터베이스 접근 금지",
+  CLIENT_MODULE_NOT_FOUND: {
+    id: "CLIENT_MODULE_NOT_FOUND",
+    description: "spec에 명시된 clientModule 파일을 찾을 수 없습니다",
     severity: "error",
-    appliesTo: "client",
-    forbiddenPatterns: [
-      /import\s+.*from\s+['"].*prisma/,
-      /import\s+.*from\s+['"].*drizzle/,
-      /import\s+.*from\s+['"].*mongoose/,
-      /import\s+.*from\s+['"].*typeorm/,
-      /import\s+.*from\s+['"].*sequelize/,
-    ],
-    suggestion: "API를 통해 데이터를 가져오세요: fetch('/api/...')",
-    autoFixable: false
   },
-
-  /**
-   * 클라이언트에서 민감한 환경변수 사용 금지
-   */
-  CLIENT_ENV_EXPOSURE: {
-    id: "CLIENT_ENV_EXPOSURE",
-    description: "클라이언트에서 민감한 환경변수 노출 금지",
-    severity: "error",
-    appliesTo: "client",
-    forbiddenPatterns: [
-      /process\.env\.(DATABASE|DB_)/i,
-      /process\.env\.(SECRET|PRIVATE)/i,
-      /process\.env\.(API_KEY|APIKEY)/i,
-      /process\.env\.(PASSWORD|PASSWD)/i,
-      /process\.env\.(TOKEN(?!_PUBLIC))/i,
-    ],
-    suggestion: "민감한 정보는 서버에서만 사용하고, 필요시 API로 전달하세요",
-    autoFixable: false
-  },
-
-  /**
-   * Island 간 전역 상태 공유 금지
-   */
-  ISLAND_GLOBAL_STATE: {
-    id: "ISLAND_GLOBAL_STATE",
-    description: "Island 간 전역 상태 직접 공유 금지",
-    severity: "warning",
-    appliesTo: "client",
-    forbiddenPatterns: [
-      /window\.__ISLAND_STATE__/,
-      /globalThis\.__MANDU_SHARED__/,
-      /window\.GLOBAL_STATE/,
-    ],
-    suggestion: "Island 간 통신은 이벤트 또는 API를 통해 하세요",
-    autoFixable: false
-  },
-
-  /**
-   * 클라이언트 슬롯에서 Mandu.island() 패턴 필수
-   */
-  CLIENT_ISLAND_PATTERN: {
-    id: "CLIENT_ISLAND_PATTERN",
-    description: "클라이언트 슬롯은 Mandu.island() 패턴을 사용해야 함",
-    severity: "error",
-    appliesTo: "client",
-    requiredPattern: /Mandu\s*\.\s*island\s*\(/,
-    suggestion: "export default Mandu.island({ setup: ..., render: ... }) 형태로 작성하세요",
-    autoFixable: false
-  },
-
-  /**
-   * setup 함수에서 조건부 훅 호출 금지
-   */
-  CONDITIONAL_HOOKS: {
-    id: "CONDITIONAL_HOOKS",
-    description: "setup 함수에서 조건부 훅 호출 금지",
-    severity: "error",
-    appliesTo: "client",
-    forbiddenPatterns: [
-      /if\s*\([^)]*\)\s*\{[^}]*use[A-Z]/,  // if (...) { useState/useEffect }
-      /\?\s*use[A-Z]/,  // condition ? useState() : ...
-    ],
-    suggestion: "React 훅은 항상 최상위 레벨에서 호출되어야 합니다",
-    autoFixable: false
-  },
-
-  /**
-   * 클라이언트 번들 크기 제한
-   */
-  CLIENT_BUNDLE_SIZE: {
-    id: "CLIENT_BUNDLE_SIZE",
-    description: "클라이언트 번들 크기 초과",
-    severity: "warning",
-    appliesTo: "bundle",
-    maxSize: 100 * 1024, // 100KB per island (gzip 전)
-    suggestion: "코드를 분리하거나 dynamic import를 사용하세요",
-    autoFixable: false
-  },
-
-  /**
-   * 클라이언트에서 동기 XHR 금지
-   */
-  SYNC_XHR: {
-    id: "SYNC_XHR",
-    description: "동기 XMLHttpRequest 사용 금지",
-    severity: "error",
-    appliesTo: "client",
-    forbiddenPatterns: [
-      /\.open\s*\([^,]+,\s*[^,]+,\s*false\s*\)/,
-    ],
-    suggestion: "비동기 fetch() 또는 async/await를 사용하세요",
-    autoFixable: false
-  }
 };
 
-/**
- * 클라이언트 슬롯 검증
- */
-export async function validateClientSlot(
-  content: string,
-  routeId: string
-): Promise<GuardCheckResult> {
-  const violations: GuardViolation[] = [];
-  const lines = content.split("\n");
+// packages/core/src/guard/check.ts (발췌)
+export async function checkIslandFirstIntegrity(manifest, rootDir) {
+  const violations = [];
 
-  // 적용 가능한 규칙 필터링
-  const clientRules = Object.values(GUARD_RULES).filter(
-    rule => rule.appliesTo === "client"
-  );
+  for (const route of manifest.routes) {
+    if (route.kind !== "page" || !route.clientModule) continue;
 
-  for (const rule of clientRules) {
-    // 금지 패턴 검사
-    if (rule.forbiddenPatterns) {
-      for (let i = 0; i < lines.length; i++) {
-        for (const pattern of rule.forbiddenPatterns) {
-          if (pattern.test(lines[i])) {
-            violations.push({
-              ruleId: rule.id,
-              file: `spec/slots/${routeId}.client.ts`,
-              line: i + 1,
-              message: rule.description,
-              suggestion: rule.suggestion,
-              severity: rule.severity
-            });
-          }
-        }
-      }
+    const clientPath = path.join(rootDir, route.clientModule);
+    if (!(await fileExists(clientPath))) {
+      violations.push({
+        ruleId: "CLIENT_MODULE_NOT_FOUND",
+        file: route.clientModule,
+        message: `clientModule 파일을 찾을 수 없습니다 (routeId: ${route.id})`,
+        suggestion: "clientModule 경로를 확인하거나 파일을 생성하세요",
+      });
+      continue;
     }
 
-    // 필수 패턴 검사
-    if (rule.requiredPattern && !rule.requiredPattern.test(content)) {
-      violations.push({
-        ruleId: rule.id,
-        file: `spec/slots/${routeId}.client.ts`,
-        message: rule.description,
-        suggestion: rule.suggestion,
-        severity: rule.severity
-      });
+    if (route.componentModule) {
+      const componentPath = path.join(rootDir, route.componentModule);
+      const content = await readFileContent(componentPath);
+      if (content && !content.includes("islandModule") && !content.includes("Island-First")) {
+        violations.push({
+          ruleId: "ISLAND_FIRST_INTEGRITY",
+          file: route.componentModule,
+          message: `componentModule이 island을 import하지 않습니다 (routeId: ${route.id})`,
+          suggestion: "mandu generate를 실행하여 Island-First 템플릿으로 재생성하세요",
+        });
+      }
     }
   }
 
-  return {
-    passed: violations.filter(v => v.severity === "error").length === 0,
-    violations
-  };
+  return violations;
 }
 ```
 
@@ -1601,404 +1216,122 @@ export async function validateClientSlot(
 
 ## 8. MCP 도구 확장
 
-### 8.1 클라이언트 관련 MCP 도구
+### 8.1 현재 구현된 MCP Hydration 도구 (2026-01-30)
+
+- `mandu_build`: 클라이언트 번들 빌드
+- `mandu_build_status`: 번들 상태/매니페스트 조회
+- `mandu_list_islands`: Hydration 대상 라우트 목록
+- `mandu_set_hydration`: 라우트 Hydration 설정
+- `mandu_add_client_slot`: 클라이언트 슬롯 추가
+
+> 구현 위치: `packages/mcp/src/tools/hydration.ts`
+
+### 8.2 구현 코드 (발췌)
 
 ```typescript
-// packages/mcp/src/tools/client.ts
+// packages/mcp/src/tools/hydration.ts (발췌)
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   loadManifest,
-  validateClientSlot,
-  buildClientBundles
+  buildClientBundles,
+  formatSize,
+  needsHydration,
+  getRouteHydration,
 } from "@mandujs/core";
-import { getProjectPaths, isInsideProject } from "../utils/project.js";
+import { getProjectPaths, readJsonFile, writeJsonFile } from "../utils/project.js";
 import path from "path";
-import fs from "fs/promises";
 
-export const clientToolDefinitions: Tool[] = [
-  {
-    name: "mandu_write_client_slot",
-    description: "Write or update a client-side slot file for island hydration",
-    inputSchema: {
-      type: "object",
-      properties: {
-        routeId: {
-          type: "string",
-          description: "The route ID whose client slot to write"
-        },
-        content: {
-          type: "string",
-          description: "The TypeScript content for the client slot"
-        },
-        autoCorrect: {
-          type: "boolean",
-          description: "Automatically fix correctable issues (default: false)"
-        },
-        validateOnly: {
-          type: "boolean",
-          description: "Only validate without writing (default: false)"
-        }
-      },
-      required: ["routeId", "content"]
-    }
-  },
-
-  {
-    name: "mandu_set_hydration",
-    description: "Configure hydration strategy for a route",
-    inputSchema: {
-      type: "object",
-      properties: {
-        routeId: {
-          type: "string",
-          description: "The route ID to configure"
-        },
-        strategy: {
-          type: "string",
-          enum: ["none", "island", "full", "progressive"],
-          description: "Hydration strategy"
-        },
-        priority: {
-          type: "string",
-          enum: ["immediate", "visible", "idle", "interaction"],
-          description: "When to hydrate (default: visible)"
-        },
-        preload: {
-          type: "boolean",
-          description: "Whether to preload the bundle (default: false)"
-        }
-      },
-      required: ["routeId", "strategy"]
-    }
-  },
-
-  {
-    name: "mandu_build_client",
-    description: "Build client bundles for all islands",
-    inputSchema: {
-      type: "object",
-      properties: {
-        minify: {
-          type: "boolean",
-          description: "Minify the output (default: based on NODE_ENV)"
-        },
-        sourcemap: {
-          type: "boolean",
-          description: "Generate sourcemaps (default: true in development)"
-        },
-        routeId: {
-          type: "string",
-          description: "Build only a specific route's bundle (optional)"
-        }
-      }
-    }
-  },
-
-  {
-    name: "mandu_analyze_bundle",
-    description: "Analyze client bundle size and dependencies",
-    inputSchema: {
-      type: "object",
-      properties: {
-        routeId: {
-          type: "string",
-          description: "The route ID to analyze (optional, analyzes all if omitted)"
-        },
-        detailed: {
-          type: "boolean",
-          description: "Show detailed dependency analysis (default: false)"
-        }
-      }
-    }
-  },
-
-  {
-    name: "mandu_validate_client_slot",
-    description: "Validate client slot content against Guard rules",
-    inputSchema: {
-      type: "object",
-      properties: {
-        routeId: {
-          type: "string",
-          description: "The route ID to validate"
-        },
-        content: {
-          type: "string",
-          description: "The content to validate (optional, reads from file if omitted)"
-        }
-      },
-      required: ["routeId"]
-    }
-  }
+export const hydrationToolDefinitions: Tool[] = [
+  { name: "mandu_build", description: "Build client bundles for hydration", inputSchema: { type: "object", properties: {} } },
+  { name: "mandu_build_status", description: "Get bundle manifest/status", inputSchema: { type: "object", properties: {} } },
+  { name: "mandu_list_islands", description: "List routes with hydration", inputSchema: { type: "object", properties: {} } },
+  { name: "mandu_set_hydration", description: "Update hydration config", inputSchema: { type: "object", properties: { routeId: { type: "string" } }, required: ["routeId"] } },
+  { name: "mandu_add_client_slot", description: "Add client slot and update manifest", inputSchema: { type: "object", properties: { routeId: { type: "string" } }, required: ["routeId"] } },
 ];
 
-export function clientTools(projectRoot: string) {
+export function hydrationTools(projectRoot: string) {
   const paths = getProjectPaths(projectRoot);
 
   return {
-    mandu_write_client_slot: async (args: Record<string, unknown>) => {
-      const { routeId, content, autoCorrect = false, validateOnly = false } = args as {
-        routeId: string;
-        content: string;
-        autoCorrect?: boolean;
-        validateOnly?: boolean;
-      };
-
-      // 1. manifest 로드
+    mandu_build: async (args: Record<string, unknown>) => {
+      const { minify, sourcemap } = args as { minify?: boolean; sourcemap?: boolean };
       const manifestResult = await loadManifest(paths.manifestPath);
-      if (!manifestResult.success || !manifestResult.data) {
-        return { error: manifestResult.errors };
-      }
+      if (!manifestResult.success || !manifestResult.data) return { error: manifestResult.errors };
 
-      // 2. 라우트 찾기
-      const route = manifestResult.data.routes.find(r => r.id === routeId);
-      if (!route) {
-        return { error: `Route not found: ${routeId}` };
-      }
+      const result = await buildClientBundles(manifestResult.data, projectRoot, { minify, sourcemap });
+      return {
+        success: result.success,
+        bundleCount: result.stats.bundleCount,
+        totalSize: formatSize(result.stats.totalSize),
+        totalGzipSize: formatSize(result.stats.totalGzipSize),
+        buildTime: `${result.stats.buildTime.toFixed(0)}ms`,
+        bundles: result.outputs.map((o) => ({
+          routeId: o.routeId,
+          path: o.outputPath,
+          size: formatSize(o.size),
+          gzipSize: formatSize(o.gzipSize),
+        })),
+        errors: result.errors,
+      };
+    },
 
-      // 3. clientModule 경로 결정
-      const clientModule = route.clientModule || `spec/slots/${routeId}.client.ts`;
-      const clientPath = path.join(projectRoot, clientModule);
+    mandu_build_status: async () => {
+      const manifest = await readJsonFile(path.join(projectRoot, ".mandu/manifest.json"));
+      if (!manifest) return { hasBundles: false, message: "No bundle manifest found. Run mandu_build first." };
+      return { hasBundles: true, version: manifest.version, buildTime: manifest.buildTime, bundleCount: Object.keys(manifest.bundles).length };
+    },
 
-      // 보안 검사
-      if (!isInsideProject(clientPath, projectRoot)) {
-        return { error: "Client slot path is outside project directory" };
-      }
-
-      // 4. 검증
-      const validation = await validateClientSlot(content, routeId);
-
-      if (validateOnly) {
-        return {
-          validateOnly: true,
-          valid: validation.passed,
-          violations: validation.violations,
-          tip: validation.passed
-            ? "Content is valid and ready to write"
-            : "Fix the violations before writing"
-        };
-      }
-
-      // 5. 에러가 있으면 쓰기 거부 (autoCorrect가 false인 경우)
-      if (!validation.passed && !autoCorrect) {
-        const errors = validation.violations.filter(v => v.severity === "error");
-        return {
-          success: false,
-          valid: false,
-          errors,
-          tip: "Use autoCorrect: true or fix the errors manually"
-        };
-      }
-
-      // 6. 파일 쓰기
-      try {
-        const slotDir = path.dirname(clientPath);
-        await fs.mkdir(slotDir, { recursive: true });
-
-        const file = Bun.file(clientPath);
-        const existed = await file.exists();
-
-        await Bun.write(clientPath, content);
-
-        // 7. manifest 업데이트 (clientModule이 없었다면)
-        if (!route.clientModule) {
-          route.clientModule = clientModule;
-          // hydration 기본값 설정
-          if (!route.hydration) {
-            route.hydration = { strategy: "island", priority: "visible" };
-          }
-          await Bun.write(
-            paths.manifestPath,
-            JSON.stringify(manifestResult.data, null, 2)
-          );
-        }
-
-        return {
-          success: true,
-          clientModule,
-          action: existed ? "updated" : "created",
-          validation: {
-            passed: validation.passed,
-            warnings: validation.violations.filter(v => v.severity === "warning")
-          },
-          tip: "Run mandu_build_client to rebuild the bundle"
-        };
-      } catch (error) {
-        return {
-          error: `Failed to write client slot: ${error instanceof Error ? error.message : String(error)}`
-        };
-      }
+    mandu_list_islands: async () => {
+      const manifestResult = await loadManifest(paths.manifestPath);
+      if (!manifestResult.success || !manifestResult.data) return { error: manifestResult.errors };
+      const islands = manifestResult.data.routes
+        .filter((r) => r.kind === "page")
+        .map((r) => ({
+          routeId: r.id,
+          clientModule: r.clientModule,
+          hydration: getRouteHydration(r),
+          enabled: needsHydration(r),
+        }));
+      return { count: islands.length, islands };
     },
 
     mandu_set_hydration: async (args: Record<string, unknown>) => {
       const { routeId, strategy, priority, preload } = args as {
         routeId: string;
-        strategy: "none" | "island" | "full" | "progressive";
+        strategy?: "none" | "island" | "full" | "progressive";
         priority?: "immediate" | "visible" | "idle" | "interaction";
         preload?: boolean;
       };
-
-      // manifest 로드
       const manifestResult = await loadManifest(paths.manifestPath);
-      if (!manifestResult.success || !manifestResult.data) {
-        return { error: manifestResult.errors };
-      }
+      if (!manifestResult.success || !manifestResult.data) return { error: manifestResult.errors };
+      const manifest = manifestResult.data;
+      const route = manifest.routes.find((r) => r.id === routeId);
+      if (!route) return { error: `Route not found: ${routeId}` };
+      if (route.kind !== "page") return { error: `Route ${routeId} is not a page route` };
 
-      // 라우트 찾기
-      const route = manifestResult.data.routes.find(r => r.id === routeId);
-      if (!route) {
-        return { error: `Route not found: ${routeId}` };
-      }
-
-      // hydration 설정 업데이트
       route.hydration = {
-        strategy,
-        priority: priority || "visible",
-        preload: preload || false
+        strategy: strategy || route.hydration?.strategy || "island",
+        priority: priority || route.hydration?.priority || "visible",
+        preload: preload !== undefined ? preload : route.hydration?.preload || false,
       };
-
-      // manifest 저장
-      await Bun.write(
-        paths.manifestPath,
-        JSON.stringify(manifestResult.data, null, 2)
-      );
-
-      return {
-        success: true,
-        routeId,
-        hydration: route.hydration,
-        tip: strategy === "none"
-          ? "This route will be static HTML only"
-          : `This route will use ${strategy} hydration with ${route.hydration.priority} priority`
-      };
+      await writeJsonFile(paths.manifestPath, manifest);
+      return { success: true, routeId, hydration: route.hydration };
     },
 
-    mandu_build_client: async (args: Record<string, unknown>) => {
-      const { minify, sourcemap, routeId } = args as {
-        minify?: boolean;
-        sourcemap?: boolean;
-        routeId?: string;
-      };
-
-      // manifest 로드
+    mandu_add_client_slot: async (args: Record<string, unknown>) => {
+      const { routeId } = args as { routeId: string };
       const manifestResult = await loadManifest(paths.manifestPath);
-      if (!manifestResult.success || !manifestResult.data) {
-        return { error: manifestResult.errors };
-      }
+      if (!manifestResult.success || !manifestResult.data) return { error: manifestResult.errors };
+      const manifest = manifestResult.data;
+      const route = manifest.routes.find((r) => r.id === routeId);
+      if (!route) return { error: `Route not found: ${routeId}` };
+      if (route.kind !== "page") return { error: `Route ${routeId} is not a page route` };
 
-      // 빌드 실행
-      const result = await buildClientBundles(manifestResult.data, projectRoot, {
-        minify,
-        sourcemap
-      });
-
-      if (!result.success) {
-        return {
-          success: false,
-          errors: result.errors
-        };
-      }
-
-      return {
-        success: true,
-        bundles: result.outputs.map(o => ({
-          routeId: o.routeId,
-          path: o.outputPath,
-          size: `${(o.size / 1024).toFixed(2)} KB`,
-          gzipSize: `${(o.gzipSize / 1024).toFixed(2)} KB`
-        })),
-        stats: {
-          totalSize: `${(result.stats.totalSize / 1024).toFixed(2)} KB`,
-          buildTime: `${result.stats.buildTime.toFixed(0)} ms`
-        }
-      };
+      // 실제 구현: apps/web/components/{routeId}.client.tsx 생성 + manifest 업데이트
+      // (템플릿 생성/파일 쓰기 로직은 hydration.ts 참고)
+      return { success: true, routeId, message: "Client slot created (see hydration.ts)" };
     },
-
-    mandu_analyze_bundle: async (args: Record<string, unknown>) => {
-      const { routeId, detailed } = args as {
-        routeId?: string;
-        detailed?: boolean;
-      };
-
-      const bundleManifestPath = path.join(projectRoot, ".mandu/manifest.json");
-      const file = Bun.file(bundleManifestPath);
-
-      if (!(await file.exists())) {
-        return {
-          error: "No bundle manifest found. Run mandu_build_client first."
-        };
-      }
-
-      const bundleManifest = await file.json();
-
-      if (routeId) {
-        const bundle = bundleManifest.bundles[routeId];
-        if (!bundle) {
-          return { error: `Bundle not found for route: ${routeId}` };
-        }
-
-        const bundleFile = Bun.file(path.join(projectRoot, bundle.js));
-        const content = await bundleFile.text();
-        const gzipped = Bun.gzipSync(Buffer.from(content));
-
-        return {
-          routeId,
-          bundle: bundle.js,
-          size: `${(bundleFile.size / 1024).toFixed(2)} KB`,
-          gzipSize: `${(gzipped.length / 1024).toFixed(2)} KB`,
-          dependencies: bundle.dependencies,
-          recommendation: bundleFile.size > 100 * 1024
-            ? "Consider code splitting or lazy loading"
-            : "Bundle size is acceptable"
-        };
-      }
-
-      // 전체 분석
-      const analysis = Object.entries(bundleManifest.bundles).map(([id, bundle]: [string, any]) => ({
-        routeId: id,
-        bundle: bundle.js,
-        dependencies: bundle.dependencies?.length || 0
-      }));
-
-      return {
-        totalBundles: analysis.length,
-        bundles: analysis,
-        shared: bundleManifest.shared,
-        buildTime: bundleManifest.buildTime
-      };
-    },
-
-    mandu_validate_client_slot: async (args: Record<string, unknown>) => {
-      const { routeId, content } = args as {
-        routeId: string;
-        content?: string;
-      };
-
-      let slotContent = content;
-
-      // content가 없으면 파일에서 읽기
-      if (!slotContent) {
-        const clientPath = path.join(projectRoot, `spec/slots/${routeId}.client.ts`);
-        const file = Bun.file(clientPath);
-
-        if (!(await file.exists())) {
-          return { error: `Client slot not found: ${routeId}` };
-        }
-
-        slotContent = await file.text();
-      }
-
-      const validation = await validateClientSlot(slotContent, routeId);
-
-      return {
-        valid: validation.passed,
-        violations: validation.violations,
-        summary: validation.passed
-          ? "No issues found"
-          : `${validation.violations.filter(v => v.severity === "error").length} errors, ${validation.violations.filter(v => v.severity === "warning").length} warnings`
-      };
-    }
   };
 }
 ```
@@ -2012,102 +1345,191 @@ export function clientTools(projectRoot: string) {
 ```typescript
 // packages/cli/src/commands/build.ts
 
-import { buildClientBundles, loadManifest } from "@mandujs/core";
+import { loadManifest, buildClientBundles, printBundleStats } from "@mandujs/core";
 import path from "path";
+import fs from "fs/promises";
 
-interface BuildOptions {
+export interface BuildOptions {
   minify?: boolean;
   sourcemap?: boolean;
   watch?: boolean;
+  outDir?: string;
 }
 
-export async function buildCommand(options: BuildOptions = {}) {
-  const rootDir = process.cwd();
-  const manifestPath = path.join(rootDir, "spec/routes.manifest.json");
+export async function build(options: BuildOptions = {}): Promise<boolean> {
+  const cwd = process.cwd();
+  const specPath = path.join(cwd, "spec", "routes.manifest.json");
 
-  console.log("🔨 Building client bundles...\n");
+  console.log("📦 Mandu Build - Client Bundle Builder\n");
 
-  // Manifest 로드
-  const manifestResult = await loadManifest(manifestPath);
-  if (!manifestResult.success || !manifestResult.data) {
-    console.error("❌ Failed to load manifest:", manifestResult.errors);
-    process.exit(1);
+  const specResult = await loadManifest(specPath);
+  if (!specResult.success) {
+    console.error("❌ Spec 로드 실패:");
+    for (const error of specResult.errors) {
+      console.error(`   ${error}`);
+    }
+    return false;
   }
 
-  // 빌드 실행
-  const startTime = performance.now();
-  const result = await buildClientBundles(manifestResult.data, rootDir, {
-    minify: options.minify ?? process.env.NODE_ENV === "production",
-    sourcemap: options.sourcemap ?? process.env.NODE_ENV !== "production"
+  const manifest = specResult.data!;
+  const hydratedRoutes = manifest.routes.filter(
+    (route) =>
+      route.kind === "page" &&
+      route.clientModule &&
+      (!route.hydration || route.hydration.strategy !== "none")
+  );
+
+  if (hydratedRoutes.length === 0) {
+    console.log("\n📭 Hydration이 필요한 라우트가 없습니다.");
+    console.log("   (clientModule이 없거나 hydration.strategy: none)");
+    return true;
+  }
+
+  const result = await buildClientBundles(manifest, cwd, {
+    minify: options.minify,
+    sourcemap: options.sourcemap,
+    outDir: options.outDir,
   });
-  const duration = performance.now() - startTime;
+
+  printBundleStats(result);
 
   if (!result.success) {
-    console.error("❌ Build failed:");
-    result.errors.forEach(err => console.error(`   ${err}`));
-    process.exit(1);
+    console.error("\n❌ 빌드 실패");
+    return false;
   }
 
-  // 결과 출력
-  console.log(`✅ Built ${result.outputs.length} islands in ${duration.toFixed(0)}ms\n`);
-
-  console.log("📦 Bundles:");
-  console.log("┌─────────────────┬────────────┬────────────┐");
-  console.log("│ Route           │ Size       │ Gzip       │");
-  console.log("├─────────────────┼────────────┼────────────┤");
-
-  for (const output of result.outputs) {
-    const size = (output.size / 1024).toFixed(2).padStart(7);
-    const gzip = (output.gzipSize / 1024).toFixed(2).padStart(7);
-    const id = output.routeId.padEnd(15);
-    console.log(`│ ${id} │ ${size} KB │ ${gzip} KB │`);
-  }
-
-  console.log("└─────────────────┴────────────┴────────────┘");
-  console.log(`\n총 크기: ${(result.stats.totalSize / 1024).toFixed(2)} KB`);
-
-  // Watch 모드
   if (options.watch) {
-    console.log("\n👀 Watching for changes...");
-    // ... watch 로직
+    await watchAndRebuild(manifest, cwd, options);
   }
+
+  return true;
+}
+
+async function watchAndRebuild(
+  manifest: Awaited<ReturnType<typeof loadManifest>>["manifest"],
+  rootDir: string,
+  options: BuildOptions
+): Promise<void> {
+  const slotsDir = path.join(rootDir, "spec", "slots");
+
+  try {
+    await fs.access(slotsDir);
+  } catch {
+    console.warn(`⚠️  슬롯 디렉토리가 없습니다: ${slotsDir}`);
+    return;
+  }
+
+  const { watch } = await import("fs");
+  watch(slotsDir, { recursive: true }, async (event, filename) => {
+    if (!filename || !filename.endsWith(".client.ts")) return;
+    const routeId = filename.replace(".client.ts", "").replace(/\\/g, "/").split("/").pop();
+    if (!routeId) return;
+    const route = manifest!.routes.find((r) => r.id === routeId);
+    if (!route || !route.clientModule) return;
+
+    const result = await buildClientBundles(manifest!, rootDir, {
+      minify: options.minify,
+      sourcemap: options.sourcemap,
+      outDir: options.outDir,
+    });
+
+    if (!result.success) {
+      console.error(`❌ 재빌드 실패: ${routeId}`);
+    }
+  });
 }
 ```
+
+> 참고: `build`의 watch 모드는 현재 `.client.ts` 변경만 감지합니다. `.client.tsx` 파일은 감지되지 않으므로 추후 개선 필요합니다.
 
 ### 9.2 dev 명령어 확장
 
 ```typescript
-// packages/cli/src/commands/dev.ts (확장)
+// packages/cli/src/commands/dev.ts (발췌)
 
-import { buildClientBundles, startDevBundler, createHMRServer } from "@mandujs/core";
+import {
+  loadManifest,
+  startServer,
+  registerApiHandler,
+  registerPageLoader,
+  registerPageHandler,
+  startDevBundler,
+  createHMRServer,
+  needsHydration,
+  loadEnv,
+} from "@mandujs/core";
+import { resolveFromCwd } from "../util/fs";
+import path from "path";
 
-export async function devCommand(options: DevOptions) {
-  // ... 기존 코드 ...
+export async function dev(options: DevOptions = {}): Promise<void> {
+  const specPath = resolveFromCwd("spec/routes.manifest.json");
+  const rootDir = resolveFromCwd(".");
 
-  // 클라이언트 번들러 시작
-  const hmrServer = createHMRServer(options.port);
-  const devBundler = await startDevBundler({
-    rootDir,
-    manifest: manifestResult.data,
-    port: options.port,
-    onRebuild: (routeId) => {
-      // HMR 신호 전송
-      hmrServer.broadcast({
-        type: "island-update",
-        data: { routeId }
-      });
+  const envResult = await loadEnv({ rootDir, env: "development" });
+  if (envResult.loaded.length > 0) {
+    console.log(`🔐 환경 변수 로드: ${envResult.loaded.join(", ")}`);
+  }
+
+  const manifestResult = await loadManifest(specPath);
+  if (!manifestResult.success || !manifestResult.data) {
+    console.error("❌ Spec 로드 실패:");
+    manifestResult.errors?.forEach((e) => console.error(`  - ${e}`));
+    process.exit(1);
+  }
+
+  const manifest = manifestResult.data;
+
+  // 핸들러 등록
+  for (const route of manifest.routes) {
+    if (route.kind === "api") {
+      const modulePath = path.resolve(rootDir, route.module);
+      const module = await import(modulePath);
+      registerApiHandler(route.id, module.default || module.handler);
+    } else if (route.kind === "page" && route.componentModule) {
+      const componentPath = path.resolve(rootDir, route.componentModule);
+      if (route.slotModule) {
+        registerPageHandler(route.id, async () => {
+          const module = await import(componentPath);
+          return module.default;
+        });
+      } else registerPageLoader(route.id, () => import(componentPath));
     }
+  }
+
+  // HMR/Dev Bundler
+  const hasIslands = manifest.routes.some((r) => r.kind === "page" && r.clientModule && needsHydration(r));
+  const port = options.port || Number(process.env.PORT) || 3000;
+  const hmrServer = hasIslands && !options.noHmr ? createHMRServer(port) : null;
+  const devBundler = hasIslands && !options.noHmr
+    ? await startDevBundler({
+        rootDir,
+        manifest,
+        onRebuild: (result) => {
+          hmrServer?.broadcast({ type: "island-update", data: { routeId: result.routeId, timestamp: Date.now() } });
+        },
+        onError: (error, routeId) => {
+          hmrServer?.broadcast({ type: "error", data: { routeId, message: error.message } });
+        },
+      })
+    : null;
+
+  const server = startServer(manifest, {
+    port,
+    rootDir,
+    isDev: true,
+    hmrPort: hmrServer ? port : undefined,
+    bundleManifest: devBundler?.initialBuild.manifest,
   });
 
-  // 서버 시작
-  // ...
-
-  // 종료 시 정리
-  process.on("SIGINT", () => {
-    devBundler.close();
-    hmrServer.close();
+  const cleanup = () => {
+    server.stop();
+    devBundler?.close();
+    hmrServer?.close();
     process.exit(0);
-  });
+  };
+
+  process.on("SIGINT", cleanup);
+  process.on("SIGTERM", cleanup);
 }
 ```
 
@@ -2130,8 +1552,8 @@ export async function devCommand(options: DevOptions) {
 
 | 작업 | 설명 | 우선순위 |
 |------|------|----------|
-| Client Slot | .client.ts 파일 지원 | P0 |
-| Mandu.island() | 클라이언트 API | P0 |
+| Client Slot | .client.tsx 파일 지원 | P0 |
+| ManduClient.island() | 클라이언트 API | P0 |
 | Priority Scheduling | visible/idle/interaction | P0 |
 | Guard 확장 | 클라이언트 규칙 | P1 |
 | MCP 도구 | 클라이언트 도구 추가 | P1 |
@@ -2211,7 +1633,7 @@ bun run dev
       "pattern": "/todos",
       "kind": "page",
       "slotModule": "spec/slots/todos.slot.ts",
-      "clientModule": "spec/slots/todos.client.ts",
+      "clientModule": "apps/web/components/todos.client.tsx",
       "hydration": {
         "strategy": "island",
         "priority": "visible"

@@ -96,7 +96,7 @@ export interface StreamingSSROptions {
   hmrPort?: number;
   /** Client-side Router 활성화 */
   enableClientRouter?: boolean;
-  /** Streaming 타임아웃 (ms) */
+  /** Streaming 타임아웃 (ms) - 전체 스트림 최대 시간 */
   streamTimeout?: number;
   /** Shell 렌더링 후 콜백 (TTFB 측정 시점) */
   onShellReady?: () => void;
@@ -626,11 +626,14 @@ export async function renderToStream(
     : generateHTMLTail(options);
 
   let shellSent = false;
+  let timedOut = false;
 
   // React renderToReadableStream 호출
   // 실패 시 throw → renderStreamingResponse에서 500 처리
   const reactStream = await renderToReadableStream(element, {
     onError: (error: Error) => {
+      if (timedOut) return;
+
       metrics.hasError = true;
       const streamingError: StreamingError = {
         error,
@@ -665,18 +668,44 @@ export async function renderToStream(
 
   // Custom stream으로 래핑 (Shell + React Content + Tail)
   let tailSent = false;
-  let streamTimedOut = false;
   const reader = reactStream.getReader();
+  const deadline = streamTimeout && streamTimeout > 0
+    ? metrics.startTime + streamTimeout
+    : null;
 
-  // 스트림 타임아웃 타이머 (옵션이 있을 때만)
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  if (streamTimeout && streamTimeout > 0) {
-    timeoutId = setTimeout(() => {
-      streamTimedOut = true;
-      if (isDev) {
-        console.warn(`[Mandu Streaming] Stream timeout after ${streamTimeout}ms`);
-      }
-    }, streamTimeout);
+  async function readWithTimeout(): Promise<ReadableStreamReadResult<Uint8Array> | null> {
+    if (!deadline) {
+      return reader.read();
+    }
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      return null;
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<{ kind: "timeout" }>((resolve) => {
+      timeoutId = setTimeout(() => resolve({ kind: "timeout" }), remaining);
+    });
+
+    const readPromise = reader
+      .read()
+      .then((result) => ({ kind: "read" as const, result }))
+      .catch((error) => ({ kind: "error" as const, error }));
+
+    const result = await Promise.race([readPromise, timeoutPromise]);
+
+    if (result.kind === "timeout") {
+      return null;
+    }
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (result.kind === "error") {
+      throw result.error;
+    }
+
+    return result.result;
   }
 
   return new ReadableStream<Uint8Array>({
@@ -690,10 +719,16 @@ export async function renderToStream(
 
     async pull(controller) {
       try {
-        // 타임아웃 체크
-        if (streamTimedOut) {
+        const readResult = await readWithTimeout();
+
+        // 타임아웃 발생
+        if (!readResult) {
           const timeoutError = new Error(`Stream timeout: exceeded ${streamTimeout}ms`);
           metrics.hasError = true;
+          timedOut = true;
+          if (isDev) {
+            console.warn(`[Mandu Streaming] Stream timeout after ${streamTimeout}ms`);
+          }
 
           const streamingError: StreamingError = {
             error: timeoutError,
@@ -712,16 +747,18 @@ export async function renderToStream(
             onMetrics?.(metrics);
           }
           controller.close();
-          reader.cancel();
+          try {
+            const cancelPromise = reader.cancel();
+            if (cancelPromise) {
+              cancelPromise.catch(() => {});
+            }
+          } catch {}
           return;
         }
 
-        const { done, value } = await reader.read();
+        const { done, value } = readResult;
 
         if (done) {
-          // 타이머 정리
-          if (timeoutId) clearTimeout(timeoutId);
-
           if (!tailSent) {
             controller.enqueue(encoder.encode(htmlTail));
             tailSent = true;
@@ -739,9 +776,6 @@ export async function renderToStream(
         // React 컨텐츠를 그대로 스트리밍
         controller.enqueue(value);
       } catch (error) {
-        // 타이머 정리
-        if (timeoutId) clearTimeout(timeoutId);
-
         const err = error instanceof Error ? error : new Error(String(error));
         metrics.hasError = true;
 
@@ -769,8 +803,12 @@ export async function renderToStream(
     },
 
     cancel() {
-      if (timeoutId) clearTimeout(timeoutId);
-      reader.cancel();
+      try {
+        const cancelPromise = reader.cancel();
+        if (cancelPromise) {
+          cancelPromise.catch(() => {});
+        }
+      } catch {}
     },
   });
 }
@@ -879,6 +917,7 @@ export async function renderWithDeferredData(
     isDev = false,
     ...restOptions
   } = options;
+  const streamTimeout = options.streamTimeout;
 
   const encoder = new TextEncoder();
   const startTime = Date.now();
@@ -940,7 +979,13 @@ export async function renderWithDeferredData(
       // base stream 완료 후, deferred가 아직 안 끝났으면 잠시 대기
       // (단, deferredTimeout 내에서만)
       if (!allDeferredSettled) {
-        const remainingTime = Math.max(0, deferredTimeout - (Date.now() - startTime));
+        const elapsed = Date.now() - startTime;
+        let remainingTime = deferredTimeout - elapsed;
+        if (streamTimeout && streamTimeout > 0) {
+          const remainingStream = streamTimeout - elapsed;
+          remainingTime = Math.min(remainingTime, remainingStream);
+        }
+        remainingTime = Math.max(0, remainingTime);
         if (remainingTime > 0) {
           await Promise.race([
             deferredSettledPromise,
