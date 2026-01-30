@@ -358,7 +358,19 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
       if (loader) {
         try {
           const module = await loader();
-          registerRouteComponent(route.id, module.default);
+          // module.default가 { component, filling } 객체인 경우 component 추출
+          const exported = module.default;
+          const component = typeof exported === 'function'
+            ? exported
+            : exported?.component ?? exported;
+          registerRouteComponent(route.id, component);
+
+          // filling이 있으면 loader 실행
+          const filling = typeof exported === 'object' ? exported?.filling : null;
+          if (filling?.hasLoader?.()) {
+            const ctx = new ManduContext(req, params);
+            loaderData = await filling.executeLoader(ctx);
+          }
         } catch (err) {
           const pageError = createPageLoadErrorResponse(
             route.id,
