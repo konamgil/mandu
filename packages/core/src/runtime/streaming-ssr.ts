@@ -345,6 +345,8 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     lang = "ko",
     headTags = "",
     bundleManifest,
+    routeId,
+    hydration,
   } = options;
 
   // Import map (module scripts 전에 위치해야 함)
@@ -375,6 +377,16 @@ function generateHTMLShell(options: StreamingSSROptions): string {
 }
 </style>`;
 
+  // Island wrapper (hydration이 필요한 경우)
+  const needsHydration = hydration && hydration.strategy !== "none" && routeId && bundleManifest;
+  let islandOpenTag = "";
+  if (needsHydration) {
+    const bundle = bundleManifest.bundles[routeId];
+    const bundleSrc = bundle?.js || "";
+    const priority = hydration.priority || "visible";
+    islandOpenTag = `<div data-mandu-island="${routeId}" data-mandu-src="${bundleSrc}" data-mandu-priority="${priority}">`;
+  }
+
   return `<!DOCTYPE html>
 <html lang="${lang}">
 <head>
@@ -386,7 +398,7 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   ${importMapScript}
 </head>
 <body>
-  <div id="root">`;
+  <div id="root">${islandOpenTag}`;
 }
 
 /**
@@ -464,7 +476,11 @@ function generateHTMLTail(options: StreamingSSROptions): string {
     scripts.push(generateHMRScript(hmrPort));
   }
 
-  return `</div>
+  // Island wrapper 닫기 (hydration이 필요한 경우)
+  const needsHydration = hydration && hydration.strategy !== "none" && routeId && bundleManifest;
+  const islandCloseTag = needsHydration ? "</div>" : "";
+
+  return `${islandCloseTag}</div>
   ${scripts.join("\n  ")}
 </body>
 </html>`;
