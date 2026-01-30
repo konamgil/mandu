@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/core",
-  "version": "0.9.22",
+  "version": "0.9.23",
   "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
   "main": "./src/index.ts",
@@ -14,7 +14,7 @@
     "src/**/*"
   ],
   "scripts": {
-    "test": "bun test",
+    "test": "bun test tests/streaming-ssr && bun test tests/hydration tests/typing src",
     "test:hydration": "bun test tests/hydration",
     "test:streaming": "bun test tests/streaming-ssr",
     "test:watch": "bun test --watch"

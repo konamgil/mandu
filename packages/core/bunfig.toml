@@ -1,0 +1,3 @@
+[test]
+# streaming-ssr 테스트는 happy-dom 환경 불필요하므로 preload 비활성화
+# hydration 테스트에서는 각 파일에서 직접 setup.ts import

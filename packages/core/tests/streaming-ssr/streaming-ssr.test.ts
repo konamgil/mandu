@@ -722,13 +722,13 @@ describe("Streaming Core Value Tests", () => {
     expect(html).toContain("settings");
     expect(html).toContain("mandu:deferred-data");
 
-    // Deferred 스크립트는 base HTML 이후에 주입됨
-    // (TransformStream의 flush()에서 주입하므로 </html> 이후에 위치)
-    const htmlEndIndex = html.indexOf("</html>");
+    // Deferred 스크립트는 </body> 전에 주입됨 (v0.9.23+)
+    // HTML 표준 준수 - 스크립트가 document 내부에 위치해야 함
+    const bodyCloseIndex = html.indexOf("</body>");
     const deferredScriptIndex = html.indexOf("__MANDU_DEFERRED__");
     expect(deferredScriptIndex).toBeGreaterThan(0);
-    // deferred scripts는 base stream 완료 후 주입되므로 </html> 이후에 위치
-    expect(deferredScriptIndex).toBeGreaterThan(htmlEndIndex);
+    // deferred scripts는 </body> 전에 위치해야 함
+    expect(deferredScriptIndex).toBeLessThan(bodyCloseIndex);
   });
 
   /**

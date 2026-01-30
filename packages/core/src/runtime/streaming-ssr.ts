@@ -83,8 +83,7 @@ export interface StreamingSSROptions {
   routePattern?: string;
   /** Critical 데이터 (Shell과 함께 즉시 전송) - JSON-serializable object만 허용 */
   criticalData?: Record<string, unknown>;
-  /** Deferred 데이터 (Suspense 후 스트리밍) */
-  deferredData?: Record<string, unknown>;
+  // Note: deferredData는 renderWithDeferredData의 deferredPromises로 대체됨
   /** Hydration 설정 */
   hydration?: HydrationConfig;
   /** 번들 매니페스트 */
@@ -121,6 +120,11 @@ export interface StreamingSSROptions {
   onError?: (error: Error) => void;
   /** 메트릭 콜백 (observability) */
   onMetrics?: (metrics: StreamingMetrics) => void;
+  /**
+   * HTML 닫기 태그 생략 여부 (내부용)
+   * true이면 </body></html>을 생략하여 deferred 스크립트 삽입 지점 확보
+   */
+  _skipHtmlClose?: boolean;
 }
 
 export interface StreamingLoaderResult<T = unknown> {
@@ -239,7 +243,10 @@ function warnStreamingCaveats(isDev: boolean): void {
  */
 function generateErrorScript(error: Error, routeId: string): string {
   const safeMessage = error.message
-    .replace(/</g, "\\u003c")
+    .replace(/\\/g, "\\\\")      // 백슬래시 먼저 (다른 이스케이프에 영향)
+    .replace(/\n/g, "\\n")       // 줄바꿈
+    .replace(/\r/g, "\\r")       // 캐리지 리턴
+    .replace(/</g, "\\u003c")    // XSS 방지
     .replace(/>/g, "\\u003e")
     .replace(/"/g, "\\u0022");
 
@@ -387,6 +394,7 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     islandOpenTag = `<div data-mandu-island="${routeId}" data-mandu-src="${bundleSrc}" data-mandu-priority="${priority}">`;
   }
 
+  // Import map은 module 스크립트보다 먼저 정의되어야 bare specifier 해석 가능
   return `<!DOCTYPE html>
 <html lang="${lang}">
 <head>
@@ -394,22 +402,22 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
   ${loadingStyles}
-  ${headTags}
   ${importMapScript}
+  ${headTags}
 </head>
 <body>
   <div id="root">${islandOpenTag}`;
 }
 
 /**
- * Streaming용 HTML Tail 생성 (</div id="root"> ~ </html>)
+ * Streaming용 HTML Tail 스크립트 생성 (</div id="root"> ~ 스크립트들)
+ * `</body></html>`은 포함하지 않음 - deferred 스크립트 삽입 지점 확보
  */
-function generateHTMLTail(options: StreamingSSROptions): string {
+function generateHTMLTailContent(options: StreamingSSROptions): string {
   const {
     routeId,
     routePattern,
     criticalData,
-    deferredData,
     bundleManifest,
     isDev = false,
     hmrPort,
@@ -481,9 +489,25 @@ function generateHTMLTail(options: StreamingSSROptions): string {
   const islandCloseTag = needsHydration ? "</div>" : "";
 
   return `${islandCloseTag}</div>
-  ${scripts.join("\n  ")}
+  ${scripts.join("\n  ")}`;
+}
+
+/**
+ * HTML 문서 닫기 태그
+ * Deferred 스크립트 삽입 후 호출
+ */
+function generateHTMLClose(): string {
+  return `
 </body>
 </html>`;
+}
+
+/**
+ * Streaming용 HTML Tail 생성 (</div id="root"> ~ </html>)
+ * 하위 호환성 유지 - 내부적으로 generateHTMLTailContent + generateHTMLClose 사용
+ */
+function generateHTMLTail(options: StreamingSSROptions): string {
+  return generateHTMLTailContent(options) + generateHTMLClose();
 }
 
 /**
@@ -573,6 +597,7 @@ export async function renderToStream(
     isDev = false,
     routeId = "unknown",
     criticalData,
+    streamTimeout,
   } = options;
 
   // 메트릭 수집
@@ -595,7 +620,10 @@ export async function renderToStream(
 
   const encoder = new TextEncoder();
   const htmlShell = generateHTMLShell(options);
-  const htmlTail = generateHTMLTail(options);
+  // _skipHtmlClose가 true이면 </body></html> 생략 (deferred 스크립트 삽입용)
+  const htmlTail = options._skipHtmlClose
+    ? generateHTMLTailContent(options)
+    : generateHTMLTail(options);
 
   let shellSent = false;
 
@@ -637,7 +665,19 @@ export async function renderToStream(
 
   // Custom stream으로 래핑 (Shell + React Content + Tail)
   let tailSent = false;
+  let streamTimedOut = false;
   const reader = reactStream.getReader();
+
+  // 스트림 타임아웃 타이머 (옵션이 있을 때만)
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  if (streamTimeout && streamTimeout > 0) {
+    timeoutId = setTimeout(() => {
+      streamTimedOut = true;
+      if (isDev) {
+        console.warn(`[Mandu Streaming] Stream timeout after ${streamTimeout}ms`);
+      }
+    }, streamTimeout);
+  }
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -650,9 +690,38 @@ export async function renderToStream(
 
     async pull(controller) {
       try {
+        // 타임아웃 체크
+        if (streamTimedOut) {
+          const timeoutError = new Error(`Stream timeout: exceeded ${streamTimeout}ms`);
+          metrics.hasError = true;
+
+          const streamingError: StreamingError = {
+            error: timeoutError,
+            isShellError: false,
+            recoverable: true,
+            timestamp: Date.now(),
+          };
+          onStreamError?.(streamingError);
+
+          controller.enqueue(encoder.encode(generateErrorScript(timeoutError, routeId)));
+
+          if (!tailSent) {
+            controller.enqueue(encoder.encode(htmlTail));
+            tailSent = true;
+            metrics.allReadyTime = Date.now() - metrics.startTime;
+            onMetrics?.(metrics);
+          }
+          controller.close();
+          reader.cancel();
+          return;
+        }
+
         const { done, value } = await reader.read();
 
         if (done) {
+          // 타이머 정리
+          if (timeoutId) clearTimeout(timeoutId);
+
           if (!tailSent) {
             controller.enqueue(encoder.encode(htmlTail));
             tailSent = true;
@@ -670,6 +739,9 @@ export async function renderToStream(
         // React 컨텐츠를 그대로 스트리밍
         controller.enqueue(value);
       } catch (error) {
+        // 타이머 정리
+        if (timeoutId) clearTimeout(timeoutId);
+
         const err = error instanceof Error ? error : new Error(String(error));
         metrics.hasError = true;
 
@@ -697,6 +769,7 @@ export async function renderToStream(
     },
 
     cancel() {
+      if (timeoutId) clearTimeout(timeoutId);
       reader.cancel();
     },
   });
@@ -845,11 +918,13 @@ export async function renderWithDeferredData(
     : Promise.resolve().then(() => { allDeferredSettled = true; });
 
   // 2. Base stream 즉시 시작 (TTFB 최소화의 핵심!)
+  //    _skipHtmlClose: true로 </body></html> 생략 → deferred 스크립트 삽입 지점 확보
   let baseMetrics: StreamingMetrics | null = null;
   const baseStream = await renderToStream(element, {
     ...restOptions,
     routeId,
     isDev,
+    _skipHtmlClose: true, // deferred 스크립트를 </body> 전에 삽입하기 위해
     onMetrics: (metrics) => {
       baseMetrics = metrics;
     },
@@ -884,6 +959,9 @@ export async function renderWithDeferredData(
       if (isDev && injectedCount > 0) {
         console.log(`[Mandu Streaming] Injected ${injectedCount} deferred scripts`);
       }
+
+      // HTML 닫기 태그 추가 (</body></html>)
+      controller.enqueue(encoder.encode(generateHTMLClose()));
 
       // 최종 메트릭 보고 (injectedCount가 실제 메트릭)
       if (onMetrics && baseMetrics) {
