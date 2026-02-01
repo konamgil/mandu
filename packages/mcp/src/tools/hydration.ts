@@ -379,8 +379,8 @@ function generateClientSlotTemplate(routeId: string, slotModule?: string): strin
     .join("");
 
   const typeImport = slotModule
-    ? `// Import types from server slot if needed
-// import type { LoaderData } from "./${routeId}.slot";
+    ? `// Import types from server slot if needed (adjust path to your project)
+// import type { LoaderData } from "../../../spec/slots/${routeId}.slot";
 
 `
     : "";
@@ -390,7 +390,7 @@ function generateClientSlotTemplate(routeId: string, slotModule?: string): strin
  * 브라우저에서 실행되는 클라이언트 로직
  */
 
-import { Mandu } from "@mandujs/core/client";
+import { ManduClient } from "@mandujs/core/client";
 import { useState, useCallback } from "react";
 
 ${typeImport}// 서버에서 전달받는 데이터 타입
@@ -399,7 +399,7 @@ interface ServerData {
   [key: string]: unknown;
 }
 
-export default Mandu.island<ServerData>({
+export default ManduClient.island<ServerData>({
   /**
    * Setup Phase
    * - 서버 데이터를 받아 클라이언트 상태 초기화

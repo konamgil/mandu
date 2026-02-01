@@ -62,7 +62,7 @@
 ### 5.1 SSOT 파일(모두 JSON)
 - `spec/routes.manifest.json`
 - `spec/channels.manifest.json` (후속)
-- `spec/contracts/*.json` (후속)
+- `spec/contracts/*.contract.ts` (후속)
 - `spec/isr.policy.json` (후속)
 - `spec/plan.json` (후속)
 
@@ -71,17 +71,18 @@
 - `spec/history/snapshots/<id>.snapshot.json`: 커밋 스냅샷(옵션→필수로 확장)
 
 ### 5.3 변경 트랜잭션 ✅ (구현 완료)
-- `change.begin()` → (spec 변경/생성) → `guard.check()` + `tests.run()` → `change.commit()`
-- 실패 시 `change.rollback()`으로 깨끗하게 복구
+- `beginChange()` → (spec 변경/생성) → `runGuardCheck()` + `tests.run()` → `commitChange()`
+- 실패 시 `rollbackChange()`으로 깨끗하게 복구
 
-**트랜잭션 API (SpecTransaction)**:
+**트랜잭션 API (core 함수)**:
 ```typescript
-const tx = new SpecTransaction(projectRoot);
-tx.begin("Add users API");           // 스냅샷 생성
+import { beginChange, commitChange, rollbackChange } from "@mandujs/core";
+
+await beginChange(projectRoot, { message: "Add users API" }); // 스냅샷 생성
 // ... spec 변경, 코드 생성, 슬롯 작성 ...
-tx.commit();                          // 히스토리에 저장
+await commitChange(projectRoot); // 히스토리에 저장
 // 또는
-tx.rollback();                        // 스냅샷으로 완전 복원
+await rollbackChange(projectRoot); // 스냅샷으로 완전 복원
 ```
 
 **스냅샷 구조**:
@@ -207,16 +208,20 @@ AI 에이전트가 Mandu 프레임워크를 직접 조작하는 MCP 서버:
 - 트랜잭션: `mandu_begin`, `mandu_commit`, `mandu_rollback`, `mandu_tx_status`
 - 히스토리: `mandu_list_history`, `mandu_get_snapshot`, `mandu_prune_history`
 - 가드: `mandu_guard_check`, `mandu_analyze_error`
-- 슬롯: `mandu_read_slot`, `mandu_write_slot`
+- 슬롯: `mandu_read_slot`, `mandu_validate_slot`
 - Hydration: `mandu_build`, `mandu_build_status`, `mandu_list_islands`, `mandu_set_hydration`, `mandu_add_client_slot`
 - Contract: `mandu_list_contracts`, `mandu_get_contract`, `mandu_create_contract`, `mandu_update_route_contract`, `mandu_validate_contracts`, `mandu_sync_contract_slot`, `mandu_generate_openapi`
 - Brain: `mandu_doctor`, `mandu_watch_start`, `mandu_watch_status`, `mandu_watch_stop`, `mandu_check_location`, `mandu_check_import`, `mandu_get_architecture`
+- Runtime: `mandu_get_runtime_config`, `mandu_get_contract_options`, `mandu_set_contract_normalize`, `mandu_list_logger_options`, `mandu_generate_logger_config`
 
 **리소스 (Resources)**:
 - `mandu://spec/manifest` - routes.manifest.json
 - `mandu://spec/lock` - spec.lock.json
 - `mandu://generated/map` - generated.map.json
 - `mandu://transaction/active` - 활성 트랜잭션 정보
+- `mandu://slots/{routeId}` - 라우트 슬롯 내용
+- `mandu://watch/warnings` - Watch 경고 목록
+- `mandu://watch/status` - Watch 상태
 
 ---
 
