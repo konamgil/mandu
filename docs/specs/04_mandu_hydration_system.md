@@ -301,7 +301,7 @@ interface LoaderConfig {
 ```typescript
 // spec/slots/todos.slot.ts
 import { Mandu } from "@mandujs/core";
-import type { Context } from "@mandujs/core";
+import type { ManduContext } from "@mandujs/core";
 
 // 타입 정의 (클라이언트와 공유)
 export interface Todo {
@@ -322,13 +322,16 @@ export default Mandu.filling<TodosLoaderData>()
    * SSR Loader - 페이지 렌더링 전 데이터 로딩
    * 이 데이터는 서버에서 렌더링되고, 클라이언트로 전달됨
    */
-  .loader(async (ctx: Context): Promise<TodosLoaderData> => {
+  .loader(async (ctx: ManduContext): Promise<TodosLoaderData> => {
     // 병렬로 데이터 로딩
+    const apiUrl = process.env.API_URL ?? "http://localhost:3000";
+    const session = ctx.cookies.get("session");
+    const cookieHeader = session ? `session=${encodeURIComponent(session)}` : undefined;
     const [todosRes, userRes] = await Promise.all([
-      fetch(`${ctx.env.API_URL}/todos`),
-      ctx.cookies.get("session")
-        ? fetch(`${ctx.env.API_URL}/me`, {
-            headers: { Cookie: ctx.cookies.toString() }
+      fetch(`${apiUrl}/todos`),
+      session
+        ? fetch(`${apiUrl}/me`, {
+            headers: { Cookie: cookieHeader }
           })
         : Promise.resolve(null)
     ]);
@@ -382,7 +385,8 @@ export default Mandu.filling<TodosLoaderData>()
 // apps/web/components/todos.client.tsx
 import { ManduClient } from "@mandujs/core/client";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import type { TodosLoaderData, Todo } from "./todos.slot";
+// 필요 시 서버 slot 타입을 가져올 수 있음 (프로젝트 구조에 맞게 경로 조정)
+import type { TodosLoaderData, Todo } from "../../../spec/slots/todos.slot";
 
 /**
  * Client Island 정의
@@ -1243,11 +1247,55 @@ import { getProjectPaths, readJsonFile, writeJsonFile } from "../utils/project.j
 import path from "path";
 
 export const hydrationToolDefinitions: Tool[] = [
-  { name: "mandu_build", description: "Build client bundles for hydration", inputSchema: { type: "object", properties: {} } },
-  { name: "mandu_build_status", description: "Get bundle manifest/status", inputSchema: { type: "object", properties: {} } },
-  { name: "mandu_list_islands", description: "List routes with hydration", inputSchema: { type: "object", properties: {} } },
-  { name: "mandu_set_hydration", description: "Update hydration config", inputSchema: { type: "object", properties: { routeId: { type: "string" } }, required: ["routeId"] } },
-  { name: "mandu_add_client_slot", description: "Add client slot and update manifest", inputSchema: { type: "object", properties: { routeId: { type: "string" } }, required: ["routeId"] } },
+  {
+    name: "mandu_build",
+    description: "Build client bundles for hydration. Compiles client slots (.client.ts) into browser-ready JavaScript bundles.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        minify: { type: "boolean", description: "Minify the output bundles (default: true in production)" },
+        sourcemap: { type: "boolean", description: "Generate source maps for debugging" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "mandu_build_status",
+    description: "Get the current build status, bundle manifest, and statistics for client bundles.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "mandu_list_islands",
+    description: "List all routes that have client-side hydration (islands). Shows hydration strategy and priority for each.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "mandu_set_hydration",
+    description: "Set hydration configuration for a specific route. Updates the route's hydration strategy and priority.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        routeId: { type: "string", description: "The route ID to configure" },
+        strategy: { type: "string", enum: ["none", "island", "full", "progressive"] },
+        priority: { type: "string", enum: ["immediate", "visible", "idle", "interaction"] },
+        preload: { type: "boolean" },
+      },
+      required: ["routeId"],
+    },
+  },
+  {
+    name: "mandu_add_client_slot",
+    description: "Add a client slot file for a route to enable hydration. Creates the .client.ts file and updates the manifest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        routeId: { type: "string", description: "The route ID to add client slot for" },
+        strategy: { type: "string", enum: ["island", "full", "progressive"] },
+        priority: { type: "string", enum: ["immediate", "visible", "idle", "interaction"] },
+      },
+      required: ["routeId"],
+    },
+  },
 ];
 
 export function hydrationTools(projectRoot: string) {
@@ -1278,22 +1326,57 @@ export function hydrationTools(projectRoot: string) {
 
     mandu_build_status: async () => {
       const manifest = await readJsonFile(path.join(projectRoot, ".mandu/manifest.json"));
-      if (!manifest) return { hasBundles: false, message: "No bundle manifest found. Run mandu_build first." };
-      return { hasBundles: true, version: manifest.version, buildTime: manifest.buildTime, bundleCount: Object.keys(manifest.bundles).length };
+      if (!manifest) {
+        return { hasBundles: false, message: "No bundle manifest found. Run mandu_build first." };
+      }
+      const bundleCount = Object.keys(manifest.bundles).length;
+      return {
+        hasBundles: true,
+        version: manifest.version,
+        buildTime: manifest.buildTime,
+        environment: manifest.env,
+        bundleCount,
+        shared: { runtime: manifest.shared.runtime, vendor: manifest.shared.vendor },
+        bundles: Object.entries(manifest.bundles).map(([routeId, bundle]) => ({
+          routeId,
+          js: bundle.js,
+          css: bundle.css || null,
+          priority: bundle.priority,
+          dependencies: bundle.dependencies,
+        })),
+      };
     },
 
     mandu_list_islands: async () => {
       const manifestResult = await loadManifest(paths.manifestPath);
       if (!manifestResult.success || !manifestResult.data) return { error: manifestResult.errors };
       const islands = manifestResult.data.routes
-        .filter((r) => r.kind === "page")
-        .map((r) => ({
-          routeId: r.id,
-          clientModule: r.clientModule,
-          hydration: getRouteHydration(r),
-          enabled: needsHydration(r),
-        }));
-      return { count: islands.length, islands };
+        .filter((route) => route.kind === "page")
+        .map((route) => {
+          const hydration = getRouteHydration(route);
+          const isIsland = needsHydration(route);
+          return {
+            routeId: route.id,
+            pattern: route.pattern,
+            hasClientModule: !!route.clientModule,
+            clientModule: route.clientModule || null,
+            isIsland,
+            hydration: {
+              strategy: hydration.strategy,
+              priority: hydration.priority,
+              preload: hydration.preload,
+            },
+          };
+        });
+      const islandCount = islands.filter((i) => i.isIsland).length;
+      const staticCount = islands.filter((i) => !i.isIsland).length;
+      return {
+        totalPages: islands.length,
+        islandCount,
+        staticCount,
+        islands: islands.filter((i) => i.isIsland),
+        staticPages: islands.filter((i) => !i.isIsland),
+      };
     },
 
     mandu_set_hydration: async (args: Record<string, unknown>) => {
@@ -1320,17 +1403,51 @@ export function hydrationTools(projectRoot: string) {
     },
 
     mandu_add_client_slot: async (args: Record<string, unknown>) => {
-      const { routeId } = args as { routeId: string };
+      const { routeId, strategy = "island", priority = "visible" } = args as {
+        routeId: string;
+        strategy?: "island" | "full" | "progressive";
+        priority?: "immediate" | "visible" | "idle" | "interaction";
+      };
       const manifestResult = await loadManifest(paths.manifestPath);
       if (!manifestResult.success || !manifestResult.data) return { error: manifestResult.errors };
       const manifest = manifestResult.data;
-      const route = manifest.routes.find((r) => r.id === routeId);
-      if (!route) return { error: `Route not found: ${routeId}` };
+      const routeIndex = manifest.routes.findIndex((r) => r.id === routeId);
+      if (routeIndex === -1) return { error: `Route not found: ${routeId}` };
+      const route = manifest.routes[routeIndex];
       if (route.kind !== "page") return { error: `Route ${routeId} is not a page route` };
 
-      // 실제 구현: apps/web/components/{routeId}.client.tsx 생성 + manifest 업데이트
-      // (템플릿 생성/파일 쓰기 로직은 hydration.ts 참고)
-      return { success: true, routeId, message: "Client slot created (see hydration.ts)" };
+      if (route.clientModule) {
+        return { error: `Route ${routeId} already has a client module: ${route.clientModule}` };
+      }
+
+      const clientModulePath = `apps/web/components/${routeId}.client.tsx`;
+      const clientFilePath = path.join(projectRoot, clientModulePath);
+      const clientFile = Bun.file(clientFilePath);
+      if (await clientFile.exists()) {
+        return { error: `Client slot file already exists: ${clientModulePath}` };
+      }
+
+      const template = generateClientSlotTemplate(routeId, route.slotModule);
+      await Bun.write(clientFilePath, template);
+
+      manifest.routes[routeIndex] = {
+        ...route,
+        clientModule: clientModulePath,
+        hydration: {
+          strategy,
+          priority,
+          preload: false,
+        },
+      };
+      await writeJsonFile(paths.manifestPath, manifest);
+
+      return {
+        success: true,
+        routeId,
+        clientModule: clientModulePath,
+        hydration: { strategy, priority, preload: false },
+        message: `Created client slot: ${clientModulePath}`,
+      };
     },
   };
 }

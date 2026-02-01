@@ -79,6 +79,7 @@ repo/
           hydration.ts
           contract.ts
           brain.ts
+          runtime.ts
         resources/handlers.ts
         utils/
           project.ts
@@ -255,7 +256,7 @@ packages/mcp/
 | **Guard** | `mandu_guard_check` | Guard 검사 |
 | | `mandu_analyze_error` | 에러 분석 |
 | **Slot** | `mandu_read_slot` | 슬롯 파일 읽기 |
-| | `mandu_write_slot` | 슬롯 파일 쓰기 |
+| | `mandu_validate_slot` | 슬롯 내용 검증 |
 | **Hydration** | `mandu_build` | 클라이언트 번들 빌드 |
 | | `mandu_build_status` | 번들 상태/매니페스트 조회 |
 | | `mandu_list_islands` | Hydration 대상 라우트 목록 |
@@ -275,6 +276,11 @@ packages/mcp/
 | | `mandu_check_location` | 파일 위치 규칙 검사 |
 | | `mandu_check_import` | import 규칙 검사 |
 | | `mandu_get_architecture` | 아키텍처 규칙 조회 |
+| **Runtime** | `mandu_get_runtime_config` | 런타임 설정 조회 |
+| | `mandu_get_contract_options` | Contract normalize/coerce 옵션 조회 |
+| | `mandu_set_contract_normalize` | Contract normalize/coerce 설정 |
+| | `mandu_list_logger_options` | 로거 옵션 목록 |
+| | `mandu_generate_logger_config` | 로거 설정 코드 생성 |
 
 ### 11.4 MCP 리소스
 
@@ -284,6 +290,9 @@ packages/mcp/
 | `mandu://spec/lock` | spec.lock.json |
 | `mandu://generated/map` | generated.map.json |
 | `mandu://transaction/active` | 활성 트랜잭션 정보 |
+| `mandu://slots/{routeId}` | 라우트 슬롯 내용 |
+| `mandu://watch/warnings` | Watch 경고 목록 |
+| `mandu://watch/status` | Watch 상태 |
 
 ### 11.5 트랜잭션 흐름
 
@@ -298,7 +307,7 @@ packages/mcp/
 │          ↓                                                  │
 │   3. mandu_generate      코드 생성                          │
 │          ↓                                                  │
-│   4. mandu_write_slot    슬롯 로직 작성                     │
+│   4. 슬롯 로직 작성     spec/slots/*.slot.ts 편집           │
 │          ↓                                                  │
 │   5. mandu_guard_check   규칙 검사                          │
 │          ↓                                                  │
@@ -324,7 +333,7 @@ packages/mcp/
 
 1) MVP‑0.1 전체 통과
 2) MCP 서버 설치 및 연결
-3) `mandu_add_route` → `mandu_generate` → `mandu_write_slot` 워크플로우 동작
+3) `mandu_add_route` → `mandu_generate` → 슬롯 로직 작성 워크플로우 동작
 4) `mandu_begin` → 작업 → `mandu_rollback`으로 완전 복원
 5) `mandu_guard_check` 실패 시 수정 가이드 제공
 6) `mandu_analyze_error`로 에러 분류 및 수정 위치 안내
