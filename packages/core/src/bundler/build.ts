@@ -1118,12 +1118,23 @@ export async function buildClientBundles(
   // 1. Hydration이 필요한 라우트 필터링
   const hydratedRoutes = getHydratedRoutes(manifest);
 
+  // 2. 출력 디렉토리 생성 (항상 필요 - 매니페스트 저장용)
+  const outDir = options.outDir || path.join(rootDir, ".mandu/client");
+  await fs.mkdir(outDir, { recursive: true });
+
+  // Hydration 라우트가 없어도 빈 매니페스트를 저장해야 함
+  // (이전 빌드의 stale 매니페스트 참조 방지)
   if (hydratedRoutes.length === 0) {
+    const emptyManifest = createEmptyManifest(env);
+    await fs.writeFile(
+      path.join(rootDir, ".mandu/manifest.json"),
+      JSON.stringify(emptyManifest, null, 2)
+    );
     return {
       success: true,
       outputs: [],
       errors: [],
-      manifest: createEmptyManifest(env),
+      manifest: emptyManifest,
       stats: {
         totalSize: 0,
         totalGzipSize: 0,
@@ -1133,10 +1144,6 @@ export async function buildClientBundles(
       },
     };
   }
-
-  // 2. 출력 디렉토리 생성
-  const outDir = options.outDir || path.join(rootDir, ".mandu/client");
-  await fs.mkdir(outDir, { recursive: true });
 
   // 3. Runtime 번들 빌드
   const runtimeResult = await buildRuntime(outDir, options);
