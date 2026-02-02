@@ -461,7 +461,26 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
   // 3. Streaming 완료 마커 (클라이언트에서 감지용)
   scripts.push(`<script>window.__MANDU_STREAMING_SHELL_READY__ = true;</script>`);
 
-  // 4. Island modulepreload
+  // 4. Vendor modulepreload (React, ReactDOM 등 - 캐시 효율 극대화)
+  if (bundleManifest?.shared.vendor) {
+    scripts.push(`<link rel="modulepreload" href="${bundleManifest.shared.vendor}">`);
+  }
+  if (bundleManifest?.importMap?.imports) {
+    const imports = bundleManifest.importMap.imports;
+    if (imports["react-dom"] && imports["react-dom"] !== bundleManifest.shared.vendor) {
+      scripts.push(`<link rel="modulepreload" href="${imports["react-dom"]}">`);
+    }
+    if (imports["react-dom/client"]) {
+      scripts.push(`<link rel="modulepreload" href="${imports["react-dom/client"]}">`);
+    }
+  }
+
+  // 5. Runtime modulepreload (hydration 실행 전 미리 로드)
+  if (bundleManifest?.shared.runtime) {
+    scripts.push(`<link rel="modulepreload" href="${bundleManifest.shared.runtime}">`);
+  }
+
+  // 6. Island modulepreload
   if (bundleManifest && routeId) {
     const bundle = bundleManifest.bundles[routeId];
     if (bundle) {
@@ -469,17 +488,17 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
     }
   }
 
-  // 5. Runtime 로드
+  // 7. Runtime 로드
   if (bundleManifest?.shared.runtime) {
     scripts.push(`<script type="module" src="${bundleManifest.shared.runtime}"></script>`);
   }
 
-  // 6. Router 스크립트
+  // 8. Router 스크립트
   if (enableClientRouter && bundleManifest?.shared?.router) {
     scripts.push(`<script type="module" src="${bundleManifest.shared.router}"></script>`);
   }
 
-  // 7. HMR 스크립트 (개발 모드)
+  // 9. HMR 스크립트 (개발 모드)
   if (isDev && hmrPort) {
     scripts.push(generateHMRScript(hmrPort));
   }
@@ -969,57 +988,71 @@ export async function renderWithDeferredData(
     },
   });
 
-  // 3. TransformStream: base stream 통과 + tail 이후 deferred 스크립트 주입
-  const transformStream = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      // base stream chunk 그대로 전달
-      controller.enqueue(chunk);
+  // 3. 수동 스트림 파이프라인 (Bun pipeThrough 호환성 문제 해결)
+  //    base stream을 읽고 → 변환 후 → 새 스트림으로 출력
+  const reader = baseStream.getReader();
+
+  const finalStream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+
+        if (!done && value) {
+          // base stream chunk 그대로 전달
+          controller.enqueue(value);
+          return;
+        }
+
+        // base stream 완료 → flush 로직 실행
+        // deferred가 아직 안 끝났으면 잠시 대기 (단, deferredTimeout 내에서만)
+        if (!allDeferredSettled) {
+          const elapsed = Date.now() - startTime;
+          let remainingTime = deferredTimeout - elapsed;
+          if (streamTimeout && streamTimeout > 0) {
+            const remainingStream = streamTimeout - elapsed;
+            remainingTime = Math.min(remainingTime, remainingStream);
+          }
+          remainingTime = Math.max(0, remainingTime);
+          if (remainingTime > 0) {
+            await Promise.race([
+              deferredSettledPromise,
+              new Promise(resolve => setTimeout(resolve, remainingTime)),
+            ]);
+          }
+        }
+
+        // 준비된 deferred 스크립트만 주입 (실제 enqueue 기준 카운트)
+        let injectedCount = 0;
+        for (const script of readyScripts) {
+          controller.enqueue(encoder.encode(script));
+          injectedCount++;
+        }
+
+        if (isDev && injectedCount > 0) {
+          console.log(`[Mandu Streaming] Injected ${injectedCount} deferred scripts`);
+        }
+
+        // HTML 닫기 태그 추가 (</body></html>)
+        controller.enqueue(encoder.encode(generateHTMLClose()));
+
+        // 최종 메트릭 보고 (injectedCount가 실제 메트릭)
+        if (onMetrics && baseMetrics) {
+          onMetrics({
+            ...baseMetrics,
+            deferredChunkCount: injectedCount,
+            allReadyTime: Date.now() - startTime,
+          });
+        }
+
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
     },
-    async flush(controller) {
-      // base stream 완료 후, deferred가 아직 안 끝났으면 잠시 대기
-      // (단, deferredTimeout 내에서만)
-      if (!allDeferredSettled) {
-        const elapsed = Date.now() - startTime;
-        let remainingTime = deferredTimeout - elapsed;
-        if (streamTimeout && streamTimeout > 0) {
-          const remainingStream = streamTimeout - elapsed;
-          remainingTime = Math.min(remainingTime, remainingStream);
-        }
-        remainingTime = Math.max(0, remainingTime);
-        if (remainingTime > 0) {
-          await Promise.race([
-            deferredSettledPromise,
-            new Promise(resolve => setTimeout(resolve, remainingTime)),
-          ]);
-        }
-      }
-
-      // 준비된 deferred 스크립트만 주입 (실제 enqueue 기준 카운트)
-      let injectedCount = 0;
-      for (const script of readyScripts) {
-        controller.enqueue(encoder.encode(script));
-        injectedCount++;
-      }
-
-      if (isDev && injectedCount > 0) {
-        console.log(`[Mandu Streaming] Injected ${injectedCount} deferred scripts`);
-      }
-
-      // HTML 닫기 태그 추가 (</body></html>)
-      controller.enqueue(encoder.encode(generateHTMLClose()));
-
-      // 최종 메트릭 보고 (injectedCount가 실제 메트릭)
-      if (onMetrics && baseMetrics) {
-        onMetrics({
-          ...baseMetrics,
-          deferredChunkCount: injectedCount,
-          allReadyTime: Date.now() - startTime,
-        });
-      }
+    cancel() {
+      reader.cancel();
     },
   });
-
-  const finalStream = baseStream.pipeThrough(transformStream);
 
   return new Response(finalStream, {
     status: 200,

@@ -2,7 +2,7 @@
 
 Legend: **done** = implemented, **partial** = implemented but incomplete, **not started** = not implemented, **untested** = implemented but tests not runnable.
 
-> Last updated: 2026-01-30
+> Last updated: 2026-02-02
 
 ---
 
@@ -41,7 +41,7 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Island definition API | done | `packages/core/src/client/island.ts` |
 | SSR island wrapper/scripts | done | `packages/core/src/runtime/ssr.ts`, `streaming-ssr.ts` |
 | Client Hydration Runtime | done | `packages/core/src/bundler/build.ts` generateRuntimeSource() |
-| Client partials/slots | not started | (not implemented) |
+| Client partials/slots | done | `packages/core/src/client/island.ts` partial(), slot(), createPartialGroup() |
 
 ## Client-side Routing
 
@@ -96,11 +96,11 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 |----------|------|-------------|
 | Core Runtime | 8 | 0 |
 | Contracts & OpenAPI | 9 | 0 |
-| Hydration & Islands | 4 | 1 |
+| Hydration & Islands | 5 | 0 |
 | Client-side Routing | 4 | 0 |
 | Data & Content | 0 | 1 |
 | Integrations & Build | 2 | 2 |
 | Routing | 1 | 1 |
 | Realtime / Resumable | 0 | 2 |
 | Observability & Perf | 1 | 1 |
-| **Total** | **29** | **8** |
+| **Total** | **30** | **7** |

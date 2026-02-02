@@ -74,7 +74,7 @@ function generateImportMap(manifest: BundleManifest): string {
 
 /**
  * Hydration 스크립트 태그 생성
- * v0.8.0: Island 직접 로드 제거 - Runtime이 data-mandu-src에서 dynamic import
+ * v0.9.0: vendor, runtime 모두 modulepreload로 성능 최적화
  */
 function generateHydrationScripts(
   routeId: string,
@@ -88,8 +88,27 @@ function generateHydrationScripts(
     scripts.push(importMap);
   }
 
+  // Vendor modulepreload (React, ReactDOM 등 - 캐시 효율 극대화)
+  if (manifest.shared.vendor) {
+    scripts.push(`<link rel="modulepreload" href="${manifest.shared.vendor}">`);
+  }
+  if (manifest.importMap?.imports) {
+    const imports = manifest.importMap.imports;
+    // react-dom, react-dom/client 등 추가 preload
+    if (imports["react-dom"] && imports["react-dom"] !== manifest.shared.vendor) {
+      scripts.push(`<link rel="modulepreload" href="${imports["react-dom"]}">`);
+    }
+    if (imports["react-dom/client"]) {
+      scripts.push(`<link rel="modulepreload" href="${imports["react-dom/client"]}">`);
+    }
+  }
+
+  // Runtime modulepreload (hydration 실행 전 미리 로드)
+  if (manifest.shared.runtime) {
+    scripts.push(`<link rel="modulepreload" href="${manifest.shared.runtime}">`);
+  }
+
   // Island 번들 modulepreload (성능 최적화 - prefetch only)
-  // v0.8.0: <script> 태그 제거 - Runtime이 dynamic import로 로드
   const bundle = manifest.bundles[routeId];
   if (bundle) {
     scripts.push(`<link rel="modulepreload" href="${bundle.js}">`);

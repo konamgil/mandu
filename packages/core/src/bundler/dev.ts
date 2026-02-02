@@ -89,12 +89,21 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     // clientModule 매핑에서 routeId 찾기
     let routeId = clientModuleToRoute.get(normalizedPath);
 
-    // .client.ts 파일인 경우 파일명에서 routeId 추출
-    if (!routeId && changedFile.endsWith(".client.ts")) {
-      const basename = path.basename(changedFile, ".client.ts");
-      const route = manifest.routes.find((r) => r.id === basename);
-      if (route) {
-        routeId = route.id;
+    // .client.ts 또는 .client.tsx 파일인 경우 파일명에서 routeId 추출
+    if (!routeId) {
+      let basename: string | null = null;
+
+      if (changedFile.endsWith(".client.ts")) {
+        basename = path.basename(changedFile, ".client.ts");
+      } else if (changedFile.endsWith(".client.tsx")) {
+        basename = path.basename(changedFile, ".client.tsx");
+      }
+
+      if (basename) {
+        const route = manifest.routes.find((r) => r.id === basename);
+        if (route) {
+          routeId = route.id;
+        }
       }
     }
 

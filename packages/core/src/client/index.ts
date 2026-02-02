@@ -33,11 +33,23 @@ export {
   useHydrated,
   useIslandEvent,
   fetchApi,
+  // Partials/Slots API
+  partial,
+  slot,
+  createPartialGroup,
   type IslandDefinition,
   type IslandMetadata,
   type CompiledIsland,
   type FetchOptions,
   type WrapComponentOptions,
+  type IslandEventHandle,
+  // Partials/Slots Types
+  type PartialConfig,
+  type PartialDefinition,
+  type CompiledPartial,
+  type SlotDefinition,
+  type CompiledSlot,
+  type PartialGroup,
 } from "./island";
 
 // Runtime API
@@ -96,7 +108,7 @@ export {
 } from "./serialize";
 
 // Re-export as Mandu namespace for consistent API
-import { island, wrapComponent } from "./island";
+import { island, wrapComponent, partial, slot, createPartialGroup } from "./island";
 import { navigate, prefetch, initializeRouter } from "./router";
 import { Link, NavLink } from "./Link";
 
@@ -147,4 +159,22 @@ export const ManduClient = {
    * @see NavLink
    */
   NavLink,
+
+  /**
+   * Create a partial island for granular hydration
+   * @see partial
+   */
+  partial,
+
+  /**
+   * Create a slot for server-rendered content with client hydration
+   * @see slot
+   */
+  slot,
+
+  /**
+   * Create a group of partials for coordinated hydration
+   * @see createPartialGroup
+   */
+  createPartialGroup,
 };

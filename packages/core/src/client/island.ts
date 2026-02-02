@@ -141,14 +141,45 @@ export function useHydrated(): boolean {
 }
 
 /**
+ * Island 간 통신을 위한 이벤트 훅 반환 타입
+ */
+export interface IslandEventHandle<T> {
+  /** 이벤트 발송 함수 */
+  emit: (data: T) => void;
+  /** 이벤트 리스너 해제 함수 (cleanup) */
+  cleanup: () => void;
+}
+
+/**
  * Island 간 통신을 위한 이벤트 훅
+ *
+ * @example
+ * ```typescript
+ * // Island A
+ * const { emit, cleanup } = useIslandEvent<{ count: number }>(
+ *   'counter-update',
+ *   (data) => console.log('Received:', data.count)
+ * );
+ *
+ * // 이벤트 발송
+ * emit({ count: 42 });
+ *
+ * // 컴포넌트 언마운트 시 cleanup
+ * useEffect(() => cleanup, []);
+ * ```
+ *
+ * @deprecated 새로운 API는 { emit, cleanup } 객체를 반환합니다.
+ *   하위 호환성을 위해 emit 함수에 cleanup 속성도 추가됩니다.
  */
 export function useIslandEvent<T = unknown>(
   eventName: string,
   handler: (data: T) => void
-): (data: T) => void {
+): IslandEventHandle<T>["emit"] & IslandEventHandle<T> {
   if (typeof window === "undefined") {
-    return () => {};
+    const noop = (() => {}) as IslandEventHandle<T>["emit"] & IslandEventHandle<T>;
+    noop.emit = noop;
+    noop.cleanup = () => {};
+    return noop;
   }
 
   // 이벤트 리스너 등록
@@ -160,10 +191,22 @@ export function useIslandEvent<T = unknown>(
 
   window.addEventListener(customEventName, listener as EventListener);
 
-  // 이벤트 발송 함수 반환
-  return (data: T) => {
+  // cleanup 함수
+  const cleanup = () => {
+    window.removeEventListener(customEventName, listener as EventListener);
+  };
+
+  // 이벤트 발송 함수
+  const emit = (data: T) => {
     window.dispatchEvent(new CustomEvent(customEventName, { detail: data }));
   };
+
+  // 하위 호환성: emit 함수에 cleanup 속성 추가
+  const result = emit as IslandEventHandle<T>["emit"] & IslandEventHandle<T>;
+  result.emit = emit;
+  result.cleanup = cleanup;
+
+  return result;
 }
 
 /**
@@ -253,4 +296,219 @@ export async function fetchApi<T>(
   }
 
   return response.json();
+}
+
+// ========== Client Partials/Slots API ==========
+
+/**
+ * Partial Island 설정
+ * 페이지 내 특정 부분만 하이드레이션할 때 사용
+ */
+export interface PartialConfig {
+  /** Partial 고유 ID */
+  id: string;
+  /** 하이드레이션 우선순위 */
+  priority?: "immediate" | "visible" | "idle" | "interaction";
+  /** 부모 Island ID (중첩 시) */
+  parentId?: string;
+}
+
+/**
+ * Partial Island 정의 타입
+ */
+export interface PartialDefinition<TProps> {
+  /** Partial 컴포넌트 */
+  component: React.ComponentType<TProps>;
+  /** 초기 props (SSR에서 전달) */
+  initialProps?: TProps;
+  /** 하이드레이션 우선순위 */
+  priority?: "immediate" | "visible" | "idle" | "interaction";
+}
+
+/**
+ * 컴파일된 Partial
+ */
+export interface CompiledPartial<TProps> {
+  /** Partial 정의 */
+  definition: PartialDefinition<TProps>;
+  /** Mandu Partial 마커 */
+  __mandu_partial: true;
+  /** Partial ID */
+  __mandu_partial_id?: string;
+}
+
+/**
+ * Partial Island 생성
+ * 페이지 내 특정 부분만 하이드레이션
+ *
+ * @example
+ * ```typescript
+ * // 검색 바만 별도 Island로 분리
+ * const SearchBarPartial = partial({
+ *   component: SearchBar,
+ *   priority: 'interaction', // 사용자 상호작용 시 하이드레이션
+ * });
+ *
+ * // 사용
+ * function Header() {
+ *   return (
+ *     <header>
+ *       <Logo />
+ *       <SearchBarPartial.Render query="" />
+ *     </header>
+ *   );
+ * }
+ * ```
+ */
+export function partial<TProps extends Record<string, any>>(
+  definition: PartialDefinition<TProps>
+): CompiledPartial<TProps> & {
+  Render: React.ComponentType<TProps>;
+} {
+  if (!definition.component) {
+    throw new Error("[Mandu Partial] component is required");
+  }
+
+  const compiled: CompiledPartial<TProps> = {
+    definition,
+    __mandu_partial: true,
+  };
+
+  // Render 컴포넌트 생성
+  const React = require("react");
+
+  const RenderComponent: React.FC<TProps> = (props) => {
+    return React.createElement(definition.component, props);
+  };
+
+  return Object.assign(compiled, { Render: RenderComponent });
+}
+
+/**
+ * Slot 정의 - 서버에서 렌더링되고 클라이언트에서 하이드레이션되는 영역
+ */
+export interface SlotDefinition<TData, TProps> {
+  /** 슬롯 ID */
+  id: string;
+  /** 데이터 로더 (서버에서 실행) */
+  loader?: () => Promise<TData>;
+  /** 데이터를 props로 변환 */
+  transform?: (data: TData) => TProps;
+  /** 렌더링 컴포넌트 */
+  component: React.ComponentType<TProps>;
+  /** 하이드레이션 우선순위 */
+  priority?: "immediate" | "visible" | "idle" | "interaction";
+  /** 로딩 UI */
+  loading?: () => ReactNode;
+  /** 에러 UI */
+  errorBoundary?: (error: Error, reset: () => void) => ReactNode;
+}
+
+/**
+ * 컴파일된 Slot
+ */
+export interface CompiledSlot<TData, TProps> {
+  definition: SlotDefinition<TData, TProps>;
+  __mandu_slot: true;
+  __mandu_slot_id: string;
+}
+
+/**
+ * Client Slot 생성
+ * 서버 데이터를 받아 클라이언트에서 하이드레이션되는 컴포넌트
+ *
+ * @example
+ * ```typescript
+ * // 댓글 영역을 별도 슬롯으로 분리
+ * const CommentsSlot = slot({
+ *   id: 'comments',
+ *   loader: async () => fetchComments(postId),
+ *   transform: (data) => ({ comments: data.items }),
+ *   component: CommentList,
+ *   priority: 'visible',
+ *   loading: () => <CommentsSkeleton />,
+ * });
+ * ```
+ */
+export function slot<TData, TProps extends Record<string, any>>(
+  definition: SlotDefinition<TData, TProps>
+): CompiledSlot<TData, TProps> {
+  if (!definition.id) {
+    throw new Error("[Mandu Slot] id is required");
+  }
+  if (!definition.component) {
+    throw new Error("[Mandu Slot] component is required");
+  }
+
+  return {
+    definition,
+    __mandu_slot: true,
+    __mandu_slot_id: definition.id,
+  };
+}
+
+/**
+ * 여러 Partial을 그룹으로 관리
+ */
+export interface PartialGroup {
+  /** 그룹에 Partial 추가 */
+  add: <TProps>(id: string, partial: CompiledPartial<TProps>) => void;
+  /** Partial 조회 */
+  get: <TProps>(id: string) => CompiledPartial<TProps> | undefined;
+  /** 모든 Partial ID 목록 */
+  ids: () => string[];
+  /** 특정 Partial 하이드레이션 트리거 */
+  hydrate: (id: string) => Promise<void>;
+  /** 모든 Partial 하이드레이션 */
+  hydrateAll: () => Promise<void>;
+}
+
+/**
+ * Partial 그룹 생성
+ *
+ * @example
+ * ```typescript
+ * const dashboardPartials = createPartialGroup();
+ *
+ * dashboardPartials.add('chart', ChartPartial);
+ * dashboardPartials.add('table', TablePartial);
+ *
+ * // 특정 부분만 하이드레이션
+ * await dashboardPartials.hydrate('chart');
+ * ```
+ */
+export function createPartialGroup(): PartialGroup {
+  const partials = new Map<string, CompiledPartial<any>>();
+
+  return {
+    add: (id, partial) => {
+      partial.__mandu_partial_id = id;
+      partials.set(id, partial);
+    },
+    get: (id) => partials.get(id),
+    ids: () => Array.from(partials.keys()),
+    hydrate: async (id) => {
+      if (typeof window === "undefined") return;
+
+      const element = document.querySelector(`[data-mandu-partial="${id}"]`);
+      if (element) {
+        element.dispatchEvent(
+          new CustomEvent("mandu:hydrate-partial", { bubbles: true, detail: { id } })
+        );
+      }
+    },
+    hydrateAll: async () => {
+      if (typeof window === "undefined") return;
+
+      const elements = document.querySelectorAll("[data-mandu-partial]");
+      for (const el of elements) {
+        const id = el.getAttribute("data-mandu-partial");
+        if (id) {
+          el.dispatchEvent(
+            new CustomEvent("mandu:hydrate-partial", { bubbles: true, detail: { id } })
+          );
+        }
+      }
+    },
+  };
 }
