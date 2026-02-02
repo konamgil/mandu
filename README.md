@@ -88,6 +88,146 @@ That's it! You're ready to build with Mandu.
 
 ---
 
+## Beginner's Guide
+
+If you're new to Mandu, this section will help you understand the basics.
+
+### Project Structure After Init
+
+```
+my-app/
+├── app/                    # Your code goes here (FS Routes)
+│   ├── page.tsx           # Home page (/)
+│   └── api/
+│       └── health/
+│           └── route.ts   # Health check API (/api/health)
+├── spec/
+│   └── routes.manifest.json  # Route definitions (auto-managed)
+├── .mandu/                 # Build output (auto-generated)
+├── package.json
+└── tsconfig.json
+```
+
+### File Naming Conventions
+
+| File Name | Purpose | URL |
+|-----------|---------|-----|
+| `app/page.tsx` | Home page | `/` |
+| `app/about/page.tsx` | About page | `/about` |
+| `app/users/[id]/page.tsx` | Dynamic user page | `/users/123` |
+| `app/api/users/route.ts` | Users API | `/api/users` |
+| `app/layout.tsx` | Shared layout | Wraps all pages |
+
+### Common Tasks
+
+#### Add a New Page
+
+Create `app/about/page.tsx`:
+
+```tsx
+export default function About() {
+  return (
+    <div>
+      <h1>About Us</h1>
+      <p>Welcome to our site!</p>
+    </div>
+  );
+}
+```
+
+Visit `http://localhost:3000/about`
+
+#### Add a Dynamic Route
+
+Create `app/users/[id]/page.tsx`:
+
+```tsx
+export default function UserProfile({ params }: { params: { id: string } }) {
+  return (
+    <div>
+      <h1>User Profile</h1>
+      <p>User ID: {params.id}</p>
+    </div>
+  );
+}
+```
+
+Visit `http://localhost:3000/users/123`
+
+#### Add an API with Multiple Methods
+
+Create `app/api/users/route.ts`:
+
+```typescript
+// GET /api/users
+export function GET() {
+  return Response.json({
+    users: [
+      { id: 1, name: "Alice" },
+      { id: 2, name: "Bob" }
+    ]
+  });
+}
+
+// POST /api/users
+export async function POST(request: Request) {
+  const body = await request.json();
+  return Response.json({
+    message: "User created",
+    user: body
+  }, { status: 201 });
+}
+```
+
+#### Add a Layout
+
+Create `app/layout.tsx`:
+
+```tsx
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <head>
+        <title>My Mandu App</title>
+      </head>
+      <body>
+        <nav>
+          <a href="/">Home</a>
+          <a href="/about">About</a>
+        </nav>
+        <main>{children}</main>
+        <footer>© 2025 My App</footer>
+      </body>
+    </html>
+  );
+}
+```
+
+### Tech Stack
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Bun** | 1.0+ | JavaScript runtime & package manager |
+| **React** | 19.x | UI library |
+| **TypeScript** | 5.x | Type safety |
+
+### Next Steps
+
+1. **Read the [FS Routes](#fs-routes) section** to understand routing patterns
+2. **Try [Mandu Guard](#mandu-guard)** to enforce architecture rules
+3. **Explore [MCP Server](#mcp-server-ai-integration)** for AI agent integration
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `command not found: bun` | Install Bun: `curl -fsSL https://bun.sh/install \| bash` |
+| Port 3000 already in use | Stop other servers or use `PORT=3001 bun run dev` |
+| Changes not reflecting | Restart dev server with `bun run dev` |
+| TypeScript errors | Run `bun install` to ensure types are installed |
+
+---
+
 ## What is Mandu?
 
 **Mandu** is a **Bun + TypeScript + React fullstack framework** designed for AI-assisted development.

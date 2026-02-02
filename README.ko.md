@@ -88,6 +88,146 @@ bun run build
 
 ---
 
+## 입문 가이드
+
+Mandu를 처음 사용하신다면 이 섹션이 도움이 됩니다.
+
+### 프로젝트 생성 후 구조
+
+```
+my-app/
+├── app/                    # 코드 작성 영역 (FS Routes)
+│   ├── page.tsx           # 홈 페이지 (/)
+│   └── api/
+│       └── health/
+│           └── route.ts   # Health check API (/api/health)
+├── spec/
+│   └── routes.manifest.json  # 라우트 정의 (자동 관리)
+├── .mandu/                 # 빌드 출력 (자동 생성)
+├── package.json
+└── tsconfig.json
+```
+
+### 파일 이름 규칙
+
+| 파일 이름 | 용도 | URL |
+|-----------|------|-----|
+| `app/page.tsx` | 홈 페이지 | `/` |
+| `app/about/page.tsx` | About 페이지 | `/about` |
+| `app/users/[id]/page.tsx` | 동적 사용자 페이지 | `/users/123` |
+| `app/api/users/route.ts` | 사용자 API | `/api/users` |
+| `app/layout.tsx` | 공유 레이아웃 | 모든 페이지 감싸기 |
+
+### 일반적인 작업
+
+#### 새 페이지 추가하기
+
+`app/about/page.tsx` 생성:
+
+```tsx
+export default function About() {
+  return (
+    <div>
+      <h1>회사 소개</h1>
+      <p>저희 사이트에 오신 것을 환영합니다!</p>
+    </div>
+  );
+}
+```
+
+`http://localhost:3000/about` 에서 확인
+
+#### 동적 라우트 추가하기
+
+`app/users/[id]/page.tsx` 생성:
+
+```tsx
+export default function UserProfile({ params }: { params: { id: string } }) {
+  return (
+    <div>
+      <h1>사용자 프로필</h1>
+      <p>사용자 ID: {params.id}</p>
+    </div>
+  );
+}
+```
+
+`http://localhost:3000/users/123` 에서 확인
+
+#### 여러 메서드를 가진 API 추가하기
+
+`app/api/users/route.ts` 생성:
+
+```typescript
+// GET /api/users
+export function GET() {
+  return Response.json({
+    users: [
+      { id: 1, name: "Alice" },
+      { id: 2, name: "Bob" }
+    ]
+  });
+}
+
+// POST /api/users
+export async function POST(request: Request) {
+  const body = await request.json();
+  return Response.json({
+    message: "사용자 생성됨",
+    user: body
+  }, { status: 201 });
+}
+```
+
+#### 레이아웃 추가하기
+
+`app/layout.tsx` 생성:
+
+```tsx
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <head>
+        <title>My Mandu App</title>
+      </head>
+      <body>
+        <nav>
+          <a href="/">홈</a>
+          <a href="/about">소개</a>
+        </nav>
+        <main>{children}</main>
+        <footer>© 2025 My App</footer>
+      </body>
+    </html>
+  );
+}
+```
+
+### 기술 스택
+
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| **Bun** | 1.0+ | JavaScript 런타임 & 패키지 매니저 |
+| **React** | 19.x | UI 라이브러리 |
+| **TypeScript** | 5.x | 타입 안전성 |
+
+### 다음 단계
+
+1. **[FS Routes](#fs-routes) 섹션 읽기** - 라우팅 패턴 이해하기
+2. **[Mandu Guard](#mandu-guard-시스템) 사용해보기** - 아키텍처 규칙 강제
+3. **[MCP Server](#mcp-서버-ai-에이전트-통합) 탐색하기** - AI 에이전트 통합
+
+### 문제 해결
+
+| 문제 | 해결 방법 |
+|------|----------|
+| `command not found: bun` | Bun 설치: `curl -fsSL https://bun.sh/install \| bash` |
+| 포트 3000 사용 중 | 다른 서버 중지 또는 `PORT=3001 bun run dev` |
+| 변경사항 미반영 | `bun run dev`로 개발 서버 재시작 |
+| TypeScript 에러 | `bun install`로 타입 설치 확인 |
+
+---
+
 ## 문서
 
 - `docs/README.ko.md` — 문서 인덱스
