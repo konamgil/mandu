@@ -7,7 +7,7 @@ import {
   type SpecLock,
 } from "@mandujs/core";
 import { getProjectPaths, readJsonFile } from "../utils/project.js";
-import { getGuide, listGuides } from "./skills/index.js";
+import { getGuide, listGuides, getRecipe, listRecipes } from "./skills/index.js";
 import path from "path";
 
 export const resourceDefinitions: Resource[] = [
@@ -82,6 +82,43 @@ export const resourceDefinitions: Resource[] = [
     uri: "mandu://skills/guides/guard",
     name: "Guard Guide",
     description: "Guide for architecture enforcement and layer dependencies",
+    mimeType: "text/markdown",
+  },
+  // Skills - Recipes
+  {
+    uri: "mandu://skills/recipes",
+    name: "Skills Recipe List",
+    description: "Step-by-step recipes for common tasks",
+    mimeType: "application/json",
+  },
+  {
+    uri: "mandu://skills/recipes/add-api-route",
+    name: "Add API Route Recipe",
+    description: "Step-by-step guide to add a new REST API endpoint",
+    mimeType: "text/markdown",
+  },
+  {
+    uri: "mandu://skills/recipes/add-page",
+    name: "Add Page Recipe",
+    description: "Step-by-step guide to add a new page",
+    mimeType: "text/markdown",
+  },
+  {
+    uri: "mandu://skills/recipes/add-auth",
+    name: "Add Auth Recipe",
+    description: "Step-by-step guide to add authentication",
+    mimeType: "text/markdown",
+  },
+  {
+    uri: "mandu://skills/recipes/add-island",
+    name: "Add Island Recipe",
+    description: "Step-by-step guide to add an interactive Island component",
+    mimeType: "text/markdown",
+  },
+  {
+    uri: "mandu://skills/recipes/add-database",
+    name: "Add Database Recipe",
+    description: "Step-by-step guide to connect a database",
     mimeType: "text/markdown",
   },
 ];
@@ -283,6 +320,39 @@ export function resourceHandlers(
     "mandu://skills/guides/guard": async () => {
       const content = getGuide("guard");
       return { id: "guard", content };
+    },
+
+    // Skills - Recipes
+    "mandu://skills/recipes": async () => {
+      return {
+        recipes: listRecipes(),
+        usage: "Read a specific recipe with mandu://skills/recipes/{id}",
+      };
+    },
+
+    "mandu://skills/recipes/add-api-route": async () => {
+      const content = getRecipe("add-api-route");
+      return { id: "add-api-route", content };
+    },
+
+    "mandu://skills/recipes/add-page": async () => {
+      const content = getRecipe("add-page");
+      return { id: "add-page", content };
+    },
+
+    "mandu://skills/recipes/add-auth": async () => {
+      const content = getRecipe("add-auth");
+      return { id: "add-auth", content };
+    },
+
+    "mandu://skills/recipes/add-island": async () => {
+      const content = getRecipe("add-island");
+      return { id: "add-island", content };
+    },
+
+    "mandu://skills/recipes/add-database": async () => {
+      const content = getRecipe("add-database");
+      return { id: "add-database", content };
     },
   };
 }
