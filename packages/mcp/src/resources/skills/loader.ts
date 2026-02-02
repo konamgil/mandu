@@ -37,6 +37,8 @@ const SKILL_IDS = [
   "mandu-security",
   "mandu-testing",
   "mandu-deployment",
+  "mandu-styling",
+  "mandu-ui",
 ];
 
 /**
@@ -102,6 +104,8 @@ function getSkillDescription(id: string): string {
     "mandu-security": "Security best practices for authentication and protection",
     "mandu-testing": "Testing patterns with Bun test and Playwright",
     "mandu-deployment": "Production deployment with Render, Supabase, Docker, and CI/CD",
+    "mandu-styling": "CSS framework integration with Tailwind, Panda CSS, and theming",
+    "mandu-ui": "UI component library integration with shadcn/ui and accessibility",
   };
   return descriptions[id] || "";
 }
