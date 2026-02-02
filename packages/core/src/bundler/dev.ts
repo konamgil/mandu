@@ -18,6 +18,17 @@ export interface DevBundlerOptions {
   onRebuild?: (result: RebuildResult) => void;
   /** 에러 콜백 */
   onError?: (error: Error, routeId?: string) => void;
+  /**
+   * 추가 watch 디렉토리 (공통 컴포넌트 등)
+   * 상대 경로 또는 절대 경로 모두 지원
+   * 기본값: ["src/components", "components", "src/shared", "shared", "lib"]
+   */
+  watchDirs?: string[];
+  /**
+   * 기본 watch 디렉토리 비활성화
+   * true로 설정하면 watchDirs만 감시
+   */
+  disableDefaultWatchDirs?: boolean;
 }
 
 export interface RebuildResult {
@@ -34,12 +45,33 @@ export interface DevBundler {
   close: () => void;
 }
 
+// 기본 공통 컴포넌트 디렉토리 목록
+const DEFAULT_COMMON_DIRS = [
+  "src/components",
+  "components",
+  "src/shared",
+  "shared",
+  "src/lib",
+  "lib",
+  "src/hooks",
+  "hooks",
+  "src/utils",
+  "utils",
+];
+
 /**
  * 개발 모드 번들러 시작
  * 파일 변경 감시 및 자동 재빌드
  */
 export async function startDevBundler(options: DevBundlerOptions): Promise<DevBundler> {
-  const { rootDir, manifest, onRebuild, onError } = options;
+  const {
+    rootDir,
+    manifest,
+    onRebuild,
+    onError,
+    watchDirs: customWatchDirs = [],
+    disableDefaultWatchDirs = false,
+  } = options;
 
   // 초기 빌드
   console.log("🔨 Initial client bundle build...");
@@ -57,6 +89,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
   // clientModule 경로에서 routeId 매핑 생성
   const clientModuleToRoute = new Map<string, string>();
   const watchDirs = new Set<string>();
+  const commonWatchDirs = new Set<string>(); // 공통 디렉토리 (전체 재빌드 트리거)
 
   for (const route of manifest.routes) {
     if (route.clientModule) {
@@ -79,12 +112,78 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     // slots 디렉토리 없으면 무시
   }
 
+  // 공통 컴포넌트 디렉토리 추가 (기본 + 커스텀)
+  const commonDirsToCheck = disableDefaultWatchDirs
+    ? customWatchDirs
+    : [...DEFAULT_COMMON_DIRS, ...customWatchDirs];
+
+  for (const dir of commonDirsToCheck) {
+    const absDir = path.isAbsolute(dir) ? dir : path.join(rootDir, dir);
+    try {
+      await fs.promises.access(absDir);
+      commonWatchDirs.add(absDir);
+      watchDirs.add(absDir);
+    } catch {
+      // 디렉토리 없으면 무시
+    }
+  }
+
   // 파일 감시 설정
   const watchers: fs.FSWatcher[] = [];
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // 파일이 공통 디렉토리에 있는지 확인
+  const isInCommonDir = (filePath: string): boolean => {
+    const normalizedFile = path.resolve(filePath).replace(/\\/g, "/");
+    for (const commonDir of commonWatchDirs) {
+      const normalizedCommon = path.resolve(commonDir).replace(/\\/g, "/");
+      if (normalizedFile.startsWith(normalizedCommon + "/")) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   const handleFileChange = async (changedFile: string) => {
     const normalizedPath = changedFile.replace(/\\/g, "/");
+
+    // 공통 컴포넌트 디렉토리 변경 → 전체 재빌드
+    if (isInCommonDir(changedFile)) {
+      console.log(`\n🔄 Common file changed: ${path.basename(changedFile)}`);
+      console.log(`   Rebuilding all islands...`);
+      const startTime = performance.now();
+
+      try {
+        const result = await buildClientBundles(manifest, rootDir, {
+          minify: false,
+          sourcemap: true,
+        });
+
+        const buildTime = performance.now() - startTime;
+
+        if (result.success) {
+          console.log(`✅ Rebuilt ${result.stats.bundleCount} islands in ${buildTime.toFixed(0)}ms`);
+          onRebuild?.({
+            routeId: "*", // 전체 재빌드 표시
+            success: true,
+            buildTime,
+          });
+        } else {
+          console.error(`❌ Build failed:`, result.errors);
+          onRebuild?.({
+            routeId: "*",
+            success: false,
+            buildTime,
+            error: result.errors.join(", "),
+          });
+        }
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        console.error(`❌ Build error:`, err.message);
+        onError?.(err, "*");
+      }
+      return;
+    }
 
     // clientModule 매핑에서 routeId 찾기
     let routeId = clientModuleToRoute.get(normalizedPath);
@@ -173,6 +272,12 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
 
   if (watchers.length > 0) {
     console.log(`👀 Watching ${watchers.length} directories for changes...`);
+    if (commonWatchDirs.size > 0) {
+      const commonDirNames = Array.from(commonWatchDirs)
+        .map(d => path.relative(rootDir, d) || ".")
+        .join(", ");
+      console.log(`📦 Common dirs (full rebuild): ${commonDirNames}`);
+    }
   }
 
   return {
