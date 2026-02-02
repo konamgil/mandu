@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/core",
-  "version": "0.9.38",
+  "version": "0.9.39",
   "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
   "main": "./src/index.ts",
@@ -43,8 +43,8 @@
     "bun": ">=1.0.0"
   },
   "peerDependencies": {
-    "react": ">=18.0.0",
-    "react-dom": ">=18.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "zod": ">=3.0.0"
   },
   "dependencies": {

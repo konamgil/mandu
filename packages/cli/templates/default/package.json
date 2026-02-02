@@ -8,14 +8,14 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@mandujs/core": "^0.9.38",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "@mandujs/core": "^0.9.39",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@mandujs/cli": "^0.9.20",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
+    "@mandujs/cli": "^0.9.21",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "typescript": "^5.0.0"
   }
 }
