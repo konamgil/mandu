@@ -36,6 +36,7 @@ const SKILL_IDS = [
   "mandu-composition",
   "mandu-security",
   "mandu-testing",
+  "mandu-deployment",
 ];
 
 /**
@@ -100,6 +101,7 @@ function getSkillDescription(id: string): string {
     "mandu-composition": "React composition patterns for Islands and state",
     "mandu-security": "Security best practices for authentication and protection",
     "mandu-testing": "Testing patterns with Bun test and Playwright",
+    "mandu-deployment": "Production deployment with Render, Supabase, Docker, and CI/CD",
   };
   return descriptions[id] || "";
 }
