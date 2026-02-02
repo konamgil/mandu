@@ -12,6 +12,7 @@ export * from "./contract";
 export * from "./openapi";
 export * from "./brain";
 export * from "./watcher";
+export * from "./router";
 
 // Consolidated Mandu namespace
 import { ManduFilling, ManduContext, ManduFillingFactory } from "./filling";

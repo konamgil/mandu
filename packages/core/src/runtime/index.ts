@@ -7,3 +7,4 @@ export * from "./compose";
 export * from "./lifecycle";
 export * from "./trace";
 export * from "./logger";
+export * from "./boundary";

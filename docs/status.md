@@ -78,7 +78,12 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Item | Status | Evidence |
 |------|--------|----------|
 | Server router | done | `packages/core/src/runtime/router.ts` |
-| FS routes command layer | not started | (no `packages/core/src/router/fs-*`) |
+| FS Routes scanner | done | `packages/core/src/router/fs-scanner.ts` (v0.9.32) |
+| FS Routes patterns | done | `packages/core/src/router/fs-patterns.ts` (v0.9.32) |
+| FS Routes generator | done | `packages/core/src/router/fs-routes.ts` (v0.9.32) |
+| FS Routes watcher | done | `packages/core/src/router/fs-routes.ts` watchFSRoutes() (v0.9.32) |
+| FS Routes CLI | done | `packages/cli/src/commands/routes.ts` routes generate/list/watch (v0.9.13) |
+| FS Routes dev integration | done | `packages/cli/src/commands/dev.ts` FS Routes 기반 dev 서버 (v0.9.13) |
 
 ## Realtime / Resumable
 
@@ -113,18 +118,23 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Client-side Routing | 4 | 0 |
 | Data & Content | 0 | 1 |
 | Integrations & Build | 5 | 2 |
-| Routing | 1 | 1 |
+| Routing | 7 | 0 |
 | Realtime / Resumable | 0 | 2 |
 | Observability & Perf | 1 | 1 |
 | Security | 2 | 0 |
-| **Total** | **38** | **7** |
+| **Total** | **44** | **6** |
 
 ---
 
-## Recent Changes (v0.9.26 ~ v0.9.31)
+## Recent Changes (v0.9.26 ~ v0.9.34)
 
 | Version | Package | Changes |
 |---------|---------|---------|
+| v0.9.34 | core | Advanced routes (catch-all `:param*`, optional `:param*?`, boundary components) |
+| v0.9.33 | core | Layout System (layoutChain, loadingModule, errorModule in RouteSpec) |
+| v0.9.14 | cli | Layout HMR support (registerLayoutLoader, clearDefaultRegistry on reload) |
+| v0.9.32 | core | FS Routes system (scanner, patterns, generator, watcher) |
+| v0.9.13 | cli | FS Routes CLI (routes generate/list/watch, dev 통합) |
 | v0.9.31 | core | HMR common file reload support |
 | v0.9.30 | core | Dev bundler common dirs watch |
 | v0.9.29 | core | Server registry instance isolation |

@@ -5,7 +5,8 @@ import type { ManduFilling } from "../filling/filling";
 import { ManduContext } from "../filling/context";
 import { Router } from "./router";
 import { renderSSR, renderStreamingResponse } from "./ssr";
-import React from "react";
+import { PageBoundary, DefaultLoading, DefaultError, type ErrorFallbackProps } from "./boundary";
+import React, { type ReactNode } from "react";
 import path from "path";
 import {
   formatErrorResponse,
@@ -120,6 +121,36 @@ export type ApiHandler = (req: Request, params: Record<string, string>) => Respo
 export type PageLoader = () => Promise<{ default: React.ComponentType<{ params: Record<string, string> }> }>;
 
 /**
+ * Layout 컴포넌트 타입
+ * children을 받아서 감싸는 구조
+ */
+export type LayoutComponent = React.ComponentType<{
+  children: React.ReactNode;
+  params?: Record<string, string>;
+}>;
+
+/**
+ * Layout 로더 타입
+ */
+export type LayoutLoader = () => Promise<{ default: LayoutComponent }>;
+
+/**
+ * Loading 컴포넌트 타입
+ */
+export type LoadingComponent = React.ComponentType<Record<string, never>>;
+
+/**
+ * Error 컴포넌트 타입
+ */
+export type ErrorComponent = React.ComponentType<ErrorFallbackProps>;
+
+/**
+ * Loading/Error 로더 타입
+ */
+export type LoadingLoader = () => Promise<{ default: LoadingComponent }>;
+export type ErrorLoader = () => Promise<{ default: ErrorComponent }>;
+
+/**
  * Page 등록 정보
  * - component: React 컴포넌트
  * - filling: Slot의 ManduFilling 인스턴스 (loader 포함)
@@ -166,6 +197,18 @@ export class ServerRegistry {
   readonly pageLoaders: Map<string, PageLoader> = new Map();
   readonly pageHandlers: Map<string, PageHandler> = new Map();
   readonly routeComponents: Map<string, RouteComponent> = new Map();
+  /** Layout 컴포넌트 캐시 (모듈 경로 → 컴포넌트) */
+  readonly layoutComponents: Map<string, LayoutComponent> = new Map();
+  /** Layout 로더 (모듈 경로 → 로더 함수) */
+  readonly layoutLoaders: Map<string, LayoutLoader> = new Map();
+  /** Loading 컴포넌트 캐시 (모듈 경로 → 컴포넌트) */
+  readonly loadingComponents: Map<string, LoadingComponent> = new Map();
+  /** Loading 로더 (모듈 경로 → 로더 함수) */
+  readonly loadingLoaders: Map<string, LoadingLoader> = new Map();
+  /** Error 컴포넌트 캐시 (모듈 경로 → 컴포넌트) */
+  readonly errorComponents: Map<string, ErrorComponent> = new Map();
+  /** Error 로더 (모듈 경로 → 로더 함수) */
+  readonly errorLoaders: Map<string, ErrorLoader> = new Map();
   createAppFn: CreateAppFn | null = null;
   settings: ServerRegistrySettings = {
     isDev: false,
@@ -191,8 +234,128 @@ export class ServerRegistry {
     this.routeComponents.set(routeId, component);
   }
 
+  /**
+   * Layout 로더 등록
+   */
+  registerLayoutLoader(modulePath: string, loader: LayoutLoader): void {
+    this.layoutLoaders.set(modulePath, loader);
+  }
+
+  /**
+   * Layout 컴포넌트 가져오기 (캐시 또는 로드)
+   */
+  async getLayoutComponent(modulePath: string): Promise<LayoutComponent | null> {
+    // 캐시 확인
+    const cached = this.layoutComponents.get(modulePath);
+    if (cached) {
+      return cached;
+    }
+
+    // 로더로 로드
+    const loader = this.layoutLoaders.get(modulePath);
+    if (loader) {
+      try {
+        const module = await loader();
+        const component = module.default;
+        this.layoutComponents.set(modulePath, component);
+        return component;
+      } catch (error) {
+        console.error(`[Mandu] Failed to load layout: ${modulePath}`, error);
+        return null;
+      }
+    }
+
+    // 동적 import 시도
+    try {
+      const fullPath = path.join(this.settings.rootDir, modulePath);
+      const module = await import(fullPath);
+      const component = module.default;
+      this.layoutComponents.set(modulePath, component);
+      return component;
+    } catch (error) {
+      console.error(`[Mandu] Failed to load layout: ${modulePath}`, error);
+      return null;
+    }
+  }
+
   setCreateApp(fn: CreateAppFn): void {
     this.createAppFn = fn;
+  }
+
+  /**
+   * Loading 로더 등록
+   */
+  registerLoadingLoader(modulePath: string, loader: LoadingLoader): void {
+    this.loadingLoaders.set(modulePath, loader);
+  }
+
+  /**
+   * Error 로더 등록
+   */
+  registerErrorLoader(modulePath: string, loader: ErrorLoader): void {
+    this.errorLoaders.set(modulePath, loader);
+  }
+
+  /**
+   * Loading 컴포넌트 가져오기 (캐시 또는 로드)
+   */
+  async getLoadingComponent(modulePath: string): Promise<LoadingComponent | null> {
+    const cached = this.loadingComponents.get(modulePath);
+    if (cached) return cached;
+
+    const loader = this.loadingLoaders.get(modulePath);
+    if (loader) {
+      try {
+        const module = await loader();
+        const component = module.default;
+        this.loadingComponents.set(modulePath, component);
+        return component;
+      } catch (error) {
+        console.error(`[Mandu] Failed to load loading component: ${modulePath}`, error);
+        return null;
+      }
+    }
+
+    try {
+      const fullPath = path.join(this.settings.rootDir, modulePath);
+      const module = await import(fullPath);
+      const component = module.default;
+      this.loadingComponents.set(modulePath, component);
+      return component;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Error 컴포넌트 가져오기 (캐시 또는 로드)
+   */
+  async getErrorComponent(modulePath: string): Promise<ErrorComponent | null> {
+    const cached = this.errorComponents.get(modulePath);
+    if (cached) return cached;
+
+    const loader = this.errorLoaders.get(modulePath);
+    if (loader) {
+      try {
+        const module = await loader();
+        const component = module.default;
+        this.errorComponents.set(modulePath, component);
+        return component;
+      } catch (error) {
+        console.error(`[Mandu] Failed to load error component: ${modulePath}`, error);
+        return null;
+      }
+    }
+
+    try {
+      const fullPath = path.join(this.settings.rootDir, modulePath);
+      const module = await import(fullPath);
+      const component = module.default;
+      this.errorComponents.set(modulePath, component);
+      return component;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -203,6 +366,12 @@ export class ServerRegistry {
     this.pageLoaders.clear();
     this.pageHandlers.clear();
     this.routeComponents.clear();
+    this.layoutComponents.clear();
+    this.layoutLoaders.clear();
+    this.loadingComponents.clear();
+    this.loadingLoaders.clear();
+    this.errorComponents.clear();
+    this.errorLoaders.clear();
     this.createAppFn = null;
   }
 }
@@ -251,6 +420,63 @@ export function registerRouteComponent(routeId: string, component: RouteComponen
 
 export function setCreateApp(fn: CreateAppFn): void {
   defaultRegistry.setCreateApp(fn);
+}
+
+/**
+ * Layout 로더 등록 (전역)
+ */
+export function registerLayoutLoader(modulePath: string, loader: LayoutLoader): void {
+  defaultRegistry.registerLayoutLoader(modulePath, loader);
+}
+
+/**
+ * Loading 로더 등록 (전역)
+ */
+export function registerLoadingLoader(modulePath: string, loader: LoadingLoader): void {
+  defaultRegistry.registerLoadingLoader(modulePath, loader);
+}
+
+/**
+ * Error 로더 등록 (전역)
+ */
+export function registerErrorLoader(modulePath: string, loader: ErrorLoader): void {
+  defaultRegistry.registerErrorLoader(modulePath, loader);
+}
+
+/**
+ * 레이아웃 체인으로 컨텐츠 래핑
+ *
+ * @param content 페이지 컴포넌트로 렌더된 React Element
+ * @param layoutChain 레이아웃 모듈 경로 배열 (외부 → 내부)
+ * @param registry ServerRegistry 인스턴스
+ * @param params URL 파라미터
+ * @returns 래핑된 React Element
+ */
+async function wrapWithLayouts(
+  content: React.ReactElement,
+  layoutChain: string[],
+  registry: ServerRegistry,
+  params: Record<string, string>
+): Promise<React.ReactElement> {
+  if (!layoutChain || layoutChain.length === 0) {
+    return content;
+  }
+
+  // 레이아웃 로드 (병렬)
+  const layouts = await Promise.all(
+    layoutChain.map((modulePath) => registry.getLayoutComponent(modulePath))
+  );
+
+  // 내부 → 외부 순서로 래핑 (역순)
+  let wrapped = content;
+  for (let i = layouts.length - 1; i >= 0; i--) {
+    const Layout = layouts[i];
+    if (Layout) {
+      wrapped = React.createElement(Layout, { params }, wrapped);
+    }
+  }
+
+  return wrapped;
 }
 
 // Default createApp implementation (registry 기반)
@@ -504,12 +730,17 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
     const defaultAppCreator = createDefaultAppFactory(registry);
     const appCreator = registry.createAppFn || defaultAppCreator;
     try {
-      const app = appCreator({
+      let app = appCreator({
         routeId: route.id,
         url: req.url,
         params,
         loaderData,
       });
+
+      // 레이아웃 체인 적용 (layoutChain이 있는 경우)
+      if (route.layoutChain && route.layoutChain.length > 0) {
+        app = await wrapWithLayouts(app, route.layoutChain, registry, params);
+      }
 
       // serverData 구조: { [routeId]: { serverData: loaderData } }
       const serverData = loaderData

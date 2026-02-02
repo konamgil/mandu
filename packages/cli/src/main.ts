@@ -3,6 +3,7 @@
 import { specUpsert } from "./commands/spec-upsert";
 import { generateApply } from "./commands/generate-apply";
 import { guardCheck } from "./commands/guard-check";
+import { guardArch } from "./commands/guard-arch";
 import { dev } from "./commands/dev";
 import { init } from "./commands/init";
 import { build } from "./commands/build";
@@ -19,6 +20,7 @@ import {
 import { doctor } from "./commands/doctor";
 import { watch } from "./commands/watch";
 import { brainSetup, brainStatus } from "./commands/brain";
+import { routesGenerate, routesList, routesWatch } from "./commands/routes";
 
 const HELP_TEXT = `
 🥟 Mandu CLI - Agent-Native Fullstack Framework
@@ -27,11 +29,20 @@ Usage: bunx mandu <command> [options]
 
 Commands:
   init           새 프로젝트 생성
-  spec-upsert    Spec 파일 검증 및 lock 갱신
-  generate       Spec에서 코드 생성
-  guard          Guard 규칙 검사
+  routes generate  FS Routes 스캔 및 매니페스트 생성
+  routes list      현재 라우트 목록 출력
+  routes watch     실시간 라우트 감시
+  dev            개발 서버 실행 (FS Routes 자동 적용)
+  dev --guard    Guard 실시간 감시와 함께 개발 서버 실행
   build          클라이언트 번들 빌드 (Hydration)
-  dev            개발 서버 실행
+  guard          Guard 규칙 검사 (레거시 Spec 기반)
+  guard arch     아키텍처 위반 검사 (FSD/Clean/Hexagonal)
+  guard arch --watch  실시간 아키텍처 감시
+  guard arch --list-presets  사용 가능한 프리셋 목록
+  guard arch --output report.md  리포트 파일 생성
+  guard arch --show-trend  트렌드 분석 표시
+  spec-upsert    Spec 파일 검증 및 lock 갱신 (레거시)
+  generate       Spec에서 코드 생성 (레거시)
 
   doctor         Guard 실패 분석 + 패치 제안 (Brain)
   watch          실시간 파일 감시 - 경고만 (Brain)
@@ -56,15 +67,23 @@ Options:
   --name <name>      init 시 프로젝트 이름 (기본: my-mandu-app)
   --file <path>      spec-upsert 시 사용할 spec 파일 경로
   --port <port>      dev/openapi serve 포트 (기본: 3000/8080)
+  --guard            dev 시 Architecture Guard 실시간 감시 활성화
+  --guard-preset <p> dev --guard 시 프리셋 (기본: mandu)
   --no-auto-correct  guard 시 자동 수정 비활성화
+  --preset <name>    guard arch 프리셋 (기본: mandu) - fsd, clean, hexagonal, atomic 선택 가능
+  --ci               guard arch CI 모드 (에러 시 exit 1)
+  --quiet            guard arch 요약만 출력
+  --report-format    guard arch 리포트 형식: json, markdown, html
+  --save-stats       guard arch 통계 저장 (트렌드 분석용)
+  --show-trend       guard arch 트렌드 분석 표시
   --minify           build 시 코드 압축
   --sourcemap        build 시 소스맵 생성
-  --watch            build 시 파일 감시 모드
+  --watch            build/guard arch 파일 감시 모드
   --message <msg>    change begin 시 설명 메시지
   --id <id>          change rollback 시 특정 변경 ID
   --keep <n>         change prune 시 유지할 스냅샷 수 (기본: 5)
   --output <path>    openapi/doctor 출력 경로
-  --format <fmt>     doctor 출력 형식: console, json, markdown (기본: console)
+  --format <fmt>     doctor/guard 출력 형식: console, json, agent
   --no-llm           doctor에서 LLM 사용 안 함 (템플릿 모드)
   --model <name>     brain setup 시 모델 이름 (기본: llama3.2)
   --url <url>        brain setup 시 Ollama URL
@@ -73,26 +92,24 @@ Options:
 
 Examples:
   bunx mandu init --name my-app
-  bunx mandu spec-upsert
-  bunx mandu generate
-  bunx mandu guard
-  bunx mandu build --minify
-  bunx mandu build --watch
+  bunx mandu routes list
+  bunx mandu routes generate
   bunx mandu dev --port 3000
+  bunx mandu build --minify
+  bunx mandu guard
+  bunx mandu guard arch --preset fsd
+  bunx mandu guard arch --watch
+  bunx mandu guard arch --ci --format json
   bunx mandu doctor
-  bunx mandu doctor --format markdown --output report.md
-  bunx mandu watch
   bunx mandu brain setup --model codellama
-  bunx mandu brain status
   bunx mandu contract create users
-  bunx mandu contract validate --verbose
   bunx mandu openapi generate --output docs/api.json
-  bunx mandu openapi serve --port 8080
   bunx mandu change begin --message "Add new route"
-  bunx mandu change commit
-  bunx mandu change rollback
 
-Workflow:
+FS Routes Workflow (권장):
+  1. init → 2. app/ 폴더에 page.tsx 생성 → 3. dev → 4. build
+
+Legacy Workflow:
   1. init → 2. spec-upsert → 3. generate → 4. build → 5. guard → 6. dev
 
 Contract-first Workflow:
@@ -174,11 +191,32 @@ async function main(): Promise<void> {
       success = await generateApply();
       break;
 
-    case "guard":
-      success = await guardCheck({
-        autoCorrect: options["no-auto-correct"] !== "true",
-      });
+    case "guard": {
+      const subCommand = args[1];
+      switch (subCommand) {
+        case "arch":
+          success = await guardArch({
+            preset: (options.preset as any) || "fsd",
+            watch: options.watch === "true",
+            ci: options.ci === "true",
+            format: (options.format as any) || "console",
+            quiet: options.quiet === "true",
+            srcDir: options["src-dir"],
+            listPresets: options["list-presets"] === "true",
+            output: options.output,
+            reportFormat: (options["report-format"] as any) || "markdown",
+            saveStats: options["save-stats"] === "true",
+            showTrend: options["show-trend"] === "true",
+          });
+          break;
+        default:
+          // 기본값: 레거시 guard-check
+          success = await guardCheck({
+            autoCorrect: options["no-auto-correct"] !== "true",
+          });
+      }
       break;
+    }
 
     case "build":
       success = await build({
@@ -189,8 +227,47 @@ async function main(): Promise<void> {
       break;
 
     case "dev":
-      await dev({ port: parsePort(options.port) });
+      await dev({
+        port: parsePort(options.port),
+        guard: options.guard === "true",
+        guardPreset: options["guard-preset"] as any,
+      });
       break;
+
+    case "routes": {
+      const subCommand = args[1];
+      switch (subCommand) {
+        case "generate":
+          success = await routesGenerate({
+            output: options.output,
+            verbose: options.verbose === "true",
+          });
+          break;
+        case "list":
+          success = await routesList({
+            verbose: options.verbose === "true",
+          });
+          break;
+        case "watch":
+          success = await routesWatch({
+            output: options.output,
+            verbose: options.verbose === "true",
+          });
+          break;
+        default:
+          // 기본값: list
+          if (!subCommand) {
+            success = await routesList({
+              verbose: options.verbose === "true",
+            });
+          } else {
+            console.error(`❌ Unknown routes subcommand: ${subCommand}`);
+            console.log("\nUsage: bunx mandu routes <generate|list|watch>");
+            process.exit(1);
+          }
+      }
+      break;
+    }
 
     case "contract": {
       const subCommand = args[1];
