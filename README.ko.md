@@ -24,6 +24,70 @@
 
 ---
 
+## Quick Start
+
+### 사전 요구사항
+
+- **Bun** v1.0.0 이상 ([Bun 설치하기](https://bun.sh/docs/installation))
+
+```bash
+# Bun 버전 확인
+bun --version
+```
+
+### 1. 새 프로젝트 생성
+
+```bash
+bunx @mandujs/cli init my-app
+cd my-app
+bun install
+```
+
+### 2. 개발 서버 시작
+
+```bash
+bun run dev
+```
+
+앱이 `http://localhost:3000`에서 실행됩니다.
+
+### 3. 첫 페이지 만들기
+
+`app/page.tsx` 파일 생성:
+
+```tsx
+export default function Home() {
+  return (
+    <div>
+      <h1>Mandu에 오신 것을 환영합니다!</h1>
+      <p>이 파일을 수정하면 변경사항이 즉시 반영됩니다.</p>
+    </div>
+  );
+}
+```
+
+### 4. API 라우트 추가
+
+`app/api/hello/route.ts` 파일 생성:
+
+```typescript
+export function GET() {
+  return Response.json({ message: "안녕하세요, Mandu입니다!" });
+}
+```
+
+이제 `http://localhost:3000/api/hello`에서 확인할 수 있습니다.
+
+### 5. 프로덕션 빌드
+
+```bash
+bun run build
+```
+
+이게 전부입니다! Mandu로 개발할 준비가 되었습니다.
+
+---
+
 ## 문서
 
 - `docs/README.ko.md` — 문서 인덱스
