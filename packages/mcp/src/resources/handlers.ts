@@ -7,6 +7,7 @@ import {
   type SpecLock,
 } from "@mandujs/core";
 import { getProjectPaths, readJsonFile } from "../utils/project.js";
+import { getGuide, listGuides } from "./skills/index.js";
 import path from "path";
 
 export const resourceDefinitions: Resource[] = [
@@ -51,6 +52,37 @@ export const resourceDefinitions: Resource[] = [
     name: "Watch Status",
     description: "File watcher status (active/inactive, uptime, rule count)",
     mimeType: "application/json",
+  },
+  // Skills - Guides
+  {
+    uri: "mandu://skills/guides",
+    name: "Skills Guide List",
+    description: "Available guide documents for learning Mandu",
+    mimeType: "application/json",
+  },
+  {
+    uri: "mandu://skills/guides/slot",
+    name: "Slot Guide",
+    description: "Guide for writing business logic with Mandu.filling() API",
+    mimeType: "text/markdown",
+  },
+  {
+    uri: "mandu://skills/guides/fs-routes",
+    name: "FS Routes Guide",
+    description: "Guide for file-system based routing patterns",
+    mimeType: "text/markdown",
+  },
+  {
+    uri: "mandu://skills/guides/hydration",
+    name: "Hydration Guide",
+    description: "Guide for Island hydration and client components",
+    mimeType: "text/markdown",
+  },
+  {
+    uri: "mandu://skills/guides/guard",
+    name: "Guard Guide",
+    description: "Guide for architecture enforcement and layer dependencies",
+    mimeType: "text/markdown",
   },
 ];
 
@@ -223,6 +255,34 @@ export function resourceHandlers(
           : 0,
         startedAt: status.startedAt?.toISOString() || null,
       };
+    },
+
+    // Skills - Guides
+    "mandu://skills/guides": async () => {
+      return {
+        guides: listGuides(),
+        usage: "Read a specific guide with mandu://skills/guides/{id}",
+      };
+    },
+
+    "mandu://skills/guides/slot": async () => {
+      const content = getGuide("slot");
+      return { id: "slot", content };
+    },
+
+    "mandu://skills/guides/fs-routes": async () => {
+      const content = getGuide("fs-routes");
+      return { id: "fs-routes", content };
+    },
+
+    "mandu://skills/guides/hydration": async () => {
+      const content = getGuide("hydration");
+      return { id: "hydration", content };
+    },
+
+    "mandu://skills/guides/guard": async () => {
+      const content = getGuide("guard");
+      return { id: "guard", content };
     },
   };
 }
