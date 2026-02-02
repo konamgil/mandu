@@ -17,13 +17,15 @@ import {
   loadStatistics,
   analyzeTrend,
   calculateLayerStatistics,
-  generateMarkdownReport,
+  generateGuardMarkdownReport,
   generateHTMLReport,
   type GuardConfig,
   type GuardPreset,
 } from "@mandujs/core";
 import { writeFile } from "fs/promises";
-import { resolveFromCwd } from "../util/fs";
+import { isDirectory, resolveFromCwd } from "../util/fs";
+import { resolveOutputFormat, type OutputFormat } from "../util/output";
+import path from "path";
 
 export interface GuardArchOptions {
   /** 프리셋 이름 */
@@ -33,7 +35,7 @@ export interface GuardArchOptions {
   /** CI 모드 (에러 시 exit 1) */
   ci?: boolean;
   /** 출력 형식: console, agent, json */
-  format?: "console" | "agent" | "json";
+  format?: OutputFormat;
   /** 조용히 (요약만 출력) */
   quiet?: boolean;
   /** 소스 디렉토리 */
@@ -55,7 +57,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     preset = "mandu",
     watch = false,
     ci = false,
-    format = "console",
+    format,
     quiet = false,
     srcDir = "src",
     listPresets: showPresets = false,
@@ -66,6 +68,8 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
   } = options;
 
   const rootDir = resolveFromCwd(".");
+  const resolvedFormat = resolveOutputFormat(format);
+  const enableFsRoutes = await isDirectory(path.resolve(rootDir, "app"));
 
   // 프리셋 목록 출력
   if (showPresets) {
@@ -86,25 +90,37 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     return true;
   }
 
-  console.log("");
-  console.log("🛡️  Mandu Guard - Architecture Checker");
-  console.log("");
-  console.log(`📋 Preset: ${preset}`);
-  console.log(`📂 Source: ${srcDir}/`);
-  console.log(`🔧 Mode: ${watch ? "Watch" : "Check"}`);
-  console.log("");
+  if (resolvedFormat === "console") {
+    console.log("");
+    console.log("🛡️  Mandu Guard - Architecture Checker");
+    console.log("");
+    console.log(`📋 Preset: ${preset}`);
+    console.log(`📂 Source: ${srcDir}/`);
+    console.log(`🔧 Mode: ${watch ? "Watch" : "Check"}`);
+    console.log("");
+  }
 
   // Guard 설정
   const config: GuardConfig = {
     preset,
     srcDir,
     realtime: watch,
+    realtimeOutput: resolvedFormat,
+    fsRoutes: enableFsRoutes
+      ? {
+          noPageToPage: true,
+          pageCanImport: ["widgets", "features", "entities", "shared"],
+          layoutCanImport: ["widgets", "shared"],
+        }
+      : undefined,
   };
 
   // 실시간 감시 모드
   if (watch) {
-    console.log("👁️  Watching for architecture violations...");
-    console.log("   Press Ctrl+C to stop\n");
+    if (resolvedFormat === "console") {
+      console.log("👁️  Watching for architecture violations...");
+      console.log("   Press Ctrl+C to stop\n");
+    }
 
     const watcher = createGuardWatcher({
       config,
@@ -113,7 +129,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
         // 실시간 위반 출력은 watcher 내부에서 처리됨
       },
       onFileAnalyzed: (analysis, violations) => {
-        if (violations.length > 0 && !quiet) {
+        if (resolvedFormat === "console" && violations.length > 0 && !quiet) {
           const timestamp = new Date().toLocaleTimeString();
           console.log(`[${timestamp}] ${analysis.filePath}: ${violations.length} violation(s)`);
         }
@@ -134,13 +150,15 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
   }
 
   // 일회성 검사 모드
-  console.log("🔍 Scanning for architecture violations...\n");
+  if (resolvedFormat === "console" && !quiet) {
+    console.log("🔍 Scanning for architecture violations...\n");
+  }
 
   const report = await checkDirectory(config, rootDir);
   const presetDef = getPreset(preset);
 
   // 출력 형식에 따른 리포트 출력
-  switch (format) {
+  switch (resolvedFormat) {
     case "json":
       console.log(formatReportAsAgentJSON(report, preset));
       break;
@@ -209,7 +227,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
         break;
       case "markdown":
       default:
-        reportContent = generateMarkdownReport(report, trend, layerStats ?? undefined);
+        reportContent = generateGuardMarkdownReport(report, trend, layerStats ?? undefined);
         break;
     }
 

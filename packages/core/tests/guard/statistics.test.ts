@@ -7,7 +7,7 @@ import {
   createScanRecord,
   calculateLayerStatistics,
   analyzeTrend,
-  generateMarkdownReport,
+  generateGuardMarkdownReport,
 } from "../../src/guard/statistics";
 import type { ViolationReport, Violation, ScanRecord } from "../../src/guard/types";
 
@@ -179,7 +179,7 @@ describe("analyzeTrend", () => {
   });
 });
 
-describe("generateMarkdownReport", () => {
+describe("generateGuardMarkdownReport", () => {
   it("should generate markdown report", () => {
     const report: ViolationReport = {
       totalViolations: 2,
@@ -198,7 +198,7 @@ describe("generateMarkdownReport", () => {
       analysisTime: 100,
     };
 
-    const markdown = generateMarkdownReport(report);
+    const markdown = generateGuardMarkdownReport(report);
 
     expect(markdown).toContain("# 🛡️ Mandu Guard Report");
     expect(markdown).toContain("Files Analyzed | 10");
@@ -221,7 +221,7 @@ describe("generateMarkdownReport", () => {
       analysisTime: 100,
     };
 
-    const markdown = generateMarkdownReport(report);
+    const markdown = generateGuardMarkdownReport(report);
 
     expect(markdown).toContain("All clear");
   });

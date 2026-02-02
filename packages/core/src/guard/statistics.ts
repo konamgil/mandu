@@ -360,9 +360,9 @@ export async function addScanRecord(
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * 마크다운 리포트 생성
+ * 마크다운 리포트 생성 (Guard Report)
  */
-export function generateMarkdownReport(
+export function generateGuardMarkdownReport(
   report: ViolationReport,
   trend?: TrendAnalysis | null,
   layerStats?: LayerStatistics[]
@@ -499,7 +499,7 @@ export function generateHTMLReport(
   trend?: TrendAnalysis | null,
   layerStats?: LayerStatistics[]
 ): string {
-  const markdown = generateMarkdownReport(report, trend, layerStats);
+  const markdown = generateGuardMarkdownReport(report, trend, layerStats);
 
   // 간단한 마크다운 → HTML 변환
   let html = markdown
