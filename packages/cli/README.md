@@ -19,18 +19,49 @@
 bun add -D @mandujs/cli
 ```
 
-## Quick Start
+Or use directly with `bunx`:
 
 ```bash
-# Create project
 bunx @mandujs/cli init my-app
-cd my-app && bun install
-
-# Start development
-bun run dev
 ```
 
-That's it. Create pages in `app/` and start coding.
+## Quick Start
+
+### 1. Create a New Project
+
+```bash
+bunx @mandujs/cli init my-app
+cd my-app
+bun install
+```
+
+### 2. Start Development Server
+
+```bash
+bun run dev
+# or
+bunx mandu dev
+```
+
+Your app is now running at `http://localhost:3000`.
+
+### 3. Create Pages in `app/` Directory
+
+```
+app/
+├── page.tsx              → /
+├── about/page.tsx        → /about
+├── users/[id]/page.tsx   → /users/:id
+└── api/hello/route.ts    → /api/hello
+```
+
+### 4. Build for Production
+
+```bash
+bunx mandu build
+```
+
+That's it!
 
 ---
 

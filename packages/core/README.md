@@ -21,6 +21,53 @@ bun add @mandujs/core
 
 > Typically used through `@mandujs/cli`. Direct usage is for advanced use cases.
 
+## Quick Start
+
+### Basic API Handler (Filling)
+
+```typescript
+import { Mandu } from "@mandujs/core";
+
+export default Mandu.filling()
+  .guard((ctx) => {
+    if (!ctx.get("user")) return ctx.unauthorized("Login required");
+  })
+  .get(async (ctx) => {
+    const users = await db.users.findMany();
+    return ctx.ok({ data: users });
+  })
+  .post(async (ctx) => {
+    const body = await ctx.body<{ name: string }>();
+    const user = await db.users.create({ data: body });
+    return ctx.created({ data: user });
+  });
+```
+
+### Type-Safe Contract
+
+```typescript
+import { Mandu } from "@mandujs/core";
+import { z } from "zod";
+
+const userContract = Mandu.contract({
+  request: {
+    GET: { query: z.object({ id: z.string() }) },
+    POST: { body: z.object({ name: z.string() }) }
+  },
+  response: {
+    200: z.object({ data: z.any() }),
+    400: z.object({ error: z.string() })
+  }
+});
+
+const handlers = Mandu.handler(userContract, {
+  GET: (ctx) => ({ data: fetchUser(ctx.query.id) }),
+  POST: (ctx) => ({ data: createUser(ctx.body) })
+});
+```
+
+---
+
 ## Module Overview
 
 ```
