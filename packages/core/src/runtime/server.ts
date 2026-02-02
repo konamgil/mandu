@@ -100,11 +100,19 @@ export interface ServerOptions {
    * - false: 기존 renderToString 사용 (기본값)
    */
   streaming?: boolean;
+  /**
+   * 커스텀 레지스트리 (핸들러/설정 분리)
+   * - 제공하지 않으면 기본 전역 레지스트리 사용
+   * - 테스트나 멀티앱 시나리오에서 createServerRegistry()로 생성한 인스턴스 전달
+   */
+  registry?: ServerRegistry;
 }
 
 export interface ManduServer {
   server: Server;
   router: Router;
+  /** 이 서버 인스턴스의 레지스트리 */
+  registry: ServerRegistry;
   stop: () => void;
 }
 
@@ -137,15 +145,13 @@ export interface AppContext {
 type RouteComponent = (props: { params: Record<string, string>; loaderData?: unknown }) => React.ReactElement;
 type CreateAppFn = (context: AppContext) => React.ReactElement;
 
-// Registry
-const apiHandlers: Map<string, ApiHandler> = new Map();
-const pageLoaders: Map<string, PageLoader> = new Map();
-const pageHandlers: Map<string, PageHandler> = new Map();
-const routeComponents: Map<string, RouteComponent> = new Map();
-let createAppFn: CreateAppFn | null = null;
+// ========== Server Registry (인스턴스별 분리) ==========
 
-// Server settings (module-level for handleRequest access)
-let serverSettings: {
+/**
+ * 서버 인스턴스별 핸들러/설정 레지스트리
+ * 같은 프로세스에서 여러 서버를 띄울 때 핸들러가 섞이는 문제 방지
+ */
+export interface ServerRegistrySettings {
   isDev: boolean;
   hmrPort?: number;
   bundleManifest?: BundleManifest;
@@ -153,20 +159,82 @@ let serverSettings: {
   publicDir: string;
   cors?: CorsOptions | false;
   streaming: boolean;
-} = {
-  isDev: false,
-  rootDir: process.cwd(),
-  publicDir: "public",
-  cors: false,
-  streaming: false,
-};
+}
+
+export class ServerRegistry {
+  readonly apiHandlers: Map<string, ApiHandler> = new Map();
+  readonly pageLoaders: Map<string, PageLoader> = new Map();
+  readonly pageHandlers: Map<string, PageHandler> = new Map();
+  readonly routeComponents: Map<string, RouteComponent> = new Map();
+  createAppFn: CreateAppFn | null = null;
+  settings: ServerRegistrySettings = {
+    isDev: false,
+    rootDir: process.cwd(),
+    publicDir: "public",
+    cors: false,
+    streaming: false,
+  };
+
+  registerApiHandler(routeId: string, handler: ApiHandler): void {
+    this.apiHandlers.set(routeId, handler);
+  }
+
+  registerPageLoader(routeId: string, loader: PageLoader): void {
+    this.pageLoaders.set(routeId, loader);
+  }
+
+  registerPageHandler(routeId: string, handler: PageHandler): void {
+    this.pageHandlers.set(routeId, handler);
+  }
+
+  registerRouteComponent(routeId: string, component: RouteComponent): void {
+    this.routeComponents.set(routeId, component);
+  }
+
+  setCreateApp(fn: CreateAppFn): void {
+    this.createAppFn = fn;
+  }
+
+  /**
+   * 모든 핸들러/컴포넌트 초기화 (테스트용)
+   */
+  clear(): void {
+    this.apiHandlers.clear();
+    this.pageLoaders.clear();
+    this.pageHandlers.clear();
+    this.routeComponents.clear();
+    this.createAppFn = null;
+  }
+}
+
+/**
+ * 기본 전역 레지스트리 (하위 호환성)
+ */
+const defaultRegistry = new ServerRegistry();
+
+/**
+ * 새 레지스트리 인스턴스 생성
+ * 테스트나 멀티앱 시나리오에서 사용
+ */
+export function createServerRegistry(): ServerRegistry {
+  return new ServerRegistry();
+}
+
+/**
+ * 기본 레지스트리 초기화 (테스트용)
+ */
+export function clearDefaultRegistry(): void {
+  defaultRegistry.clear();
+}
+
+// ========== 하위 호환성을 위한 전역 함수들 (defaultRegistry 사용) ==========
 
 export function registerApiHandler(routeId: string, handler: ApiHandler): void {
-  apiHandlers.set(routeId, handler);
+  defaultRegistry.registerApiHandler(routeId, handler);
 }
 
 export function registerPageLoader(routeId: string, loader: PageLoader): void {
-  pageLoaders.set(routeId, loader);
+  defaultRegistry.registerPageLoader(routeId, loader);
 }
 
 /**
@@ -174,32 +242,34 @@ export function registerPageLoader(routeId: string, loader: PageLoader): void {
  * filling이 있으면 loader를 실행하여 serverData 전달
  */
 export function registerPageHandler(routeId: string, handler: PageHandler): void {
-  pageHandlers.set(routeId, handler);
+  defaultRegistry.registerPageHandler(routeId, handler);
 }
 
 export function registerRouteComponent(routeId: string, component: RouteComponent): void {
-  routeComponents.set(routeId, component);
+  defaultRegistry.registerRouteComponent(routeId, component);
 }
 
 export function setCreateApp(fn: CreateAppFn): void {
-  createAppFn = fn;
+  defaultRegistry.setCreateApp(fn);
 }
 
-// Default createApp implementation
-function defaultCreateApp(context: AppContext): React.ReactElement {
-  const Component = routeComponents.get(context.routeId);
+// Default createApp implementation (registry 기반)
+function createDefaultAppFactory(registry: ServerRegistry) {
+  return function defaultCreateApp(context: AppContext): React.ReactElement {
+    const Component = registry.routeComponents.get(context.routeId);
 
-  if (!Component) {
-    return React.createElement("div", null,
-      React.createElement("h1", null, "404 - Route Not Found"),
-      React.createElement("p", null, `Route ID: ${context.routeId}`)
-    );
-  }
+    if (!Component) {
+      return React.createElement("div", null,
+        React.createElement("h1", null, "404 - Route Not Found"),
+        React.createElement("p", null, `Route ID: ${context.routeId}`)
+      );
+    }
 
-  return React.createElement(Component, {
-    params: context.params,
-    loaderData: context.loaderData,
-  });
+    return React.createElement(Component, {
+      params: context.params,
+      loaderData: context.loaderData,
+    });
+  };
 }
 
 // ========== Static File Serving ==========
@@ -224,7 +294,7 @@ function isPathSafe(filePath: string, allowedDir: string): boolean {
  *
  * 보안: Path traversal 공격 방지를 위해 모든 경로를 검증합니다.
  */
-async function serveStaticFile(pathname: string): Promise<Response | null> {
+async function serveStaticFile(pathname: string, settings: ServerRegistrySettings): Promise<Response | null> {
   let filePath: string | null = null;
   let isBundleFile = false;
   let allowedBaseDir: string;
@@ -238,14 +308,14 @@ async function serveStaticFile(pathname: string): Promise<Response | null> {
   if (pathname.startsWith("/.mandu/client/")) {
     // pathname에서 prefix 제거 후 안전하게 조합
     const relativePath = pathname.slice("/.mandu/client/".length);
-    allowedBaseDir = path.join(serverSettings.rootDir, ".mandu", "client");
+    allowedBaseDir = path.join(settings.rootDir, ".mandu", "client");
     filePath = path.join(allowedBaseDir, relativePath);
     isBundleFile = true;
   }
   // 2. Public 폴더 파일 (/public/*)
   else if (pathname.startsWith("/public/")) {
     const relativePath = pathname.slice("/public/".length);
-    allowedBaseDir = path.join(serverSettings.rootDir, "public");
+    allowedBaseDir = path.join(settings.rootDir, "public");
     filePath = path.join(allowedBaseDir, relativePath);
   }
   // 3. Public 폴더의 루트 파일 (favicon.ico, robots.txt 등)
@@ -257,7 +327,7 @@ async function serveStaticFile(pathname: string): Promise<Response | null> {
   ) {
     // 고정된 파일명만 허용 (이미 위에서 정확히 매칭됨)
     const filename = path.basename(pathname);
-    allowedBaseDir = path.join(serverSettings.rootDir, serverSettings.publicDir);
+    allowedBaseDir = path.join(settings.rootDir, settings.publicDir);
     filePath = path.join(allowedBaseDir, filename);
   } else {
     return null; // 정적 파일이 아님
@@ -281,7 +351,7 @@ async function serveStaticFile(pathname: string): Promise<Response | null> {
 
     // Cache-Control 헤더 설정
     let cacheControl: string;
-    if (serverSettings.isDev) {
+    if (settings.isDev) {
       // 개발 모드: 캐시 없음
       cacheControl = "no-cache, no-store, must-revalidate";
     } else if (isBundleFile) {
@@ -305,22 +375,23 @@ async function serveStaticFile(pathname: string): Promise<Response | null> {
 
 // ========== Request Handler ==========
 
-async function handleRequest(req: Request, router: Router): Promise<Response> {
+async function handleRequest(req: Request, router: Router, registry: ServerRegistry): Promise<Response> {
   const url = new URL(req.url);
   const pathname = url.pathname;
+  const settings = registry.settings;
 
   // 0. CORS Preflight 요청 처리
-  if (serverSettings.cors && isPreflightRequest(req)) {
-    const corsOptions = serverSettings.cors === true ? {} : serverSettings.cors;
+  if (settings.cors && isPreflightRequest(req)) {
+    const corsOptions = settings.cors === true ? {} : settings.cors;
     return handlePreflightRequest(req, corsOptions);
   }
 
   // 1. 정적 파일 서빙 시도 (최우선)
-  const staticResponse = await serveStaticFile(pathname);
+  const staticResponse = await serveStaticFile(pathname, settings);
   if (staticResponse) {
     // 정적 파일에도 CORS 헤더 적용
-    if (serverSettings.cors && isCorsRequest(req)) {
-      const corsOptions = serverSettings.cors === true ? {} : serverSettings.cors;
+    if (settings.cors && isCorsRequest(req)) {
+      const corsOptions = settings.cors === true ? {} : settings.cors;
       return applyCorsToResponse(staticResponse, req, corsOptions);
     }
     return staticResponse;
@@ -340,7 +411,7 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
   const { route, params } = match;
 
   if (route.kind === "api") {
-    const handler = apiHandlers.get(route.id);
+    const handler = registry.apiHandlers.get(route.id);
     if (!handler) {
       const error = createHandlerNotFoundResponse(route.id, route.pattern);
       const response = formatErrorResponse(error, {
@@ -359,12 +430,12 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
     const isDataRequest = url.searchParams.has("_data");
 
     // 1. PageHandler 방식 (신규 - filling 포함)
-    const pageHandler = pageHandlers.get(route.id);
+    const pageHandler = registry.pageHandlers.get(route.id);
     if (pageHandler) {
       try {
         const registration = await pageHandler();
         component = registration.component as RouteComponent;
-        registerRouteComponent(route.id, component);
+        registry.registerRouteComponent(route.id, component);
 
         // Filling의 loader 실행
         if (registration.filling?.hasLoader()) {
@@ -386,7 +457,7 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
     }
     // 2. PageLoader 방식 (레거시 호환)
     else {
-      const loader = pageLoaders.get(route.id);
+      const loader = registry.pageLoaders.get(route.id);
       if (loader) {
         try {
           const module = await loader();
@@ -395,7 +466,7 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
           const component = typeof exported === 'function'
             ? exported
             : exported?.component ?? exported;
-          registerRouteComponent(route.id, component);
+          registry.registerRouteComponent(route.id, component);
 
           // filling이 있으면 loader 실행
           const filling = typeof exported === 'object' ? exported?.filling : null;
@@ -430,7 +501,8 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
     }
 
     // SSR 렌더링
-    const appCreator = createAppFn || defaultCreateApp;
+    const defaultAppCreator = createDefaultAppFactory(registry);
+    const appCreator = registry.createAppFn || defaultAppCreator;
     try {
       const app = appCreator({
         routeId: route.id,
@@ -445,29 +517,29 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
         : undefined;
 
       // Streaming SSR 모드 결정
-      // 우선순위: route.streaming > serverSettings.streaming
+      // 우선순위: route.streaming > settings.streaming
       const useStreaming = route.streaming !== undefined
         ? route.streaming
-        : serverSettings.streaming;
+        : settings.streaming;
 
       if (useStreaming) {
         return await renderStreamingResponse(app, {
           title: `${route.id} - Mandu`,
-          isDev: serverSettings.isDev,
-          hmrPort: serverSettings.hmrPort,
+          isDev: settings.isDev,
+          hmrPort: settings.hmrPort,
           routeId: route.id,
           routePattern: route.pattern,
           hydration: route.hydration,
-          bundleManifest: serverSettings.bundleManifest,
+          bundleManifest: settings.bundleManifest,
           criticalData: loaderData as Record<string, unknown> | undefined,
           enableClientRouter: true,
           onShellReady: () => {
-            if (serverSettings.isDev) {
+            if (settings.isDev) {
               console.log(`[Mandu Streaming] Shell ready: ${route.id}`);
             }
           },
           onMetrics: (metrics) => {
-            if (serverSettings.isDev) {
+            if (settings.isDev) {
               console.log(`[Mandu Streaming] Metrics for ${route.id}:`, {
                 shellReadyTime: `${metrics.shellReadyTime}ms`,
                 allReadyTime: `${metrics.allReadyTime}ms`,
@@ -481,11 +553,11 @@ async function handleRequest(req: Request, router: Router): Promise<Response> {
       // 기존 renderToString 방식
       return renderSSR(app, {
         title: `${route.id} - Mandu`,
-        isDev: serverSettings.isDev,
-        hmrPort: serverSettings.hmrPort,
+        isDev: settings.isDev,
+        hmrPort: settings.hmrPort,
         routeId: route.id,
         hydration: route.hydration,
-        bundleManifest: serverSettings.bundleManifest,
+        bundleManifest: settings.bundleManifest,
         serverData,
         // Client-side Routing 활성화 정보 전달
         enableClientRouter: true,
@@ -535,13 +607,14 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     publicDir = "public",
     cors = false,
     streaming = false,
+    registry = defaultRegistry,
   } = options;
 
   // CORS 옵션 파싱
   const corsOptions: CorsOptions | false = cors === true ? {} : cors;
 
-  // Server settings 저장
-  serverSettings = {
+  // Registry settings 저장
+  registry.settings = {
     isDev,
     hmrPort,
     bundleManifest,
@@ -553,9 +626,9 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
 
   const router = new Router(manifest.routes);
 
-  // Fetch handler with CORS support
+  // Fetch handler with CORS support (registry를 클로저로 캡처)
   const fetchHandler = async (req: Request): Promise<Response> => {
-    const response = await handleRequest(req, router);
+    const response = await handleRequest(req, router, registry);
 
     // API 라우트 응답에 CORS 헤더 적용
     if (corsOptions && isCorsRequest(req)) {
@@ -593,17 +666,18 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   return {
     server,
     router,
+    registry,
     stop: () => server.stop(),
   };
 }
 
-// Clear registries (useful for testing)
+// Clear registries (useful for testing) - deprecated, use clearDefaultRegistry()
 export function clearRegistry(): void {
-  apiHandlers.clear();
-  pageLoaders.clear();
-  pageHandlers.clear();
-  routeComponents.clear();
-  createAppFn = null;
+  clearDefaultRegistry();
 }
 
-export { apiHandlers, pageLoaders, pageHandlers, routeComponents };
+// Export registry maps for backward compatibility (defaultRegistry 사용)
+export const apiHandlers = defaultRegistry.apiHandlers;
+export const pageLoaders = defaultRegistry.pageLoaders;
+export const pageHandlers = defaultRegistry.pageHandlers;
+export const routeComponents = defaultRegistry.routeComponents;
