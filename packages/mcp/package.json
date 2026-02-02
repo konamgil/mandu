@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/mcp",
-  "version": "0.9.20",
+  "version": "0.9.21",
   "description": "Mandu MCP Server - Agent-native interface for Mandu framework operations",
   "type": "module",
   "main": "./src/index.ts",
