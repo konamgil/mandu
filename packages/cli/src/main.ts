@@ -123,6 +123,31 @@ function parseArgs(args: string[]): { command: string; options: Record<string, s
   return { command, options };
 }
 
+/**
+ * 포트 옵션 안전하게 파싱
+ * - 숫자가 아니면 undefined 반환 (기본값 사용)
+ * - 유효 범위: 1-65535
+ */
+function parsePort(value: string | undefined, optionName = "port"): number | undefined {
+  if (!value || value === "true") {
+    return undefined; // 기본값 사용
+  }
+
+  const port = Number(value);
+
+  if (Number.isNaN(port)) {
+    console.warn(`⚠️  Invalid --${optionName} value: "${value}" (using default)`);
+    return undefined;
+  }
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    console.warn(`⚠️  Invalid --${optionName} range: ${port} (must be 1-65535, using default)`);
+    return undefined;
+  }
+
+  return port;
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { command, options } = parseArgs(args);
@@ -164,7 +189,7 @@ async function main(): Promise<void> {
       break;
 
     case "dev":
-      await dev({ port: options.port ? Number(options.port) : undefined });
+      await dev({ port: parsePort(options.port) });
       break;
 
     case "contract": {
@@ -203,7 +228,7 @@ async function main(): Promise<void> {
           break;
         case "serve":
           success = await openAPIServe({
-            port: options.port ? Number(options.port) : undefined,
+            port: parsePort(options.port),
           });
           break;
         default:
