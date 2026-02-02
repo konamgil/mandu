@@ -203,6 +203,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
+### CLI Commands for Beginners
+
+| Command | What it does |
+|---------|--------------|
+| `bunx @mandujs/cli init my-app` | Create a new project called "my-app" |
+| `bun install` | Install all dependencies |
+| `bun run dev` | Start development server at http://localhost:3000 |
+| `bun run build` | Build for production |
+| `bun run test` | Run tests |
+
+#### More CLI Commands
+
+```bash
+# Check all available commands
+bunx mandu --help
+
+# Show all routes in your app
+bunx mandu routes list
+
+# Check architecture rules
+bunx mandu guard arch
+
+# Watch for architecture violations (real-time)
+bunx mandu guard arch --watch
+```
+
 ### Tech Stack
 
 | Technology | Version | Purpose |

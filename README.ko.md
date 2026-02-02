@@ -203,6 +203,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
+### 초보자를 위한 CLI 명령어
+
+| 명령어 | 설명 |
+|--------|------|
+| `bunx @mandujs/cli init my-app` | "my-app" 이름으로 새 프로젝트 생성 |
+| `bun install` | 모든 의존성 설치 |
+| `bun run dev` | http://localhost:3000 에서 개발 서버 시작 |
+| `bun run build` | 프로덕션 빌드 |
+| `bun run test` | 테스트 실행 |
+
+#### 추가 CLI 명령어
+
+```bash
+# 사용 가능한 모든 명령어 확인
+bunx mandu --help
+
+# 앱의 모든 라우트 표시
+bunx mandu routes list
+
+# 아키텍처 규칙 검사
+bunx mandu guard arch
+
+# 아키텍처 위반 실시간 감시
+bunx mandu guard arch --watch
+```
+
 ### 기술 스택
 
 | 기술 | 버전 | 용도 |
