@@ -133,6 +133,33 @@ if (!result.passed) {
 | `COMPONENT_NOT_FOUND` | 컴포넌트 파일 없음 | ❌ |
 | `SLOT_NOT_FOUND` | slot 파일 없음 | ✅ |
 
+## Contract 모듈
+
+Zod 기반 계약(Contract) 정의 및 타입 안전 클라이언트 생성.
+
+```typescript
+import { Mandu } from "@mandujs/core";
+import { z } from "zod";
+
+const userContract = Mandu.contract({
+  request: {
+    GET: { query: z.object({ id: z.string() }) },
+    POST: { body: z.object({ name: z.string() }) },
+  },
+  response: {
+    200: z.object({ data: z.any() }),
+    400: z.object({ error: z.string() }),
+  },
+});
+
+// 클라이언트에 노출할 스키마만 선택
+const clientContract = Mandu.clientContract(userContract, {
+  request: { POST: { body: true } },
+  response: [200],
+  includeErrors: true,
+});
+```
+
 ## Runtime 모듈
 
 서버 시작 및 라우팅.
