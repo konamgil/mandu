@@ -169,7 +169,7 @@ export {
   loadStatistics,
   saveStatistics,
   addScanRecord,
-  generateMarkdownReport,
+  generateGuardMarkdownReport,
   generateHTMLReport,
   type ScanRecord,
   type StatisticsStore,

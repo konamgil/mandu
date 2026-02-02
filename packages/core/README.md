@@ -186,7 +186,7 @@ import {
   createScanRecord,
   addScanRecord,
   analyzeTrend,
-  generateMarkdownReport
+  generateGuardMarkdownReport
 } from "@mandujs/core/guard";
 
 // Save scan for trend analysis
@@ -198,7 +198,7 @@ const trend = analyzeTrend(records, 7); // 7 days
 console.log(trend.trend); // "improving" | "stable" | "degrading"
 
 // Generate reports
-const markdown = generateMarkdownReport(report, trend);
+const markdown = generateGuardMarkdownReport(report, trend);
 ```
 
 ---

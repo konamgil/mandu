@@ -34,7 +34,7 @@ export {
   formatPatch,
   printDoctorReport,
   generateJsonReport,
-  generateMarkdownReport,
+  generateDoctorMarkdownReport,
   formatDoctorReport,
   type ReportFormat,
 } from "./reporter";

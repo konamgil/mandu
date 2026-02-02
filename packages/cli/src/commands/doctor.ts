@@ -10,7 +10,7 @@ import {
   runGuardCheck,
   analyzeViolations,
   printDoctorReport,
-  generateMarkdownReport,
+  generateDoctorMarkdownReport,
   initializeBrain,
   getBrain,
 } from "../../../core/src/index";
@@ -108,7 +108,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<boolean> {
     }
 
     case "markdown": {
-      const md = generateMarkdownReport(analysis);
+      const md = generateDoctorMarkdownReport(analysis);
 
       if (output) {
         await fs.writeFile(output, md, "utf-8");
