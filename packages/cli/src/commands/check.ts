@@ -200,5 +200,5 @@ export async function check(options: CheckOptions = {}): Promise<boolean> {
     console.log(JSON.stringify(summary, null, 2));
   }
 
-  return options.ci ? success : success;
+  return options.ci ? success : true;
 }

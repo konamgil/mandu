@@ -71,18 +71,18 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     return false;
   }
 
-  // Create empty generated directories
-  await fs.mkdir(path.join(targetDir, "apps/server/generated/routes"), { recursive: true });
-  await fs.mkdir(path.join(targetDir, "apps/web/generated/routes"), { recursive: true });
+  // Create .mandu directory for build output
+  await fs.mkdir(path.join(targetDir, ".mandu/client"), { recursive: true });
 
   console.log(`\n✅ 프로젝트 생성 완료!\n`);
   console.log(`📍 위치: ${targetDir}`);
   console.log(`\n🚀 시작하기:`);
   console.log(`   cd ${projectName}`);
   console.log(`   bun install`);
-  console.log(`   bun run spec`);
-  console.log(`   bun run generate`);
   console.log(`   bun run dev`);
+  console.log(`\n📂 파일 구조:`);
+  console.log(`   app/page.tsx      → http://localhost:3000/`);
+  console.log(`   app/api/*/route.ts → API endpoints`);
 
   return true;
 }

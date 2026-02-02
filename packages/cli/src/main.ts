@@ -88,7 +88,8 @@ Options:
   --id <id>          change rollback 시 특정 변경 ID
   --keep <n>         change prune 시 유지할 스냅샷 수 (기본: 5)
   --output <path>    openapi/doctor 출력 경로
-  --format <fmt>     doctor/guard/check 출력 형식: console, json, agent (기본: 자동)
+  --format <fmt>     guard/check 출력 형식: console, json, agent (기본: 자동)
+  --format <fmt>     doctor 출력 형식: console, json, markdown (기본: console)
   --no-llm           doctor에서 LLM 사용 안 함 (템플릿 모드)
   --model <name>     brain setup 시 모델 이름 (기본: llama3.2)
   --url <url>        brain setup 시 Ollama URL

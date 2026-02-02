@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/cli",
-  "version": "0.9.19",
+  "version": "0.9.20",
   "description": "Agent-Native Fullstack Framework - 에이전트가 코딩해도 아키텍처가 무너지지 않는 개발 OS",
   "type": "module",
   "main": "./src/main.ts",
