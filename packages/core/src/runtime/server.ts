@@ -205,23 +205,48 @@ function defaultCreateApp(context: AppContext): React.ReactElement {
 // ========== Static File Serving ==========
 
 /**
+ * 경로가 허용된 디렉토리 내에 있는지 검증
+ * Path traversal 공격 방지
+ */
+function isPathSafe(filePath: string, allowedDir: string): boolean {
+  const resolvedPath = path.resolve(filePath);
+  const resolvedAllowedDir = path.resolve(allowedDir);
+  // 경로가 허용된 디렉토리로 시작하는지 확인 (디렉토리 구분자 포함)
+  return resolvedPath.startsWith(resolvedAllowedDir + path.sep) ||
+         resolvedPath === resolvedAllowedDir;
+}
+
+/**
  * 정적 파일 서빙
  * - /.mandu/client/* : 클라이언트 번들 (Island hydration)
  * - /public/* : 정적 에셋 (이미지, CSS 등)
  * - /favicon.ico : 파비콘
+ *
+ * 보안: Path traversal 공격 방지를 위해 모든 경로를 검증합니다.
  */
 async function serveStaticFile(pathname: string): Promise<Response | null> {
   let filePath: string | null = null;
   let isBundleFile = false;
+  let allowedBaseDir: string;
+
+  // Path traversal 시도 조기 차단 (정규화 전 raw 체크)
+  if (pathname.includes("..")) {
+    return null;
+  }
 
   // 1. 클라이언트 번들 파일 (/.mandu/client/*)
   if (pathname.startsWith("/.mandu/client/")) {
-    filePath = path.join(serverSettings.rootDir, pathname);
+    // pathname에서 prefix 제거 후 안전하게 조합
+    const relativePath = pathname.slice("/.mandu/client/".length);
+    allowedBaseDir = path.join(serverSettings.rootDir, ".mandu", "client");
+    filePath = path.join(allowedBaseDir, relativePath);
     isBundleFile = true;
   }
-  // 2. Public 폴더 파일 (/public/* 또는 직접 접근)
+  // 2. Public 폴더 파일 (/public/*)
   else if (pathname.startsWith("/public/")) {
-    filePath = path.join(serverSettings.rootDir, pathname);
+    const relativePath = pathname.slice("/public/".length);
+    allowedBaseDir = path.join(serverSettings.rootDir, "public");
+    filePath = path.join(allowedBaseDir, relativePath);
   }
   // 3. Public 폴더의 루트 파일 (favicon.ico, robots.txt 등)
   else if (
@@ -230,11 +255,18 @@ async function serveStaticFile(pathname: string): Promise<Response | null> {
     pathname === "/sitemap.xml" ||
     pathname === "/manifest.json"
   ) {
-    filePath = path.join(serverSettings.rootDir, serverSettings.publicDir, pathname);
+    // 고정된 파일명만 허용 (이미 위에서 정확히 매칭됨)
+    const filename = path.basename(pathname);
+    allowedBaseDir = path.join(serverSettings.rootDir, serverSettings.publicDir);
+    filePath = path.join(allowedBaseDir, filename);
+  } else {
+    return null; // 정적 파일이 아님
   }
 
-  if (!filePath) {
-    return null; // 정적 파일이 아님
+  // 최종 경로 검증: 허용된 디렉토리 내에 있는지 확인
+  if (!isPathSafe(filePath, allowedBaseDir!)) {
+    console.warn(`[Mandu Security] Path traversal attempt blocked: ${pathname}`);
+    return null;
   }
 
   try {
