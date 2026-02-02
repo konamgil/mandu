@@ -34,6 +34,8 @@ const SKILL_IDS = [
   "mandu-guard",
   "mandu-performance",
   "mandu-composition",
+  "mandu-security",
+  "mandu-testing",
 ];
 
 /**
@@ -96,6 +98,8 @@ function getSkillDescription(id: string): string {
     "mandu-guard": "Architecture enforcement and layer dependencies",
     "mandu-performance": "Performance optimization patterns for Mandu apps",
     "mandu-composition": "React composition patterns for Islands and state",
+    "mandu-security": "Security best practices for authentication and protection",
+    "mandu-testing": "Testing patterns with Bun test and Playwright",
   };
   return descriptions[id] || "";
 }

@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "organization": "Mandu Framework",
+  "date": "February 2026",
+  "abstract": "Mandu 애플리케이션 보안 모범 사례 가이드. slot guard 인증/인가, 입력 검증 및 스키마 유효성 검사, CSRF/XSS 방어, 보안 헤더, 환경 변수 및 시크릿 관리를 다룹니다.",
+  "references": [
+    "https://owasp.org/www-project-top-ten/",
+    "https://cheatsheetseries.owasp.org/",
+    "https://bun.sh/docs/api/hashing",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP"
+  ],
+  "tags": ["security", "auth", "csrf", "xss", "validation", "mandu"]
+}
