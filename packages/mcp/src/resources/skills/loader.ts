@@ -33,6 +33,7 @@ const SKILL_IDS = [
   "mandu-hydration",
   "mandu-guard",
   "mandu-performance",
+  "mandu-composition",
 ];
 
 /**
@@ -94,6 +95,7 @@ function getSkillDescription(id: string): string {
     "mandu-hydration": "Island hydration and client components",
     "mandu-guard": "Architecture enforcement and layer dependencies",
     "mandu-performance": "Performance optimization patterns for Mandu apps",
+    "mandu-composition": "React composition patterns for Islands and state",
   };
   return descriptions[id] || "";
 }
