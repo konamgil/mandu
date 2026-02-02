@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "organization": "Mandu Framework",
+  "date": "February 2026",
+  "abstract": "Island Hydration 패턴 가이드. 부분 hydration으로 페이지의 일부만 인터랙티브하게 만드는 기술입니다. \"use client\" 지시어, Mandu.island() API, hydration 우선순위, Island 간 통신을 다룹니다.",
+  "references": [
+    "https://jasonformat.com/islands-architecture/",
+    "https://docs.astro.build/en/concepts/islands/",
+    "https://fresh.deno.dev/docs/concepts/islands"
+  ],
+  "tags": ["hydration", "island", "client", "interactive", "mandu"]
+}

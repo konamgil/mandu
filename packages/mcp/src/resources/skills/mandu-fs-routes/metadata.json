@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "organization": "Mandu Framework",
+  "date": "February 2026",
+  "abstract": "파일 시스템 기반 라우팅 가이드. app/ 폴더 구조가 URL이 되는 규칙, 동적 라우트 [id], catch-all [...slug], 라우트 그룹 (group), 특수 파일 (page.tsx, route.ts, layout.tsx) 사용법을 다룹니다.",
+  "references": [
+    "https://nextjs.org/docs/app/building-your-application/routing",
+    "https://fresh.deno.dev/docs/concepts/routing",
+    "https://kit.svelte.dev/docs/routing"
+  ],
+  "tags": ["routes", "filesystem", "pages", "api", "mandu"]
+}
