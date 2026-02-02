@@ -17,7 +17,8 @@ import {
   type GuardConfig,
   type GuardPreset,
 } from "@mandujs/core";
-import { resolveFromCwd } from "../util/fs";
+import { isDirectory, resolveFromCwd } from "../util/fs";
+import { resolveOutputFormat, type OutputFormat } from "../util/output";
 import path from "path";
 
 export interface DevOptions {
@@ -30,6 +31,8 @@ export interface DevOptions {
   guard?: boolean;
   /** Guard 프리셋 */
   guardPreset?: GuardPreset;
+  /** Guard 출력 형식 */
+  guardFormat?: OutputFormat;
 }
 
 export async function dev(options: DevOptions = {}): Promise<void> {
@@ -206,12 +209,22 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   // Architecture Guard 실시간 감시 (선택적)
   let archGuardWatcher: ReturnType<typeof createGuardWatcher> | null = null;
 
-  if (options.guard) {
+  if (options.guard !== false) {
     const guardPreset = options.guardPreset || "mandu";
+    const guardFormat = resolveOutputFormat(options.guardFormat);
+    const enableFsRoutes = !options.legacy && await isDirectory(path.resolve(rootDir, "app"));
     const guardConfig: GuardConfig = {
       preset: guardPreset,
       srcDir: "src",
       realtime: true,
+      realtimeOutput: guardFormat,
+      fsRoutes: enableFsRoutes
+        ? {
+            noPageToPage: true,
+            pageCanImport: ["widgets", "features", "entities", "shared"],
+            layoutCanImport: ["widgets", "shared"],
+          }
+        : undefined,
     };
 
     console.log(`🛡️  Architecture Guard 활성화 (${guardPreset})`);

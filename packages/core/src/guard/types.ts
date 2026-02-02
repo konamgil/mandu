@@ -84,6 +84,9 @@ export interface GuardConfig {
   /** FS Routes 통합 */
   fsRoutes?: FSRoutesGuardConfig;
 
+  /** 실시간 출력 형식 */
+  realtimeOutput?: "console" | "agent" | "json";
+
   /** 캐시 사용 여부 (기본값: true) */
   cache?: boolean;
 
@@ -320,6 +323,7 @@ export const DEFAULT_GUARD_CONFIG: Required<Omit<GuardConfig, "preset" | "layers
     deepNesting: "info",
     crossSliceDependency: "warn",
   },
+  realtimeOutput: "console",
   cache: true,
   incremental: true,
   debounceMs: 100,

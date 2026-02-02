@@ -175,7 +175,7 @@ export class ArchitectureAnalyzer {
    */
   async checkLocation(request: CheckLocationRequest): Promise<CheckLocationResult> {
     const violations: ArchitectureViolation[] = [];
-    const normalizedPath = request.path.replace(/\\/g, "/");
+    const normalizedPath = this.toRelativePath(request.path);
 
     // 1. readonly 폴더 검사
     for (const [key, rule] of Object.entries(this.config.folders || {})) {
@@ -295,7 +295,7 @@ export class ArchitectureAnalyzer {
       suggestion?: string;
     }> = [];
 
-    const normalizedSource = request.sourceFile.replace(/\\/g, "/");
+    const normalizedSource = this.toRelativePath(request.sourceFile);
 
     for (const importPath of request.imports) {
       for (const rule of this.config.imports || []) {
@@ -385,6 +385,14 @@ export class ArchitectureAnalyzer {
     }
 
     return imports;
+  }
+
+  private toRelativePath(filePath: string): string {
+    const normalized = filePath.replace(/\\/g, "/");
+    if (path.isAbsolute(normalized)) {
+      return path.relative(this.rootDir, normalized).replace(/\\/g, "/");
+    }
+    return normalized;
   }
 
   /**

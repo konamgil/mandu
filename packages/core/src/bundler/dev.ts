@@ -312,9 +312,10 @@ export interface HMRServer {
 }
 
 export interface HMRMessage {
-  type: "connected" | "reload" | "island-update" | "error" | "ping";
+  type: "connected" | "reload" | "island-update" | "layout-update" | "error" | "ping";
   data?: {
     routeId?: string;
+    layoutPath?: string;
     message?: string;
     timestamp?: number;
   };
@@ -480,6 +481,13 @@ export function generateHMRClientScript(port: number): string {
           console.log('[Mandu HMR] Reloading page for island update');
           location.reload();
         }
+        break;
+
+      case 'layout-update':
+        const layoutPath = message.data?.layoutPath;
+        console.log('[Mandu HMR] Layout updated:', layoutPath);
+        // Layout 변경은 항상 전체 리로드
+        location.reload();
         break;
 
       case 'error':

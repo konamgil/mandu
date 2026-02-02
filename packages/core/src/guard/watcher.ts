@@ -20,7 +20,11 @@ import type {
 import { WATCH_EXTENSIONS, DEFAULT_GUARD_CONFIG } from "./types";
 import { analyzeFile, shouldAnalyzeFile } from "./analyzer";
 import { validateFileAnalysis, detectCircularDependencies } from "./validator";
-import { printRealtimeViolation } from "./reporter";
+import {
+  printRealtimeViolation,
+  formatViolationForAgent,
+  formatViolationAsAgentJSON,
+} from "./reporter";
 import { getPreset } from "./presets";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -119,12 +123,24 @@ export function createGuardWatcher(options: WatcherOptions): GuardWatcher {
       // 콜백 호출
       onFileAnalyzed?.(analysis, violations);
 
+      const realtimeOutput = config.realtimeOutput ?? DEFAULT_GUARD_CONFIG.realtimeOutput;
+
       // 위반 처리
       for (const violation of violations) {
         onViolation?.(violation);
 
         if (!silent) {
-          printRealtimeViolation(violation);
+          switch (realtimeOutput) {
+            case "agent":
+              console.log(formatViolationForAgent(violation, config.preset));
+              break;
+            case "json":
+              console.log(formatViolationAsAgentJSON(violation, config.preset));
+              break;
+            case "console":
+            default:
+              printRealtimeViolation(violation);
+          }
         }
       }
     } catch (error) {
@@ -239,7 +255,8 @@ export function createGuardWatcher(options: WatcherOptions): GuardWatcher {
       watcher.on("change", (path) => handleFileChange("change", resolve(rootDir, path)));
       watcher.on("unlink", (path) => handleFileChange("unlink", resolve(rootDir, path)));
 
-      if (!silent) {
+      const realtimeOutput = config.realtimeOutput ?? DEFAULT_GUARD_CONFIG.realtimeOutput;
+      if (!silent && realtimeOutput === "console") {
         console.log(`[Guard] 🛡️  Watching ${Array.from(scanRoots).join(", ")} for architecture violations...`);
       }
     },
