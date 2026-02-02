@@ -418,20 +418,68 @@ mandu/
 
 ## Roadmap
 
-### v0.9.x (Current)
-- [x] FS Routes system
-- [x] Mandu Guard with 5 presets
-- [x] Island hydration
-- [x] MCP server (25+ tools)
-- [x] Contract API
-- [x] Transaction API
-- [x] Brain (Doctor, Watcher)
-- [x] Client-side router
+### v0.9.x (Current) — 44 features done
 
-### v1.0.x (Next)
-- [ ] WebSocket platform
+**Core Runtime**
+- [x] Middleware compose & lifecycle hooks
+- [x] Streaming SSR
+- [x] Filling API (guard, hooks, middleware)
+- [x] Runtime logger & trace system
+
+**Routing**
+- [x] FS Routes (scanner, patterns, generator, watcher)
+- [x] Layout system (layoutChain, loading, error)
+- [x] Advanced routes (catch-all, optional params)
+- [x] Client-side router (Link, NavLink, hooks)
+
+**Architecture**
+- [x] Mandu Guard with 5 presets (mandu, fsd, clean, hexagonal, atomic)
+- [x] AST-based import analysis
+- [x] Statistics & trend tracking
+- [x] Real-time violation detection
+
+**API & Types**
+- [x] Contract API with Zod
+- [x] Type-safe handlers & clients
+- [x] OpenAPI 3.0 generator
+- [x] Schema normalization
+
+**Hydration**
+- [x] Island hydration (visible, idle, interaction)
+- [x] Partials & slots
+- [x] Error boundary & loading states
+- [x] HMR support
+
+**AI Integration**
+- [x] MCP server (25+ tools, 7 resources)
+- [x] Brain (Doctor, Watcher, Architecture analyzer)
+- [x] Transaction API with snapshots
+- [x] Real-time push notifications
+
+**Security**
+- [x] Path traversal prevention
+- [x] Port validation
+
+### v0.10.x (Next)
+
+**Data Layer**
+- [ ] Data Loader API
+- [ ] Cache Store adapter
 - [ ] ISR (Incremental Static Regeneration)
+
+**Realtime**
+- [ ] WebSocket channels
+- [ ] Server-sent events
+- [ ] Resumable state (QRL-lite)
+
+**Build & Deploy**
+- [ ] Build plugins & hooks
+- [ ] Bundle analyzer
 - [ ] Production deployment guides
+
+**Observability**
+- [ ] Performance benchmarks
+- [ ] Integration hooks
 
 ---
 
