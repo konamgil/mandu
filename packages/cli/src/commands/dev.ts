@@ -100,13 +100,22 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       manifest,
       onRebuild: (result) => {
         if (result.success) {
-          hmrServer?.broadcast({
-            type: "island-update",
-            data: {
-              routeId: result.routeId,
-              timestamp: Date.now(),
-            },
-          });
+          if (result.routeId === "*") {
+            hmrServer?.broadcast({
+              type: "reload",
+              data: {
+                timestamp: Date.now(),
+              },
+            });
+          } else {
+            hmrServer?.broadcast({
+              type: "island-update",
+              data: {
+                routeId: result.routeId,
+                timestamp: Date.now(),
+              },
+            });
+          }
         } else {
           hmrServer?.broadcast({
             type: "error",

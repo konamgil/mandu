@@ -21,7 +21,7 @@ export interface DevBundlerOptions {
   /**
    * 추가 watch 디렉토리 (공통 컴포넌트 등)
    * 상대 경로 또는 절대 경로 모두 지원
-   * 기본값: ["src/components", "components", "src/shared", "shared", "lib"]
+   * 기본값: ["src/components", "components", "src/shared", "shared", "src/lib", "lib", "src/hooks", "hooks", "src/utils", "utils"]
    */
   watchDirs?: string[];
   /**
@@ -117,15 +117,21 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     ? customWatchDirs
     : [...DEFAULT_COMMON_DIRS, ...customWatchDirs];
 
-  for (const dir of commonDirsToCheck) {
-    const absDir = path.isAbsolute(dir) ? dir : path.join(rootDir, dir);
+  const addCommonDir = async (dir: string): Promise<void> => {
+    const absPath = path.isAbsolute(dir) ? dir : path.join(rootDir, dir);
     try {
-      await fs.promises.access(absDir);
-      commonWatchDirs.add(absDir);
-      watchDirs.add(absDir);
+      const stat = await fs.promises.stat(absPath);
+      const watchPath = stat.isDirectory() ? absPath : path.dirname(absPath);
+      await fs.promises.access(watchPath);
+      commonWatchDirs.add(watchPath);
+      watchDirs.add(watchPath);
     } catch {
       // 디렉토리 없으면 무시
     }
+  };
+
+  for (const dir of commonDirsToCheck) {
+    await addCommonDir(dir);
   }
 
   // 파일 감시 설정
