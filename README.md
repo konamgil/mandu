@@ -462,24 +462,47 @@ mandu/
 
 ### v0.10.x (Next)
 
-**Data Layer**
-- [ ] Data Loader API
-- [ ] Cache Store adapter
+**Data Layer** *(Astro-inspired)*
+- [ ] Loader API with LoaderContext (store, meta, logger, watcher)
+- [ ] File Loader & API Loader implementations
+- [ ] DataStore & MetaStore with digest tracking
+- [ ] Cache Store adapter (Redis, in-memory)
 - [ ] ISR (Incremental Static Regeneration)
 
-**Realtime**
-- [ ] WebSocket channels
-- [ ] Server-sent events
-- [ ] Resumable state (QRL-lite)
+**Realtime** *(Phoenix-inspired)*
+- [ ] WebSocket Channels (join/handle_in/handle_out pattern)
+- [ ] Channel/Socket separation model
+- [ ] Serializer-based message protocol
+- [ ] Server-sent events (SSE)
 
-**Build & Deploy**
-- [ ] Build plugins & hooks
-- [ ] Bundle analyzer
-- [ ] Production deployment guides
+**Build & Integration** *(Astro/Fresh-inspired)*
+- [ ] Build Hooks (start/setup/done lifecycle)
+- [ ] Plugin API for build extensions
+- [ ] Integration hooks with timeout warnings & dedicated logger
+- [ ] Bundle analyzer with size reporting
 
 **Observability**
-- [ ] Performance benchmarks
-- [ ] Integration hooks
+- [ ] Performance benchmarks (routing, SSR, hydration)
+- [ ] TTFB & TTI measurement
+- [ ] Automated perf test suite
+
+### v0.11.x (Future)
+
+**AOT Optimization** *(Elysia-inspired)*
+- [ ] AOT Handler Generation (runtime precompile)
+- [ ] Sucrose-style context inference for minimal runtime
+- [ ] JIT/AOT mode selection (`mandu build --aot`)
+
+**Advanced Hydration** *(Qwik/Fresh-inspired)*
+- [ ] Client Reviver (DOM marker-based restoration)
+- [ ] Resumable POC / QRL-lite (lazy event handler loading)
+- [ ] Serializer Registry (pluggable type serializers)
+- [ ] Progressive Hydration improvements
+
+**Developer Experience**
+- [ ] Error overlay in development
+- [ ] Enhanced TypeScript inference
+- [ ] Project templates & scaffolding
 
 ---
 

@@ -902,23 +902,91 @@ Mandu는 자동으로 에러를 세 가지 유형으로 분류합니다:
 
 ## 로드맵
 
-### v0.9.x (현재)
-- [x] Island hydration 시스템
-- [x] HMR (Hot Module Replacement)
-- [x] 20개 이상의 도구를 포함한 MCP 서버
-- [x] 스냅샷 포함 트랜잭션 API
-- [x] 에러 분류 시스템
-- [x] 슬롯 자동 수정
-- [x] Contract-first API + 타입 추론
-- [x] MCP push notification 기반 실시간 아키텍처 감시
-- [x] Brain v0.1 (Doctor, Architecture analyzer, File watcher)
-- [x] 클라이언트 라우터 + NavLink
+### v0.9.x (현재) — 44개 기능 완료
 
-### v1.0.x (다음)
-- [ ] WebSocket 플랫폼
+**Core Runtime**
+- [x] 미들웨어 compose & 라이프사이클 훅
+- [x] Streaming SSR
+- [x] Filling API (guard, hooks, middleware)
+- [x] 런타임 로거 & trace 시스템
+
+**Routing**
+- [x] FS Routes (스캐너, 패턴, 제너레이터, 와처)
+- [x] 레이아웃 시스템 (layoutChain, loading, error)
+- [x] 고급 라우트 (catch-all, optional params)
+- [x] 클라이언트 라우터 (Link, NavLink, hooks)
+
+**Architecture**
+- [x] Mandu Guard 5가지 프리셋 (mandu, fsd, clean, hexagonal, atomic)
+- [x] AST 기반 import 분석
+- [x] 통계 & 트렌드 추적
+- [x] 실시간 위반 감지
+
+**API & Types**
+- [x] Zod 기반 Contract API
+- [x] 타입 안전 핸들러 & 클라이언트
+- [x] OpenAPI 3.0 생성기
+- [x] 스키마 정규화
+
+**Hydration**
+- [x] Island hydration (visible, idle, interaction)
+- [x] Partials & slots
+- [x] Error boundary & loading states
+- [x] HMR 지원
+
+**AI Integration**
+- [x] MCP 서버 (25+ 도구, 7 리소스)
+- [x] Brain (Doctor, Watcher, Architecture analyzer)
+- [x] 스냅샷 포함 트랜잭션 API
+- [x] 실시간 push 알림
+
+**Security**
+- [x] Path traversal 방지
+- [x] 포트 유효성 검사
+
+### v0.10.x (다음)
+
+**Data Layer** *(Astro 패턴)*
+- [ ] Loader API (store, meta, logger, watcher 컨텍스트)
+- [ ] File Loader & API Loader 구현
+- [ ] DataStore & MetaStore (digest 추적)
+- [ ] Cache Store 어댑터 (Redis, in-memory)
 - [ ] ISR (Incremental Static Regeneration)
-- [ ] CacheStore 어댑터
-- [ ] 프로덕션 배포 가이드
+
+**Realtime** *(Phoenix 패턴)*
+- [ ] WebSocket Channels (join/handle_in/handle_out)
+- [ ] Channel/Socket 분리 모델
+- [ ] Serializer 기반 메시지 프로토콜
+- [ ] Server-sent events (SSE)
+
+**Build & Integration** *(Astro/Fresh 패턴)*
+- [ ] Build Hooks (start/setup/done 라이프사이클)
+- [ ] 빌드 확장 Plugin API
+- [ ] 타임아웃 경고 포함 통합 훅 & 전용 로거
+- [ ] 번들 분석기
+
+**Observability**
+- [ ] 성능 벤치마크 (라우팅, SSR, hydration)
+- [ ] TTFB & TTI 측정
+- [ ] 자동화된 성능 테스트 모음
+
+### v0.11.x (예정)
+
+**AOT 최적화** *(Elysia 패턴)*
+- [ ] AOT 핸들러 생성 (런타임 프리컴파일)
+- [ ] Sucrose 스타일 컨텍스트 추론
+- [ ] JIT/AOT 모드 선택 (`mandu build --aot`)
+
+**고급 Hydration** *(Qwik/Fresh 패턴)*
+- [ ] Client Reviver (DOM marker 기반 복원)
+- [ ] Resumable POC / QRL-lite (지연 이벤트 핸들러 로딩)
+- [ ] Serializer Registry (플러그인 타입 직렬화)
+- [ ] Progressive Hydration 개선
+
+**개발자 경험**
+- [ ] 개발 환경 에러 오버레이
+- [ ] 향상된 TypeScript 추론
+- [ ] 프로젝트 템플릿 & 스캐폴딩
 
 ---
 
