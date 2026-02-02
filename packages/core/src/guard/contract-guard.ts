@@ -206,8 +206,8 @@ export async function runContractGuardCheck(
   const violations: ContractViolation[] = [];
 
   // Check missing contracts (warning level)
-  // const missingContracts = await checkMissingContract(manifest, rootDir);
-  // violations.push(...missingContracts);
+  const missingContracts = await checkMissingContract(manifest, rootDir);
+  violations.push(...missingContracts);
 
   // Check contract file exists
   const notFoundContracts = await checkContractFileExists(manifest, rootDir);

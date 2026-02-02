@@ -172,7 +172,7 @@ function generateCircularDependencySuggestions(context: SuggestionContext): stri
  */
 function generateCrossSliceSuggestions(context: SuggestionContext): string[] {
   const { fromLayer, importPath, slice } = context;
-  const toSlice = extractSliceFromPath(importPath);
+  const toSlice = extractSliceFromPath(importPath, fromLayer);
   const suggestions: string[] = [];
 
   suggestions.push(
@@ -339,7 +339,14 @@ function extractModuleName(importPath: string): string {
 /**
  * 경로에서 슬라이스 추출
  */
-function extractSliceFromPath(importPath: string): string {
+function extractSliceFromPath(importPath: string, fromLayer?: string): string {
   const parts = importPath.replace(/^[@~]\//, "").split("/");
+  if (fromLayer) {
+    const layerParts = fromLayer.split("/");
+    const matchesLayer = parts.slice(0, layerParts.length).join("/") === fromLayer;
+    if (matchesLayer && parts.length > layerParts.length) {
+      return parts[layerParts.length];
+    }
+  }
   return parts[1] ?? "unknown";
 }

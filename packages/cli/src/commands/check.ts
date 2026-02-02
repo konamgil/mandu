@@ -34,6 +34,7 @@ export async function check(options: CheckOptions = {}): Promise<boolean> {
   const preset = options.preset ?? "mandu";
   const format = resolveOutputFormat(options.format);
   const quiet = options.quiet === true;
+  const strictWarnings = options.ci === true;
   const enableFsRoutes = !options.legacy && await isDirectory(path.resolve(rootDir, "app"));
   const specPath = resolveFromCwd("spec/routes.manifest.json");
   const hasSpec = await pathExists(specPath);
@@ -122,14 +123,45 @@ export async function check(options: CheckOptions = {}): Promise<boolean> {
     fsRoutes: enableFsRoutes
       ? {
           noPageToPage: true,
-          pageCanImport: ["widgets", "features", "entities", "shared"],
-          layoutCanImport: ["widgets", "shared"],
+          pageCanImport: [
+            "client/pages",
+            "client/widgets",
+            "client/features",
+            "client/entities",
+            "client/shared",
+            "shared/contracts",
+            "shared/types",
+            "shared/utils/client",
+          ],
+          layoutCanImport: [
+            "client/app",
+            "client/widgets",
+            "client/shared",
+            "shared/contracts",
+            "shared/types",
+            "shared/utils/client",
+          ],
+          routeCanImport: [
+            "server/api",
+            "server/application",
+            "server/domain",
+            "server/infra",
+            "server/core",
+            "shared/contracts",
+            "shared/schema",
+            "shared/types",
+            "shared/utils/client",
+            "shared/utils/server",
+            "shared/env",
+          ],
         }
       : undefined,
   };
 
   const report = await checkDirectory(guardConfig, rootDir);
-  if (report.bySeverity.error > 0) {
+  const hasArchErrors = report.bySeverity.error > 0;
+  const hasArchWarnings = report.bySeverity.warn > 0;
+  if (hasArchErrors || (strictWarnings && hasArchWarnings)) {
     success = false;
   }
 
@@ -166,7 +198,11 @@ export async function check(options: CheckOptions = {}): Promise<boolean> {
       const checkResult = await runGuardCheck(manifestResult.data, rootDir);
       legacySummary.passed = checkResult.passed;
       legacySummary.violations = checkResult.violations.length;
-      success = success && checkResult.passed;
+      if (strictWarnings && checkResult.violations.length > 0) {
+        success = false;
+      } else {
+        success = success && checkResult.passed;
+      }
 
       if (format === "console") {
         const legacyReport = buildGuardReport(checkResult);
@@ -200,5 +236,5 @@ export async function check(options: CheckOptions = {}): Promise<boolean> {
     console.log(JSON.stringify(summary, null, 2));
   }
 
-  return options.ci ? success : true;
+  return success;
 }

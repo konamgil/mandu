@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "mandu dev",
+    "check": "mandu check",
     "generate": "mandu generate",
     "guard": "mandu guard",
     "spec": "mandu spec-upsert"

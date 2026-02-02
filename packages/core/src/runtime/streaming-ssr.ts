@@ -17,6 +17,8 @@ import React, { Suspense } from "react";
 import type { BundleManifest } from "../bundler/types";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 import { serializeProps } from "../client/serialize";
+import type { Metadata, MetadataItem } from "../seo/types";
+import { injectSEOIntoOptions, resolveSEO, type SEOOptions } from "../seo/integration/ssr";
 
 // ========== Types ==========
 
@@ -73,7 +75,7 @@ export interface StreamingMetrics {
 }
 
 export interface StreamingSSROptions {
-  /** 페이지 타이틀 */
+  /** 페이지 타이틀 (SEO metadata 사용 시 자동 설정됨) */
   title?: string;
   /** HTML lang 속성 */
   lang?: string;
@@ -88,8 +90,18 @@ export interface StreamingSSROptions {
   hydration?: HydrationConfig;
   /** 번들 매니페스트 */
   bundleManifest?: BundleManifest;
-  /** 추가 head 태그 */
+  /** 추가 head 태그 (SEO metadata와 병합됨) */
   headTags?: string;
+  /**
+   * SEO 메타데이터 (Layout 체인 또는 단일 객체)
+   * - 배열: [rootLayout, ...nestedLayouts, page] 순서로 병합
+   * - 객체: 단일 정적 메타데이터
+   */
+  metadata?: MetadataItem[] | Metadata;
+  /** 라우트 파라미터 (동적 메타데이터용) */
+  routeParams?: Record<string, string>;
+  /** 쿼리 파라미터 (동적 메타데이터용) */
+  searchParams?: Record<string, string>;
   /** 개발 모드 여부 */
   isDev?: boolean;
   /** HMR 포트 */
@@ -1102,6 +1114,111 @@ export function defer<T>(promise: Promise<T>): Promise<T> {
   return promise;
 }
 
+// ========== SEO Integration ==========
+
+/**
+ * SEO 메타데이터와 함께 Streaming SSR 렌더링
+ *
+ * Layout 체인에서 메타데이터를 자동으로 수집하고 병합하여
+ * HTML head에 삽입합니다.
+ *
+ * @example
+ * ```typescript
+ * // 정적 메타데이터
+ * const response = await renderWithSEO(<Page />, {
+ *   metadata: {
+ *     title: 'Home',
+ *     description: 'Welcome to my site',
+ *     openGraph: { type: 'website' },
+ *   },
+ * })
+ *
+ * // Layout 체인 메타데이터
+ * const response = await renderWithSEO(<Page />, {
+ *   metadata: [
+ *     layoutMetadata,  // { title: { template: '%s | Site' } }
+ *     pageMetadata,    // { title: 'Blog Post' }
+ *   ],
+ *   routeParams: { slug: 'hello' },
+ * })
+ * // → title: "Blog Post | Site"
+ * ```
+ */
+export async function renderWithSEO(
+  element: ReactElement,
+  options: StreamingSSROptions = {}
+): Promise<Response> {
+  const { metadata, routeParams, searchParams, ...restOptions } = options;
+
+  // SEO 메타데이터 처리
+  if (metadata) {
+    const seoOptions: SEOOptions = {
+      routeParams,
+      searchParams,
+    };
+
+    // 배열이면 Layout 체인, 아니면 단일 메타데이터
+    if (Array.isArray(metadata)) {
+      seoOptions.metadata = metadata;
+    } else {
+      seoOptions.staticMetadata = metadata as Metadata;
+    }
+
+    // SEO를 옵션에 주입
+    const optionsWithSEO = await injectSEOIntoOptions(restOptions, seoOptions);
+    return renderStreamingResponse(element, optionsWithSEO);
+  }
+
+  // SEO 없이 기본 렌더링
+  return renderStreamingResponse(element, restOptions);
+}
+
+/**
+ * Deferred 데이터 + SEO 메타데이터와 함께 Streaming SSR 렌더링
+ *
+ * @example
+ * ```typescript
+ * const response = await renderWithDeferredDataAndSEO(<Page />, {
+ *   metadata: {
+ *     title: post.title,
+ *     openGraph: { images: [post.image] },
+ *   },
+ *   deferredPromises: {
+ *     comments: fetchComments(postId),
+ *     related: fetchRelatedPosts(postId),
+ *   },
+ * })
+ * ```
+ */
+export async function renderWithDeferredDataAndSEO(
+  element: ReactElement,
+  options: StreamingSSROptions & {
+    deferredPromises?: Record<string, Promise<unknown>>;
+    deferredTimeout?: number;
+  } = {}
+): Promise<Response> {
+  const { metadata, routeParams, searchParams, ...restOptions } = options;
+
+  // SEO 메타데이터 처리
+  if (metadata) {
+    const seoOptions: SEOOptions = {
+      routeParams,
+      searchParams,
+    };
+
+    if (Array.isArray(metadata)) {
+      seoOptions.metadata = metadata;
+    } else {
+      seoOptions.staticMetadata = metadata as Metadata;
+    }
+
+    const optionsWithSEO = await injectSEOIntoOptions(restOptions, seoOptions);
+    return renderWithDeferredData(element, optionsWithSEO);
+  }
+
+  return renderWithDeferredData(element, restOptions);
+}
+
 // ========== Exports ==========
 
 export {
@@ -1109,3 +1226,7 @@ export {
   generateHTMLTail,
   generateDeferredDataScript,
 };
+
+// Re-export SEO integration utilities
+export { resolveSEO, injectSEOIntoOptions } from "../seo/integration/ssr";
+export type { SEOOptions, SEOResult } from "../seo/integration/ssr";

@@ -5,17 +5,26 @@
   "scripts": {
     "dev": "mandu dev",
     "build": "mandu build",
+    "check": "mandu check",
+    "guard": "mandu guard",
     "test": "bun test"
   },
   "dependencies": {
     "@mandujs/core": "^0.9.39",
+    "@radix-ui/react-slot": "^1.1.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {
     "@mandujs/cli": "^0.9.21",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
     "typescript": "^5.0.0"
   }
 }

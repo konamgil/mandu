@@ -130,25 +130,30 @@ describe("Atomic Design preset", () => {
 });
 
 describe("Mandu preset", () => {
-  it("should combine FSD and Clean Architecture", () => {
+  it("should combine client FSD and server Clean Architecture", () => {
     const layerNames = manduPreset.layers.map((l) => l.name);
 
     // FSD layers
-    expect(layerNames).toContain("app");
-    expect(layerNames).toContain("pages");
-    expect(layerNames).toContain("widgets");
-    expect(layerNames).toContain("features");
-    expect(layerNames).toContain("entities");
+    expect(layerNames).toContain("client/app");
+    expect(layerNames).toContain("client/pages");
+    expect(layerNames).toContain("client/widgets");
+    expect(layerNames).toContain("client/features");
+    expect(layerNames).toContain("client/entities");
 
     // Clean layers
-    expect(layerNames).toContain("api");
-    expect(layerNames).toContain("application");
-    expect(layerNames).toContain("domain");
-    expect(layerNames).toContain("infra");
+    expect(layerNames).toContain("server/api");
+    expect(layerNames).toContain("server/application");
+    expect(layerNames).toContain("server/domain");
+    expect(layerNames).toContain("server/infra");
 
     // Shared layers
-    expect(layerNames).toContain("core");
-    expect(layerNames).toContain("shared");
+    expect(layerNames).toContain("server/core");
+    expect(layerNames).toContain("shared/contracts");
+    expect(layerNames).toContain("shared/types");
+    expect(layerNames).toContain("shared/utils/client");
+    expect(layerNames).toContain("shared/utils/server");
+    expect(layerNames).toContain("shared/schema");
+    expect(layerNames).toContain("shared/env");
   });
 });
 

@@ -568,5 +568,11 @@ function getTypeTitle(type: ViolationType): string {
       return "Cross-Slice Dependencies";
     case "deep-nesting":
       return "Deep Nesting";
+    case "file-type":
+      return "File Type Violations";
+    case "invalid-shared-segment":
+      return "Shared Segment Violations";
+    default:
+      return "Violations";
   }
 }

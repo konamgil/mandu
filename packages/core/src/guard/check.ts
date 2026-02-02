@@ -4,12 +4,42 @@ import { runContractGuardCheck } from "./contract-guard";
 import { validateSlotContent } from "../slot/validator";
 import type { RoutesManifest } from "../spec/schema";
 import type { GeneratedMap } from "../generator/generate";
+import { loadManduConfig, type GuardRuleSeverity } from "../config";
 import path from "path";
 import fs from "fs/promises";
 
 export interface GuardCheckResult {
   passed: boolean;
   violations: GuardViolation[];
+}
+
+function normalizeSeverity(level: GuardRuleSeverity): "error" | "warning" | "off" {
+  if (level === "warn") return "warning";
+  return level;
+}
+
+function applyRuleSeverity(
+  violations: GuardViolation[],
+  config: { rules?: Record<string, GuardRuleSeverity>; contractRequired?: GuardRuleSeverity }
+): GuardViolation[] {
+  const resolved: GuardViolation[] = [];
+  const ruleOverrides = config.rules ?? {};
+
+  for (const violation of violations) {
+    let override = ruleOverrides[violation.ruleId];
+    if (violation.ruleId === "CONTRACT_MISSING" && config.contractRequired) {
+      override = config.contractRequired;
+    }
+
+    const baseSeverity = violation.severity ?? GUARD_RULES[violation.ruleId]?.severity ?? "error";
+    const finalSeverity = override ? normalizeSeverity(override) : baseSeverity;
+
+    if (finalSeverity === "off") continue;
+
+    resolved.push({ ...violation, severity: finalSeverity });
+  }
+
+  return resolved;
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -176,6 +206,8 @@ export async function checkSlotContentValidation(
           ruleId = GUARD_RULES.SLOT_INVALID_RETURN?.id ?? "SLOT_INVALID_RETURN";
         } else if (issue.code === "MISSING_FILLING_PATTERN") {
           ruleId = GUARD_RULES.SLOT_MISSING_FILLING_PATTERN?.id ?? "SLOT_MISSING_FILLING_PATTERN";
+        } else if (issue.code === "ZOD_DIRECT_IMPORT") {
+          ruleId = GUARD_RULES.SLOT_ZOD_DIRECT_IMPORT?.id ?? "SLOT_ZOD_DIRECT_IMPORT";
         }
 
         violations.push({
@@ -337,6 +369,7 @@ export async function runGuardCheck(
   rootDir: string
 ): Promise<GuardCheckResult> {
   const violations: GuardViolation[] = [];
+  const config = await loadManduConfig(rootDir);
 
   const lockPath = path.join(rootDir, "spec/spec.lock.json");
   const mapPath = path.join(rootDir, "packages/core/map/generated.map.json");
@@ -392,8 +425,11 @@ export async function runGuardCheck(
   const specDirViolations = await checkSpecDirNaming(rootDir);
   violations.push(...specDirViolations);
 
+  const resolvedViolations = applyRuleSeverity(violations, config.guard ?? {});
+  const passed = resolvedViolations.every((v) => v.severity !== "error");
+
   return {
-    passed: violations.length === 0,
-    violations,
+    passed,
+    violations: resolvedViolations,
   };
 }

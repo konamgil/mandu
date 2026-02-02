@@ -12,10 +12,15 @@ import {
   watchFSRoutes,
   clearDefaultRegistry,
   createGuardWatcher,
+  checkDirectory,
+  printReport,
+  formatReportForAgent,
+  formatReportAsAgentJSON,
   getPreset,
   type RoutesManifest,
   type GuardConfig,
   type GuardPreset,
+  type Violation,
 } from "@mandujs/core";
 import { isDirectory, resolveFromCwd } from "../util/fs";
 import { resolveOutputFormat, type OutputFormat } from "../util/output";
@@ -72,6 +77,70 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   let manifest = result.manifest;
   console.log(`✅ ${manifest.routes.length}개 라우트 발견\n`);
+
+  const enableFsRoutes = !options.legacy && await isDirectory(path.resolve(rootDir, "app"));
+  const guardPreset = options.guardPreset || "mandu";
+  const guardFormat = resolveOutputFormat(options.guardFormat);
+  const guardConfig: GuardConfig | null =
+    options.guard === false
+      ? null
+      : {
+          preset: guardPreset,
+          srcDir: "src",
+          realtime: true,
+          realtimeOutput: guardFormat,
+          fsRoutes: enableFsRoutes
+            ? {
+                noPageToPage: true,
+                pageCanImport: [
+                  "client/pages",
+                  "client/widgets",
+                  "client/features",
+                  "client/entities",
+                  "client/shared",
+                  "shared/contracts",
+                  "shared/types",
+                  "shared/utils/client",
+                ],
+                layoutCanImport: [
+                  "client/app",
+                  "client/widgets",
+                  "client/shared",
+                  "shared/contracts",
+                  "shared/types",
+                  "shared/utils/client",
+                ],
+                routeCanImport: [
+                  "server/api",
+                  "server/application",
+                  "server/domain",
+                  "server/infra",
+                  "server/core",
+                  "shared/contracts",
+                  "shared/schema",
+                  "shared/types",
+                  "shared/utils/client",
+                  "shared/utils/server",
+                  "shared/env",
+                ],
+              }
+            : undefined,
+        };
+
+  if (guardConfig) {
+    const preflightReport = await checkDirectory(guardConfig, rootDir);
+    if (preflightReport.bySeverity.error > 0) {
+      if (guardFormat === "json") {
+        console.log(formatReportAsAgentJSON(preflightReport, guardPreset));
+      } else if (guardFormat === "agent") {
+        console.log(formatReportForAgent(preflightReport, guardPreset));
+      } else {
+        printReport(preflightReport, getPreset(guardPreset).hierarchy);
+      }
+      console.error("\n❌ Architecture Guard failed. Fix errors before starting dev server.");
+      process.exit(1);
+    }
+  }
 
   // Layout 경로 추적 (중복 등록 방지)
   const registeredLayouts = new Set<string>();
@@ -206,55 +275,6 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     bundleManifest: devBundler?.initialBuild.manifest,
   });
 
-  // Architecture Guard 실시간 감시 (선택적)
-  let archGuardWatcher: ReturnType<typeof createGuardWatcher> | null = null;
-
-  if (options.guard !== false) {
-    const guardPreset = options.guardPreset || "mandu";
-    const guardFormat = resolveOutputFormat(options.guardFormat);
-    const enableFsRoutes = !options.legacy && await isDirectory(path.resolve(rootDir, "app"));
-    const guardConfig: GuardConfig = {
-      preset: guardPreset,
-      srcDir: "src",
-      realtime: true,
-      realtimeOutput: guardFormat,
-      fsRoutes: enableFsRoutes
-        ? {
-            noPageToPage: true,
-            pageCanImport: ["widgets", "features", "entities", "shared"],
-            layoutCanImport: ["widgets", "shared"],
-          }
-        : undefined,
-    };
-
-    console.log(`🛡️  Architecture Guard 활성화 (${guardPreset})`);
-
-    archGuardWatcher = createGuardWatcher({
-      config: guardConfig,
-      rootDir,
-      onViolation: (violation) => {
-        // 실시간 경고는 watcher 내부에서 처리
-      },
-      onFileAnalyzed: (analysis, violations) => {
-        if (violations.length > 0) {
-          // HMR 에러로 브로드캐스트
-          hmrServer?.broadcast({
-            type: "guard-violation",
-            data: {
-              file: analysis.filePath,
-              violations: violations.map((v) => ({
-                line: v.line,
-                message: `${v.fromLayer} → ${v.toLayer}: ${v.ruleDescription}`,
-              })),
-            },
-          });
-        }
-      },
-    });
-
-    archGuardWatcher.start();
-  }
-
   // FS Routes 실시간 감시
   const routesWatcher = await watchFSRoutes(rootDir, {
     skipLegacy: true,
@@ -282,6 +302,10 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     },
   });
 
+  // Architecture Guard 실시간 감시 (선택적)
+  let archGuardWatcher: ReturnType<typeof createGuardWatcher> | null = null;
+  let guardFailed = false;
+
   // 정리 함수
   const cleanup = () => {
     console.log("\n🛑 서버 종료 중...");
@@ -292,6 +316,42 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     archGuardWatcher?.close();
     process.exit(0);
   };
+
+  const stopOnGuardError = (violation: Violation) => {
+    if (violation.severity !== "error" || guardFailed) {
+      return;
+    }
+    guardFailed = true;
+    console.error("\n❌ Architecture Guard violation detected. Stopping dev server.");
+    cleanup();
+  };
+
+  if (guardConfig) {
+    console.log(`🛡️  Architecture Guard 활성화 (${guardPreset})`);
+
+    archGuardWatcher = createGuardWatcher({
+      config: guardConfig,
+      rootDir,
+      onViolation: stopOnGuardError,
+      onFileAnalyzed: (analysis, violations) => {
+        if (violations.length > 0) {
+          // HMR 에러로 브로드캐스트
+          hmrServer?.broadcast({
+            type: "guard-violation",
+            data: {
+              file: analysis.filePath,
+              violations: violations.map((v) => ({
+                line: v.line,
+                message: `${v.fromLayer} → ${v.toLayer}: ${v.ruleDescription}`,
+              })),
+            },
+          });
+        }
+      },
+    });
+
+    archGuardWatcher.start();
+  }
 
   process.on("SIGINT", cleanup);
   process.on("SIGTERM", cleanup);

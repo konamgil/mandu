@@ -61,6 +61,34 @@ app/
 bunx mandu build
 ```
 
+### Default Architecture Layout
+
+```
+app/                     # FS Routes
+src/
+  client/                # Client (FSD)
+    app/
+    pages/
+    widgets/
+    features/
+    entities/
+    shared/
+  server/                # Server (Clean)
+    api/
+    application/
+    domain/
+    infra/
+    core/
+  shared/                # Universal shared
+    contracts/           # Client-safe contracts
+    types/
+    utils/
+      client/            # Client-safe utils
+      server/            # Server-only utils
+    schema/              # Server-only schema
+    env/                 # Server-only env
+```
+
 That's it!
 
 ---
@@ -87,11 +115,12 @@ That's it!
 
 | Command | Description |
 |---------|-------------|
-| `mandu guard arch` | Run architecture check (default: mandu preset) |
-| `mandu guard arch --watch` | Watch mode |
-| `mandu guard arch --ci` | CI mode (exit 1 on errors) |
-| `mandu guard arch --preset fsd` | Use specific preset |
-| `mandu guard arch --output report.md` | Generate report |
+| `mandu guard` | Run architecture check (default: mandu preset) |
+| `mandu guard --watch` | Watch mode |
+| `mandu guard --ci` | CI mode (exit 1 on errors/warnings) |
+| `mandu guard --preset fsd` | Use specific preset |
+| `mandu guard --output report.md` | Generate report |
+| `mandu guard legacy` | Legacy Spec guard (auto-correct) |
 
 ### Transaction Commands
 
@@ -119,6 +148,8 @@ That's it!
 |---------|-------------|
 | `mandu contract create <routeId>` | Create contract for route |
 | `mandu contract validate` | Validate contract-slot consistency |
+| `mandu contract build` | Build contract registry |
+| `mandu contract diff` | Diff contracts against registry |
 | `mandu openapi generate` | Generate OpenAPI 3.0 spec |
 | `mandu openapi serve` | Start Swagger UI server |
 
@@ -149,7 +180,7 @@ bun run dev
 bunx mandu dev --guard
 
 # Or run Guard separately
-bunx mandu guard arch --watch
+bunx mandu guard --watch
 ```
 
 ### CI/CD Integration
@@ -157,7 +188,7 @@ bunx mandu guard arch --watch
 ```bash
 # Build and check
 bunx mandu build --minify
-bunx mandu guard arch --ci --format json
+bunx mandu guard --ci --format json
 ```
 
 ---
@@ -209,10 +240,10 @@ app/
 
 ```bash
 # List all presets
-bunx mandu guard arch --list-presets
+bunx mandu guard --list-presets
 
 # Use specific preset
-bunx mandu guard arch --preset fsd
+bunx mandu guard --preset fsd
 ```
 
 ---
@@ -235,13 +266,13 @@ bunx mandu guard arch --preset fsd
 | `--sourcemap` | Generate sourcemaps |
 | `--watch` | Watch mode |
 
-### `mandu guard arch`
+### `mandu guard`
 
 | Option | Description |
 |--------|-------------|
 | `--preset <p>` | Preset: fsd, clean, hexagonal, atomic, mandu |
 | `--watch` | Watch mode |
-| `--ci` | CI mode (exit 1 on errors) |
+| `--ci` | CI mode (exit 1 on errors/warnings) |
 | `--quiet` | Summary only |
 | `--format <f>` | Output: console, agent, json |
 | `--output <path>` | Report file path |
@@ -284,10 +315,11 @@ bunx mandu routes list
 bunx mandu routes generate
 
 # Guard
-bunx mandu guard arch
-bunx mandu guard arch --watch
-bunx mandu guard arch --ci --format json
-bunx mandu guard arch --output report.md
+bunx mandu guard
+bunx mandu guard --watch
+bunx mandu guard --ci --format json
+bunx mandu guard --output report.md
+bunx mandu guard legacy
 
 # Transactions
 bunx mandu change begin --message "Add users API"

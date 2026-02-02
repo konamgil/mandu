@@ -8,7 +8,7 @@ import { check } from "./commands/check";
 import { dev } from "./commands/dev";
 import { init } from "./commands/init";
 import { build } from "./commands/build";
-import { contractCreate, contractValidate } from "./commands/contract";
+import { contractCreate, contractValidate, contractBuild, contractDiff } from "./commands/contract";
 import { openAPIGenerate, openAPIServe } from "./commands/openapi";
 import {
   changeBegin,
@@ -30,7 +30,7 @@ const HELP_TEXT = `
 Usage: bunx mandu <command> [options]
 
 Commands:
-  init           새 프로젝트 생성
+  init           새 프로젝트 생성 (Tailwind + shadcn/ui 기본 포함)
   check          FS Routes + Guard 통합 검사
   routes generate  FS Routes 스캔 및 매니페스트 생성
   routes list      현재 라우트 목록 출력
@@ -38,8 +38,9 @@ Commands:
   dev            개발 서버 실행 (FS Routes + Guard 기본)
   dev --no-guard Guard 감시 비활성화
   build          클라이언트 번들 빌드 (Hydration)
-  guard          Guard 규칙 검사 (레거시 Spec 기반)
+  guard          아키텍처 위반 검사 (기본)
   guard arch     아키텍처 위반 검사 (FSD/Clean/Hexagonal)
+  guard legacy   레거시 Spec Guard 검사
   guard arch --watch  실시간 아키텍처 감시
   guard arch --list-presets  사용 가능한 프리셋 목록
   guard arch --output report.md  리포트 파일 생성
@@ -56,6 +57,8 @@ Commands:
 
   contract create <routeId>  라우트에 대한 Contract 생성
   contract validate          Contract-Slot 일관성 검증
+  contract build             Contract 레지스트리 생성
+  contract diff              Contract 변경사항 비교
 
   openapi generate           OpenAPI 3.0 스펙 생성
   openapi serve              Swagger UI 로컬 서버 실행
@@ -69,6 +72,10 @@ Commands:
 
 Options:
   --name <name>      init 시 프로젝트 이름 (기본: my-mandu-app)
+  --css <framework>  init 시 CSS 프레임워크: tailwind, panda, none (기본: tailwind)
+  --ui <library>     init 시 UI 라이브러리: shadcn, ark, none (기본: shadcn)
+  --theme            init 시 다크모드 테마 시스템 추가
+  --minimal          init 시 CSS/UI 없이 최소 템플릿 생성 (--css none --ui none)
   --file <path>      spec-upsert 시 사용할 spec 파일 경로
   --port <port>      dev/openapi serve 포트 (기본: 3000/8080)
   --guard            dev 시 Architecture Guard 실시간 감시 활성화 (기본: ON)
@@ -78,7 +85,7 @@ Options:
   --legacy           FS Routes 비활성화 (레거시 모드)
   --no-auto-correct  guard 시 자동 수정 비활성화
   --preset <name>    guard/check 프리셋 (기본: mandu) - fsd, clean, hexagonal, atomic 선택 가능
-  --ci               guard/check CI 모드 (에러 시 exit 1)
+  --ci               guard/check CI 모드 (warning도 실패 처리)
   --quiet            guard/check 요약만 출력
   --report-format    guard arch 리포트 형식: json, markdown, html
   --save-stats       guard arch 통계 저장 (트렌드 분석용)
@@ -94,6 +101,9 @@ Options:
   --id <id>          change rollback 시 특정 변경 ID
   --keep <n>         change prune 시 유지할 스냅샷 수 (기본: 5)
   --output <path>    openapi/doctor 출력 경로
+  --from <path>      contract diff 기준 레지스트리 경로
+  --to <path>        contract diff 대상 레지스트리 경로
+  --json             contract diff 결과 JSON 출력
   --format <fmt>     guard/check 출력 형식: console, json, agent (기본: 자동)
   --format <fmt>     doctor 출력 형식: console, json, markdown (기본: console)
   --no-llm           doctor에서 LLM 사용 안 함 (템플릿 모드)
@@ -103,7 +113,10 @@ Options:
   --help, -h         도움말 표시
 
 Examples:
-  bunx mandu init --name my-app
+  bunx mandu init --name my-app          # Tailwind + shadcn/ui 기본
+  bunx mandu init my-app --minimal       # CSS/UI 없이 최소 템플릿
+  bunx mandu init my-app --theme         # 다크모드 테마 포함
+  bunx mandu init my-app --ui none       # UI 라이브러리 없이
   bunx mandu check
   bunx mandu routes list
   bunx mandu routes generate
@@ -114,11 +127,14 @@ Examples:
   bunx mandu guard arch --preset fsd
   bunx mandu guard arch --watch
   bunx mandu guard arch --ci --format json
+  bunx mandu guard legacy
   bunx mandu monitor
   bunx mandu monitor --summary --since 5m
   bunx mandu doctor
   bunx mandu brain setup --model codellama
   bunx mandu contract create users
+  bunx mandu contract build
+  bunx mandu contract diff
   bunx mandu openapi generate --output docs/api.json
   bunx mandu change begin --message "Add new route"
 
@@ -195,7 +211,11 @@ async function main(): Promise<void> {
   switch (command) {
     case "init":
       success = await init({
-        name: options.name || options._positional
+        name: options.name || options._positional,
+        css: options.css as any,
+        ui: options.ui as any,
+        theme: options.theme === "true",
+        minimal: options.minimal === "true",
       });
       break;
 
@@ -219,27 +239,38 @@ async function main(): Promise<void> {
 
     case "guard": {
       const subCommand = args[1];
+      const hasSubCommand = subCommand && !subCommand.startsWith("--");
+      const guardArchOptions = {
+        preset: options.preset as any,
+        watch: options.watch === "true",
+        ci: options.ci === "true",
+        format: options.format as any,
+        quiet: options.quiet === "true",
+        srcDir: options["src-dir"],
+        listPresets: options["list-presets"] === "true",
+        output: options.output,
+        reportFormat: (options["report-format"] as any) || "markdown",
+        saveStats: options["save-stats"] === "true",
+        showTrend: options["show-trend"] === "true",
+      };
       switch (subCommand) {
         case "arch":
-          success = await guardArch({
-            preset: (options.preset as any) || "fsd",
-            watch: options.watch === "true",
-            ci: options.ci === "true",
-            format: options.format as any,
-            quiet: options.quiet === "true",
-            srcDir: options["src-dir"],
-            listPresets: options["list-presets"] === "true",
-            output: options.output,
-            reportFormat: (options["report-format"] as any) || "markdown",
-            saveStats: options["save-stats"] === "true",
-            showTrend: options["show-trend"] === "true",
-          });
+          success = await guardArch(guardArchOptions);
           break;
-        default:
-          // 기본값: 레거시 guard-check
+        case "legacy":
+        case "spec":
           success = await guardCheck({
             autoCorrect: options["no-auto-correct"] !== "true",
           });
+          break;
+        default:
+          if (hasSubCommand) {
+            console.error(`❌ Unknown guard subcommand: ${subCommand}`);
+            console.log("\nUsage: bunx mandu guard <arch|legacy>");
+            process.exit(1);
+          }
+          // 기본값: architecture guard
+          success = await guardArch(guardArchOptions);
       }
       break;
     }
@@ -313,9 +344,20 @@ async function main(): Promise<void> {
         case "validate":
           success = await contractValidate({ verbose: options.verbose === "true" });
           break;
+        case "build":
+          success = await contractBuild({ output: options.output });
+          break;
+        case "diff":
+          success = await contractDiff({
+            from: options.from,
+            to: options.to,
+            output: options.output,
+            json: options.json === "true",
+          });
+          break;
         default:
           console.error(`❌ Unknown contract subcommand: ${subCommand}`);
-          console.log("\nUsage: bunx mandu contract <create|validate>");
+          console.log("\nUsage: bunx mandu contract <create|validate|build|diff>");
           process.exit(1);
       }
       break;

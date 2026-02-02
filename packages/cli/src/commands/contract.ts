@@ -3,7 +3,15 @@
  * Contract 생성 및 검증 명령어
  */
 
-import { loadManifest, runContractGuardCheck, generateContractTemplate } from "@mandujs/core";
+import {
+  loadManifest,
+  runContractGuardCheck,
+  generateContractTemplate,
+  buildContractRegistry,
+  writeContractRegistry,
+  readContractRegistry,
+  diffContractRegistry,
+} from "@mandujs/core";
 import path from "path";
 import fs from "fs/promises";
 
@@ -13,6 +21,17 @@ interface ContractCreateOptions {
 
 interface ContractValidateOptions {
   verbose?: boolean;
+}
+
+interface ContractBuildOptions {
+  output?: string;
+}
+
+interface ContractDiffOptions {
+  from?: string;
+  to?: string;
+  output?: string;
+  json?: boolean;
 }
 
 /**
@@ -149,4 +168,111 @@ export async function contractValidate(options: ContractValidateOptions = {}): P
   }
 
   return false;
+}
+
+/**
+ * Build contract registry (.mandu/contracts.json)
+ */
+export async function contractBuild(options: ContractBuildOptions = {}): Promise<boolean> {
+  const rootDir = process.cwd();
+  const manifestPath = path.join(rootDir, "spec/routes.manifest.json");
+  const outputPath = options.output || path.join(rootDir, ".mandu", "contracts.json");
+
+  console.log(`\n📦 Building contract registry...\n`);
+
+  const manifestResult = await loadManifest(manifestPath);
+  if (!manifestResult.success) {
+    console.error("❌ Failed to load manifest:", manifestResult.errors);
+    return false;
+  }
+
+  const manifest = manifestResult.data!;
+  const { registry, warnings } = await buildContractRegistry(manifest, rootDir);
+
+  if (warnings.length > 0) {
+    console.log(`⚠️  ${warnings.length} warning(s):`);
+    for (const warning of warnings) {
+      console.log(`   - ${warning}`);
+    }
+    console.log();
+  }
+
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await writeContractRegistry(outputPath, registry);
+
+  console.log(`✅ Registry generated: ${path.relative(rootDir, outputPath)}`);
+  console.log(`📊 Contracts: ${registry.contracts.length}`);
+
+  return true;
+}
+
+/**
+ * Diff current contracts against a registry
+ */
+export async function contractDiff(options: ContractDiffOptions = {}): Promise<boolean> {
+  const rootDir = process.cwd();
+  const manifestPath = path.join(rootDir, "spec/routes.manifest.json");
+  const fromPath = options.from || path.join(rootDir, ".mandu", "contracts.json");
+
+  console.log(`\n🔍 Diffing contracts...\n`);
+
+  const fromRegistry = await readContractRegistry(fromPath);
+  if (!fromRegistry) {
+    console.error(`❌ Registry not found: ${path.relative(rootDir, fromPath)}`);
+    console.log(`💡 Run \`mandu contract build\` first.`);
+    return false;
+  }
+
+  let toRegistry = options.to ? await readContractRegistry(options.to) : null;
+
+  if (!toRegistry) {
+    const manifestResult = await loadManifest(manifestPath);
+    if (!manifestResult.success) {
+      console.error("❌ Failed to load manifest:", manifestResult.errors);
+      return false;
+    }
+    const { registry } = await buildContractRegistry(manifestResult.data!, rootDir);
+    toRegistry = registry;
+  }
+
+  const diff = diffContractRegistry(fromRegistry, toRegistry);
+
+  if (options.output) {
+    await fs.mkdir(path.dirname(options.output), { recursive: true });
+    await Bun.write(options.output, JSON.stringify(diff, null, 2));
+    console.log(`✅ Diff saved: ${path.relative(rootDir, options.output)}`);
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify(diff, null, 2));
+    return diff.summary.major === 0;
+  }
+
+  console.log(`📊 Summary: major ${diff.summary.major}, minor ${diff.summary.minor}, patch ${diff.summary.patch}`);
+
+  if (diff.added.length > 0) {
+    console.log(`\n🟢 Added (${diff.added.length})`);
+    for (const entry of diff.added) {
+      console.log(`  - ${entry.id} (${entry.routeId})`);
+    }
+  }
+
+  if (diff.removed.length > 0) {
+    console.log(`\n🔴 Removed (${diff.removed.length})`);
+    for (const entry of diff.removed) {
+      console.log(`  - ${entry.id} (${entry.routeId})`);
+    }
+  }
+
+  if (diff.changed.length > 0) {
+    console.log(`\n🟡 Changed (${diff.changed.length})`);
+    for (const change of diff.changed) {
+      console.log(`  - ${change.id} (${change.routeId}) [${change.severity}]`);
+      for (const detail of change.changes) {
+        console.log(`     • ${detail}`);
+      }
+    }
+  }
+
+  return diff.summary.major === 0;
 }

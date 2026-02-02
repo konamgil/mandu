@@ -4,57 +4,35 @@
  * Edit this file and see changes at http://localhost:3000
  */
 
+import { Button } from "@/client/shared/ui/button";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/client/shared/ui/card";
+
 export default function HomePage() {
   return (
-    <html lang="ko">
-      <head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Mandu App</title>
-        <style>{`
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-          }
-          .container {
-            text-align: center;
-            padding: 2rem;
-          }
-          h1 {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-          }
-          p {
-            font-size: 1.2rem;
-            opacity: 0.9;
-          }
-          code {
-            background: rgba(255,255,255,0.2);
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-          }
-          a {
-            color: white;
-            text-decoration: underline;
-          }
-        `}</style>
-      </head>
-      <body>
-        <div className="container">
-          <h1>🥟 Mandu</h1>
-          <p>Welcome to your new Mandu project!</p>
-          <p>Edit <code>app/page.tsx</code> to get started.</p>
-          <p>
-            <a href="/api/health">Check API Health →</a>
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 p-8">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-4xl">🥟 Mandu</CardTitle>
+          <CardDescription>
+            Welcome to your new Mandu project!
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <p className="text-center text-muted-foreground">
+            Edit <code className="rounded bg-muted px-1.5 py-0.5 text-sm">app/page.tsx</code> to get started.
           </p>
-        </div>
-      </body>
-    </html>
+          <div className="flex justify-center gap-2">
+            <Button asChild variant="default">
+              <a href="/api/health">API Health →</a>
+            </Button>
+            <Button asChild variant="outline">
+              <a href="https://mandujs.dev/docs" target="_blank" rel="noopener noreferrer">
+                Documentation
+              </a>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </main>
   );
 }

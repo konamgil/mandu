@@ -111,6 +111,10 @@ export default async function handler(
 }
 
 export function generateSlotLogic(route: RouteSpec): string {
+  if (route.contractModule) {
+    return generateSlotLogicWithContract(route);
+  }
+
   return `// 🥟 Mandu Filling - ${route.id}
 // Pattern: ${route.pattern}
 // 이 파일에서 비즈니스 로직을 구현하세요.
@@ -154,6 +158,51 @@ export default Mandu.filling()
 // ctx.notFound(msg)    - 404 Not Found
 // ctx.set(key, value)  - Guard에서 Handler로 데이터 전달
 // ctx.get(key)         - Guard에서 설정한 데이터 읽기
+`;
+}
+
+export function generateSlotLogicWithContract(route: RouteSpec): string {
+  const contractImportPath = computeSlotImportPath(
+    route.contractModule!,
+    pathDirname(route.slotModule ?? "spec/slots")
+  );
+
+  return `// 🥟 Mandu Filling - ${route.id}
+// Pattern: ${route.pattern}
+// Contract Module: ${route.contractModule}
+// 이 파일에서 비즈니스 로직을 구현하세요.
+
+import { Mandu } from "@mandujs/core";
+import contract from "${contractImportPath}";
+
+export default Mandu.filling()
+  // 📋 GET ${route.pattern}
+  .get(async (ctx) => {
+    const input = await ctx.input(contract, "GET", ctx.params);
+    // TODO: 계약의 응답 코드에 맞게 status를 조정하세요
+    return ctx.output(contract, 200, {
+      message: "Hello from ${route.id}!",
+      input,
+      timestamp: new Date().toISOString(),
+    });
+  })
+
+  // ➕ POST ${route.pattern}
+  .post(async (ctx) => {
+    const input = await ctx.input(contract, "POST", ctx.params);
+    // TODO: 계약의 응답 코드에 맞게 status를 조정하세요
+    return ctx.output(contract, 201, {
+      message: "Created!",
+      input,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+// 💡 Contract 기반 사용법:
+// ctx.input(contract, "GET")  - Contract로 요청 검증 + 정규화
+// ctx.output(contract, 200, data) - Contract로 응답 검증
+// ctx.okContract(contract, data)  - 200 OK (Contract 검증)
+// ctx.createdContract(contract, data) - 201 Created (Contract 검증)
 `;
 }
 
@@ -339,4 +388,8 @@ function toPascalCase(str: string): string {
     .split(/[-_]/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join("");
+}
+
+function pathDirname(filePath: string): string {
+  return filePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
 }

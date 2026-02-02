@@ -4,6 +4,19 @@
  */
 
 import type { ZodSchema } from "zod";
+import type { ContractSchema, ContractMethod } from "../contract/schema";
+import type { InferBody, InferHeaders, InferParams, InferQuery, InferResponse } from "../contract/types";
+import { ContractValidator, type ContractValidatorOptions } from "../contract/validator";
+
+type ContractInput<
+  TContract extends ContractSchema,
+  TMethod extends ContractMethod,
+> = {
+  query: InferQuery<TContract, TMethod>;
+  body: InferBody<TContract, TMethod>;
+  params: InferParams<TContract, TMethod>;
+  headers: InferHeaders<TContract, TMethod>;
+};
 
 // ========== Cookie Types ==========
 
@@ -316,6 +329,34 @@ export class ManduContext {
     return data as T;
   }
 
+  /**
+   * Parse and validate request input via Contract
+   * @example
+   * const input = await ctx.input(userContract, "POST", { id: "123" })
+   */
+  async input<
+    TContract extends ContractSchema,
+    TMethod extends ContractMethod,
+  >(
+    contract: TContract,
+    method: TMethod,
+    pathParams: Record<string, string> = {},
+    options: ContractValidatorOptions = {}
+  ): Promise<ContractInput<TContract, TMethod>> {
+    const validator = new ContractValidator(contract, options);
+    const result = await validator.validateAndNormalizeRequest(
+      this.request,
+      method,
+      pathParams
+    );
+
+    if (!result.success) {
+      throw new ValidationError(result.errors ?? []);
+    }
+
+    return (result.data ?? {}) as ContractInput<TContract, TMethod>;
+  }
+
   // ============================================
   // 🥟 Response 보내기
   // ============================================
@@ -374,6 +415,68 @@ export class ManduContext {
   json<T>(data: T, status: number = 200): Response {
     const response = Response.json(data, { status });
     return this.withCookies(response);
+  }
+
+  /**
+   * Validate and send response via Contract
+   * @example
+   * return ctx.output(userContract, 200, { data: users })
+   */
+  output<
+    TContract extends ContractSchema,
+    TStatus extends keyof TContract["response"],
+  >(
+    contract: TContract,
+    status: TStatus,
+    data: InferResponse<TContract, TStatus>,
+    options: ContractValidatorOptions = {}
+  ): Response {
+    const validator = new ContractValidator(contract, options);
+    const result = validator.validateResponse(data, Number(status));
+
+    if (!result.success) {
+      if (options.mode === "strict") {
+        const errorResponse = Response.json(
+          {
+            errorType: "CONTRACT_VIOLATION",
+            code: "MANDU_C001",
+            message: "Response does not match contract schema",
+            summary: "응답이 Contract 스키마와 일치하지 않습니다",
+            statusCode: Number(status),
+            violations: result.errors,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 500 }
+        );
+        return this.withCookies(errorResponse);
+      }
+
+      console.warn(
+        "\x1b[33m[Mandu] Contract violation in response:\x1b[0m",
+        result.errors
+      );
+    }
+
+    const payload = result.success ? result.data : data;
+    return this.json(payload as InferResponse<TContract, TStatus>, Number(status));
+  }
+
+  /** 200 OK with Contract validation */
+  okContract<TContract extends ContractSchema>(
+    contract: TContract,
+    data: InferResponse<TContract, 200>,
+    options: ContractValidatorOptions = {}
+  ): Response {
+    return this.output(contract, 200 as keyof TContract["response"], data, options);
+  }
+
+  /** 201 Created with Contract validation */
+  createdContract<TContract extends ContractSchema>(
+    contract: TContract,
+    data: InferResponse<TContract, 201>,
+    options: ContractValidatorOptions = {}
+  ): Response {
+    return this.output(contract, 201 as keyof TContract["response"], data, options);
   }
 
   /** Custom text response */

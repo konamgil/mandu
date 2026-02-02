@@ -13,6 +13,7 @@ import type {
   ContractMethod,
   MethodRequestSchema,
 } from "./schema";
+import type { InferResponseSchema } from "./types";
 
 /**
  * Client options for making requests
@@ -73,11 +74,11 @@ type InferRequestOptions<T extends MethodRequestSchema | undefined> =
  * Infer success response from contract
  */
 type InferSuccessResponse<TResponse extends ContractSchema["response"]> =
-  TResponse[200] extends z.ZodTypeAny
-    ? z.infer<TResponse[200]>
-    : TResponse[201] extends z.ZodTypeAny
-      ? z.infer<TResponse[201]>
-      : unknown;
+  InferResponseSchema<TResponse[200]> extends never
+    ? InferResponseSchema<TResponse[201]> extends never
+      ? unknown
+      : InferResponseSchema<TResponse[201]>
+    : InferResponseSchema<TResponse[200]>;
 
 /**
  * Contract client method

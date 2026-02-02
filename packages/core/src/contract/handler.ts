@@ -11,6 +11,7 @@ import type {
   ContractMethod,
   MethodRequestSchema,
 } from "./schema";
+import type { InferResponseSchema } from "./types";
 
 /**
  * Typed request context for a handler
@@ -62,9 +63,7 @@ export type HandlerFn<TContext, TResponse> = (
  * Infer response type union from contract response schema
  */
 type InferResponseUnion<TResponse extends ContractSchema["response"]> = {
-  [K in keyof TResponse]: TResponse[K] extends z.ZodTypeAny
-    ? z.infer<TResponse[K]>
-    : never;
+  [K in keyof TResponse]: InferResponseSchema<TResponse[K]>;
 }[keyof TResponse];
 
 /**

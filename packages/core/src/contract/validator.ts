@@ -20,6 +20,7 @@ import type {
   ContractValidationIssue,
   MethodRequestSchema,
   ContractNormalizeMode,
+  ResponseSchemaWithExamples,
 } from "./schema";
 import {
   type NormalizeMode,
@@ -28,6 +29,16 @@ import {
   createCoerceSchema,
 } from "./normalize";
 import { ZodObject } from "zod";
+
+function isResponseSchemaWithExamples(
+  schema: z.ZodTypeAny | ResponseSchemaWithExamples | undefined
+): schema is ResponseSchemaWithExamples {
+  return (
+    schema !== undefined &&
+    typeof schema === "object" &&
+    "schema" in schema
+  );
+}
 
 /**
  * Validator 옵션
@@ -443,11 +454,15 @@ export class ContractValidator {
    * @param statusCode - HTTP status code
    */
   validateResponse(responseBody: unknown, statusCode: number): ContractValidationResult {
-    const responseSchema = this.contract.response[statusCode];
-    if (!responseSchema) {
+    const responseSchemaOrWithExamples = this.contract.response[statusCode];
+    if (!responseSchemaOrWithExamples) {
       // No schema defined for this status code, pass through
       return { success: true };
     }
+
+    const responseSchema = isResponseSchemaWithExamples(responseSchemaOrWithExamples)
+      ? responseSchemaOrWithExamples.schema
+      : responseSchemaOrWithExamples;
 
     const result = responseSchema.safeParse(responseBody);
     if (!result.success) {

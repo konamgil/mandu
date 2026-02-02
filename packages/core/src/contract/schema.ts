@@ -8,6 +8,30 @@ import type { z } from "zod";
 /** HTTP Methods supported in contracts */
 export type ContractMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+/**
+ * Client-safe schema options
+ */
+export type ClientSafeRequestMap = Partial<Record<
+  ContractMethod,
+  {
+    query?: boolean;
+    body?: boolean;
+    params?: boolean;
+    headers?: boolean;
+  }
+>>;
+
+export type ClientSafeResponseMap = number[] | Partial<Record<number, boolean>>;
+
+export interface ClientSafeOptions {
+  /** Request schema exposure */
+  request?: ClientSafeRequestMap;
+  /** Response schema exposure */
+  response?: ClientSafeResponseMap;
+  /** Include standard error responses if defined */
+  includeErrors?: boolean;
+}
+
 /** Example data for request/response documentation */
 export interface SchemaExamples {
   /** Example name → example data */
@@ -74,6 +98,14 @@ export type ContractNormalizeMode = "strip" | "strict" | "passthrough";
 
 /** Full contract schema definition */
 export interface ContractSchema {
+  /** Contract name (optional) */
+  name?: string;
+  /** Contract version (optional) */
+  version?: string;
+  /** Contract metadata (optional) */
+  meta?: Record<string, unknown>;
+  /** Client-safe schema config (optional) */
+  clientSafe?: ClientSafeOptions;
   /** API description */
   description?: string;
   /** Tags for grouping (e.g., OpenAPI tags) */
@@ -98,6 +130,10 @@ export interface ContractSchema {
 
 /** Contract definition input (what user provides) */
 export interface ContractDefinition {
+  name?: string;
+  version?: string;
+  meta?: Record<string, unknown>;
+  clientSafe?: ClientSafeOptions;
   description?: string;
   tags?: string[];
   request: ContractRequestSchema;

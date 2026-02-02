@@ -44,12 +44,35 @@ bunx @mandujs/cli init my-app
 생성되는 구조:
 ```
 my-app/
+├── app/                 # FS Routes
+│   └── page.tsx         # /
+├── src/                 # 아키텍처 레이어
+│   ├── client/          # 클라이언트 (FSD)
+│   │   ├── app/
+│   │   ├── pages/
+│   │   ├── widgets/
+│   │   ├── features/
+│   │   ├── entities/
+│   │   └── shared/
+│   ├── server/          # 서버 (Clean)
+│   │   ├── api/
+│   │   ├── application/
+│   │   ├── domain/
+│   │   ├── infra/
+│   │   └── core/
+│   └── shared/          # 공용
+│       ├── contracts/        # client-safe 계약
+│       ├── types/
+│       ├── utils/
+│       │   ├── client/       # 클라이언트 safe 유틸
+│       │   └── server/       # 서버 전용 유틸
+│       ├── schema/           # 서버 전용 스키마
+│       └── env/              # 서버 전용 환경
 ├── apps/
 │   ├── server/main.ts    # 서버 진입점
 │   └── web/entry.tsx     # 클라이언트 진입점
 ├── spec/
 │   └── routes.manifest.json  # SSOT - 라우트 정의
-├── tests/                # 테스트 템플릿
 ├── package.json
 └── tsconfig.json
 ```
@@ -82,19 +105,49 @@ bun run generate
 
 ### `mandu guard`
 
-아키텍처 규칙을 검사하고 위반 사항을 자동 수정합니다.
+아키텍처 규칙을 검사합니다. (기본: mandu 프리셋)
 
 ```bash
 bun run guard
 
-# 자동 수정 비활성화
-bunx mandu guard --no-auto-correct
+# 프리셋 변경
+bunx mandu guard --preset fsd
+
+# CI 모드 (warning도 실패 처리)
+bunx mandu guard --ci
 ```
 
-자동 수정 가능한 규칙:
+### `mandu guard legacy`
+
+레거시 Spec Guard 검사 + 자동 수정입니다.
+
+```bash
+bunx mandu guard legacy
+
+# 자동 수정 비활성화
+bunx mandu guard legacy --no-auto-correct
+```
+
+자동 수정 가능한 규칙(legacy):
 - `SPEC_HASH_MISMATCH` → lock 파일 갱신
 - `GENERATED_MANUAL_EDIT` → 코드 재생성
 - `SLOT_NOT_FOUND` → slot 파일 생성
+
+### `mandu contract build`
+
+계약 레지스트리(`.mandu/contracts.json`)를 생성합니다.
+
+```bash
+bunx mandu contract build
+```
+
+### `mandu contract diff`
+
+계약 변경사항(major/minor/patch)을 비교합니다.
+
+```bash
+bunx mandu contract diff
+```
 
 ## Spec 파일 작성
 

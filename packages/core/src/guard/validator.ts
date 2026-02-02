@@ -72,6 +72,8 @@ export function createViolation(
     "circular-dependency": "circularDependency",
     "cross-slice": "crossSliceDependency",
     "deep-nesting": "deepNesting",
+    "file-type": "fileType",
+    "invalid-shared-segment": "invalidSharedSegment",
   };
 
   const severity: Severity = severityConfig[severityMap[type]] ?? "error";
@@ -81,6 +83,8 @@ export function createViolation(
     "circular-dependency": "Circular Dependency",
     "cross-slice": "Cross-Slice Dependency",
     "deep-nesting": "Deep Nesting",
+    "file-type": "TypeScript Only",
+    "invalid-shared-segment": "Shared Segment",
   };
 
   const ruleDescriptions: Record<ViolationType, string> = {
@@ -88,6 +92,8 @@ export function createViolation(
     "circular-dependency": `순환 의존성이 감지되었습니다: ${fromLayer} ⇄ ${toLayer}`,
     "cross-slice": `같은 레이어 내 다른 슬라이스 간 직접 import가 감지되었습니다`,
     "deep-nesting": `깊은 경로 import가 감지되었습니다. Public API를 통해 import하세요`,
+    "file-type": `JS/JSX 파일은 금지됩니다. .ts/.tsx로 변환하세요`,
+    "invalid-shared-segment": `shared 하위 세그먼트 규칙을 위반했습니다`,
   };
 
   // 스마트 제안 생성
@@ -118,6 +124,98 @@ export function createViolation(
   };
 }
 
+function createFileTypeViolation(
+  analysis: FileAnalysis,
+  severityConfig: SeverityConfig
+): Violation {
+  const severity: Severity = severityConfig.fileType ?? "error";
+  const normalizedPath = analysis.filePath.replace(/\\/g, "/");
+  const extension = normalizedPath.slice(normalizedPath.lastIndexOf("."));
+
+  return {
+    type: "file-type",
+    filePath: analysis.filePath,
+    line: 1,
+    column: 1,
+    importStatement: normalizedPath,
+    importPath: normalizedPath,
+    fromLayer: "typescript",
+    toLayer: extension,
+    ruleName: "TypeScript Only",
+    ruleDescription: `JS/JSX 파일은 금지됩니다 (${extension}). .ts/.tsx로 변환하세요`,
+    severity,
+    allowedLayers: [],
+    suggestions: [
+      "파일 확장자를 .ts 또는 .tsx로 변경하세요",
+      "필요한 타입을 추가하고 TypeScript로 변환하세요",
+    ],
+  };
+}
+
+function createInvalidSharedSegmentViolation(
+  analysis: FileAnalysis,
+  severityConfig: SeverityConfig
+): Violation {
+  const severity: Severity = severityConfig.invalidSharedSegment ?? "error";
+  const normalizedPath = analysis.filePath.replace(/\\/g, "/");
+  const marker = "src/shared/";
+  let segment = "(unknown)";
+
+  const index = normalizedPath.indexOf(marker);
+  if (index !== -1) {
+    const rest = normalizedPath.slice(index + marker.length);
+    segment = rest.split("/")[0] || "(root)";
+  }
+
+  return {
+    type: "invalid-shared-segment",
+    filePath: analysis.filePath,
+    line: 1,
+    column: 1,
+    importStatement: normalizedPath,
+    importPath: normalizedPath,
+    fromLayer: "shared",
+    toLayer: "shared/unsafe",
+    ruleName: "Shared Segment",
+    ruleDescription: `src/shared/${segment}는 허용되지 않습니다`,
+    severity,
+    allowedLayers: [],
+    suggestions: [
+      "허용 경로: src/shared/contracts|schema|types|utils/client|utils/server|env",
+      "파일을 허용된 shared 하위 폴더로 이동하세요",
+    ],
+  };
+}
+
+function createSharedEnvImportViolation(
+  analysis: FileAnalysis,
+  importInfo: ImportInfo,
+  fromLayer: string,
+  allowedLayers: string[],
+  severityConfig: SeverityConfig
+): Violation {
+  const severity: Severity = severityConfig.layerViolation ?? "error";
+
+  return {
+    type: "layer-violation",
+    filePath: analysis.filePath,
+    line: importInfo.line,
+    column: importInfo.column,
+    importStatement: importInfo.statement,
+    importPath: importInfo.path,
+    fromLayer,
+    toLayer: "shared/env",
+    ruleName: "Shared Env (Server-only)",
+    ruleDescription: "shared/env는 서버 전용입니다. 클라이언트 레이어에서 import할 수 없습니다",
+    severity,
+    allowedLayers,
+    suggestions: [
+      "환경변수 접근은 src/server 또는 app/api/route.ts에서 처리하세요",
+      "필요한 값은 서버에서 주입하거나 응답으로 전달하세요",
+    ],
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // File Validation
 // ═══════════════════════════════════════════════════════════════════════════
@@ -132,6 +230,15 @@ export function validateFileAnalysis(
 ): Violation[] {
   const violations: Violation[] = [];
   const severityConfig = config.severity ?? {};
+  const normalizedPath = analysis.filePath.toLowerCase();
+
+  if (normalizedPath.endsWith(".js") || normalizedPath.endsWith(".jsx")) {
+    violations.push(createFileTypeViolation(analysis, severityConfig));
+  }
+
+  if (analysis.layer === "shared/unsafe") {
+    violations.push(createInvalidSharedSegmentViolation(analysis, severityConfig));
+  }
 
   // FS Routes 규칙 검사 (app/ 내부)
   violations.push(...validateFsRoutesImports(analysis, layers, config));
@@ -165,6 +272,19 @@ export function validateFileAnalysis(
 
     if (!toLayer) {
       continue; // 레이어를 알 수 없으면 무시
+    }
+
+    if (toLayer === "shared/env" && fromLayer.startsWith("client/")) {
+      violations.push(
+        createSharedEnvImportViolation(
+          analysis,
+          importInfo,
+          fromLayer,
+          fromLayerDef?.canImport ?? [],
+          severityConfig
+        )
+      );
+      continue;
     }
 
     // 같은 레이어 내 같은 슬라이스는 허용
@@ -257,8 +377,10 @@ function extractSliceFromImport(
   if (!layerRelative) return undefined;
 
   const parts = layerRelative.split("/");
-  if (parts[0] === layer && parts.length > 1) {
-    return parts[1];
+  const layerParts = layer.split("/");
+  const matchesLayer = parts.slice(0, layerParts.length).join("/") === layer;
+  if (matchesLayer && parts.length > layerParts.length) {
+    return parts[layerParts.length];
   }
 
   return undefined;
@@ -281,7 +403,11 @@ function validateFsRoutesImports(
   const violations: Violation[] = [];
   const severity = config.severity?.layerViolation ?? "error";
   const allowedLayers =
-    fileType === "page" ? fsRoutesConfig.pageCanImport : fsRoutesConfig.layoutCanImport;
+    fileType === "page"
+      ? fsRoutesConfig.pageCanImport
+      : fileType === "layout"
+      ? fsRoutesConfig.layoutCanImport
+      : fsRoutesConfig.routeCanImport;
 
   for (const importInfo of analysis.imports) {
     const isFsRoutesImport = isFsRoutesImportPath(importInfo.path);
@@ -323,7 +449,32 @@ function validateFsRoutesImports(
         analysis.rootDir
       );
 
+      if (toLayer === "shared/env" && fileType !== "route") {
+        violations.push(
+          createSharedEnvImportViolation(
+            analysis,
+            importInfo,
+            fileType,
+            allowedLayers,
+            config.severity ?? {}
+          )
+        );
+        continue;
+      }
+
       if (toLayer && !allowedLayers.includes(toLayer)) {
+        const fileLabel = fileType === "route" ? "route.ts" : `${fileType}.tsx`;
+        const suggestions =
+          fileType === "route"
+            ? [
+                `허용 레이어: ${allowedLayers.join(", ")}`,
+                "서버 로직은 src/server 또는 src/shared로 이동하세요",
+              ]
+            : [
+                `허용 레이어: ${allowedLayers.join(", ")}`,
+                "클라이언트 로직은 src/client 또는 src/shared로 이동하세요",
+              ];
+
         violations.push({
           type: "layer-violation",
           filePath: analysis.filePath,
@@ -334,13 +485,10 @@ function validateFsRoutesImports(
           fromLayer: fileType,
           toLayer,
           ruleName: "FS Routes Import Rule",
-          ruleDescription: `${fileType}.tsx는 지정된 레이어만 import 가능합니다`,
+          ruleDescription: `${fileLabel}는 지정된 레이어만 import 가능합니다`,
           severity,
           allowedLayers,
-          suggestions: [
-            `허용 레이어: ${allowedLayers.join(", ")}`,
-            "필요한 모듈은 widgets/features/shared로 옮겨 사용하세요",
-          ],
+          suggestions,
         });
       }
     }
@@ -349,7 +497,7 @@ function validateFsRoutesImports(
   return violations;
 }
 
-function getFsRouteFileType(analysis: FileAnalysis): "page" | "layout" | null {
+function getFsRouteFileType(analysis: FileAnalysis): "page" | "layout" | "route" | null {
   const normalizedPath = normalizePathValue(
     analysis.rootDir
       ? relative(
@@ -371,6 +519,9 @@ function getFsRouteFileType(analysis: FileAnalysis): "page" | "layout" | null {
   }
   if (FILE_PATTERNS.layout.test(fileName)) {
     return "layout";
+  }
+  if (FILE_PATTERNS.route.test(fileName)) {
+    return "route";
   }
 
   return null;

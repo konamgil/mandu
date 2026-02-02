@@ -109,8 +109,37 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     fsRoutes: enableFsRoutes
       ? {
           noPageToPage: true,
-          pageCanImport: ["widgets", "features", "entities", "shared"],
-          layoutCanImport: ["widgets", "shared"],
+          pageCanImport: [
+            "client/pages",
+            "client/widgets",
+            "client/features",
+            "client/entities",
+            "client/shared",
+            "shared/contracts",
+            "shared/types",
+            "shared/utils/client",
+          ],
+          layoutCanImport: [
+            "client/app",
+            "client/widgets",
+            "client/shared",
+            "shared/contracts",
+            "shared/types",
+            "shared/utils/client",
+          ],
+          routeCanImport: [
+            "server/api",
+            "server/application",
+            "server/domain",
+            "server/infra",
+            "server/core",
+            "shared/contracts",
+            "shared/schema",
+            "shared/types",
+            "shared/utils/client",
+            "shared/utils/server",
+            "shared/env",
+          ],
         }
       : undefined,
   };
@@ -238,19 +267,20 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
   }
 
   // CI 모드에서 에러가 있으면 실패
-  if (ci && report.bySeverity.error > 0) {
-    console.log("\n❌ Architecture check failed");
-    return false;
-  }
+  const hasErrors = report.bySeverity.error > 0;
+  const hasWarnings = report.bySeverity.warn > 0;
 
   if (report.totalViolations === 0) {
     console.log("\n✅ Architecture check passed");
     return true;
   }
 
-  if (report.bySeverity.error > 0) {
-    console.log(`\n⚠️  ${report.bySeverity.error} error(s) found - please fix before continuing`);
-    return !ci;
+  if (hasErrors || (ci && hasWarnings)) {
+    const reason = hasErrors
+      ? `${report.bySeverity.error} error(s)`
+      : `${report.bySeverity.warn} warning(s)`;
+    console.log(`\n❌ Architecture check failed: ${reason}`);
+    return false;
   }
 
   console.log(`\n⚠️  ${report.totalViolations} issue(s) found`);

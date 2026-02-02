@@ -345,6 +345,8 @@ function countByType(violations: Violation[]): Record<ViolationType, number> {
     "circular-dependency": 0,
     "cross-slice": 0,
     "deep-nesting": 0,
+    "file-type": 0,
+    "invalid-shared-segment": 0,
   };
 
   for (const v of violations) {

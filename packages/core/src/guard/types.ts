@@ -37,6 +37,10 @@ export interface SeverityConfig {
   deepNesting?: Severity;
   /** 같은 레이어 내 슬라이스 간 의존 */
   crossSliceDependency?: Severity;
+  /** 파일 타입 위반 (.js/.jsx 금지 등) */
+  fileType?: Severity;
+  /** shared 하위 세그먼트 위반 */
+  invalidSharedSegment?: Severity;
 }
 
 /**
@@ -49,6 +53,8 @@ export interface FSRoutesGuardConfig {
   pageCanImport?: string[];
   /** layout.tsx가 import 가능한 레이어 */
   layoutCanImport?: string[];
+  /** route.ts가 import 가능한 레이어 */
+  routeCanImport?: string[];
 }
 
 /**
@@ -183,7 +189,9 @@ export type ViolationType =
   | "layer-violation"      // 레이어 의존 위반
   | "circular-dependency"  // 순환 의존
   | "cross-slice"          // 같은 레이어 내 슬라이스 간 의존
-  | "deep-nesting";        // 깊은 중첩 import
+  | "deep-nesting"         // 깊은 중첩 import
+  | "file-type"            // 파일 타입 위반
+  | "invalid-shared-segment"; // shared 세그먼트 위반
 
 /**
  * 아키텍처 위반
@@ -322,6 +330,8 @@ export const DEFAULT_GUARD_CONFIG: Required<Omit<GuardConfig, "preset" | "layers
     circularDependency: "warn",
     deepNesting: "info",
     crossSliceDependency: "warn",
+    fileType: "error",
+    invalidSharedSegment: "error",
   },
   realtimeOutput: "console",
   cache: true,

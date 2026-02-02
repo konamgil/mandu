@@ -239,11 +239,16 @@ export function resolveImportLayer(
 export function extractSlice(filePath: string, layer: string): string | undefined {
   const relativePath = filePath.replace(/\\/g, "/");
 
-  // layer/slice/... 형식에서 slice 추출
-  const pattern = new RegExp(`${layer}/([^/]+)`);
-  const match = relativePath.match(pattern);
+  const marker = `${layer}/`;
+  const index = relativePath.indexOf(marker);
+  if (index === -1) {
+    return undefined;
+  }
 
-  return match?.[1];
+  const rest = relativePath.slice(index + marker.length);
+  const slice = rest.split("/")[0];
+
+  return slice || undefined;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
