@@ -7,7 +7,16 @@ import {
   type SpecLock,
 } from "@mandujs/core";
 import { getProjectPaths, readJsonFile } from "../utils/project.js";
-import { getGuide, listGuides, getRecipe, listRecipes } from "./skills/index.js";
+import {
+  getGuide,
+  listGuides,
+  getRecipe,
+  listRecipes,
+  listSkills,
+  getSkill,
+  listSkillRules,
+  getSkillRule,
+} from "./skills/index.js";
 import path from "path";
 
 export const resourceDefinitions: Resource[] = [
@@ -119,6 +128,31 @@ export const resourceDefinitions: Resource[] = [
     uri: "mandu://skills/recipes/add-database",
     name: "Add Database Recipe",
     description: "Step-by-step guide to connect a database",
+    mimeType: "text/markdown",
+  },
+  // Agent Skills (file-based)
+  {
+    uri: "mandu://skills",
+    name: "Available Skills",
+    description: "List of all Agent Skills for learning Mandu patterns",
+    mimeType: "application/json",
+  },
+  {
+    uri: "mandu://skills/{skillId}",
+    name: "Skill Overview",
+    description: "SKILL.md content with overview and rule categories",
+    mimeType: "text/markdown",
+  },
+  {
+    uri: "mandu://skills/{skillId}/rules",
+    name: "Skill Rules",
+    description: "List of rules for a specific skill",
+    mimeType: "application/json",
+  },
+  {
+    uri: "mandu://skills/{skillId}/rules/{ruleId}",
+    name: "Skill Rule",
+    description: "Detailed rule documentation",
     mimeType: "text/markdown",
   },
 ];
@@ -353,6 +387,86 @@ export function resourceHandlers(
     "mandu://skills/recipes/add-database": async () => {
       const content = getRecipe("add-database");
       return { id: "add-database", content };
+    },
+
+    // Agent Skills (file-based)
+    "mandu://skills": async () => {
+      return {
+        skills: listSkills(),
+        usage: {
+          overview: "Read skill overview with mandu://skills/{skillId}",
+          rules: "List rules with mandu://skills/{skillId}/rules",
+          rule: "Read specific rule with mandu://skills/{skillId}/rules/{ruleId}",
+        },
+        availableSkills: [
+          "mandu-slot",
+          "mandu-fs-routes",
+          "mandu-hydration",
+          "mandu-guard",
+        ],
+      };
+    },
+
+    "mandu://skills/{skillId}": async (params: Record<string, string>) => {
+      const { skillId } = params;
+      if (!skillId) {
+        return { error: "skillId parameter is required" };
+      }
+
+      const skill = await getSkill(skillId);
+      if (!skill) {
+        return { error: `Skill not found: ${skillId}` };
+      }
+
+      const rules = await listSkillRules(skillId);
+
+      return {
+        id: skillId,
+        meta: skill.meta,
+        content: skill.content,
+        rulesCount: rules.length,
+        rulesUri: `mandu://skills/${skillId}/rules`,
+      };
+    },
+
+    "mandu://skills/{skillId}/rules": async (params: Record<string, string>) => {
+      const { skillId } = params;
+      if (!skillId) {
+        return { error: "skillId parameter is required" };
+      }
+
+      const rules = await listSkillRules(skillId);
+      if (rules.length === 0) {
+        return { error: `No rules found for skill: ${skillId}` };
+      }
+
+      return {
+        skillId,
+        count: rules.length,
+        rules: rules.map((r) => ({
+          ...r,
+          uri: `mandu://skills/${skillId}/rules/${r.id}`,
+        })),
+      };
+    },
+
+    "mandu://skills/{skillId}/rules/{ruleId}": async (params: Record<string, string>) => {
+      const { skillId, ruleId } = params;
+      if (!skillId || !ruleId) {
+        return { error: "skillId and ruleId parameters are required" };
+      }
+
+      const rule = await getSkillRule(skillId, ruleId);
+      if (!rule) {
+        return { error: `Rule not found: ${skillId}/${ruleId}` };
+      }
+
+      return {
+        skillId,
+        ruleId,
+        meta: rule.meta,
+        content: rule.content,
+      };
     },
   };
 }
