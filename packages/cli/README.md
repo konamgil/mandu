@@ -109,6 +109,7 @@ That's it!
 |---------|-------------|
 | `mandu doctor` | Analyze Guard failures + suggest patches |
 | `mandu watch` | Real-time file monitoring |
+| `mandu monitor` | MCP Activity Monitor log stream |
 | `mandu brain setup` | Configure sLLM (optional) |
 | `mandu brain status` | Check Brain status |
 
@@ -256,6 +257,16 @@ bunx mandu guard arch --preset fsd
 | `--no-llm` | Template mode (no LLM) |
 | `--output <path>` | Output file path |
 
+### `mandu monitor`
+
+| Option | Description |
+|--------|-------------|
+| `--format <f>` | Output: console, agent, json |
+| `--summary` | Print summary (JSON log only) |
+| `--since <d>` | Summary window: 5m, 30s, 1h |
+| `--follow <bool>` | Follow mode (default: true) |
+| `--file <path>` | Use custom log file |
+
 ---
 
 ## Examples
@@ -286,6 +297,10 @@ bunx mandu change rollback
 # Doctor
 bunx mandu doctor
 bunx mandu doctor --format json
+
+# Monitor
+bunx mandu monitor
+bunx mandu monitor --summary --since 5m
 
 # Build
 bunx mandu build --minify --sourcemap

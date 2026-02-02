@@ -171,6 +171,36 @@ When `mandu_watch_start` is active, the agent receives real-time push notificati
 
 ---
 
+## Activity Monitor (JSON Schema)
+
+The MCP server writes activity logs to `.mandu/activity.log` (pretty) or `.mandu/activity.jsonl` (JSON).  
+JSON lines follow a stable schema with `schemaVersion`:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "ts": "2026-02-02T12:34:56.789Z",
+  "type": "tool.call",
+  "severity": "info",
+  "source": "tool",
+  "message": "",
+  "actionRequired": false,
+  "fingerprint": "tool:call:mandu_guard_check",
+  "count": 1,
+  "data": {
+    "tool": "mandu_guard_check",
+    "tag": "GUARD",
+    "args": {}
+  }
+}
+```
+
+Common `type` values: `tool.call`, `tool.result`, `tool.error`, `watch.warning`, `guard.summary`, `guard.violation`, `routes.change`, `system.event`, `monitor.summary`.
+
+Default config is auto-created at `.mandu/monitor.config.json` on first run.
+
+---
+
 ## Agent Workflow Examples
 
 ### Adding a New API Route

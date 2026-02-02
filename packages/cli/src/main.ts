@@ -22,6 +22,7 @@ import { doctor } from "./commands/doctor";
 import { watch } from "./commands/watch";
 import { brainSetup, brainStatus } from "./commands/brain";
 import { routesGenerate, routesList, routesWatch } from "./commands/routes";
+import { monitor } from "./commands/monitor";
 
 const HELP_TEXT = `
 🥟 Mandu CLI - Agent-Native Fullstack Framework
@@ -48,6 +49,7 @@ Commands:
 
   doctor         Guard 실패 분석 + 패치 제안 (Brain)
   watch          실시간 파일 감시 - 경고만 (Brain)
+  monitor        MCP Activity Monitor 로그 스트림
 
   brain setup    sLLM 설정 (선택)
   brain status   Brain 상태 확인
@@ -84,6 +86,10 @@ Options:
   --minify           build 시 코드 압축
   --sourcemap        build 시 소스맵 생성
   --watch            build/guard arch 파일 감시 모드
+  --summary          monitor 요약 출력 (JSON 로그에서만)
+  --since <duration> monitor 요약 기간 (예: 5m, 30s, 1h)
+  --follow <bool>    monitor follow 모드 (기본: true)
+  --file <path>      monitor 로그 파일 직접 지정
   --message <msg>    change begin 시 설명 메시지
   --id <id>          change rollback 시 특정 변경 ID
   --keep <n>         change prune 시 유지할 스냅샷 수 (기본: 5)
@@ -108,6 +114,8 @@ Examples:
   bunx mandu guard arch --preset fsd
   bunx mandu guard arch --watch
   bunx mandu guard arch --ci --format json
+  bunx mandu monitor
+  bunx mandu monitor --summary --since 5m
   bunx mandu doctor
   bunx mandu brain setup --model codellama
   bunx mandu contract create users
@@ -379,6 +387,16 @@ async function main(): Promise<void> {
       success = await watch({
         status: options.status === "true",
         debounce: options.debounce ? Number(options.debounce) : undefined,
+      });
+      break;
+
+    case "monitor":
+      success = await monitor({
+        format: options.format as any,
+        summary: options.summary === "true",
+        since: options.since,
+        follow: options.follow === "false" ? false : true,
+        file: options.file,
       });
       break;
 
