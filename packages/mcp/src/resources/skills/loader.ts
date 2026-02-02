@@ -27,7 +27,13 @@ export interface RuleMeta {
 }
 
 // Available skills
-const SKILL_IDS = ["mandu-slot", "mandu-fs-routes", "mandu-hydration", "mandu-guard"];
+const SKILL_IDS = [
+  "mandu-slot",
+  "mandu-fs-routes",
+  "mandu-hydration",
+  "mandu-guard",
+  "mandu-performance",
+];
 
 /**
  * Parse YAML frontmatter from markdown content
@@ -87,6 +93,7 @@ function getSkillDescription(id: string): string {
     "mandu-fs-routes": "File-system based routing patterns",
     "mandu-hydration": "Island hydration and client components",
     "mandu-guard": "Architecture enforcement and layer dependencies",
+    "mandu-performance": "Performance optimization patterns for Mandu apps",
   };
   return descriptions[id] || "";
 }
