@@ -26,16 +26,65 @@
 
 ## Quick Start
 
-```bash
-# Create new project
-bunx @mandujs/cli init my-app
-cd my-app && bun install
+### Prerequisites
 
-# Start development (everything is automatic!)
+- **Bun** v1.0.0 or higher ([install Bun](https://bun.sh/docs/installation))
+
+```bash
+# Check Bun version
+bun --version
+```
+
+### 1. Create a New Project
+
+```bash
+bunx @mandujs/cli init my-app
+cd my-app
+bun install
+```
+
+### 2. Start Development Server
+
+```bash
 bun run dev
 ```
 
-That's it. Create `app/page.tsx` and start coding.
+Your app is now running at `http://localhost:3000`
+
+### 3. Create Your First Page
+
+Create `app/page.tsx`:
+
+```tsx
+export default function Home() {
+  return (
+    <div>
+      <h1>Welcome to Mandu!</h1>
+      <p>Edit this file and see changes instantly.</p>
+    </div>
+  );
+}
+```
+
+### 4. Add an API Route
+
+Create `app/api/hello/route.ts`:
+
+```typescript
+export function GET() {
+  return Response.json({ message: "Hello from Mandu!" });
+}
+```
+
+Now visit `http://localhost:3000/api/hello`
+
+### 5. Build for Production
+
+```bash
+bun run build
+```
+
+That's it! You're ready to build with Mandu.
 
 ---
 
