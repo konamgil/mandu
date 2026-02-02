@@ -140,7 +140,9 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
 
     // Ctrl+C 핸들링
     process.on("SIGINT", () => {
-      console.log("\n🛑 Guard stopped");
+      if (resolvedFormat === "console") {
+        console.log("\n🛑 Guard stopped");
+      }
       watcher.close();
       process.exit(0);
     });

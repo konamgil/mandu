@@ -4,6 +4,7 @@ import { specUpsert } from "./commands/spec-upsert";
 import { generateApply } from "./commands/generate-apply";
 import { guardCheck } from "./commands/guard-check";
 import { guardArch } from "./commands/guard-arch";
+import { check } from "./commands/check";
 import { dev } from "./commands/dev";
 import { init } from "./commands/init";
 import { build } from "./commands/build";
@@ -29,11 +30,12 @@ Usage: bunx mandu <command> [options]
 
 Commands:
   init           새 프로젝트 생성
+  check          FS Routes + Guard 통합 검사
   routes generate  FS Routes 스캔 및 매니페스트 생성
   routes list      현재 라우트 목록 출력
   routes watch     실시간 라우트 감시
-  dev            개발 서버 실행 (FS Routes 자동 적용)
-  dev --guard    Guard 실시간 감시와 함께 개발 서버 실행
+  dev            개발 서버 실행 (FS Routes + Guard 기본)
+  dev --no-guard Guard 감시 비활성화
   build          클라이언트 번들 빌드 (Hydration)
   guard          Guard 규칙 검사 (레거시 Spec 기반)
   guard arch     아키텍처 위반 검사 (FSD/Clean/Hexagonal)
@@ -67,12 +69,15 @@ Options:
   --name <name>      init 시 프로젝트 이름 (기본: my-mandu-app)
   --file <path>      spec-upsert 시 사용할 spec 파일 경로
   --port <port>      dev/openapi serve 포트 (기본: 3000/8080)
-  --guard            dev 시 Architecture Guard 실시간 감시 활성화
+  --guard            dev 시 Architecture Guard 실시간 감시 활성화 (기본: ON)
+  --no-guard         dev 시 Guard 비활성화
   --guard-preset <p> dev --guard 시 프리셋 (기본: mandu)
+  --guard-format <f> dev --guard 출력 형식: console, json, agent (기본: 자동)
+  --legacy           FS Routes 비활성화 (레거시 모드)
   --no-auto-correct  guard 시 자동 수정 비활성화
-  --preset <name>    guard arch 프리셋 (기본: mandu) - fsd, clean, hexagonal, atomic 선택 가능
-  --ci               guard arch CI 모드 (에러 시 exit 1)
-  --quiet            guard arch 요약만 출력
+  --preset <name>    guard/check 프리셋 (기본: mandu) - fsd, clean, hexagonal, atomic 선택 가능
+  --ci               guard/check CI 모드 (에러 시 exit 1)
+  --quiet            guard/check 요약만 출력
   --report-format    guard arch 리포트 형식: json, markdown, html
   --save-stats       guard arch 통계 저장 (트렌드 분석용)
   --show-trend       guard arch 트렌드 분석 표시
@@ -83,7 +88,7 @@ Options:
   --id <id>          change rollback 시 특정 변경 ID
   --keep <n>         change prune 시 유지할 스냅샷 수 (기본: 5)
   --output <path>    openapi/doctor 출력 경로
-  --format <fmt>     doctor/guard 출력 형식: console, json, agent
+  --format <fmt>     doctor/guard/check 출력 형식: console, json, agent (기본: 자동)
   --no-llm           doctor에서 LLM 사용 안 함 (템플릿 모드)
   --model <name>     brain setup 시 모델 이름 (기본: llama3.2)
   --url <url>        brain setup 시 Ollama URL
@@ -92,9 +97,11 @@ Options:
 
 Examples:
   bunx mandu init --name my-app
+  bunx mandu check
   bunx mandu routes list
   bunx mandu routes generate
   bunx mandu dev --port 3000
+  bunx mandu dev --no-guard
   bunx mandu build --minify
   bunx mandu guard
   bunx mandu guard arch --preset fsd
@@ -191,6 +198,16 @@ async function main(): Promise<void> {
       success = await generateApply();
       break;
 
+    case "check":
+      success = await check({
+        preset: options.preset as any,
+        format: options.format as any,
+        ci: options.ci === "true",
+        quiet: options.quiet === "true",
+        legacy: options.legacy === "true",
+      });
+      break;
+
     case "guard": {
       const subCommand = args[1];
       switch (subCommand) {
@@ -199,7 +216,7 @@ async function main(): Promise<void> {
             preset: (options.preset as any) || "fsd",
             watch: options.watch === "true",
             ci: options.ci === "true",
-            format: (options.format as any) || "console",
+            format: options.format as any,
             quiet: options.quiet === "true",
             srcDir: options["src-dir"],
             listPresets: options["list-presets"] === "true",
@@ -229,8 +246,10 @@ async function main(): Promise<void> {
     case "dev":
       await dev({
         port: parsePort(options.port),
-        guard: options.guard === "true",
+        guard: options["no-guard"] === "true" ? false : options.guard !== "false",
         guardPreset: options["guard-preset"] as any,
+        guardFormat: options["guard-format"] as any,
+        legacy: options.legacy === "true",
       });
       break;
 
