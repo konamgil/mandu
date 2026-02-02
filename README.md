@@ -101,6 +101,17 @@ my-app/
 │   └── api/
 │       └── health/
 │           └── route.ts   # Health check API (/api/health)
+├── src/                    # Architecture layers
+│   ├── client/             # Client (FSD)
+│   ├── server/             # Server (Clean)
+│   └── shared/             # Universal shared
+│       ├── contracts/      # Client-safe contracts
+│       ├── types/
+│       ├── utils/
+│       │   ├── client/     # Client-safe utils
+│       │   └── server/     # Server-only utils
+│       ├── schema/         # Server-only schema
+│       └── env/            # Server-only env
 ├── spec/
 │   └── routes.manifest.json  # Route definitions (auto-managed)
 ├── .mandu/                 # Build output (auto-generated)
@@ -296,6 +307,7 @@ Current AI coding has a fundamental problem: the more agents code, the more arch
 | **Slot System** | Isolated areas where agents safely write business logic |
 | **Island Hydration** | Selective client-side JavaScript for performance |
 | **Contract API** | Type-safe API contracts with Zod schema validation |
+| **SEO Module** | Next.js Metadata API compatible, sitemap/robots generation, JSON-LD helpers |
 | **MCP Server** | 25+ tools for AI agents to directly manipulate the framework |
 | **HMR Support** | Hot Module Replacement for rapid development |
 | **Transaction API** | Atomic changes with snapshot-based rollback |
@@ -410,19 +422,19 @@ bunx mandu guard arch --output report.md --report-format markdown
 ### Layer Hierarchy (Mandu Preset)
 
 ```
-Frontend (FSD)           Backend (Clean)
-─────────────────        ─────────────────
-app                      api
-  ↓                        ↓
-pages                    application
-  ↓                        ↓
-widgets                  domain
-  ↓                        ↓
-features                 infra
-  ↓                        ↓
-entities                 core
-  ↓                        ↓
-shared ←───────────────── shared
+Client (FSD)               Shared (strict)              Server (Clean)
+──────────────────         ───────────────              ─────────────────
+client/app                 shared/contracts             server/api
+  ↓                        shared/types                 ↓
+client/pages               shared/utils/client          server/application
+  ↓                        shared/schema (server-only)  ↓
+client/widgets             shared/utils/server          server/domain
+  ↓                        shared/env (server-only)     ↓
+client/features                                          server/infra
+  ↓                                                     ↓
+client/entities                                         server/core
+  ↓
+client/shared
 ```
 
 Upper layers can only import from lower layers. Guard detects violations in real-time.
@@ -565,7 +577,7 @@ Mandu includes a full MCP server for AI agent integration.
 }
 ```
 
-### Tools (25+)
+### Tools (30+)
 
 | Category | Tools |
 |----------|-------|
@@ -575,6 +587,7 @@ Mandu includes a full MCP server for AI agent integration.
 | **Transaction** | `mandu_begin`, `mandu_commit`, `mandu_rollback` |
 | **Slot** | `mandu_read_slot`, `mandu_write_slot`, `mandu_validate_slot` |
 | **Hydration** | `mandu_build`, `mandu_list_islands`, `mandu_set_hydration` |
+| **SEO** | `mandu_preview_seo`, `mandu_generate_sitemap_preview`, `mandu_generate_robots_preview`, `mandu_create_jsonld`, `mandu_write_seo_file`, `mandu_seo_analyze` |
 | **Brain** | `mandu_doctor`, `mandu_watch_start`, `mandu_get_architecture` |
 
 ### Resources
@@ -633,7 +646,7 @@ mandu/
 
 ## Roadmap
 
-### v0.9.x (Current) — 44 features done
+### v0.9.x (Current) — 65 features done
 
 **Core Runtime**
 - [x] Middleware compose & lifecycle hooks
@@ -664,6 +677,15 @@ mandu/
 - [x] Partials & slots
 - [x] Error boundary & loading states
 - [x] HMR support
+
+**SEO (Search Engine Optimization)**
+- [x] Next.js Metadata API compatible types
+- [x] Layout chain metadata merging
+- [x] Open Graph & Twitter Cards
+- [x] JSON-LD structured data (12 helpers)
+- [x] Sitemap.xml & robots.txt generation
+- [x] Google SEO optimization (viewport, theme-color, resource hints)
+- [x] SSR integration
 
 **AI Integration**
 - [x] MCP server (25+ tools, 7 resources)

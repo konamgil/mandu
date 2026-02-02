@@ -13,10 +13,12 @@ export * from "./openapi";
 export * from "./brain";
 export * from "./watcher";
 export * from "./router";
+export * from "./config";
+export * from "./seo";
 
 // Consolidated Mandu namespace
 import { ManduFilling, ManduContext, ManduFillingFactory } from "./filling";
-import { createContract, defineHandler, defineRoute, createClient, contractFetch } from "./contract";
+import { createContract, defineHandler, defineRoute, createClient, contractFetch, createClientContract } from "./contract";
 import type { ContractDefinition, ContractInstance, ContractSchema } from "./contract";
 import type { ContractHandlers, ClientOptions } from "./contract";
 
@@ -82,6 +84,11 @@ export const Mandu = {
    * Create a type-safe API client
    */
   client: createClient,
+
+  /**
+   * Create a client-safe contract
+   */
+  clientContract: createClientContract,
 
   /**
    * Make a type-safe fetch call

@@ -729,12 +729,374 @@ src/
 \`\`\`
 `;
 
+export const GUIDE_SEO = `# Mandu SEO 가이드
+
+## 개요
+
+Mandu SEO 모듈은 Next.js Metadata API 패턴을 따릅니다.
+정적/동적 메타데이터, Open Graph, Twitter Cards, JSON-LD 구조화 데이터를 지원합니다.
+
+## 정적 메타데이터
+
+\`\`\`typescript
+// app/layout.tsx
+import type { Metadata } from '@mandujs/core'
+
+export const metadata: Metadata = {
+  metadataBase: new URL('https://example.com'),
+  title: {
+    template: '%s | My Site',
+    default: 'My Site',
+  },
+  description: 'Welcome to my site',
+  openGraph: {
+    siteName: 'My Site',
+    type: 'website',
+  },
+}
+
+export default function RootLayout({ children }) {
+  return <html><body>{children}</body></html>
+}
+\`\`\`
+
+## 동적 메타데이터
+
+\`\`\`typescript
+// app/blog/[slug]/page.tsx
+import type { Metadata, MetadataParams } from '@mandujs/core'
+
+export async function generateMetadata({ params }: MetadataParams): Promise<Metadata> {
+  const post = await getPost(params.slug)
+
+  return {
+    title: post.title,
+    description: post.excerpt,
+    openGraph: {
+      title: post.title,
+      images: [post.coverImage],
+    },
+  }
+}
+\`\`\`
+
+## 타이틀 템플릿
+
+\`\`\`typescript
+// 루트 레이아웃
+export const metadata: Metadata = {
+  title: {
+    template: '%s | My Site',  // 자식 타이틀이 %s에 삽입
+    default: 'Home | My Site', // 기본값
+  },
+}
+
+// 페이지 (템플릿 상속)
+export const metadata: Metadata = {
+  title: 'About',  // 결과: "About | My Site"
+}
+
+// 템플릿 무시
+export const metadata: Metadata = {
+  title: {
+    absolute: 'Custom Title',  // 템플릿 무시
+  },
+}
+\`\`\`
+
+## Open Graph
+
+\`\`\`typescript
+export const metadata: Metadata = {
+  openGraph: {
+    title: 'Page Title',
+    description: 'Page description',
+    url: 'https://example.com/page',
+    siteName: 'My Site',
+    images: [
+      {
+        url: 'https://example.com/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'OG Image',
+      },
+    ],
+    locale: 'ko_KR',
+    type: 'website',
+  },
+}
+\`\`\`
+
+### Article Open Graph
+
+\`\`\`typescript
+export const metadata: Metadata = {
+  openGraph: {
+    type: 'article',
+    publishedTime: '2024-01-15T00:00:00Z',
+    modifiedTime: '2024-01-16T00:00:00Z',
+    authors: ['https://example.com/author'],
+    section: 'Technology',
+    tags: ['React', 'Next.js'],
+  },
+}
+\`\`\`
+
+## Twitter Cards
+
+\`\`\`typescript
+export const metadata: Metadata = {
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Page Title',
+    description: 'Page description',
+    site: '@mysite',
+    creator: '@author',
+    images: ['https://example.com/twitter-image.jpg'],
+  },
+}
+\`\`\`
+
+## JSON-LD 구조화 데이터
+
+### 헬퍼 함수 사용
+
+\`\`\`typescript
+import {
+  createArticleJsonLd,
+  createBreadcrumbJsonLd,
+  createOrganizationJsonLd,
+  createFAQJsonLd,
+  createProductJsonLd,
+  createLocalBusinessJsonLd,
+  createVideoJsonLd,
+  createEventJsonLd,
+} from '@mandujs/core'
+
+export const metadata: Metadata = {
+  jsonLd: [
+    createArticleJsonLd({
+      headline: 'Article Title',
+      author: 'John Doe',
+      datePublished: new Date('2024-01-15'),
+      publisher: {
+        name: 'My Blog',
+        logo: 'https://example.com/logo.png',
+      },
+    }),
+    createBreadcrumbJsonLd([
+      { name: 'Home', url: 'https://example.com' },
+      { name: 'Blog', url: 'https://example.com/blog' },
+    ]),
+  ],
+}
+\`\`\`
+
+### 직접 작성
+
+\`\`\`typescript
+export const metadata: Metadata = {
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: 'Article Title',
+    author: {
+      '@type': 'Person',
+      name: 'John Doe',
+    },
+  },
+}
+\`\`\`
+
+## Sitemap
+
+\`\`\`typescript
+// app/sitemap.ts
+import type { Sitemap } from '@mandujs/core'
+
+export default function sitemap(): Sitemap {
+  return [
+    {
+      url: 'https://example.com',
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 1.0,
+    },
+    {
+      url: 'https://example.com/about',
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: 'https://example.com/blog',
+      images: ['https://example.com/blog-cover.jpg'],
+      alternates: {
+        languages: {
+          en: 'https://example.com/en/blog',
+          ko: 'https://example.com/ko/blog',
+        },
+      },
+    },
+  ]
+}
+\`\`\`
+
+## Robots.txt
+
+\`\`\`typescript
+// app/robots.ts
+import type { RobotsFile } from '@mandujs/core'
+
+export default function robots(): RobotsFile {
+  return {
+    rules: [
+      {
+        userAgent: '*',
+        allow: '/',
+        disallow: ['/admin', '/private'],
+      },
+      {
+        userAgent: 'Googlebot',
+        allow: '/',
+        crawlDelay: 2,
+      },
+    ],
+    sitemap: 'https://example.com/sitemap.xml',
+  }
+}
+\`\`\`
+
+## Google SEO 최적화
+
+### Viewport
+
+\`\`\`typescript
+export const metadata: Metadata = {
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 5,
+    userScalable: true,
+  },
+}
+\`\`\`
+
+### Theme Color (다크모드 대응)
+
+\`\`\`typescript
+export const metadata: Metadata = {
+  themeColor: [
+    { color: '#ffffff', media: '(prefers-color-scheme: light)' },
+    { color: '#000000', media: '(prefers-color-scheme: dark)' },
+  ],
+}
+\`\`\`
+
+### Resource Hints (성능 최적화)
+
+\`\`\`typescript
+export const metadata: Metadata = {
+  resourceHints: {
+    preconnect: ['https://fonts.googleapis.com'],
+    dnsPrefetch: ['https://cdn.example.com'],
+    preload: [
+      { href: '/fonts/main.woff2', as: 'font', type: 'font/woff2' },
+    ],
+    prefetch: ['/next-page.js'],
+  },
+}
+\`\`\`
+
+### Format Detection (iOS Safari)
+
+\`\`\`typescript
+export const metadata: Metadata = {
+  formatDetection: {
+    telephone: false,
+    date: false,
+    address: false,
+    email: false,
+  },
+}
+\`\`\`
+
+### App Links
+
+\`\`\`typescript
+export const metadata: Metadata = {
+  appLinks: {
+    iosAppStoreId: '123456789',
+    iosAppName: 'My App',
+    androidPackage: 'com.example.app',
+    androidAppName: 'My App',
+  },
+}
+\`\`\`
+
+## MCP 도구
+
+\`\`\`typescript
+// SEO 메타데이터 미리보기
+mandu_preview_seo({ metadata: { title: 'Test', description: 'Test desc' } })
+
+// Sitemap 미리보기
+mandu_generate_sitemap_preview({
+  entries: [{ url: 'https://example.com', priority: 1.0 }]
+})
+
+// Robots.txt 미리보기
+mandu_generate_robots_preview({
+  rules: { userAgent: '*', allow: '/' },
+  sitemap: 'https://example.com/sitemap.xml'
+})
+
+// JSON-LD 생성
+mandu_create_jsonld({
+  type: 'Article',
+  data: { headline: 'Title', author: 'Name', datePublished: '2024-01-15' }
+})
+
+// SEO 파일 생성
+mandu_write_seo_file({ fileType: 'sitemap' })
+mandu_write_seo_file({ fileType: 'robots' })
+
+// SEO 분석
+mandu_seo_analyze({
+  metadata: { title: 'Test', description: 'Test' },
+  url: 'https://example.com/page'
+})
+\`\`\`
+
+## SEO 체크리스트
+
+### 필수 항목
+- [ ] title (30-60자)
+- [ ] description (50-160자)
+- [ ] viewport 설정
+- [ ] canonical URL
+
+### 권장 항목
+- [ ] Open Graph (title, description, image)
+- [ ] Twitter Card
+- [ ] JSON-LD 구조화 데이터
+- [ ] sitemap.xml
+- [ ] robots.txt
+- [ ] hreflang (다국어 사이트)
+
+### 성능 최적화
+- [ ] preconnect (외부 도메인)
+- [ ] dns-prefetch
+- [ ] preload (중요 리소스)
+`;
+
 // 모든 가이드 목록
 export const GUIDES = {
   slot: GUIDE_SLOT,
   "fs-routes": GUIDE_FS_ROUTES,
   hydration: GUIDE_HYDRATION,
   guard: GUIDE_GUARD,
+  seo: GUIDE_SEO,
 } as const;
 
 export type GuideId = keyof typeof GUIDES;
@@ -764,6 +1126,11 @@ export function listGuides(): { id: string; title: string; description: string }
       id: "guard",
       title: "Guard 가이드",
       description: "아키텍처 규칙 강제와 레이어 의존성 관리",
+    },
+    {
+      id: "seo",
+      title: "SEO 가이드",
+      description: "메타데이터, Open Graph, JSON-LD, Sitemap 설정법",
     },
   ];
 }

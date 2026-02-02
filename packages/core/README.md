@@ -160,7 +160,7 @@ listPresets().forEach(p => console.log(p.name, p.description));
 
 | Preset | Layers | Use Case |
 |--------|--------|----------|
-| `mandu` | app, pages, widgets, features, entities, api, application, domain, infra, core, shared | Fullstack (default) |
+| `mandu` | client/*, shared/(contracts, types, utils/*, schema, env), server/* | Fullstack (default) |
 | `fsd` | app, pages, widgets, features, entities, shared | Frontend |
 | `clean` | api, application, domain, infra, shared | Backend |
 | `hexagonal` | adapters, ports, application, domain | DDD |
@@ -295,10 +295,26 @@ const handlers = Mandu.handler(userContract, {
   POST: (ctx) => ({ data: createUser(ctx.body) })
 });
 
-// Type-safe client
-const client = Mandu.client(userContract, { baseUrl: "/api/users" });
-const result = await client.GET({ query: { id: "123" } });
-```
+  // Type-safe client
+  const client = Mandu.client(userContract, { baseUrl: "/api/users" });
+  const result = await client.GET({ query: { id: "123" } });
+  ```
+
+  ### Client-safe Contract
+
+  Limit schemas exposed to client-side usage (forms/UI validation):
+
+  ```typescript
+  const clientContract = Mandu.clientContract(userContract, {
+    request: {
+      POST: { body: true },
+    },
+    response: [201],
+    includeErrors: true,
+  });
+
+  const client = Mandu.client(clientContract, { baseUrl: "/api/users" });
+  ```
 
 ---
 

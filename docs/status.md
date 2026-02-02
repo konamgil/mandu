@@ -106,6 +106,31 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Path traversal prevention | done | `packages/core/src/runtime/server.ts` isPathSafe() (v0.9.27) |
 | CLI port validation | done | `packages/cli/src/main.ts` parsePort() (v0.9.11) |
 
+## SEO (Search Engine Optimization)
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| Metadata types (Next.js API compatible) | done | `packages/core/src/seo/types.ts` |
+| Metadata resolution pipeline | done | `packages/core/src/seo/resolve/index.ts` |
+| Title template system | done | `packages/core/src/seo/resolve/title.ts` |
+| Layout chain metadata merging | done | `resolveMetadata()` in resolve/index.ts |
+| Open Graph rendering | done | `packages/core/src/seo/render/opengraph.ts` |
+| Twitter Cards rendering | done | `packages/core/src/seo/render/twitter.ts` |
+| JSON-LD structured data | done | `packages/core/src/seo/render/jsonld.ts` |
+| JSON-LD helpers (12 types) | done | Article, WebSite, Organization, Breadcrumb, FAQ, Product, LocalBusiness, Video, Review, Course, Event, SoftwareApp |
+| Sitemap.xml generation | done | `packages/core/src/seo/render/sitemap.ts` |
+| Sitemap index support | done | `renderSitemapIndex()` in render/sitemap.ts |
+| Robots.txt generation | done | `packages/core/src/seo/render/robots.ts` |
+| Route handlers (sitemap/robots) | done | `packages/core/src/seo/routes/index.ts` |
+| SSR integration | done | `packages/core/src/seo/integration/ssr.ts` |
+| Google meta tags | done | nositelinkssearchbox, notranslate in render/basic.ts |
+| Viewport rendering | done | `renderViewport()` in render/basic.ts |
+| Theme Color (with media queries) | done | `renderThemeColor()` in render/basic.ts |
+| Format Detection (iOS Safari) | done | `renderFormatDetection()` in render/basic.ts |
+| Resource Hints (preconnect, preload, etc.) | done | `renderResourceHints()` in render/basic.ts |
+| App Links (iOS/Android) | done | `renderAppLinks()` in render/basic.ts |
+| SEO module tests | done | `packages/core/tests/seo/seo.test.ts` (67 tests) |
+
 ---
 
 ## Summary
@@ -122,14 +147,16 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Realtime / Resumable | 0 | 2 |
 | Observability & Perf | 1 | 1 |
 | Security | 2 | 0 |
-| **Total** | **44** | **6** |
+| SEO | 21 | 0 |
+| **Total** | **65** | **6** |
 
 ---
 
-## Recent Changes (v0.9.26 ~ v0.9.34)
+## Recent Changes (v0.9.26 ~ v0.9.35)
 
 | Version | Package | Changes |
 |---------|---------|---------|
+| v0.9.35 | core | SEO Module (Next.js Metadata API 호환, sitemap/robots 생성, JSON-LD 헬퍼, Google SEO 최적화) |
 | v0.9.34 | core | Advanced routes (catch-all `:param*`, optional `:param*?`, boundary components) |
 | v0.9.33 | core | Layout System (layoutChain, loadingModule, errorModule in RouteSpec) |
 | v0.9.14 | cli | Layout HMR support (registerLayoutLoader, clearDefaultRegistry on reload) |

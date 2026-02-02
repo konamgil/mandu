@@ -101,6 +101,17 @@ my-app/
 │   └── api/
 │       └── health/
 │           └── route.ts   # Health check API (/api/health)
+├── src/                    # 아키텍처 레이어
+│   ├── client/             # 클라이언트 (FSD)
+│   ├── server/             # 서버 (Clean)
+│   └── shared/             # 공용
+│       ├── contracts/      # client-safe 계약
+│       ├── types/
+│       ├── utils/
+│       │   ├── client/     # 클라이언트 safe 유틸
+│       │   └── server/     # 서버 전용 유틸
+│       ├── schema/         # 서버 전용 스키마
+│       └── env/            # 서버 전용 환경
 ├── spec/
 │   └── routes.manifest.json  # 라우트 정의 (자동 관리)
 ├── .mandu/                 # 빌드 출력 (자동 생성)
@@ -314,6 +325,7 @@ bunx mandu guard arch --watch
 | **슬롯 시스템** | 에이전트가 안전하게 비즈니스 로직을 작성하는 격리 영역 |
 | **Guard 시스템** | 아키텍처 규칙 강제 및 오염 방지 |
 | **트랜잭션 API** | 스냅샷 기반 롤백이 가능한 원자적 변경 |
+| **SEO 모듈** | Next.js Metadata API 호환, sitemap/robots 생성, JSON-LD 헬퍼 |
 | **MCP 서버** | AI 에이전트가 프레임워크를 직접 조작 가능 |
 | **실시간 Watch** | 아키텍처 위반 시 MCP push notification으로 에이전트에 실시간 알림 |
 | **Island Hydration** | 선택적 클라이언트 JavaScript로 성능 최적화 |
@@ -418,7 +430,7 @@ mandu/
 │   │   └── commands/        # init, spec-upsert, generate, guard, build, dev
 │   │
 │   └── mcp/                  # @mandujs/mcp
-│       ├── tools/           # MCP 도구 (20개 이상)
+│       ├── tools/           # MCP 도구 (30개 이상)
 │       └── resources/       # MCP 리소스 (5개)
 │
 └── tests/                    # 프레임워크 테스트
@@ -962,6 +974,17 @@ Mandu는 AI 에이전트가 프레임워크와 직접 상호작용할 수 있는
 | `mandu_list_changes` | 변경 히스토리 조회 |
 | `mandu_prune_history` | 오래된 스냅샷 정리 |
 
+#### SEO
+
+| 도구 | 설명 |
+|------|------|
+| `mandu_preview_seo` | SEO 메타데이터 HTML 미리보기 |
+| `mandu_generate_sitemap_preview` | sitemap.xml 미리보기 생성 |
+| `mandu_generate_robots_preview` | robots.txt 미리보기 생성 |
+| `mandu_create_jsonld` | JSON-LD 구조화 데이터 생성 |
+| `mandu_write_seo_file` | sitemap.ts/robots.ts 파일 생성 |
+| `mandu_seo_analyze` | SEO 메타데이터 분석 및 권장사항 제공 |
+
 ### MCP 리소스
 
 | URI | 설명 |
@@ -1132,7 +1155,7 @@ Mandu는 자동으로 에러를 세 가지 유형으로 분류합니다:
 
 ## 로드맵
 
-### v0.9.x (현재) — 44개 기능 완료
+### v0.9.x (현재) — 65개 기능 완료
 
 **Core Runtime**
 - [x] 미들웨어 compose & 라이프사이클 훅
@@ -1163,6 +1186,15 @@ Mandu는 자동으로 에러를 세 가지 유형으로 분류합니다:
 - [x] Partials & slots
 - [x] Error boundary & loading states
 - [x] HMR 지원
+
+**SEO (검색 엔진 최적화)**
+- [x] Next.js Metadata API 호환 타입
+- [x] 레이아웃 체인 메타데이터 병합
+- [x] Open Graph & Twitter Cards
+- [x] JSON-LD 구조화 데이터 (12개 헬퍼)
+- [x] sitemap.xml & robots.txt 생성
+- [x] Google SEO 최적화 (viewport, theme-color, resource hints)
+- [x] SSR 통합
 
 **AI Integration**
 - [x] MCP 서버 (25+ 도구, 7 리소스)
