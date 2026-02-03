@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/core",
-  "version": "0.9.40",
+  "version": "0.9.41",
   "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
   "main": "./src/index.ts",
