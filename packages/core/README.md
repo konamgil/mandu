@@ -490,7 +490,7 @@ import type {
 ## Requirements
 
 - Bun >= 1.0.0
-- React >= 18.0.0
+- React >= 19.0.0
 - Zod >= 3.0.0
 
 ## Related Packages
