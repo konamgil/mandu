@@ -4,6 +4,7 @@
  */
 
 import type { ReactNode } from "react";
+import { getServerData as getGlobalServerData } from "./window-state";
 
 /**
  * Island 정의 타입
@@ -118,16 +119,10 @@ export function island<TServerData, TSetupResult = TServerData>(
  * 서버 데이터가 없는 경우 fallback 반환
  */
 export function useServerData<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
+  if (typeof window === "undefined") return fallback;
 
-  const manduData = (window as any).__MANDU_DATA__;
-  if (!manduData || !(key in manduData)) {
-    return fallback;
-  }
-
-  return manduData[key] as T;
+  const data = getGlobalServerData<T>(key);
+  return data === undefined ? fallback : data;
 }
 
 /**

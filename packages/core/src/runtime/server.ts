@@ -8,12 +8,17 @@ import { renderSSR, renderStreamingResponse } from "./ssr";
 import { PageBoundary, DefaultLoading, DefaultError, type ErrorFallbackProps } from "./boundary";
 import React, { type ReactNode } from "react";
 import path from "path";
+import fs from "fs/promises";
+import { PORTS } from "../constants";
 import {
-  formatErrorResponse,
   createNotFoundResponse,
   createHandlerNotFoundResponse,
   createPageLoadErrorResponse,
   createSSRErrorResponse,
+  errorToResponse,
+  err,
+  ok,
+  type Result,
 } from "../error";
 import {
   type CorsOptions,
@@ -504,12 +509,33 @@ function createDefaultAppFactory(registry: ServerRegistry) {
  * 경로가 허용된 디렉토리 내에 있는지 검증
  * Path traversal 공격 방지
  */
-function isPathSafe(filePath: string, allowedDir: string): boolean {
-  const resolvedPath = path.resolve(filePath);
-  const resolvedAllowedDir = path.resolve(allowedDir);
-  // 경로가 허용된 디렉토리로 시작하는지 확인 (디렉토리 구분자 포함)
-  return resolvedPath.startsWith(resolvedAllowedDir + path.sep) ||
-         resolvedPath === resolvedAllowedDir;
+async function isPathSafe(filePath: string, allowedDir: string): Promise<boolean> {
+  try {
+    const resolvedPath = path.resolve(filePath);
+    const resolvedAllowedDir = path.resolve(allowedDir);
+
+    if (!resolvedPath.startsWith(resolvedAllowedDir + path.sep) &&
+        resolvedPath !== resolvedAllowedDir) {
+      return false;
+    }
+
+    // 파일이 없으면 안전 (존재하지 않는 경로)
+    try {
+      await fs.access(resolvedPath);
+    } catch {
+      return true;
+    }
+
+    // Symlink 해결 후 재검증
+    const realPath = await fs.realpath(resolvedPath);
+    const realAllowedDir = await fs.realpath(resolvedAllowedDir);
+
+    return realPath.startsWith(realAllowedDir + path.sep) ||
+           realPath === realAllowedDir;
+  } catch (error) {
+    console.warn(`[Mandu Security] Path validation failed: ${filePath}`, error);
+    return false;
+  }
 }
 
 /**
@@ -524,6 +550,7 @@ async function serveStaticFile(pathname: string, settings: ServerRegistrySetting
   let filePath: string | null = null;
   let isBundleFile = false;
   let allowedBaseDir: string;
+  let relativePath: string;
 
   // Path traversal 시도 조기 차단 (정규화 전 raw 체크)
   if (pathname.includes("..")) {
@@ -533,16 +560,14 @@ async function serveStaticFile(pathname: string, settings: ServerRegistrySetting
   // 1. 클라이언트 번들 파일 (/.mandu/client/*)
   if (pathname.startsWith("/.mandu/client/")) {
     // pathname에서 prefix 제거 후 안전하게 조합
-    const relativePath = pathname.slice("/.mandu/client/".length);
+    relativePath = pathname.slice("/.mandu/client/".length);
     allowedBaseDir = path.join(settings.rootDir, ".mandu", "client");
-    filePath = path.join(allowedBaseDir, relativePath);
     isBundleFile = true;
   }
   // 2. Public 폴더 파일 (/public/*)
   else if (pathname.startsWith("/public/")) {
-    const relativePath = pathname.slice("/public/".length);
-    allowedBaseDir = path.join(settings.rootDir, "public");
-    filePath = path.join(allowedBaseDir, relativePath);
+    relativePath = pathname.slice("/public/".length);
+    allowedBaseDir = path.join(settings.rootDir, settings.publicDir);
   }
   // 3. Public 폴더의 루트 파일 (favicon.ico, robots.txt 등)
   else if (
@@ -552,15 +577,39 @@ async function serveStaticFile(pathname: string, settings: ServerRegistrySetting
     pathname === "/manifest.json"
   ) {
     // 고정된 파일명만 허용 (이미 위에서 정확히 매칭됨)
-    const filename = path.basename(pathname);
+    relativePath = path.basename(pathname);
     allowedBaseDir = path.join(settings.rootDir, settings.publicDir);
-    filePath = path.join(allowedBaseDir, filename);
   } else {
     return null; // 정적 파일이 아님
   }
 
+  // URL 디코딩 (실패 시 차단)
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(relativePath);
+  } catch {
+    return null;
+  }
+
+  // 정규화 + Null byte 방지
+  const normalizedPath = path.posix.normalize(decodedPath);
+  if (normalizedPath.includes("\0")) {
+    console.warn(`[Mandu Security] Null byte attack detected: ${pathname}`);
+    return null;
+  }
+
+  // 선행 슬래시 제거 → path.join이 base를 무시하지 않도록 보장
+  const safeRelativePath = normalizedPath.replace(/^\/+/, "");
+
+  // 상대 경로 탈출 차단
+  if (safeRelativePath.startsWith("..")) {
+    return null;
+  }
+
+  filePath = path.join(allowedBaseDir, safeRelativePath);
+
   // 최종 경로 검증: 허용된 디렉토리 내에 있는지 확인
-  if (!isPathSafe(filePath, allowedBaseDir!)) {
+  if (!(await isPathSafe(filePath, allowedBaseDir!))) {
     console.warn(`[Mandu Security] Path traversal attempt blocked: ${pathname}`);
     return null;
   }
@@ -602,6 +651,20 @@ async function serveStaticFile(pathname: string, settings: ServerRegistrySetting
 // ========== Request Handler ==========
 
 async function handleRequest(req: Request, router: Router, registry: ServerRegistry): Promise<Response> {
+  const result = await handleRequestInternal(req, router, registry);
+
+  if (!result.ok) {
+    return errorToResponse(result.error, registry.settings.isDev);
+  }
+
+  return result.value;
+}
+
+async function handleRequestInternal(
+  req: Request,
+  router: Router,
+  registry: ServerRegistry
+): Promise<Result<Response>> {
   const url = new URL(req.url);
   const pathname = url.pathname;
   const settings = registry.settings;
@@ -609,7 +672,7 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
   // 0. CORS Preflight 요청 처리
   if (settings.cors && isPreflightRequest(req)) {
     const corsOptions = settings.cors === true ? {} : settings.cors;
-    return handlePreflightRequest(req, corsOptions);
+    return ok(handlePreflightRequest(req, corsOptions));
   }
 
   // 1. 정적 파일 서빙 시도 (최우선)
@@ -618,20 +681,16 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
     // 정적 파일에도 CORS 헤더 적용
     if (settings.cors && isCorsRequest(req)) {
       const corsOptions = settings.cors === true ? {} : settings.cors;
-      return applyCorsToResponse(staticResponse, req, corsOptions);
+      return ok(applyCorsToResponse(staticResponse, req, corsOptions));
     }
-    return staticResponse;
+    return ok(staticResponse);
   }
 
   // 2. 라우트 매칭
   const match = router.match(pathname);
 
   if (!match) {
-    const error = createNotFoundResponse(pathname);
-    const response = formatErrorResponse(error, {
-      isDev: process.env.NODE_ENV !== "production",
-    });
-    return Response.json(response, { status: 404 });
+    return err(createNotFoundResponse(pathname));
   }
 
   const { route, params } = match;
@@ -639,13 +698,15 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
   if (route.kind === "api") {
     const handler = registry.apiHandlers.get(route.id);
     if (!handler) {
-      const error = createHandlerNotFoundResponse(route.id, route.pattern);
-      const response = formatErrorResponse(error, {
-        isDev: process.env.NODE_ENV !== "production",
-      });
-      return Response.json(response, { status: 500 });
+      return err(createHandlerNotFoundResponse(route.id, route.pattern));
     }
-    return handler(req, params);
+    try {
+      const response = await handler(req, params);
+      return ok(response);
+    } catch (errValue) {
+      const error = errValue instanceof Error ? errValue : new Error(String(errValue));
+      return err(createSSRErrorResponse(route.id, route.pattern, error));
+    }
   }
 
   if (route.kind === "page") {
@@ -668,17 +729,14 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
           const ctx = new ManduContext(req, params);
           loaderData = await registration.filling.executeLoader(ctx);
         }
-      } catch (err) {
+      } catch (error) {
         const pageError = createPageLoadErrorResponse(
           route.id,
           route.pattern,
-          err instanceof Error ? err : new Error(String(err))
+          error instanceof Error ? error : new Error(String(error))
         );
         console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
-        const response = formatErrorResponse(pageError, {
-          isDev: process.env.NODE_ENV !== "production",
-        });
-        return Response.json(response, { status: 500 });
+        return err(pageError);
       }
     }
     // 2. PageLoader 방식 (레거시 호환)
@@ -700,30 +758,27 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
             const ctx = new ManduContext(req, params);
             loaderData = await filling.executeLoader(ctx);
           }
-        } catch (err) {
+        } catch (error) {
           const pageError = createPageLoadErrorResponse(
             route.id,
             route.pattern,
-            err instanceof Error ? err : new Error(String(err))
+            error instanceof Error ? error : new Error(String(error))
           );
           console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
-          const response = formatErrorResponse(pageError, {
-            isDev: process.env.NODE_ENV !== "production",
-          });
-          return Response.json(response, { status: 500 });
+          return err(pageError);
         }
       }
     }
 
     // Client-side Routing: 데이터만 반환 (JSON)
     if (isDataRequest) {
-      return Response.json({
+      return ok(Response.json({
         routeId: route.id,
         pattern: route.pattern,
         params,
         loaderData: loaderData ?? null,
         timestamp: Date.now(),
-      });
+      }));
     }
 
     // SSR 렌더링
@@ -754,7 +809,7 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
         : settings.streaming;
 
       if (useStreaming) {
-        return await renderStreamingResponse(app, {
+        return ok(await renderStreamingResponse(app, {
           title: `${route.id} - Mandu`,
           isDev: settings.isDev,
           hmrPort: settings.hmrPort,
@@ -778,11 +833,11 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
               });
             }
           },
-        });
+        }));
       }
 
       // 기존 renderToString 방식
-      return renderSSR(app, {
+      return ok(renderSSR(app, {
         title: `${route.id} - Mandu`,
         isDev: settings.isDev,
         hmrPort: settings.hmrPort,
@@ -793,24 +848,22 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
         // Client-side Routing 활성화 정보 전달
         enableClientRouter: true,
         routePattern: route.pattern,
-      });
-    } catch (err) {
+      }));
+    } catch (error) {
       const ssrError = createSSRErrorResponse(
         route.id,
         route.pattern,
-        err instanceof Error ? err : new Error(String(err))
+        error instanceof Error ? error : new Error(String(error))
       );
       console.error(`[Mandu] ${ssrError.errorType}:`, ssrError.message);
-      const response = formatErrorResponse(ssrError, {
-        isDev: process.env.NODE_ENV !== "production",
-      });
-      return Response.json(response, { status: 500 });
+      return err(ssrError);
     }
   }
 
-  return Response.json({
+  return err({
     errorType: "FRAMEWORK_BUG",
     code: "MANDU_F003",
+    httpStatus: 500,
     message: `Unknown route kind: ${route.kind}`,
     summary: "알 수 없는 라우트 종류 - 프레임워크 버그",
     fix: {
@@ -822,7 +875,7 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
       pattern: route.pattern,
     },
     timestamp: new Date().toISOString(),
-  }, { status: 500 });
+  });
 }
 
 // ========== Server Startup ==========
@@ -843,6 +896,13 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
 
   // CORS 옵션 파싱
   const corsOptions: CorsOptions | false = cors === true ? {} : cors;
+
+  if (!isDev && cors === true) {
+    console.warn("⚠️  [Security Warning] CORS is set to allow all origins.");
+    console.warn("   This is not recommended for production environments.");
+    console.warn("   Consider specifying allowed origins explicitly:");
+    console.warn("   cors: { origin: ['https://yourdomain.com'] }");
+  }
 
   // Registry settings 저장
   registry.settings = {
@@ -878,7 +938,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   if (isDev) {
     console.log(`🥟 Mandu Dev Server running at http://${hostname}:${port}`);
     if (hmrPort) {
-      console.log(`🔥 HMR enabled on port ${hmrPort + 1}`);
+      console.log(`🔥 HMR enabled on port ${hmrPort + PORTS.HMR_OFFSET}`);
     }
     console.log(`📂 Static files: /${publicDir}/, /.mandu/client/`);
     if (corsOptions) {

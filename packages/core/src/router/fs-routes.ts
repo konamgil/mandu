@@ -13,6 +13,7 @@ import type { FSRouteConfig, FSScannerConfig, ScanResult } from "./fs-types";
 import { DEFAULT_SCANNER_CONFIG } from "./fs-types";
 import { scanRoutes } from "./fs-scanner";
 import { patternsConflict } from "./fs-patterns";
+import { loadManduConfig } from "../config";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -203,6 +204,23 @@ export function mergeManifests(
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * mandu.config 기반 스캐너 설정 해석
+ */
+async function resolveScannerConfig(
+  rootDir: string,
+  scannerOverrides: Partial<FSScannerConfig> = {}
+): Promise<FSScannerConfig> {
+  const config = await loadManduConfig(rootDir);
+  const configScanner = config.fsRoutes ?? {};
+
+  return {
+    ...DEFAULT_SCANNER_CONFIG,
+    ...configScanner,
+    ...scannerOverrides,
+  };
+}
+
+/**
  * FS Routes 기반 매니페스트 생성
  *
  * @example
@@ -213,10 +231,7 @@ export async function generateManifest(
   rootDir: string,
   options: GenerateOptions = {}
 ): Promise<GenerateResult> {
-  const scannerConfig = {
-    ...DEFAULT_SCANNER_CONFIG,
-    ...options.scanner,
-  };
+  const scannerConfig = await resolveScannerConfig(rootDir, options.scanner);
 
   // 레거시 매니페스트 경로
   const legacyPath =
@@ -305,10 +320,7 @@ export async function watchFSRoutes(
   options: GenerateOptions & { onChange?: RouteChangeCallback }
 ): Promise<FSRoutesWatcher> {
   const { onChange, ...generateOptions } = options;
-  const scannerConfig = {
-    ...DEFAULT_SCANNER_CONFIG,
-    ...options.scanner,
-  };
+  const scannerConfig = await resolveScannerConfig(rootDir, options.scanner);
 
   const routesDir = join(rootDir, scannerConfig.routesDir);
 

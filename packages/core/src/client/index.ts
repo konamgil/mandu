@@ -24,6 +24,7 @@
  * }
  * ```
  */
+import "./globals";
 
 // Island API
 export {

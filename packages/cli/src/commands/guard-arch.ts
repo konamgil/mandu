@@ -19,6 +19,7 @@ import {
   calculateLayerStatistics,
   generateGuardMarkdownReport,
   generateHTMLReport,
+  validateAndReport,
   type GuardConfig,
   type GuardPreset,
 } from "@mandujs/core";
@@ -53,21 +54,18 @@ export interface GuardArchOptions {
 }
 
 export async function guardArch(options: GuardArchOptions = {}): Promise<boolean> {
+  const rootDir = resolveFromCwd(".");
   const {
-    preset = "mandu",
     watch = false,
     ci = false,
     format,
     quiet = false,
-    srcDir = "src",
     listPresets: showPresets = false,
     output,
     reportFormat = "markdown",
     saveStats = false,
     showTrend = false,
   } = options;
-
-  const rootDir = resolveFromCwd(".");
   const resolvedFormat = resolveOutputFormat(format);
   const enableFsRoutes = await isDirectory(path.resolve(rootDir, "app"));
 
@@ -90,6 +88,13 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     return true;
   }
 
+  const fileConfig = await validateAndReport(rootDir);
+  if (!fileConfig) return false;
+  const guardConfigFromFile = fileConfig.guard ?? {};
+
+  const preset = options.preset ?? guardConfigFromFile.preset ?? "mandu";
+  const srcDir = options.srcDir ?? guardConfigFromFile.srcDir ?? "src";
+
   if (resolvedFormat === "console") {
     console.log("");
     console.log("🛡️  Mandu Guard - Architecture Checker");
@@ -101,11 +106,12 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
   }
 
   // Guard 설정
-  const config: GuardConfig = {
+  const guardConfig: GuardConfig = {
     preset,
     srcDir,
     realtime: watch,
     realtimeOutput: resolvedFormat,
+    exclude: guardConfigFromFile.exclude,
     fsRoutes: enableFsRoutes
       ? {
           noPageToPage: true,
@@ -152,7 +158,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     }
 
     const watcher = createGuardWatcher({
-      config,
+      config: guardConfig,
       rootDir,
       onViolation: (violation) => {
         // 실시간 위반 출력은 watcher 내부에서 처리됨
@@ -185,7 +191,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     console.log("🔍 Scanning for architecture violations...\n");
   }
 
-  const report = await checkDirectory(config, rootDir);
+  const report = await checkDirectory(guardConfig, rootDir);
   const presetDef = getPreset(preset);
 
   // 출력 형식에 따른 리포트 출력

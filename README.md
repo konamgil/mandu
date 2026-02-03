@@ -348,6 +348,49 @@ bunx mandu build
 
 ---
 
+## Configuration
+
+Mandu loads configuration from `mandu.config.ts`, `mandu.config.js`, or `mandu.config.json`.
+For guard-only overrides, `.mandu/guard.json` is also supported.
+
+- `mandu dev` and `mandu build` validate the config and print errors if invalid
+- CLI flags override config values
+
+```ts
+// mandu.config.ts
+export default {
+  server: {
+    port: 3000,
+    hostname: "localhost",
+    cors: false,
+    streaming: false,
+  },
+  dev: {
+    hmr: true,
+    watchDirs: ["src/shared", "shared"],
+  },
+  build: {
+    outDir: ".mandu",
+    minify: true,
+    sourcemap: false,
+  },
+  guard: {
+    preset: "mandu",
+    srcDir: "src",
+    exclude: ["**/*.test.ts"],
+    realtime: true,
+    // rules/contractRequired are used by legacy spec guard
+  },
+  seo: {
+    enabled: true,
+    defaultTitle: "My App",
+    titleTemplate: "%s | My App",
+  },
+};
+```
+
+---
+
 ## FS Routes
 
 Create routes by simply adding files to the `app/` directory:

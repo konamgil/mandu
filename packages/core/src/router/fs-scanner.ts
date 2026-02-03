@@ -6,7 +6,7 @@
  * @module router/fs-scanner
  */
 
-import { readdir, stat } from "fs/promises";
+import { stat } from "fs/promises";
 import { join, relative, basename, extname } from "path";
 import type {
   ScannedFile,
@@ -19,13 +19,13 @@ import type {
 import { DEFAULT_SCANNER_CONFIG } from "./fs-types";
 import {
   parseSegments,
-  pathToPattern,
+  segmentsToPattern,
   detectFileType,
   isPrivateFolder,
   generateRouteId,
   validateSegments,
   sortRoutesByPriority,
-  patternsConflict,
+  getPatternShape,
 } from "./fs-patterns";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -77,8 +77,8 @@ export class FSScanner {
       return this.createEmptyResult([], Date.now() - startTime);
     }
 
-    // 재귀 스캔
-    await this.scanDirectory(routesDir, routesDir, files, errors);
+    // Bun.Glob 기반 스캔
+    await this.scanWithGlob(rootDir, routesDir, files, errors);
 
     // 라우트 설정 생성
     const { routes, routeErrors } = this.createRouteConfigs(files, rootDir);
@@ -96,90 +96,91 @@ export class FSScanner {
   }
 
   /**
-   * 디렉토리 재귀 스캔
+   * Bun.Glob 기반 스캔
    */
-  private async scanDirectory(
-    dir: string,
+  private async scanWithGlob(
+    rootDir: string,
     routesRoot: string,
     files: ScannedFile[],
     errors: ScanError[]
   ): Promise<void> {
-    let entries;
+    const routesDirPattern = this.config.routesDir.replace(/\\/g, "/").replace(/\/+$/, "");
+    const extensions = this.config.extensions
+      .map((ext) => ext.replace(/^\./, ""))
+      .filter(Boolean)
+      .join(",");
+
+    if (!routesDirPattern || !extensions) {
+      return;
+    }
+
+    const pattern = `${routesDirPattern}/**/*.{${extensions}}`;
+    const glob = new Bun.Glob(pattern);
+    const foundFiles: string[] = [];
 
     try {
-      entries = await readdir(dir, { withFileTypes: true });
+      for await (const filePath of glob.scan({ cwd: rootDir, absolute: true })) {
+        foundFiles.push(filePath);
+      }
     } catch (error) {
       errors.push({
         type: "file_read_error",
-        message: `Failed to read directory: ${error instanceof Error ? error.message : String(error)}`,
-        filePath: dir,
+        message: `Failed to scan directory: ${error instanceof Error ? error.message : String(error)}`,
+        filePath: routesRoot,
       });
       return;
     }
 
-    // Deterministic traversal order
-    entries.sort((a, b) => a.name.localeCompare(b.name));
+    foundFiles.sort((a, b) => a.localeCompare(b));
 
-    for (const entry of entries) {
-      const fullPath = join(dir, entry.name);
+    for (const fullPath of foundFiles) {
       const relativePath = relative(routesRoot, fullPath).replace(/\\/g, "/");
-
-      if (entry.isDirectory()) {
-        if (this.isExcluded(relativePath, true)) {
-          continue;
-        }
-
-        // 비공개 폴더 스킵
-        if (isPrivateFolder(entry.name)) {
-          continue;
-        }
-
-        // node_modules 스킵
-        if (entry.name === "node_modules") {
-          continue;
-        }
-
-        // 재귀 스캔
-        await this.scanDirectory(fullPath, routesRoot, files, errors);
-      } else if (entry.isFile()) {
-        if (this.isExcluded(relativePath, false)) {
-          continue;
-        }
-
-        // 확장자 체크
-        const ext = extname(entry.name);
-        if (!this.config.extensions.includes(ext)) {
-          continue;
-        }
-
-        // 파일 타입 감지
-        const fileType = detectFileType(entry.name, this.config.islandSuffix);
-        if (!fileType) {
-          continue;
-        }
-
-        // 세그먼트 파싱
-        const segments = parseSegments(relativePath);
-
-        // 세그먼트 유효성 검사
-        const validation = validateSegments(segments);
-        if (!validation.valid) {
-          errors.push({
-            type: "invalid_segment",
-            message: validation.error!,
-            filePath: fullPath,
-          });
-          continue;
-        }
-
-        files.push({
-          absolutePath: fullPath,
-          relativePath, // Windows 경로 정규화 완료
-          type: fileType,
-          segments,
-          extension: ext,
-        });
+      if (relativePath.startsWith("..")) {
+        continue;
       }
+
+      if (this.isExcluded(relativePath, false)) {
+        continue;
+      }
+
+      if (this.hasPrivateSegment(relativePath)) {
+        continue;
+      }
+
+      const pathSegments = relativePath.split("/");
+      if (pathSegments.includes("node_modules")) {
+        continue;
+      }
+
+      const fileName = basename(fullPath);
+      const ext = extname(fileName);
+      if (!this.config.extensions.includes(ext)) {
+        continue;
+      }
+
+      const fileType = detectFileType(fileName, this.config.islandSuffix);
+      if (!fileType) {
+        continue;
+      }
+
+      const segments = parseSegments(relativePath);
+      const validation = validateSegments(segments);
+      if (!validation.valid) {
+        errors.push({
+          type: "invalid_segment",
+          message: validation.error!,
+          filePath: fullPath,
+        });
+        continue;
+      }
+
+      files.push({
+        absolutePath: fullPath,
+        relativePath,
+        type: fileType,
+        segments,
+        extension: ext,
+      });
     }
   }
 
@@ -193,26 +194,52 @@ export class FSScanner {
     const routes: FSRouteConfig[] = [];
     const routeErrors: ScanError[] = [];
 
-    // 패턴별 라우트 매핑 (중복 감지용)
+    // 패턴별 라우트 매핑 (중복/충돌 감지용)
     const patternMap = new Map<string, FSRouteConfig>();
+    const shapeMap = new Map<string, FSRouteConfig>();
 
-    // 레이아웃 맵 (경로 → 레이아웃 파일)
-    const layoutMap = this.buildLayoutMap(files);
+    // 파일 맵 수집 (single pass)
+    const layoutMap = new Map<string, ScannedFile>();
+    const loadingMap = new Map<string, ScannedFile>();
+    const errorMap = new Map<string, ScannedFile>();
+    const islandMap = new Map<string, ScannedFile[]>();
+    const routeFiles: ScannedFile[] = [];
 
-    // 로딩/에러 맵
-    const loadingMap = this.buildSpecialFileMap(files, "loading");
-    const errorMap = this.buildSpecialFileMap(files, "error");
+    for (const file of files) {
+      const dirPath = this.getDirPath(file.relativePath);
 
-    // Island 맵 (디렉토리 → Island 파일들)
-    const islandMap = this.buildIslandMap(files);
+      switch (file.type) {
+        case "layout":
+          layoutMap.set(dirPath, file);
+          break;
+        case "loading":
+          loadingMap.set(dirPath, file);
+          break;
+        case "error":
+          errorMap.set(dirPath, file);
+          break;
+        case "island": {
+          const existing = islandMap.get(dirPath);
+          if (existing) {
+            existing.push(file);
+          } else {
+            islandMap.set(dirPath, [file]);
+          }
+          break;
+        }
+        case "page":
+        case "route":
+          routeFiles.push(file);
+          break;
+        default:
+          break;
+      }
+    }
 
     // 페이지 및 API 라우트 처리
-    for (const file of files) {
-      if (file.type !== "page" && file.type !== "route") {
-        continue;
-      }
-
-      const pattern = pathToPattern(file.relativePath);
+    for (const file of routeFiles) {
+      const pattern = segmentsToPattern(file.segments);
+      const patternShape = getPatternShape(pattern);
       const routeId = generateRouteId(file.relativePath);
       const modulePath = join(this.config.routesDir, file.relativePath);
 
@@ -229,7 +256,7 @@ export class FSScanner {
       }
 
       // 패턴 충돌 체크 (파라미터 이름만 다른 경우 등)
-      const conflictingRoute = routes.find((route) => patternsConflict(route.pattern, pattern));
+      const conflictingRoute = shapeMap.get(patternShape);
       if (conflictingRoute) {
         routeErrors.push({
           type: "pattern_conflict",
@@ -275,62 +302,10 @@ export class FSScanner {
 
       routes.push(route);
       patternMap.set(pattern, route);
+      shapeMap.set(patternShape, route);
     }
 
     return { routes, routeErrors };
-  }
-
-  /**
-   * 레이아웃 맵 구성
-   */
-  private buildLayoutMap(files: ScannedFile[]): Map<string, ScannedFile> {
-    const layoutMap = new Map<string, ScannedFile>();
-
-    for (const file of files) {
-      if (file.type === "layout") {
-        const dirPath = this.getDirPath(file.relativePath);
-        layoutMap.set(dirPath, file);
-      }
-    }
-
-    return layoutMap;
-  }
-
-  /**
-   * 특수 파일 맵 구성 (loading, error)
-   */
-  private buildSpecialFileMap(
-    files: ScannedFile[],
-    type: "loading" | "error" | "not-found"
-  ): Map<string, ScannedFile> {
-    const map = new Map<string, ScannedFile>();
-
-    for (const file of files) {
-      if (file.type === type) {
-        const dirPath = this.getDirPath(file.relativePath);
-        map.set(dirPath, file);
-      }
-    }
-
-    return map;
-  }
-
-  /**
-   * Island 맵 구성
-   */
-  private buildIslandMap(files: ScannedFile[]): Map<string, ScannedFile[]> {
-    const islandMap = new Map<string, ScannedFile[]>();
-
-    for (const file of files) {
-      if (file.type === "island") {
-        const dirPath = this.getDirPath(file.relativePath);
-        const existing = islandMap.get(dirPath) || [];
-        existing.push(file);
-        islandMap.set(dirPath, existing);
-      }
-    }
-
-    return islandMap;
   }
 
   /**
@@ -393,6 +368,15 @@ export class FSScanner {
     const normalized = relativePath.replace(/\\/g, "/");
     const lastSlash = normalized.lastIndexOf("/");
     return lastSlash === -1 ? "." : normalized.slice(0, lastSlash);
+  }
+
+  /**
+   * 경로에 비공개 폴더가 포함되어 있는지 확인
+   */
+  private hasPrivateSegment(relativePath: string): boolean {
+    const normalized = relativePath.replace(/\\/g, "/");
+    const segments = normalized.split("/").slice(0, -1);
+    return segments.some((segment) => isPrivateFolder(segment));
   }
 
   /**

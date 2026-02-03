@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs/promises";
+import { CLI_ERROR_CODES, printCLIError } from "../errors";
 
 export type CSSFramework = "tailwind" | "panda" | "none";
 export type UILibrary = "shadcn" | "ark" | "none";
@@ -162,7 +163,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   // Check if target directory exists
   try {
     await fs.access(targetDir);
-    console.error(`❌ 디렉토리가 이미 존재합니다: ${targetDir}`);
+    printCLIError(CLI_ERROR_CODES.INIT_DIR_EXISTS, { path: targetDir });
     return false;
   } catch {
     // Directory doesn't exist, good to proceed
@@ -175,7 +176,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   try {
     await fs.access(templateDir);
   } catch {
-    console.error(`❌ 템플릿을 찾을 수 없습니다: ${template}`);
+    printCLIError(CLI_ERROR_CODES.INIT_TEMPLATE_NOT_FOUND, { template });
     console.error(`   사용 가능한 템플릿: default`);
     return false;
   }

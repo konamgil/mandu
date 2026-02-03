@@ -45,6 +45,15 @@ interface WatcherOptions {
 
 const analysisCache = new Map<string, FileAnalysis>();
 
+let globModulePromise: Promise<typeof import("glob")> | null = null;
+
+async function getGlobModule(): Promise<typeof import("glob")> {
+  if (!globModulePromise) {
+    globModulePromise = import("glob");
+  }
+  return globModulePromise;
+}
+
 /**
  * 캐시 초기화
  */
@@ -167,7 +176,7 @@ export function createGuardWatcher(options: WatcherOptions): GuardWatcher {
     const analyses: FileAnalysis[] = [];
 
     // 글로브로 모든 파일 찾기
-    const { glob } = await import("glob");
+    const { glob } = await getGlobModule();
     const extensions = WATCH_EXTENSIONS.map((ext) => ext.slice(1)).join(",");
     const scanRoots = new Set<string>([srcDir]);
     if (config.fsRoutes) {

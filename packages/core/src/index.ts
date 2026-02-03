@@ -15,10 +15,17 @@ export * from "./watcher";
 export * from "./router";
 export * from "./config";
 export * from "./seo";
+export * from "./island";
+export * from "./intent";
+export * from "./devtools";
 
 // Consolidated Mandu namespace
 import { ManduFilling, ManduContext, ManduFillingFactory } from "./filling";
 import { createContract, defineHandler, defineRoute, createClient, contractFetch, createClientContract } from "./contract";
+import { defineContract, generateAllFromContract, generateOpenAPISpec } from "./contract/define";
+import { island, isIsland, type IslandComponent, type HydrationStrategy } from "./island";
+import { intent, isIntent, getIntentDocs, generateOpenAPIFromIntent } from "./intent";
+import { initializeHook, reportError, ManduDevTools, getStateManager } from "./devtools";
 import type { ContractDefinition, ContractInstance, ContractSchema } from "./contract";
 import type { ContractHandlers, ClientOptions } from "./contract";
 
@@ -94,4 +101,78 @@ export const Mandu = {
    * Make a type-safe fetch call
    */
   fetch: contractFetch,
+
+  // === AI-Native APIs ===
+  /**
+   * Define a Contract for code generation
+   * @example
+   * const api = Mandu.define({
+   *   getUser: { method: 'GET', path: '/users/:id', output: userSchema },
+   * });
+   */
+  define: defineContract,
+
+  /**
+   * Create an Island component (declarative hydration)
+   * @example
+   * export default Mandu.island('visible', ({ name }) => <div>{name}</div>);
+   */
+  island,
+
+  /**
+   * Check if a component is an Island
+   */
+  isIsland,
+
+  /**
+   * Create an Intent-based API handler
+   * @example
+   * export default Mandu.intent({
+   *   '사용자 조회': { method: 'GET', handler: (ctx) => ctx.ok(user) },
+   * });
+   */
+  intent,
+
+  /**
+   * Check if a handler is an Intent
+   */
+  isIntent,
+
+  /**
+   * Generate code from Contract
+   */
+  generate: generateAllFromContract,
+
+  /**
+   * Generate OpenAPI spec from Contract
+   */
+  openapi: generateOpenAPISpec,
+
+  // === DevTools API ===
+  /**
+   * Initialize DevTools hook (call at app startup)
+   * @example
+   * Mandu.devtools.init();
+   */
+  devtools: {
+    /**
+     * Initialize DevTools
+     */
+    init: initializeHook,
+
+    /**
+     * Report an error to DevTools
+     */
+    reportError,
+
+    /**
+     * Get the state manager instance
+     */
+    getStateManager,
+
+    /**
+     * DevTools public API (also available as window.ManduDevTools)
+     */
+    api: ManduDevTools,
+  },
 } as const;

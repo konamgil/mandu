@@ -6,6 +6,7 @@
 import { ManduContext, ValidationError } from "./context";
 import { AuthenticationError, AuthorizationError } from "./auth";
 import { ErrorClassifier, formatErrorResponse, ErrorCode } from "../error";
+import { TIMEOUTS } from "../constants";
 import { createContract, type ContractDefinition, type ContractInstance } from "../contract";
 import {
   type Middleware as RuntimeMiddleware,
@@ -80,7 +81,7 @@ export class ManduFilling<TLoaderData = unknown> {
     if (!this.config.loader) {
       return undefined;
     }
-    const { timeout = 5000, fallback } = options;
+    const { timeout = TIMEOUTS.LOADER_DEFAULT, fallback } = options;
     try {
       const loaderPromise = Promise.resolve(this.config.loader(ctx));
       const timeoutPromise = new Promise<never>((_, reject) => {

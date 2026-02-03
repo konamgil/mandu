@@ -2,7 +2,7 @@
 
 Legend: **done** = implemented, **partial** = implemented but incomplete, **not started** = not implemented, **untested** = implemented but tests not runnable.
 
-> Last updated: 2026-02-02
+> Last updated: 2026-02-03
 
 ---
 
@@ -70,6 +70,7 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Dev Watch (common dirs) | done | `packages/core/src/bundler/dev.ts` DEFAULT_COMMON_DIRS, watchDirs option (v0.9.30) |
 | HMR common file reload | done | `packages/cli/src/commands/dev.ts` type: "reload" broadcast (v0.9.31) |
 | Manifest always saved | done | `packages/core/src/bundler/build.ts` empty manifest written (v0.9.28) |
+| Config validation (dev/build/routes) | done | `packages/core/src/config/validate.ts`, `packages/cli/src/commands/dev.ts`, `build.ts`, `routes.ts` |
 | Integration hooks/logger | not started | (no `packages/core/src/integrations`) |
 | Build hooks/plugins/analyzer | not started | (no `packages/core/src/bundler/hooks.ts`) |
 
@@ -82,6 +83,7 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | FS Routes patterns | done | `packages/core/src/router/fs-patterns.ts` (v0.9.32) |
 | FS Routes generator | done | `packages/core/src/router/fs-routes.ts` (v0.9.32) |
 | FS Routes watcher | done | `packages/core/src/router/fs-routes.ts` watchFSRoutes() (v0.9.32) |
+| FS Routes config via mandu.config | done | `packages/core/src/router/fs-routes.ts` resolveScannerConfig() |
 | FS Routes CLI | done | `packages/cli/src/commands/routes.ts` routes generate/list/watch (v0.9.13) |
 | FS Routes dev integration | done | `packages/cli/src/commands/dev.ts` FS Routes 기반 dev 서버 (v0.9.13) |
 
@@ -142,20 +144,26 @@ Legend: **done** = implemented, **partial** = implemented but incomplete, **not 
 | Hydration & Islands | 7 | 0 |
 | Client-side Routing | 4 | 0 |
 | Data & Content | 0 | 1 |
-| Integrations & Build | 5 | 2 |
-| Routing | 7 | 0 |
+| Integrations & Build | 6 | 2 |
+| Routing | 8 | 0 |
 | Realtime / Resumable | 0 | 2 |
 | Observability & Perf | 1 | 1 |
 | Security | 2 | 0 |
 | SEO | 21 | 0 |
-| **Total** | **65** | **6** |
+| **Total** | **67** | **6** |
 
 ---
 
-## Recent Changes (v0.9.26 ~ v0.9.35)
+## Recent Changes (v0.9.26 ~ v0.9.41)
 
 | Version | Package | Changes |
 |---------|---------|---------|
+| v0.9.41 | core | Config validation, fsRoutes config support, error/result helpers, path traversal hardening, prod CORS warning |
+| v0.9.41 | core | Client router globals + LRU caches |
+| v0.9.41 | cli | Config validation for dev/build/routes + guard-arch config defaults |
+| v0.9.41 | core | FS scanner O(n) conflict checks, guard watcher glob cache, vendor shim parallel build |
+| v0.9.41 | cli | CLI error codes + formatted output |
+| v0.9.41 | core/cli | Bun-first refactor: JSON load via Bun.file().json, FS scan via Bun.Glob, HMR ESM cache-busting |
 | v0.9.35 | core | SEO Module (Next.js Metadata API 호환, sitemap/robots 생성, JSON-LD 헬퍼, Google SEO 최적화) |
 | v0.9.34 | core | Advanced routes (catch-all `:param*`, optional `:param*?`, boundary components) |
 | v0.9.33 | core | Layout System (layoutChain, loadingModule, errorModule in RouteSpec) |

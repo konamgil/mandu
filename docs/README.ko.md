@@ -6,6 +6,7 @@
 - `docs/status.ko.md` — 구현 상태 (완료/부분/미시작)
 - `docs/product/01_mandu_product_brief.md` — 제품 개요
 - `docs/architecture/02_mandu_technical_architecture.md` — 기술 아키텍처 (MVP-0.1)
+- `docs/guides/01_configuration.ko.md` — 설정 가이드
 - `docs/guides/03_mandu_coding_agent_prompt_template.md` — 코딩 에이전트 프롬프트 템플릿
 - `docs/specs/04_mandu_hydration_system.md` — 하이드레이션 시스템
 - `docs/architecture/05_mandu_backend-architecture-guardrails.md` — 백엔드 가드레일
@@ -15,7 +16,49 @@
 
 ---
 
-## 문서 상태 (업데이트: 2026-01-30)
+## 설정
+
+Mandu는 `mandu.config.ts`, `mandu.config.js`, `mandu.config.json`을 읽습니다.  
+Guard 전용 설정은 `.mandu/guard.json`도 지원합니다.
+
+- `mandu dev`, `mandu build` 실행 시 설정을 검증하고 오류를 출력합니다
+- CLI 옵션이 설정값보다 우선합니다
+
+```ts
+// mandu.config.ts
+export default {
+  server: {
+    port: 3000,
+    hostname: "localhost",
+    cors: false,
+    streaming: false,
+  },
+  dev: {
+    hmr: true,
+    watchDirs: ["src/shared", "shared"],
+  },
+  build: {
+    outDir: ".mandu",
+    minify: true,
+    sourcemap: false,
+  },
+  guard: {
+    preset: "mandu",
+    srcDir: "src",
+    exclude: ["**/*.test.ts"],
+    realtime: true,
+  },
+  seo: {
+    enabled: true,
+    defaultTitle: "My App",
+    titleTemplate: "%s | My App",
+  },
+};
+```
+
+---
+
+## 문서 상태 (업데이트: 2026-02-03)
 
 | 문서 | 상태 | 비고 |
 |------|------|------|
@@ -23,14 +66,15 @@
 | `docs/api/api-reference.ko.md` | 수정 | Client API 추가 (2026-01-30) |
 | `docs/product/01_mandu_product_brief.md` | 수정 | MCP/CLI 목록 및 로드맵 노트 갱신 (2026-01-30) |
 | `docs/architecture/02_mandu_technical_architecture.md` | 수정 | 구현 현황/CLI/MCP 도구 반영 (2026-01-30) |
+| `docs/guides/01_configuration.ko.md` | 신규 | 설정 가이드 (2026-02-03) |
 | `docs/guides/03_mandu_coding_agent_prompt_template.md` | 수정 | CLI 명칭 정정 (2026-01-30) |
 | `docs/specs/04_mandu_hydration_system.md` | 수정 | 구현 현황/MCP 도구 반영 (2026-01-30) |
 | `docs/architecture/05_mandu_backend-architecture-guardrails.md` | 이동 | 2026-01-28 루트에서 이동 |
 | `docs/architecture/06_mandu_router_v5_hybrid_trie.md` | 수정 | 구현 상태 표시 추가 (2026-01-30) |
 | `docs/plans/06_mandu_dna_master_plan.md` | 이동+수정 | 2026-01-28 참조 경로 수정 |
 | `docs/evaluation/MANDU_EVALUATION.ko.md` | 이동 | 2026-01-28 루트에서 이동 |
-| `docs/README.md` | 신규 | 2026-01-28 생성 |
-| `docs/README.ko.md` | 신규 | 2026-01-28 생성 |
+| `docs/README.md` | 수정 | 설정 섹션 추가 (2026-02-03) |
+| `docs/README.ko.md` | 수정 | 설정 섹션 추가 (2026-02-03) |
 
 ## 삭제/폐기
 

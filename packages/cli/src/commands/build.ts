@@ -4,7 +4,7 @@
  * Hydration이 필요한 Island들을 번들링합니다.
  */
 
-import { loadManifest, buildClientBundles, printBundleStats } from "@mandujs/core";
+import { loadManifest, buildClientBundles, printBundleStats, validateAndReport } from "@mandujs/core";
 import path from "path";
 import fs from "fs/promises";
 
@@ -24,6 +24,12 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   const specPath = path.join(cwd, "spec", "routes.manifest.json");
 
   console.log("📦 Mandu Build - Client Bundle Builder\n");
+
+  const config = await validateAndReport(cwd);
+  if (!config) {
+    return false;
+  }
+  const buildConfig = config.build ?? {};
 
   // 1. Spec 로드
   const specResult = await loadManifest(specPath);
@@ -61,9 +67,9 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   // 3. 번들 빌드
   const startTime = performance.now();
   const result = await buildClientBundles(manifest, cwd, {
-    minify: options.minify,
-    sourcemap: options.sourcemap,
-    outDir: options.outDir,
+    minify: options.minify ?? buildConfig.minify,
+    sourcemap: options.sourcemap ?? buildConfig.sourcemap,
+    outDir: options.outDir ?? buildConfig.outDir,
   });
 
   // 4. 결과 출력

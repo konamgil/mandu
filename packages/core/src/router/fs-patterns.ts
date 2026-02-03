@@ -348,6 +348,13 @@ export function patternsConflict(patternA: string, patternB: string): boolean {
 }
 
 /**
+ * 패턴 형태 반환 (파라미터 이름 무시)
+ */
+export function getPatternShape(pattern: string): string {
+  return normalizePatternShape(pattern);
+}
+
+/**
  * 패턴 형태 정규화 (파라미터 이름 무시)
  *
  * @example

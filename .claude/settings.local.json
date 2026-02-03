@@ -29,7 +29,10 @@
       "Bash(do echo \"=== $dir ===\" ls -la \"C:/Users/LamySolution/workspace/mandu/DNA/$dir\")",
       "Bash(du -sh:*)",
       "Bash(bunx tsc:*)",
-      "Bash(bun test:*)"
+      "Bash(bun test:*)",
+      "Bash(bun typecheck:*)",
+      "Bash(bun -e:*)",
+      "Bash(bun install:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

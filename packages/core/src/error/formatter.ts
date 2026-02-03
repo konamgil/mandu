@@ -108,6 +108,7 @@ export function createNotFoundResponse(
   return {
     errorType: "SPEC_ERROR",
     code: ErrorCode.SPEC_ROUTE_NOT_FOUND,
+    httpStatus: 404,
     message: `Route not found: ${pathname}`,
     summary: "라우트 없음 - spec 파일에 추가 필요",
     fix: {
@@ -129,6 +130,7 @@ export function createHandlerNotFoundResponse(
   return {
     errorType: "FRAMEWORK_BUG",
     code: ErrorCode.FRAMEWORK_ROUTER_ERROR,
+    httpStatus: 500,
     message: `Handler not registered for route: ${routeId}`,
     summary: "핸들러 미등록 - generate 재실행 필요",
     fix: {
@@ -154,6 +156,7 @@ export function createPageLoadErrorResponse(
   const error: ManduError = {
     errorType: "LOGIC_ERROR",
     code: ErrorCode.SLOT_IMPORT_ERROR,
+    httpStatus: 500,
     message: originalError?.message || `Failed to load page module for route: ${routeId}`,
     summary: `페이지 모듈 로드 실패 - ${routeId}.route.tsx 확인 필요`,
     fix: {
@@ -189,6 +192,7 @@ export function createSSRErrorResponse(
   const error: ManduError = {
     errorType: "FRAMEWORK_BUG",
     code: ErrorCode.FRAMEWORK_SSR_ERROR,
+    httpStatus: 500,
     message: originalError?.message || `SSR rendering failed for route: ${routeId}`,
     summary: `SSR 렌더링 실패 - 컴포넌트 확인 필요`,
     fix: {

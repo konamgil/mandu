@@ -271,9 +271,7 @@ rules: {
 
 ```typescript
 // mandu.config.ts
-import { defineConfig } from "@mandujs/core";
-
-export default defineConfig({
+export default {
   guard: {
     // 프리셋 사용 (권장)
     preset: "fsd",
@@ -286,15 +284,12 @@ export default defineConfig({
 
     // 제외 패턴
     exclude: ["**/*.test.ts", "**/*.spec.ts"],
-
-    // 심각도 설정
-    severity: {
-      layerViolation: "error",    // 레이어 위반
-      circularDependency: "warn", // 순환 의존
-    },
   },
-});
+};
 ```
+
+> 참고: 현재 `mandu dev`는 `preset/srcDir/exclude/realtime`만 읽습니다.  
+> `guard arch`는 `mandu.config` 값을 기본값으로 사용하며, CLI 옵션이 우선합니다.
 
 ### 4.4 핵심 결정 사항
 
@@ -620,13 +615,11 @@ guard: {
 
 ```typescript
 // mandu.config.ts
-import { defineConfig } from "@mandujs/core";
-
-export default defineConfig({
+export default {
   guard: {
     preset: "fsd",
   },
-});
+};
 ```
 
 ```bash

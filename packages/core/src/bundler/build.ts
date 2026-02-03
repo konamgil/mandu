@@ -12,6 +12,7 @@ import type {
   BundleStats,
   BundlerOptions,
 } from "./types";
+import { HYDRATION } from "../constants";
 import path from "path";
 import fs from "fs/promises";
 
@@ -281,7 +282,7 @@ function hydrateIslands() {
   for (const el of islands) {
     const id = el.getAttribute('data-mandu-island');
     const src = el.getAttribute('data-mandu-src');
-    const priority = el.getAttribute('data-mandu-priority') || 'visible';
+    const priority = el.getAttribute('data-mandu-priority') || '${HYDRATION.DEFAULT_PRIORITY}';
 
     if (!id || !src) {
       console.warn('[Mandu] Island missing id or src:', el);
@@ -859,7 +860,8 @@ async function buildVendorShims(
   options: BundlerOptions
 ): Promise<VendorBuildResult> {
   const errors: string[] = [];
-  const results: Record<string, string> = {
+  type VendorShimKey = "react" | "reactDom" | "reactDomClient" | "jsxRuntime" | "jsxDevRuntime";
+  const results: Record<VendorShimKey, string> = {
     react: "",
     reactDom: "",
     reactDomClient: "",
@@ -867,7 +869,7 @@ async function buildVendorShims(
     jsxDevRuntime: "",
   };
 
-  const shims = [
+  const shims: Array<{ name: string; source: string; key: VendorShimKey }> = [
     { name: "_react", source: generateReactShimSource(), key: "react" },
     { name: "_react-dom", source: generateReactDOMShimSource(), key: "reactDom" },
     { name: "_react-dom-client", source: generateReactDOMClientShimSource(), key: "reactDomClient" },
@@ -875,25 +877,23 @@ async function buildVendorShims(
     { name: "_jsx-dev-runtime", source: generateJsxDevRuntimeShimSource(), key: "jsxDevRuntime" },
   ];
 
-  for (const shim of shims) {
+  const buildShim = async (
+    shim: { name: string; source: string; key: VendorShimKey }
+  ): Promise<{ key: VendorShimKey; outputPath?: string; error?: string }> => {
     const srcPath = path.join(outDir, `${shim.name}.src.js`);
     const outputName = `${shim.name}.js`;
 
     try {
       await Bun.write(srcPath, shim.source);
 
-      // _react.js와 jsx-runtime들은 완전히 번들링 (external 없음)
+      // _react.js는 external 없이 React 전체를 번들링
       // _react-dom*, jsx-runtime은 react를 external로 처리하여 동일한 React 인스턴스 공유
-      // jsx-runtime은 Fragment를 react에서 가져오므로 react만 external
       let shimExternal: string[] = [];
       if (shim.name === "_react-dom" || shim.name === "_react-dom-client") {
         shimExternal = ["react"];
       } else if (shim.name === "_jsx-runtime" || shim.name === "_jsx-dev-runtime") {
-        // jsx-runtime은 react를 external로 (Fragment 때문에),
-        // 하지만 react/jsx-runtime은 번들링되어야 함
         shimExternal = ["react"];
       }
-      // _react.js는 external 없이 React 전체를 번들링
 
       const result = await Bun.build({
         entrypoints: [srcPath],
@@ -912,13 +912,31 @@ async function buildVendorShims(
       await fs.unlink(srcPath).catch(() => {});
 
       if (!result.success) {
-        errors.push(`[${shim.name}] ${result.logs.map((l) => l.message).join(", ")}`);
-      } else {
-        results[shim.key] = `/.mandu/client/${outputName}`;
+        return {
+          key: shim.key,
+          error: `[${shim.name}] ${result.logs.map((l) => l.message).join(", ")}`,
+        };
       }
+
+      return {
+        key: shim.key,
+        outputPath: `/.mandu/client/${outputName}`,
+      };
     } catch (error) {
       await fs.unlink(srcPath).catch(() => {});
-      errors.push(`[${shim.name}] ${String(error)}`);
+      return {
+        key: shim.key,
+        error: `[${shim.name}] ${String(error)}`,
+      };
+    }
+  };
+
+  const buildResults = await Promise.all(shims.map((shim) => buildShim(shim)));
+  for (const result of buildResults) {
+    if (result.error) {
+      errors.push(result.error);
+    } else if (result.outputPath) {
+      results[result.key] = result.outputPath;
     }
   }
 
@@ -1034,7 +1052,7 @@ function createBundleManifest(
     bundles[output.routeId] = {
       js: output.outputPath,
       dependencies: ["_runtime", "_react"],
-      priority: hydration?.priority || "visible",
+      priority: hydration?.priority || HYDRATION.DEFAULT_PRIORITY,
     };
   }
 

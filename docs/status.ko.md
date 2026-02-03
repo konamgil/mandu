@@ -2,7 +2,7 @@
 
 범례: **완료** = 구현됨, **부분** = 일부만 구현, **미시작** = 아직 없음, **미검증** = 구현되었으나 테스트 실행 불가.
 
-> 최종 업데이트: 2026-02-02
+> 최종 업데이트: 2026-02-03
 
 ---
 
@@ -70,6 +70,7 @@
 | Dev Watch (common dirs) | 완료 | `packages/core/src/bundler/dev.ts` DEFAULT_COMMON_DIRS, watchDirs 옵션 (v0.9.30) |
 | HMR common file reload | 완료 | `packages/cli/src/commands/dev.ts` type: "reload" 브로드캐스트 (v0.9.31) |
 | Manifest always saved | 완료 | `packages/core/src/bundler/build.ts` 빈 매니페스트 기록 (v0.9.28) |
+| 설정 검증 (dev/build/routes) | 완료 | `packages/core/src/config/validate.ts`, `packages/cli/src/commands/dev.ts`, `build.ts`, `routes.ts` |
 | Integration hooks/logger | 미시작 | (`packages/core/src/integrations` 없음) |
 | Build hooks/plugins/analyzer | 미시작 | (`packages/core/src/bundler/hooks.ts` 없음) |
 
@@ -82,6 +83,7 @@
 | FS Routes 패턴 | 완료 | `packages/core/src/router/fs-patterns.ts` (v0.9.32) |
 | FS Routes 제너레이터 | 완료 | `packages/core/src/router/fs-routes.ts` (v0.9.32) |
 | FS Routes 와처 | 완료 | `packages/core/src/router/fs-routes.ts` watchFSRoutes() (v0.9.32) |
+| FS Routes 설정 (mandu.config) | 완료 | `packages/core/src/router/fs-routes.ts` resolveScannerConfig() |
 | FS Routes CLI | 완료 | `packages/cli/src/commands/routes.ts` routes generate/list/watch (v0.9.13) |
 | FS Routes dev 통합 | 완료 | `packages/cli/src/commands/dev.ts` FS Routes 기반 dev 서버 (v0.9.13) |
 
@@ -142,20 +144,26 @@
 | Hydration & Islands | 7 | 0 |
 | Client-side Routing | 4 | 0 |
 | Data & Content | 0 | 1 |
-| Integrations & Build | 5 | 2 |
-| Routing | 7 | 0 |
+| Integrations & Build | 6 | 2 |
+| Routing | 8 | 0 |
 | Realtime / Resumable | 0 | 2 |
 | Observability & Perf | 1 | 1 |
 | Security | 2 | 0 |
 | SEO | 21 | 0 |
-| **총계** | **65** | **6** |
+| **총계** | **67** | **6** |
 
 ---
 
-## 최근 변경 (v0.9.26 ~ v0.9.35)
+## 최근 변경 (v0.9.26 ~ v0.9.41)
 
 | 버전 | 패키지 | 변경 사항 |
 |------|--------|----------|
+| v0.9.41 | core | 설정 검증, fsRoutes 설정 지원, error/result 유틸, path traversal 강화, 프로덕션 CORS 경고 |
+| v0.9.41 | core | 클라이언트 라우터 전역 상태 분리 + LRU 캐시 |
+| v0.9.41 | cli | dev/build/routes 설정 검증 + guard-arch 기본값 적용 |
+| v0.9.41 | core | FS 스캐너 충돌 검사 O(n), guard watcher glob 캐싱, vendor shim 병렬 빌드 |
+| v0.9.41 | cli | CLI 에러 코드 + 포맷 개선 |
+| v0.9.41 | core/cli | Bun-first 전환: Bun.file().json 로딩, Bun.Glob FS 스캔, HMR ESM 캐시 무효화 |
 | v0.9.35 | core | SEO 모듈 (Next.js Metadata API 호환, sitemap/robots 생성, JSON-LD 헬퍼, Google SEO 최적화) |
 | v0.9.34 | core | 고급 라우트 (catch-all `:param*`, optional `:param*?`, boundary 컴포넌트) |
 | v0.9.33 | core | 레이아웃 시스템 (layoutChain, loadingModule, errorModule in RouteSpec) |

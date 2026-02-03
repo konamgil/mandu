@@ -882,6 +882,49 @@ bunx mandu guard --auto-correct
 
 ---
 
+## 설정
+
+Mandu는 `mandu.config.ts`, `mandu.config.js`, `mandu.config.json`을 읽습니다.  
+Guard 전용 설정은 `.mandu/guard.json`도 지원합니다.
+
+- `mandu dev`, `mandu build` 실행 시 설정을 검증하고 오류를 출력합니다
+- CLI 옵션이 설정값보다 우선합니다
+
+```ts
+// mandu.config.ts
+export default {
+  server: {
+    port: 3000,
+    hostname: "localhost",
+    cors: false,
+    streaming: false,
+  },
+  dev: {
+    hmr: true,
+    watchDirs: ["src/shared", "shared"],
+  },
+  build: {
+    outDir: ".mandu",
+    minify: true,
+    sourcemap: false,
+  },
+  guard: {
+    preset: "mandu",
+    srcDir: "src",
+    exclude: ["**/*.test.ts"],
+    realtime: true,
+    // rules/contractRequired는 레거시 spec guard에서 사용
+  },
+  seo: {
+    enabled: true,
+    defaultTitle: "My App",
+    titleTemplate: "%s | My App",
+  },
+};
+```
+
+---
+
 ## MCP 서버 (AI 에이전트 통합)
 
 Mandu는 AI 에이전트가 프레임워크와 직접 상호작용할 수 있는 완전한 MCP (Model Context Protocol) 서버를 포함합니다.

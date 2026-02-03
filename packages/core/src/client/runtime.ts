@@ -6,21 +6,7 @@
  * 실제 Hydration Runtime은 bundler/build.ts의 generateRuntimeSource()에서 생성됩니다.
  */
 
-import type { Root } from "react-dom/client";
-
-/**
- * Window 전역 타입 확장
- */
-declare global {
-  interface Window {
-    /** Hydrated React roots (unmount용) */
-    __MANDU_ROOTS__: Map<string, Root>;
-    /** 서버 데이터 */
-    __MANDU_DATA__?: Record<string, { serverData: unknown; timestamp: number }>;
-    /** 직렬화된 서버 데이터 (raw JSON) */
-    __MANDU_DATA_RAW__?: string;
-  }
-}
+import { getHydratedRoots, getServerData as getGlobalServerData } from "./window-state";
 
 /**
  * Hydration 상태 추적
@@ -41,16 +27,8 @@ export type HydrationPriority = "immediate" | "visible" | "idle" | "interaction"
  * 서버 데이터 가져오기
  */
 export function getServerData<T = unknown>(islandId: string): T | undefined {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
-
-  const manduData = window.__MANDU_DATA__;
-  if (!manduData) {
-    return undefined;
-  }
-
-  return manduData[islandId]?.serverData as T;
+  if (typeof window === "undefined") return undefined;
+  return getGlobalServerData<T>(islandId);
 }
 
 /**
@@ -85,17 +63,14 @@ export function getHydrationState(): Readonly<HydrationState> {
  * 특정 Island unmount
  */
 export function unmountIsland(id: string): boolean {
-  if (typeof window === "undefined" || !window.__MANDU_ROOTS__) {
-    return false;
-  }
-
-  const root = window.__MANDU_ROOTS__.get(id);
+  const roots = getHydratedRoots();
+  const root = roots.get(id);
   if (!root) {
     return false;
   }
 
   root.unmount();
-  window.__MANDU_ROOTS__.delete(id);
+  roots.delete(id);
   return true;
 }
 
@@ -103,12 +78,9 @@ export function unmountIsland(id: string): boolean {
  * 모든 Island unmount
  */
 export function unmountAllIslands(): void {
-  if (typeof window === "undefined" || !window.__MANDU_ROOTS__) {
-    return;
-  }
-
-  for (const [id, root] of window.__MANDU_ROOTS__) {
+  const roots = getHydratedRoots();
+  for (const [id, root] of roots) {
     root.unmount();
-    window.__MANDU_ROOTS__.delete(id);
+    roots.delete(id);
   }
 }

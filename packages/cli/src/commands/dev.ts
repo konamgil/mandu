@@ -17,6 +17,7 @@ import {
   formatReportForAgent,
   formatReportAsAgentJSON,
   getPreset,
+  validateAndReport,
   type RoutesManifest,
   type GuardConfig,
   type GuardPreset,
@@ -24,6 +25,8 @@ import {
 } from "@mandujs/core";
 import { isDirectory, resolveFromCwd } from "../util/fs";
 import { resolveOutputFormat, type OutputFormat } from "../util/output";
+import { CLI_ERROR_CODES, printCLIError } from "../errors";
+import { importFresh } from "../util/bun";
 import path from "path";
 
 export interface DevOptions {
@@ -42,6 +45,16 @@ export interface DevOptions {
 
 export async function dev(options: DevOptions = {}): Promise<void> {
   const rootDir = resolveFromCwd(".");
+  const config = await validateAndReport(rootDir);
+
+  if (!config) {
+    printCLIError(CLI_ERROR_CODES.CONFIG_VALIDATION_FAILED);
+    process.exit(1);
+  }
+
+  const serverConfig = config.server ?? {};
+  const devConfig = config.dev ?? {};
+  const guardConfigFromFile = config.guard ?? {};
 
   console.log(`🥟 Mandu Dev Server (FS Routes)`);
 
@@ -63,9 +76,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   });
 
   if (result.manifest.routes.length === 0) {
-    console.log("");
-    console.log("📭 라우트가 없습니다.");
-    console.log("");
+    printCLIError(CLI_ERROR_CODES.DEV_NO_ROUTES);
     console.log("💡 app/ 폴더에 page.tsx 파일을 생성하세요:");
     console.log("");
     console.log("  app/page.tsx        → /");
@@ -79,15 +90,16 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   console.log(`✅ ${manifest.routes.length}개 라우트 발견\n`);
 
   const enableFsRoutes = !options.legacy && await isDirectory(path.resolve(rootDir, "app"));
-  const guardPreset = options.guardPreset || "mandu";
+  const guardPreset = options.guardPreset || guardConfigFromFile.preset || "mandu";
   const guardFormat = resolveOutputFormat(options.guardFormat);
   const guardConfig: GuardConfig | null =
     options.guard === false
       ? null
       : {
           preset: guardPreset,
-          srcDir: "src",
-          realtime: true,
+          srcDir: guardConfigFromFile.srcDir || "src",
+          realtime: guardConfigFromFile.realtime ?? true,
+          exclude: guardConfigFromFile.exclude,
           realtimeOutput: guardFormat,
           fsRoutes: enableFsRoutes
             ? {
@@ -157,9 +169,21 @@ export async function dev(options: DevOptions = {}): Promise<void> {
         const modulePath = path.resolve(rootDir, route.module);
         try {
           // 캐시 무효화 (HMR용)
-          delete require.cache[modulePath];
-          const module = await import(modulePath);
-          registerApiHandler(route.id, module.default || module.handler || module);
+          const module = await importFresh(modulePath);
+          let handler = module.default || module.handler || module;
+
+          // ManduFilling 인스턴스를 핸들러 함수로 래핑
+          if (handler && typeof handler.handle === 'function') {
+            console.log(`  🔄 ManduFilling 래핑: ${route.id}`);
+            const filling = handler;
+            handler = async (req: Request, params?: Record<string, string>) => {
+              return filling.handle(req, params);
+            };
+          } else {
+            console.log(`  ⚠️ 핸들러 타입: ${typeof handler}, handle: ${typeof handler?.handle}`);
+          }
+
+          registerApiHandler(route.id, handler);
           console.log(`  📡 API: ${route.pattern} -> ${route.id}`);
         } catch (error) {
           console.error(`  ❌ API 핸들러 로드 실패: ${route.id}`, error);
@@ -176,8 +200,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
               const absLayoutPath = path.resolve(rootDir, layoutPath);
               registerLayoutLoader(layoutPath, async () => {
                 // 캐시 무효화 (HMR용)
-                delete require.cache[absLayoutPath];
-                return import(absLayoutPath);
+                return importFresh(absLayoutPath);
               });
               registeredLayouts.add(layoutPath);
               console.log(`  🎨 Layout: ${layoutPath}`);
@@ -188,16 +211,12 @@ export async function dev(options: DevOptions = {}): Promise<void> {
         // slotModule이 있으면 PageHandler 사용 (filling.loader 지원)
         if (route.slotModule) {
           registerPageHandler(route.id, async () => {
-            delete require.cache[componentPath];
-            const module = await import(componentPath);
+            const module = await importFresh(componentPath);
             return module.default;
           });
           console.log(`  📄 Page: ${route.pattern} -> ${route.id} (with loader)${isIsland ? " 🏝️" : ""}${hasLayout ? " 🎨" : ""}`);
         } else {
-          registerPageLoader(route.id, () => {
-            delete require.cache[componentPath];
-            return import(componentPath);
-          });
+          registerPageLoader(route.id, () => importFresh(componentPath));
           console.log(`  📄 Page: ${route.pattern} -> ${route.id}${isIsland ? " 🏝️" : ""}${hasLayout ? " 🎨" : ""}`);
         }
       }
@@ -208,7 +227,12 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   await registerHandlers(manifest);
   console.log("");
 
-  const port = options.port || Number(process.env.PORT) || 3000;
+  const envPort = process.env.PORT ? Number(process.env.PORT) : undefined;
+  const port =
+    options.port ??
+    (envPort && Number.isFinite(envPort) ? envPort : undefined) ??
+    serverConfig.port ??
+    3333;
 
   // HMR 서버 시작 (클라이언트 슬롯이 있는 경우)
   let hmrServer: ReturnType<typeof createHMRServer> | null = null;
@@ -218,7 +242,8 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     (r) => r.kind === "page" && r.clientModule && needsHydration(r)
   );
 
-  if (hasIslands && !options.noHmr) {
+  const hmrEnabled = options.noHmr ? false : (devConfig.hmr ?? true);
+  if (hasIslands && hmrEnabled) {
     // HMR 서버 시작
     hmrServer = createHMRServer(port);
 
@@ -226,6 +251,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     devBundler = await startDevBundler({
       rootDir,
       manifest,
+      watchDirs: devConfig.watchDirs,
       onRebuild: (result) => {
         if (result.success) {
           if (result.routeId === "*") {
@@ -269,10 +295,13 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   // 메인 서버 시작
   const server = startServer(manifest, {
     port,
+    hostname: serverConfig.hostname,
     rootDir,
     isDev: true,
     hmrPort: hmrServer ? port : undefined,
     bundleManifest: devBundler?.initialBuild.manifest,
+    cors: serverConfig.cors,
+    streaming: serverConfig.streaming,
   });
 
   // FS Routes 실시간 감시

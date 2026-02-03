@@ -6,6 +6,8 @@
  * @module guard/types
  */
 
+import { TIMEOUTS } from "../constants";
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Configuration Types
 // ═══════════════════════════════════════════════════════════════════════════
@@ -336,7 +338,7 @@ export const DEFAULT_GUARD_CONFIG: Required<Omit<GuardConfig, "preset" | "layers
   realtimeOutput: "console",
   cache: true,
   incremental: true,
-  debounceMs: 100,
+  debounceMs: TIMEOUTS.WATCHER_DEBOUNCE,
 };
 
 /**

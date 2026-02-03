@@ -14,6 +14,7 @@ import type {
   MethodRequestSchema,
 } from "./schema";
 import type { InferResponseSchema } from "./types";
+import { TIMEOUTS } from "../constants";
 
 /**
  * Client options for making requests
@@ -176,7 +177,7 @@ export function createClient<T extends ContractSchema>(
     baseUrl,
     headers: defaultHeaders = {},
     fetch: customFetch = fetch,
-    timeout = 30000,
+    timeout = TIMEOUTS.CLIENT_DEFAULT,
   } = options;
 
   const methods: ContractMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -286,7 +287,7 @@ export async function contractFetch<
   const {
     headers: defaultHeaders = {},
     fetch: customFetch = fetch,
-    timeout = 30000,
+    timeout = TIMEOUTS.CLIENT_DEFAULT,
   } = clientOptions;
 
   // Build URL

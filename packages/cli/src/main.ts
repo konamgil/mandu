@@ -23,6 +23,7 @@ import { watch } from "./commands/watch";
 import { brainSetup, brainStatus } from "./commands/brain";
 import { routesGenerate, routesList, routesWatch } from "./commands/routes";
 import { monitor } from "./commands/monitor";
+import { CLI_ERROR_CODES, handleCLIError, printCLIError } from "./errors";
 
 const HELP_TEXT = `
 🥟 Mandu CLI - Agent-Native Fullstack Framework
@@ -265,7 +266,10 @@ async function main(): Promise<void> {
           break;
         default:
           if (hasSubCommand) {
-            console.error(`❌ Unknown guard subcommand: ${subCommand}`);
+            printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
+              command: "guard",
+              subcommand,
+            });
             console.log("\nUsage: bunx mandu guard <arch|legacy>");
             process.exit(1);
           }
@@ -320,7 +324,10 @@ async function main(): Promise<void> {
               verbose: options.verbose === "true",
             });
           } else {
-            console.error(`❌ Unknown routes subcommand: ${subCommand}`);
+            printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
+              command: "routes",
+              subcommand,
+            });
             console.log("\nUsage: bunx mandu routes <generate|list|watch>");
             process.exit(1);
           }
@@ -334,7 +341,7 @@ async function main(): Promise<void> {
         case "create": {
           const routeId = args[2] || options._positional;
           if (!routeId) {
-            console.error("❌ Route ID is required");
+            printCLIError(CLI_ERROR_CODES.MISSING_ARGUMENT, { argument: "routeId" });
             console.log("\nUsage: bunx mandu contract create <routeId>");
             process.exit(1);
           }
@@ -356,7 +363,10 @@ async function main(): Promise<void> {
           });
           break;
         default:
-          console.error(`❌ Unknown contract subcommand: ${subCommand}`);
+          printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
+            command: "contract",
+            subcommand,
+          });
           console.log("\nUsage: bunx mandu contract <create|validate|build|diff>");
           process.exit(1);
       }
@@ -379,7 +389,10 @@ async function main(): Promise<void> {
           });
           break;
         default:
-          console.error(`❌ Unknown openapi subcommand: ${subCommand}`);
+          printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
+            command: "openapi",
+            subcommand,
+          });
           console.log("\nUsage: bunx mandu openapi <generate|serve>");
           process.exit(1);
       }
@@ -410,7 +423,10 @@ async function main(): Promise<void> {
           });
           break;
         default:
-          console.error(`❌ Unknown change subcommand: ${subCommand}`);
+          printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
+            command: "change",
+            subcommand,
+          });
           console.log(`\nUsage: bunx mandu change <begin|commit|rollback|status|list|prune>`);
           process.exit(1);
       }
@@ -458,7 +474,10 @@ async function main(): Promise<void> {
           });
           break;
         default:
-          console.error(`❌ Unknown brain subcommand: ${subCommand}`);
+          printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
+            command: "brain",
+            subcommand,
+          });
           console.log("\nUsage: bunx mandu brain <setup|status>");
           process.exit(1);
       }
@@ -466,7 +485,7 @@ async function main(): Promise<void> {
     }
 
     default:
-      console.error(`❌ Unknown command: ${command}`);
+      printCLIError(CLI_ERROR_CODES.UNKNOWN_COMMAND, { command });
       console.log(HELP_TEXT);
       process.exit(1);
   }
@@ -476,7 +495,4 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  console.error("❌ 예상치 못한 오류:", error);
-  process.exit(1);
-});
+main().catch((error) => handleCLIError(error));

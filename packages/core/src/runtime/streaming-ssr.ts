@@ -19,6 +19,7 @@ import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 import { serializeProps } from "../client/serialize";
 import type { Metadata, MetadataItem } from "../seo/types";
 import { injectSEOIntoOptions, resolveSEO, type SEOOptions } from "../seo/integration/ssr";
+import { PORTS, TIMEOUTS } from "../constants";
 
 // ========== Types ==========
 
@@ -564,12 +565,12 @@ function generateDeferredDataScript(routeId: string, key: string, data: unknown)
  * HMR 스크립트 생성
  */
 function generateHMRScript(port: number): string {
-  const hmrPort = port + 1;
+  const hmrPort = port + PORTS.HMR_OFFSET;
   return `<script>
 (function() {
   var ws = null;
   var reconnectAttempts = 0;
-  var maxReconnectAttempts = 10;
+  var maxReconnectAttempts = ${TIMEOUTS.HMR_MAX_RECONNECT};
 
   function connect() {
     try {
@@ -590,11 +591,11 @@ function generateHMRScript(port: number): string {
       ws.onclose = function() {
         if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
-          setTimeout(connect, 1000 * reconnectAttempts);
+          setTimeout(connect, ${TIMEOUTS.HMR_RECONNECT_DELAY} * reconnectAttempts);
         }
       };
     } catch(err) {
-      setTimeout(connect, 1000);
+      setTimeout(connect, ${TIMEOUTS.HMR_RECONNECT_DELAY});
     }
   }
   connect();

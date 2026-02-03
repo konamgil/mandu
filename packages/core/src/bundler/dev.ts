@@ -6,6 +6,7 @@
 import type { RoutesManifest, RouteSpec } from "../spec/schema";
 import { buildClientBundles } from "./build";
 import type { BundleResult } from "./types";
+import { PORTS, TIMEOUTS } from "../constants";
 import path from "path";
 import fs from "fs";
 
@@ -57,6 +58,12 @@ const DEFAULT_COMMON_DIRS = [
   "hooks",
   "src/utils",
   "utils",
+  // Islands & Client 디렉토리
+  "src/client",
+  "client",
+  "src/islands",
+  "islands",
+  "apps/web",
 ];
 
 /**
@@ -267,7 +274,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
           clearTimeout(debounceTimer);
         }
 
-        debounceTimer = setTimeout(() => handleFileChange(fullPath), 100);
+        debounceTimer = setTimeout(() => handleFileChange(fullPath), TIMEOUTS.WATCHER_DEBOUNCE);
       });
 
       watchers.push(watcher);
@@ -326,7 +333,7 @@ export interface HMRMessage {
  */
 export function createHMRServer(port: number): HMRServer {
   const clients = new Set<any>();
-  const hmrPort = port + 1;
+  const hmrPort = port + PORTS.HMR_OFFSET;
 
   const server = Bun.serve({
     port: hmrPort,
@@ -410,15 +417,15 @@ export function createHMRServer(port: number): HMRServer {
  * 브라우저에서 실행되어 HMR 서버와 연결
  */
 export function generateHMRClientScript(port: number): string {
-  const hmrPort = port + 1;
+  const hmrPort = port + PORTS.HMR_OFFSET;
 
   return `
 (function() {
   const HMR_PORT = ${hmrPort};
   let ws = null;
   let reconnectAttempts = 0;
-  const maxReconnectAttempts = 10;
-  const reconnectDelay = 1000;
+  const maxReconnectAttempts = ${TIMEOUTS.HMR_MAX_RECONNECT};
+  const reconnectDelay = ${TIMEOUTS.HMR_RECONNECT_DELAY};
 
   function connect() {
     try {

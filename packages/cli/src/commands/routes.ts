@@ -9,6 +9,7 @@ import {
   generateManifest,
   formatRoutesForCLI,
   watchFSRoutes,
+  validateAndReport,
   type GenerateOptions,
   type FSScannerConfig,
 } from "@mandujs/core";
@@ -46,11 +47,14 @@ export interface RoutesWatchOptions {
  */
 export async function routesGenerate(options: RoutesGenerateOptions = {}): Promise<boolean> {
   const rootDir = resolveFromCwd(".");
+  const config = await validateAndReport(rootDir);
+  if (!config) return false;
 
   console.log("🥟 Mandu FS Routes Generate\n");
 
   try {
     const generateOptions: GenerateOptions = {
+      scanner: config.fsRoutes,
       outputPath: options.output ?? ".mandu/routes.manifest.json",
       skipLegacy: true, // 레거시 병합 비활성화
     };
@@ -93,11 +97,13 @@ export async function routesGenerate(options: RoutesGenerateOptions = {}): Promi
  */
 export async function routesList(options: RoutesListOptions = {}): Promise<boolean> {
   const rootDir = resolveFromCwd(".");
+  const config = await validateAndReport(rootDir);
+  if (!config) return false;
 
   console.log("🥟 Mandu Routes List\n");
 
   try {
-    const result = await scanRoutes(rootDir);
+    const result = await scanRoutes(rootDir, config.fsRoutes);
 
     if (result.errors.length > 0) {
       console.log("⚠️  스캔 경고:");
@@ -164,6 +170,8 @@ export async function routesList(options: RoutesListOptions = {}): Promise<boole
  */
 export async function routesWatch(options: RoutesWatchOptions = {}): Promise<boolean> {
   const rootDir = resolveFromCwd(".");
+  const config = await validateAndReport(rootDir);
+  if (!config) return false;
 
   console.log("🥟 Mandu FS Routes Watch\n");
   console.log("👀 라우트 변경 감시 중... (Ctrl+C로 종료)\n");
@@ -171,6 +179,7 @@ export async function routesWatch(options: RoutesWatchOptions = {}): Promise<boo
   try {
     // 초기 스캔
     const initialResult = await generateManifest(rootDir, {
+      scanner: config.fsRoutes,
       outputPath: options.output ?? ".mandu/routes.manifest.json",
     });
 
@@ -178,6 +187,7 @@ export async function routesWatch(options: RoutesWatchOptions = {}): Promise<boo
 
     // 감시 시작
     const watcher = await watchFSRoutes(rootDir, {
+      scanner: config.fsRoutes,
       outputPath: options.output ?? ".mandu/routes.manifest.json",
       onChange: (result) => {
         const timestamp = new Date().toLocaleTimeString();

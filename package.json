@@ -1,7 +1,9 @@
 {
-  "name": "mandu-framework",
-  "version": "0.1.0",
+  "name": "mandujs",
+  "version": "0.9.41",
   "private": true,
+  "license": "MIT",
+  "author": "Liam Ko",
   "type": "module",
   "workspaces": [
     "packages/*"

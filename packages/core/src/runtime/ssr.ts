@@ -3,6 +3,7 @@ import { serializeProps } from "../client/serialize";
 import type { ReactElement } from "react";
 import type { BundleManifest } from "../bundler/types";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
+import { PORTS, TIMEOUTS } from "../constants";
 
 // Re-export streaming SSR utilities
 export {
@@ -270,12 +271,12 @@ function generateClientRouterScript(manifest: BundleManifest): string {
  * HMR 스크립트 생성
  */
 function generateHMRScript(port: number): string {
-  const hmrPort = port + 1;
+  const hmrPort = port + PORTS.HMR_OFFSET;
   return `<script>
 (function() {
   var ws = null;
   var reconnectAttempts = 0;
-  var maxReconnectAttempts = 10;
+  var maxReconnectAttempts = ${TIMEOUTS.HMR_MAX_RECONNECT};
 
   function connect() {
     try {
@@ -298,11 +299,11 @@ function generateHMRScript(port: number): string {
       ws.onclose = function() {
         if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
-          setTimeout(connect, 1000 * reconnectAttempts);
+          setTimeout(connect, ${TIMEOUTS.HMR_RECONNECT_DELAY} * reconnectAttempts);
         }
       };
     } catch(err) {
-      setTimeout(connect, 1000);
+      setTimeout(connect, ${TIMEOUTS.HMR_RECONNECT_DELAY});
     }
   }
   connect();

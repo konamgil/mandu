@@ -368,19 +368,38 @@ export async function runGuardCheck(
   manifest: RoutesManifest,
   rootDir: string
 ): Promise<GuardCheckResult> {
-  const violations: GuardViolation[] = [];
   const config = await loadManduConfig(rootDir);
 
   const lockPath = path.join(rootDir, "spec/spec.lock.json");
   const mapPath = path.join(rootDir, "packages/core/map/generated.map.json");
 
-  // Rule 1
-  const hashViolation = await checkSpecHashMismatch(manifest, lockPath);
-  if (hashViolation) {
-    violations.push(hashViolation);
-  }
+  // ============================================
+  // Phase 1: 독립적인 검사 병렬 실행
+  // ============================================
+  const [
+    hashViolation,
+    importViolations,
+    slotViolations,
+    specDirViolations,
+    islandViolations,
+  ] = await Promise.all([
+    checkSpecHashMismatch(manifest, lockPath),
+    checkInvalidGeneratedImport(rootDir),
+    checkSlotFileExists(manifest, rootDir),
+    checkSpecDirNaming(rootDir),
+    checkIslandFirstIntegrity(manifest, rootDir),
+  ]);
 
-  // Load generated map for other checks
+  const violations: GuardViolation[] = [];
+  if (hashViolation) violations.push(hashViolation);
+  violations.push(...importViolations);
+  violations.push(...slotViolations);
+  violations.push(...specDirViolations);
+  violations.push(...islandViolations);
+
+  // ============================================
+  // Phase 2: generatedMap 의존 검사
+  // ============================================
   let generatedMap: GeneratedMap | null = null;
   if (await fileExists(mapPath)) {
     try {
@@ -392,38 +411,23 @@ export async function runGuardCheck(
   }
 
   if (generatedMap) {
-    // Rule 2
-    const editViolations = await checkGeneratedManualEdit(rootDir, generatedMap);
+    const [editViolations, forbiddenViolations] = await Promise.all([
+      checkGeneratedManualEdit(rootDir, generatedMap),
+      checkForbiddenImportsInGenerated(rootDir, generatedMap),
+    ]);
     violations.push(...editViolations);
-
-    // Rule 4
-    const forbiddenViolations = await checkForbiddenImportsInGenerated(rootDir, generatedMap);
     violations.push(...forbiddenViolations);
   }
 
-  // Rule 3
-  const importViolations = await checkInvalidGeneratedImport(rootDir);
-  violations.push(...importViolations);
-
-  // Rule 5: Slot file existence
-  const slotViolations = await checkSlotFileExists(manifest, rootDir);
-  violations.push(...slotViolations);
-
-  // Rule 6: Slot content validation (신규 - 강화된 검증)
-  const slotContentViolations = await checkSlotContentValidation(manifest, rootDir);
+  // ============================================
+  // Phase 3: Slot + Contract 검사 병렬
+  // ============================================
+  const [slotContentViolations, contractViolations] = await Promise.all([
+    checkSlotContentValidation(manifest, rootDir),
+    runContractGuardCheck(manifest, rootDir),
+  ]);
   violations.push(...slotContentViolations);
-
-  // Rule 7-10: Contract-related checks
-  const contractViolations = await runContractGuardCheck(manifest, rootDir);
   violations.push(...contractViolations);
-
-  // Rule: Island-First Integrity
-  const islandViolations = await checkIslandFirstIntegrity(manifest, rootDir);
-  violations.push(...islandViolations);
-
-  // Rule: spec/ directory naming convention
-  const specDirViolations = await checkSpecDirNaming(rootDir);
-  violations.push(...specDirViolations);
 
   const resolvedViolations = applyRuleSeverity(violations, config.guard ?? {});
   const passed = resolvedViolations.every((v) => v.severity !== "error");

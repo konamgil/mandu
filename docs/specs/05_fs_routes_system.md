@@ -303,9 +303,7 @@ my-app/
 
 ```ts
 // mandu.config.ts
-import { defineConfig } from "@mandujs/core";
-
-export default defineConfig({
+export default {
   fsRoutes: {
     // 라우트 루트 폴더 (기본: "app")
     routesDir: "app",
@@ -324,17 +322,16 @@ export default defineConfig({
     // Island 접미사 (기본: ".island")
     islandSuffix: ".island",
 
-    // 기본 레이아웃
-    defaultLayout: "app/layout.tsx",
-
     // 레거시 manifest와 병합 여부
     mergeWithLegacy: true,
 
     // 레거시 manifest 경로
     legacyManifestPath: "spec/routes.manifest.json",
   },
-});
+};
 ```
+
+> 현재 지원되는 키: `routesDir`, `extensions`, `exclude`, `islandSuffix`, `mergeWithLegacy`, `legacyManifestPath`
 
 **설정 가능한 아키텍처 패턴:**
 
