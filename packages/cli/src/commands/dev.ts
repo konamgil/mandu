@@ -8,7 +8,6 @@ import {
   createHMRServer,
   needsHydration,
   loadEnv,
-  generateManifest,
   watchFSRoutes,
   clearDefaultRegistry,
   createGuardWatcher,
@@ -18,29 +17,23 @@ import {
   formatReportAsAgentJSON,
   getPreset,
   validateAndReport,
+  hasCSSEntry,
+  startCSSWatch,
   type RoutesManifest,
   type GuardConfig,
-  type GuardPreset,
   type Violation,
+  type CSSWatcher,
 } from "@mandujs/core";
-import { isDirectory, resolveFromCwd } from "../util/fs";
-import { resolveOutputFormat, type OutputFormat } from "../util/output";
+import { resolveFromCwd } from "../util/fs";
+import { resolveOutputFormat } from "../util/output";
 import { CLI_ERROR_CODES, printCLIError } from "../errors";
 import { importFresh } from "../util/bun";
+import { resolveManifest } from "../util/manifest";
+import { resolveAvailablePort } from "../util/port";
 import path from "path";
 
 export interface DevOptions {
   port?: number;
-  /** HMR 비활성화 */
-  noHmr?: boolean;
-  /** FS Routes 비활성화 (레거시 모드) */
-  legacy?: boolean;
-  /** Architecture Guard 활성화 */
-  guard?: boolean;
-  /** Guard 프리셋 */
-  guardPreset?: GuardPreset;
-  /** Guard 출력 형식 */
-  guardFormat?: OutputFormat;
 }
 
 export async function dev(options: DevOptions = {}): Promise<void> {
@@ -55,8 +48,9 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   const serverConfig = config.server ?? {};
   const devConfig = config.dev ?? {};
   const guardConfigFromFile = config.guard ?? {};
+  const HMR_OFFSET = 1;
 
-  console.log(`🥟 Mandu Dev Server (FS Routes)`);
+  console.log(`🥟 Mandu Dev Server`);
 
   // .env 파일 로드
   const envResult = await loadEnv({
@@ -68,32 +62,37 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     console.log(`🔐 환경 변수 로드: ${envResult.loaded.join(", ")}`);
   }
 
-  // FS Routes 스캔
-  console.log(`📂 app/ 폴더 스캔 중...`);
+  // 라우트 스캔 (FS Routes 우선, 없으면 spec manifest)
+  console.log(`📂 라우트 스캔 중...`);
+  let manifest: RoutesManifest;
+  let enableFsRoutes = false;
 
-  const result = await generateManifest(rootDir, {
-    skipLegacy: true,
-  });
+  try {
+    const resolved = await resolveManifest(rootDir, { fsRoutes: config.fsRoutes });
+    manifest = resolved.manifest;
+    enableFsRoutes = resolved.source === "fs";
 
-  if (result.manifest.routes.length === 0) {
-    printCLIError(CLI_ERROR_CODES.DEV_NO_ROUTES);
-    console.log("💡 app/ 폴더에 page.tsx 파일을 생성하세요:");
-    console.log("");
-    console.log("  app/page.tsx        → /");
-    console.log("  app/blog/page.tsx   → /blog");
-    console.log("  app/api/users/route.ts → /api/users");
-    console.log("");
+    if (manifest.routes.length === 0) {
+      printCLIError(CLI_ERROR_CODES.DEV_NO_ROUTES);
+      console.log("💡 app/ 폴더에 page.tsx 파일을 생성하세요:");
+      console.log("");
+      console.log("  app/page.tsx        → /");
+      console.log("  app/blog/page.tsx   → /blog");
+      console.log("  app/api/users/route.ts → /api/users");
+      console.log("");
+      process.exit(1);
+    }
+
+    console.log(`✅ ${manifest.routes.length}개 라우트 발견\n`);
+  } catch (error) {
+    printCLIError(CLI_ERROR_CODES.DEV_MANIFEST_NOT_FOUND);
+    console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   }
-
-  let manifest = result.manifest;
-  console.log(`✅ ${manifest.routes.length}개 라우트 발견\n`);
-
-  const enableFsRoutes = !options.legacy && await isDirectory(path.resolve(rootDir, "app"));
-  const guardPreset = options.guardPreset || guardConfigFromFile.preset || "mandu";
-  const guardFormat = resolveOutputFormat(options.guardFormat);
+  const guardPreset = guardConfigFromFile.preset || "mandu";
+  const guardFormat = resolveOutputFormat();
   const guardConfig: GuardConfig | null =
-    options.guard === false
+    guardConfigFromFile.realtime === false
       ? null
       : {
           preset: guardPreset,
@@ -228,21 +227,61 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   console.log("");
 
   const envPort = process.env.PORT ? Number(process.env.PORT) : undefined;
-  const port =
+  const desiredPort =
     options.port ??
     (envPort && Number.isFinite(envPort) ? envPort : undefined) ??
     serverConfig.port ??
     3333;
 
-  // HMR 서버 시작 (클라이언트 슬롯이 있는 경우)
-  let hmrServer: ReturnType<typeof createHMRServer> | null = null;
-  let devBundler: Awaited<ReturnType<typeof startDevBundler>> | null = null;
-
   const hasIslands = manifest.routes.some(
     (r) => r.kind === "page" && r.clientModule && needsHydration(r)
   );
+  const hmrEnabled = devConfig.hmr ?? true;
 
-  const hmrEnabled = options.noHmr ? false : (devConfig.hmr ?? true);
+  const { port } = await resolveAvailablePort(desiredPort, {
+    hostname: serverConfig.hostname,
+    offsets: hasIslands && hmrEnabled ? [0, HMR_OFFSET] : [0],
+  });
+
+  if (port !== desiredPort) {
+    console.warn(`⚠️  Port ${desiredPort} is in use. Using ${port} instead.`);
+  }
+
+  // HMR 서버 시작 (클라이언트 슬롯이 있는 경우)
+  let hmrServer: ReturnType<typeof createHMRServer> | null = null;
+  let devBundler: Awaited<ReturnType<typeof startDevBundler>> | null = null;
+  let cssWatcher: CSSWatcher | null = null;
+
+  // CSS 빌드 시작 (Tailwind v4)
+  const hasCss = await hasCSSEntry(rootDir);
+  if (hasCss) {
+    cssWatcher = await startCSSWatch({
+      rootDir,
+      watch: true,
+      onBuild: (result) => {
+        if (result.success && hmrServer) {
+          hmrServer.broadcast({
+            type: "css-update",
+            data: {
+              cssPath: "/.mandu/client/globals.css",
+              timestamp: Date.now(),
+            },
+          });
+        }
+      },
+      onError: (error) => {
+        if (hmrServer) {
+          hmrServer.broadcast({
+            type: "error",
+            data: {
+              message: `CSS Error: ${error.message}`,
+            },
+          });
+        }
+      },
+    });
+  }
+
   if (hasIslands && hmrEnabled) {
     // HMR 서버 시작
     hmrServer = createHMRServer(port);
@@ -304,6 +343,16 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     streaming: serverConfig.streaming,
   });
 
+  const actualPort = server.server.port ?? port;
+  if (actualPort !== port) {
+    if (hmrServer) {
+      hmrServer.close();
+      hmrServer = createHMRServer(actualPort);
+      server.registry.settings.hmrPort = actualPort;
+      console.log(`🔁 HMR port updated: ${actualPort + HMR_OFFSET}`);
+    }
+  }
+
   // FS Routes 실시간 감시
   const routesWatcher = await watchFSRoutes(rootDir, {
     skipLegacy: true,
@@ -341,6 +390,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     server.stop();
     devBundler?.close();
     hmrServer?.close();
+    cssWatcher?.close();
     routesWatcher.close();
     archGuardWatcher?.close();
     process.exit(0);

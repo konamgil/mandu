@@ -21,7 +21,7 @@ export const ERROR_MESSAGES: Record<CLIErrorCode, ErrorInfo> = {
   },
   [CLI_ERROR_CODES.DEV_PORT_IN_USE]: {
     message: "Port {port} is already in use.",
-    suggestion: "Use --port to pick a different port or stop the process using this port.",
+    suggestion: "Set PORT or mandu.config server.port to pick a different port, or stop the process using this port.",
   },
   [CLI_ERROR_CODES.DEV_MANIFEST_NOT_FOUND]: {
     message: "Routes manifest not found.",
@@ -41,7 +41,7 @@ export const ERROR_MESSAGES: Record<CLIErrorCode, ErrorInfo> = {
   },
   [CLI_ERROR_CODES.GUARD_VIOLATION_FOUND]: {
     message: "{count} architecture violation(s) found.",
-    suggestion: "Fix violations above or run with --format agent for AI-friendly output.",
+    suggestion: "Fix violations above or set MANDU_OUTPUT=agent for AI-friendly output.",
   },
   [CLI_ERROR_CODES.BUILD_ENTRY_NOT_FOUND]: {
     message: "Build entry not found: {entry}",

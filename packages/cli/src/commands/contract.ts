@@ -4,16 +4,17 @@
  */
 
 import {
-  loadManifest,
   runContractGuardCheck,
   generateContractTemplate,
   buildContractRegistry,
   writeContractRegistry,
   readContractRegistry,
   diffContractRegistry,
+  validateAndReport,
 } from "@mandujs/core";
 import path from "path";
 import fs from "fs/promises";
+import { resolveManifest } from "../util/manifest";
 
 interface ContractCreateOptions {
   routeId: string;
@@ -34,23 +35,31 @@ interface ContractDiffOptions {
   json?: boolean;
 }
 
+async function loadRoutesManifest(rootDir: string) {
+  const config = await validateAndReport(rootDir);
+  if (!config) {
+    throw new Error("Invalid mandu.config");
+  }
+  const resolved = await resolveManifest(rootDir, { fsRoutes: config.fsRoutes });
+  return resolved.manifest;
+}
+
 /**
  * Create a new contract file for a route
  */
 export async function contractCreate(options: ContractCreateOptions): Promise<boolean> {
   const rootDir = process.cwd();
-  const manifestPath = path.join(rootDir, "spec/routes.manifest.json");
 
   console.log(`\n📜 Creating contract for route: ${options.routeId}\n`);
 
   // Load manifest
-  const manifestResult = await loadManifest(manifestPath);
-  if (!manifestResult.success) {
-    console.error("❌ Failed to load manifest:", manifestResult.errors);
+  let manifest;
+  try {
+    manifest = await loadRoutesManifest(rootDir);
+  } catch (error) {
+    console.error("❌ Failed to load manifest:", error instanceof Error ? error.message : error);
     return false;
   }
-
-  const manifest = manifestResult.data!;
 
   // Find the route
   const route = manifest.routes.find((r) => r.id === options.routeId);
@@ -106,18 +115,17 @@ export async function contractCreate(options: ContractCreateOptions): Promise<bo
  */
 export async function contractValidate(options: ContractValidateOptions = {}): Promise<boolean> {
   const rootDir = process.cwd();
-  const manifestPath = path.join(rootDir, "spec/routes.manifest.json");
 
   console.log(`\n🔍 Validating contracts...\n`);
 
   // Load manifest
-  const manifestResult = await loadManifest(manifestPath);
-  if (!manifestResult.success) {
-    console.error("❌ Failed to load manifest:", manifestResult.errors);
+  let manifest;
+  try {
+    manifest = await loadRoutesManifest(rootDir);
+  } catch (error) {
+    console.error("❌ Failed to load manifest:", error instanceof Error ? error.message : error);
     return false;
   }
-
-  const manifest = manifestResult.data!;
 
   // Run contract guard check
   const violations = await runContractGuardCheck(manifest, rootDir);
@@ -175,18 +183,17 @@ export async function contractValidate(options: ContractValidateOptions = {}): P
  */
 export async function contractBuild(options: ContractBuildOptions = {}): Promise<boolean> {
   const rootDir = process.cwd();
-  const manifestPath = path.join(rootDir, "spec/routes.manifest.json");
   const outputPath = options.output || path.join(rootDir, ".mandu", "contracts.json");
 
   console.log(`\n📦 Building contract registry...\n`);
 
-  const manifestResult = await loadManifest(manifestPath);
-  if (!manifestResult.success) {
-    console.error("❌ Failed to load manifest:", manifestResult.errors);
+  let manifest;
+  try {
+    manifest = await loadRoutesManifest(rootDir);
+  } catch (error) {
+    console.error("❌ Failed to load manifest:", error instanceof Error ? error.message : error);
     return false;
   }
-
-  const manifest = manifestResult.data!;
   const { registry, warnings } = await buildContractRegistry(manifest, rootDir);
 
   if (warnings.length > 0) {
@@ -211,7 +218,6 @@ export async function contractBuild(options: ContractBuildOptions = {}): Promise
  */
 export async function contractDiff(options: ContractDiffOptions = {}): Promise<boolean> {
   const rootDir = process.cwd();
-  const manifestPath = path.join(rootDir, "spec/routes.manifest.json");
   const fromPath = options.from || path.join(rootDir, ".mandu", "contracts.json");
 
   console.log(`\n🔍 Diffing contracts...\n`);
@@ -226,12 +232,14 @@ export async function contractDiff(options: ContractDiffOptions = {}): Promise<b
   let toRegistry = options.to ? await readContractRegistry(options.to) : null;
 
   if (!toRegistry) {
-    const manifestResult = await loadManifest(manifestPath);
-    if (!manifestResult.success) {
-      console.error("❌ Failed to load manifest:", manifestResult.errors);
+    let manifest;
+    try {
+      manifest = await loadRoutesManifest(rootDir);
+    } catch (error) {
+      console.error("❌ Failed to load manifest:", error instanceof Error ? error.message : error);
       return false;
     }
-    const { registry } = await buildContractRegistry(manifestResult.data!, rootDir);
+    const { registry } = await buildContractRegistry(manifest, rootDir);
     toRegistry = registry;
   }
 

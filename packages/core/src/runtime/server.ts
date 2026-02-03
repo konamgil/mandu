@@ -878,6 +878,48 @@ async function handleRequestInternal(
   });
 }
 
+// ========== Port Selection ==========
+
+const MAX_PORT_ATTEMPTS = 10;
+
+function isPortInUseError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: string }).code;
+  const message = (error as { message?: string }).message ?? "";
+  return code === "EADDRINUSE" || message.includes("EADDRINUSE") || message.includes("address already in use");
+}
+
+function startBunServerWithFallback(options: {
+  port: number;
+  hostname?: string;
+  fetch: (req: Request) => Promise<Response>;
+}): { server: Server; port: number; attempts: number } {
+  const { port: startPort, hostname, fetch } = options;
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
+    const candidate = startPort + attempt;
+    if (candidate < 1 || candidate > 65535) {
+      continue;
+    }
+    try {
+      const server = Bun.serve({
+        port: candidate,
+        hostname,
+        fetch,
+      });
+      return { server, port: server.port ?? candidate, attempts: attempt };
+    } catch (error) {
+      if (!isPortInUseError(error)) {
+        throw error;
+      }
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error(`No available port found starting at ${startPort}`);
+}
+
 // ========== Server Startup ==========
 
 export function startServer(manifest: RoutesManifest, options: ServerOptions = {}): ManduServer {
@@ -904,7 +946,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     console.warn("   cors: { origin: ['https://yourdomain.com'] }");
   }
 
-  // Registry settings 저장
+  // Registry settings 저장 (초기값)
   registry.settings = {
     isDev,
     hmrPort,
@@ -929,16 +971,24 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     return response;
   };
 
-  const server = Bun.serve({
+  const { server, port: actualPort, attempts } = startBunServerWithFallback({
     port,
     hostname,
     fetch: fetchHandler,
   });
 
+  if (attempts > 0) {
+    console.warn(`⚠️  Port ${port} is in use. Using ${actualPort} instead.`);
+  }
+
+  if (hmrPort !== undefined && hmrPort === port && actualPort !== port) {
+    registry.settings = { ...registry.settings, hmrPort: actualPort };
+  }
+
   if (isDev) {
-    console.log(`🥟 Mandu Dev Server running at http://${hostname}:${port}`);
-    if (hmrPort) {
-      console.log(`🔥 HMR enabled on port ${hmrPort + PORTS.HMR_OFFSET}`);
+    console.log(`🥟 Mandu Dev Server running at http://${hostname}:${actualPort}`);
+    if (registry.settings.hmrPort) {
+      console.log(`🔥 HMR enabled on port ${registry.settings.hmrPort + PORTS.HMR_OFFSET}`);
     }
     console.log(`📂 Static files: /${publicDir}/, /.mandu/client/`);
     if (corsOptions) {
@@ -948,7 +998,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
       console.log(`🌊 Streaming SSR enabled`);
     }
   } else {
-    console.log(`🥟 Mandu server running at http://${hostname}:${port}`);
+    console.log(`🥟 Mandu server running at http://${hostname}:${actualPort}`);
     if (streaming) {
       console.log(`🌊 Streaming SSR enabled`);
     }

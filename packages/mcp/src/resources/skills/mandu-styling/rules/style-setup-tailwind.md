@@ -1,97 +1,93 @@
 ---
-title: Tailwind CSS Setup
+title: Tailwind CSS v4 Setup
 impact: CRITICAL
-impactDescription: Primary CSS framework for Mandu applications
-tags: styling, tailwind, setup, postcss
+impactDescription: Primary CSS framework for Mandu applications (v4 required)
+tags: styling, tailwind, setup, v4, css-first
 ---
 
-## Tailwind CSS Setup
+## Tailwind CSS v4 Setup
 
 **Impact: CRITICAL (Primary CSS framework for Mandu applications)**
 
-Tailwind CSS를 Mandu 프로젝트에 설정하세요. Bun과 PostCSS 통합을 포함합니다.
+Tailwind CSS v4를 Mandu 프로젝트에 설정합니다. v4는 Oxide Engine(Rust)으로 재작성되어 빌드 속도가 3.5~5배 향상되었습니다.
 
-**설치:**
+## 설치
 
 ```bash
-bun add -d tailwindcss postcss autoprefixer
+bun add -d tailwindcss@^4.1 @tailwindcss/cli@^4.1
 bun add clsx tailwind-merge
-bunx tailwindcss init -p
 ```
 
-**tailwind.config.ts:**
+> **Note:** PostCSS, autoprefixer는 불필요합니다. Tailwind v4가 내장 처리합니다.
 
-```typescript
-import type { Config } from "tailwindcss";
-
-export default {
-  content: [
-    "./app/**/*.{ts,tsx}",
-    "./components/**/*.{ts,tsx}",
-    "./lib/**/*.{ts,tsx}",
-  ],
-  theme: {
-    extend: {
-      colors: {
-        mandu: {
-          primary: "hsl(var(--mandu-primary))",
-          secondary: "hsl(var(--mandu-secondary))",
-          accent: "hsl(var(--mandu-accent))",
-          background: "hsl(var(--mandu-background))",
-          foreground: "hsl(var(--mandu-foreground))",
-        },
-      },
-      borderRadius: {
-        mandu: "var(--mandu-radius)",
-      },
-    },
-  },
-  plugins: [],
-} satisfies Config;
-```
-
-**postcss.config.js:**
-
-```javascript
-export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-};
-```
-
-**app/globals.css:**
+## app/globals.css (CSS-first Configuration)
 
 ```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer base {
-  :root {
-    --mandu-primary: 221.2 83.2% 53.3%;
-    --mandu-secondary: 210 40% 96.1%;
-    --mandu-accent: 210 40% 96.1%;
-    --mandu-background: 0 0% 100%;
-    --mandu-foreground: 222.2 84% 4.9%;
-    --mandu-radius: 0.5rem;
-  }
+/*
+ * Tailwind CSS v4 - CSS-first Configuration
+ * JavaScript 설정 파일 대신 CSS에서 직접 테마 정의
+ */
 
-  .dark {
-    --mandu-primary: 217.2 91.2% 59.8%;
-    --mandu-secondary: 217.2 32.6% 17.5%;
-    --mandu-accent: 217.2 32.6% 17.5%;
-    --mandu-background: 222.2 84% 4.9%;
-    --mandu-foreground: 210 40% 98%;
-  }
+@theme {
+  /* Colors - shadcn/ui compatible */
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(222.2 84% 4.9%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(222.2 84% 4.9%);
+  --color-primary: hsl(222.2 47.4% 11.2%);
+  --color-primary-foreground: hsl(210 40% 98%);
+  --color-secondary: hsl(210 40% 96.1%);
+  --color-secondary-foreground: hsl(222.2 47.4% 11.2%);
+  --color-muted: hsl(210 40% 96.1%);
+  --color-muted-foreground: hsl(215.4 16.3% 46.9%);
+  --color-accent: hsl(210 40% 96.1%);
+  --color-accent-foreground: hsl(222.2 47.4% 11.2%);
+  --color-destructive: hsl(0 84.2% 60.2%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(214.3 31.8% 91.4%);
+  --color-input: hsl(214.3 31.8% 91.4%);
+  --color-ring: hsl(222.2 84% 4.9%);
+
+  /* Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Fonts */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Base styles */
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+```
+
+## Mandu 자동 통합
+
+Mandu는 Tailwind v4를 자동으로 감지하고 처리합니다:
+
+```
+mandu dev 실행 시:
+1. app/globals.css에서 @import "tailwindcss" 감지
+2. bunx @tailwindcss/cli --watch 자동 시작
+3. 출력: .mandu/client/globals.css
+4. SSR에서 <link> 태그 자동 주입
+5. CSS 변경 시 HMR 핫 리로드
 ```
 
 ## cn 유틸리티 함수
 
 ```typescript
-// lib/utils.ts
+// src/client/shared/lib/utils.ts
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -100,47 +96,49 @@ export function cn(...inputs: ClassValue[]) {
 }
 ```
 
-## 사용 예시
+## Island 컴포넌트 스타일링
 
 ```tsx
-// app/button/client.tsx
+// src/client/features/counter/CounterIsland.tsx
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/lib/utils";
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "default" | "outline" | "ghost";
-  size?: "sm" | "md" | "lg";
+interface CounterProps {
+  variant?: "default" | "outline";
 }
 
-export function ButtonIsland({
-  variant = "default",
-  size = "md",
-  className,
-  ...props
-}: ButtonProps) {
+export function CounterIsland({ variant = "default" }: CounterProps) {
+  const variants = {
+    default: "bg-primary text-primary-foreground",
+    outline: "border-2 border-primary text-primary",
+  };
+
   return (
-    <button
-      className={cn(
-        // Base
-        "inline-flex items-center justify-center rounded-mandu font-medium transition-colors",
-        // Variants
-        {
-          default: "bg-mandu-primary text-white hover:bg-mandu-primary/90",
-          outline: "border border-mandu-primary text-mandu-primary hover:bg-mandu-primary/10",
-          ghost: "hover:bg-mandu-secondary",
-        }[variant],
-        // Sizes
-        {
-          sm: "h-8 px-3 text-sm",
-          md: "h-10 px-4",
-          lg: "h-12 px-6 text-lg",
-        }[size],
-        className
-      )}
-      {...props}
-    />
+    <button className={cn(
+      "px-4 py-2 rounded-md transition-colors",
+      variants[variant]
+    )}>
+      Count: 0
+    </button>
   );
+}
+```
+
+## Custom Utilities (v4 방식)
+
+```css
+/* @layer utilities 대신 @utility 사용 */
+@utility text-balance {
+  text-wrap: balance;
+}
+
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 ```
 
@@ -150,12 +148,23 @@ export function ButtonIsland({
 // .vscode/settings.json
 {
   "tailwindCSS.experimental.classRegex": [
-    ["cn\\(([^)]*)\\)", "'([^']*)'"]
+    ["cn\\(([^)]*)\\)", "'([^']*)'"],
+    ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
   ],
   "editor.quickSuggestions": {
     "strings": true
+  },
+  "files.associations": {
+    "*.css": "tailwindcss"
   }
 }
 ```
 
-Reference: [Tailwind CSS Documentation](https://tailwindcss.com/docs)
+## 삭제할 파일 (v3에서 마이그레이션 시)
+
+```bash
+rm -f tailwind.config.ts tailwind.config.js
+rm -f postcss.config.js postcss.config.ts
+```
+
+Reference: [Tailwind CSS v4 Documentation](https://tailwindcss.com/docs)

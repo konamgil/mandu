@@ -138,6 +138,8 @@ export interface StreamingSSROptions {
    * true이면 </body></html>을 생략하여 deferred 스크립트 삽입 지점 확보
    */
   _skipHtmlClose?: boolean;
+  /** CSS 파일 경로 (자동 주입, 기본: /.mandu/client/globals.css) */
+  cssPath?: string | false;
 }
 
 export interface StreamingLoaderResult<T = unknown> {
@@ -367,7 +369,14 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     bundleManifest,
     routeId,
     hydration,
+    cssPath,
+    isDev = false,
   } = options;
+
+  // CSS 링크 태그 생성 (cssPath가 false가 아닌 경우)
+  const cssLinkTag = cssPath === false
+    ? ""
+    : `<link rel="stylesheet" href="${cssPath || "/.mandu/client/globals.css"}${isDev ? `?t=${Date.now()}` : ""}">`;
 
   // Import map (module scripts 전에 위치해야 함)
   let importMapScript = "";
@@ -414,6 +423,7 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
+  ${cssLinkTag}
   ${loadingStyles}
   ${importMapScript}
   ${headTags}

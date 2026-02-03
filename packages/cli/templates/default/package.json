@@ -2,6 +2,10 @@
   "name": "{{PROJECT_NAME}}",
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "bun@1.2.0",
+  "engines": {
+    "bun": ">=1.0.0"
+  },
   "scripts": {
     "dev": "mandu dev",
     "build": "mandu build",
@@ -10,7 +14,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@mandujs/core": "^0.9.39",
+    "@mandujs/core": "^0.9.42",
     "@radix-ui/react-slot": "^1.1.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
@@ -19,12 +23,11 @@
     "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {
-    "@mandujs/cli": "^0.9.21",
+    "@mandujs/cli": "^0.9.42",
+    "@tailwindcss/cli": "^4.1.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47",
-    "tailwindcss": "^3.4.14",
+    "tailwindcss": "^4.1.0",
     "typescript": "^5.0.0"
   }
 }

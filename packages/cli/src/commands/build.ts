@@ -4,9 +4,10 @@
  * Hydration이 필요한 Island들을 번들링합니다.
  */
 
-import { loadManifest, buildClientBundles, printBundleStats, validateAndReport } from "@mandujs/core";
+import { buildClientBundles, printBundleStats, validateAndReport, type RoutesManifest } from "@mandujs/core";
 import path from "path";
 import fs from "fs/promises";
+import { resolveManifest } from "../util/manifest";
 
 export interface BuildOptions {
   /** 코드 압축 (기본: production에서 true) */
@@ -21,7 +22,6 @@ export interface BuildOptions {
 
 export async function build(options: BuildOptions = {}): Promise<boolean> {
   const cwd = process.cwd();
-  const specPath = path.join(cwd, "spec", "routes.manifest.json");
 
   console.log("📦 Mandu Build - Client Bundle Builder\n");
 
@@ -31,18 +31,17 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   }
   const buildConfig = config.build ?? {};
 
-  // 1. Spec 로드
-  const specResult = await loadManifest(specPath);
-  if (!specResult.success) {
-    console.error("❌ Spec 로드 실패:");
-    for (const error of specResult.errors) {
-      console.error(`   ${error}`);
-    }
+  // 1. 라우트 매니페스트 로드 (FS Routes 우선)
+  let manifest: Awaited<ReturnType<typeof resolveManifest>>["manifest"];
+  try {
+    const resolved = await resolveManifest(cwd, { fsRoutes: config.fsRoutes });
+    manifest = resolved.manifest;
+    console.log(`✅ 라우트 로드 완료 (${resolved.source}): ${manifest.routes.length}개 라우트`);
+  } catch (error) {
+    console.error("❌ 라우트 로드 실패:");
+    console.error(`   ${error instanceof Error ? error.message : error}`);
     return false;
   }
-
-  const manifest = specResult.data!;
-  console.log(`✅ Spec 로드 완료: ${manifest.routes.length}개 라우트`);
 
   // 2. Hydration이 필요한 라우트 확인
   const hydratedRoutes = manifest.routes.filter(
@@ -66,11 +65,12 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
 
   // 3. 번들 빌드
   const startTime = performance.now();
-  const result = await buildClientBundles(manifest, cwd, {
+  const resolvedBuildOptions: BuildOptions = {
     minify: options.minify ?? buildConfig.minify,
     sourcemap: options.sourcemap ?? buildConfig.sourcemap,
     outDir: options.outDir ?? buildConfig.outDir,
-  });
+  };
+  const result = await buildClientBundles(manifest, cwd, resolvedBuildOptions);
 
   // 4. 결과 출력
   console.log("");
@@ -90,7 +90,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     console.log("\n👀 파일 감시 모드...");
     console.log("   Ctrl+C로 종료\n");
 
-    await watchAndRebuild(manifest, cwd, options);
+    await watchAndRebuild(manifest, cwd, resolvedBuildOptions);
   }
 
   return true;
@@ -100,7 +100,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
  * 파일 감시 및 재빌드
  */
 async function watchAndRebuild(
-  manifest: Awaited<ReturnType<typeof loadManifest>>["manifest"],
+  manifest: RoutesManifest,
   rootDir: string,
   options: BuildOptions
 ): Promise<void> {

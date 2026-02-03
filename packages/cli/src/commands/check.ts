@@ -10,32 +10,28 @@ import {
   checkDirectory,
   printReport,
   getPreset,
+  validateAndReport,
   loadManifest,
   runGuardCheck,
   buildGuardReport,
   printReportSummary,
   type GuardConfig,
-  type GuardPreset,
 } from "@mandujs/core";
 import path from "path";
 import { resolveFromCwd, isDirectory, pathExists } from "../util/fs";
-import { resolveOutputFormat, type OutputFormat } from "../util/output";
+import { resolveOutputFormat } from "../util/output";
 
-export interface CheckOptions {
-  preset?: GuardPreset;
-  format?: OutputFormat;
-  ci?: boolean;
-  quiet?: boolean;
-  legacy?: boolean;
-}
-
-export async function check(options: CheckOptions = {}): Promise<boolean> {
+export async function check(): Promise<boolean> {
   const rootDir = resolveFromCwd(".");
-  const preset = options.preset ?? "mandu";
-  const format = resolveOutputFormat(options.format);
-  const quiet = options.quiet === true;
-  const strictWarnings = options.ci === true;
-  const enableFsRoutes = !options.legacy && await isDirectory(path.resolve(rootDir, "app"));
+  const config = await validateAndReport(rootDir);
+  if (!config) return false;
+
+  const guardConfigFromFile = config.guard ?? {};
+  const preset = guardConfigFromFile.preset ?? "mandu";
+  const format = resolveOutputFormat();
+  const quiet = false;
+  const strictWarnings = process.env.CI === "true";
+  const enableFsRoutes = await isDirectory(path.resolve(rootDir, "app"));
   const specPath = resolveFromCwd("spec/routes.manifest.json");
   const hasSpec = await pathExists(specPath);
 
@@ -70,6 +66,7 @@ export async function check(options: CheckOptions = {}): Promise<boolean> {
     try {
       if (format === "console") {
         const result = await generateManifest(rootDir, {
+          scanner: config.fsRoutes,
           outputPath: ".mandu/routes.manifest.json",
           skipLegacy: true,
         });
@@ -95,7 +92,7 @@ export async function check(options: CheckOptions = {}): Promise<boolean> {
           log("");
         }
       } else {
-        const scan = await scanRoutes(rootDir);
+        const scan = await scanRoutes(rootDir, config.fsRoutes);
         routesSummary.count = scan.routes.length;
         routesSummary.warnings = scan.errors.map((e) => `${e.type}: ${e.message}`);
       }
@@ -119,7 +116,8 @@ export async function check(options: CheckOptions = {}): Promise<boolean> {
   // 2) Architecture Guard 검사
   const guardConfig: GuardConfig = {
     preset,
-    srcDir: "src",
+    srcDir: guardConfigFromFile.srcDir ?? "src",
+    exclude: guardConfigFromFile.exclude,
     fsRoutes: enableFsRoutes
       ? {
           noPageToPage: true,

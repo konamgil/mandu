@@ -2,12 +2,11 @@ import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
 import { resolveFromCwd, pathExists } from "../util/fs";
-import { resolveOutputFormat, type OutputFormat } from "../util/output";
+import { resolveOutputFormat } from "../util/output";
 
 type MonitorOutput = "console" | "json";
 
 export interface MonitorOptions {
-  format?: OutputFormat;
   follow?: boolean;
   summary?: boolean;
   since?: string;
@@ -263,7 +262,7 @@ async function followFile(
 
 export async function monitor(options: MonitorOptions = {}): Promise<boolean> {
   const rootDir = resolveFromCwd(".");
-  const resolved = resolveOutputFormat(options.format);
+  const resolved = resolveOutputFormat();
   const output: MonitorOutput = resolved === "json" || resolved === "agent" ? "json" : "console";
   const filePath = await resolveLogFile(rootDir, output, options.file);
 
