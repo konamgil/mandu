@@ -17,7 +17,7 @@ import {
   formatReportAsAgentJSON,
   getPreset,
   validateAndReport,
-  hasCSSEntry,
+  isTailwindProject,
   startCSSWatch,
   type RoutesManifest,
   type GuardConfig,
@@ -252,18 +252,19 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   let devBundler: Awaited<ReturnType<typeof startDevBundler>> | null = null;
   let cssWatcher: CSSWatcher | null = null;
 
-  // CSS 빌드 시작 (Tailwind v4)
-  const hasCss = await hasCSSEntry(rootDir);
-  if (hasCss) {
+  // CSS 빌드 시작 (Tailwind v4 감지 시에만)
+  const hasTailwind = await isTailwindProject(rootDir);
+  if (hasTailwind) {
     cssWatcher = await startCSSWatch({
       rootDir,
       watch: true,
       onBuild: (result) => {
         if (result.success && hmrServer) {
+          // cssWatcher.serverPath 사용 (경로 일관성)
           hmrServer.broadcast({
             type: "css-update",
             data: {
-              cssPath: "/.mandu/client/globals.css",
+              cssPath: cssWatcher?.serverPath || "/.mandu/client/globals.css",
               timestamp: Date.now(),
             },
           });
@@ -341,6 +342,8 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     bundleManifest: devBundler?.initialBuild.manifest,
     cors: serverConfig.cors,
     streaming: serverConfig.streaming,
+    // Tailwind 감지 시에만 CSS 링크 주입
+    cssPath: hasTailwind ? cssWatcher?.serverPath : false,
   });
 
   const actualPort = server.server.port ?? port;

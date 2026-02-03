@@ -503,11 +503,13 @@ export function generateHMRClientScript(port: number): string {
       case 'css-update':
         console.log('[Mandu HMR] CSS updated');
         // CSS 핫 리로드 (페이지 새로고침 없이 스타일시트만 교체)
+        var targetCssPath = message.data?.cssPath || '/.mandu/client/globals.css';
         var links = document.querySelectorAll('link[rel="stylesheet"]');
         links.forEach(function(link) {
           var href = link.getAttribute('href') || '';
-          if (href.includes('globals.css') || href.includes('.mandu/client')) {
-            var baseHref = href.split('?')[0];
+          var baseHref = href.split('?')[0];
+          // 정확한 경로 매칭 우선, fallback으로 기존 패턴 매칭
+          if (baseHref === targetCssPath || href.includes('globals.css') || href.includes('.mandu/client')) {
             link.setAttribute('href', baseHref + '?t=' + Date.now());
           }
         });

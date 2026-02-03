@@ -2,9 +2,10 @@
  * mandu build - 클라이언트 번들 빌드
  *
  * Hydration이 필요한 Island들을 번들링합니다.
+ * Tailwind v4 프로젝트는 CSS도 함께 빌드합니다.
  */
 
-import { buildClientBundles, printBundleStats, validateAndReport, type RoutesManifest } from "@mandujs/core";
+import { buildClientBundles, printBundleStats, validateAndReport, isTailwindProject, buildCSS, type RoutesManifest } from "@mandujs/core";
 import path from "path";
 import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";
@@ -63,7 +64,25 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     console.log(`   - ${route.id} (${hydration.strategy}, ${hydration.priority || "visible"})`);
   }
 
-  // 3. 번들 빌드
+  // 3. Tailwind CSS 빌드 (감지 시에만)
+  const hasTailwind = await isTailwindProject(cwd);
+  if (hasTailwind) {
+    console.log(`\n🎨 Tailwind CSS v4 빌드 중...`);
+    const cssResult = await buildCSS({
+      rootDir: cwd,
+      minify: options.minify ?? true,
+    });
+
+    if (!cssResult.success) {
+      console.error(`\n❌ CSS 빌드 실패: ${cssResult.error}`);
+      return false;
+    }
+
+    console.log(`   ✅ CSS 빌드 완료 (${cssResult.buildTime?.toFixed(0)}ms)`);
+    console.log(`   출력: ${cssResult.outputPath}`);
+  }
+
+  // 4. 번들 빌드
   const startTime = performance.now();
   const resolvedBuildOptions: BuildOptions = {
     minify: options.minify ?? buildConfig.minify,
@@ -72,7 +91,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   };
   const result = await buildClientBundles(manifest, cwd, resolvedBuildOptions);
 
-  // 4. 결과 출력
+  // 5. 결과 출력
   console.log("");
   printBundleStats(result);
 
@@ -84,8 +103,11 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   const elapsed = (performance.now() - startTime).toFixed(0);
   console.log(`\n✅ 빌드 완료 (${elapsed}ms)`);
   console.log(`   출력: .mandu/client/`);
+  if (hasTailwind) {
+    console.log(`   CSS: .mandu/client/globals.css`);
+  }
 
-  // 5. 감시 모드
+  // 6. 감시 모드
   if (options.watch) {
     console.log("\n👀 파일 감시 모드...");
     console.log("   Ctrl+C로 종료\n");

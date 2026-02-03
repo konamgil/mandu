@@ -107,6 +107,13 @@ export interface ServerOptions {
    */
   streaming?: boolean;
   /**
+   * CSS 파일 경로 (SSR 링크 주입용)
+   * - string: 해당 경로로 <link> 주입 (예: "/.mandu/client/globals.css")
+   * - false: CSS 링크 주입 비활성화 (Tailwind 미사용 시)
+   * - undefined: 자동 감지 (.mandu/client/globals.css 존재 시 주입)
+   */
+  cssPath?: string | false;
+  /**
    * 커스텀 레지스트리 (핸들러/설정 분리)
    * - 제공하지 않으면 기본 전역 레지스트리 사용
    * - 테스트나 멀티앱 시나리오에서 createServerRegistry()로 생성한 인스턴스 전달
@@ -195,6 +202,13 @@ export interface ServerRegistrySettings {
   publicDir: string;
   cors?: CorsOptions | false;
   streaming: boolean;
+  /**
+   * CSS 파일 경로 (SSR 링크 주입용)
+   * - string: 해당 경로로 <link> 주입
+   * - false: CSS 링크 주입 비활성화
+   * - undefined: 자동 감지 (.mandu/client/globals.css 존재 시 주입)
+   */
+  cssPath?: string | false;
 }
 
 export class ServerRegistry {
@@ -819,6 +833,7 @@ async function handleRequestInternal(
           bundleManifest: settings.bundleManifest,
           criticalData: loaderData as Record<string, unknown> | undefined,
           enableClientRouter: true,
+          cssPath: settings.cssPath,
           onShellReady: () => {
             if (settings.isDev) {
               console.log(`[Mandu Streaming] Shell ready: ${route.id}`);
@@ -848,6 +863,7 @@ async function handleRequestInternal(
         // Client-side Routing 활성화 정보 전달
         enableClientRouter: true,
         routePattern: route.pattern,
+        cssPath: settings.cssPath,
       }));
     } catch (error) {
       const ssrError = createSSRErrorResponse(
@@ -933,6 +949,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     publicDir = "public",
     cors = false,
     streaming = false,
+    cssPath,
     registry = defaultRegistry,
   } = options;
 
@@ -955,6 +972,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     publicDir,
     cors: corsOptions,
     streaming,
+    cssPath,
   };
 
   const router = new Router(manifest.routes);
