@@ -31,30 +31,25 @@ const HELP_TEXT = `
 Usage: bunx mandu <command> [options]
 
 Commands:
-  init           새 프로젝트 생성 (Tailwind + shadcn/ui 기본 포함)
-  check          FS Routes + Guard 통합 검사
-  routes generate  FS Routes 스캔 및 매니페스트 생성
-  routes list      현재 라우트 목록 출력
-  routes watch     실시간 라우트 감시
-  dev            개발 서버 실행 (FS Routes + Guard 기본)
-  dev --no-guard Guard 감시 비활성화
-  build          클라이언트 번들 빌드 (Hydration)
-  guard          아키텍처 위반 검사 (기본)
-  guard arch     아키텍처 위반 검사 (FSD/Clean/Hexagonal)
-  guard legacy   레거시 Spec Guard 검사
-  guard arch --watch  실시간 아키텍처 감시
-  guard arch --list-presets  사용 가능한 프리셋 목록
-  guard arch --output report.md  리포트 파일 생성
-  guard arch --show-trend  트렌드 분석 표시
-  spec-upsert    Spec 파일 검증 및 lock 갱신 (레거시)
-  generate       Spec에서 코드 생성 (레거시)
+  init              새 프로젝트 생성 (Tailwind + shadcn/ui 기본 포함)
+  check             FS Routes + Guard 통합 검사
+  routes generate   FS Routes 스캔 및 매니페스트 생성
+  routes list       현재 라우트 목록 출력
+  routes watch      실시간 라우트 감시
+  dev               개발 서버 실행 (FS Routes + Guard 기본)
+  build             클라이언트 번들 빌드 (Hydration)
+  guard             아키텍처 위반 검사 (기본)
+  guard arch        아키텍처 위반 검사 (FSD/Clean/Hexagonal)
+  guard legacy      레거시 Spec Guard 검사
+  spec-upsert       Spec 파일 검증 및 lock 갱신 (레거시)
+  generate          Spec에서 코드 생성 (레거시)
 
-  doctor         Guard 실패 분석 + 패치 제안 (Brain)
-  watch          실시간 파일 감시 - 경고만 (Brain)
-  monitor        MCP Activity Monitor 로그 스트림
+  doctor            Guard 실패 분석 + 패치 제안 (Brain)
+  watch             실시간 파일 감시 - 경고만 (Brain)
+  monitor           MCP Activity Monitor 로그 스트림
 
-  brain setup    sLLM 설정 (선택)
-  brain status   Brain 상태 확인
+  brain setup       sLLM 설정 (선택)
+  brain status      Brain 상태 확인
 
   contract create <routeId>  라우트에 대한 Contract 생성
   contract validate          Contract-Slot 일관성 검증
@@ -64,79 +59,68 @@ Commands:
   openapi generate           OpenAPI 3.0 스펙 생성
   openapi serve              Swagger UI 로컬 서버 실행
 
-  change begin   변경 트랜잭션 시작 (스냅샷 생성)
-  change commit  변경 확정
-  change rollback 스냅샷으로 복원
-  change status  현재 트랜잭션 상태
-  change list    변경 이력 조회
-  change prune   오래된 스냅샷 정리
+  change begin      변경 트랜잭션 시작 (스냅샷 생성)
+  change commit     변경 확정
+  change rollback   스냅샷으로 복원
+  change status     현재 트랜잭션 상태
+  change list       변경 이력 조회
+  change prune      오래된 스냅샷 정리
 
 Options:
-  --name <name>      init 시 프로젝트 이름 (기본: my-mandu-app)
-  --css <framework>  init 시 CSS 프레임워크: tailwind, panda, none (기본: tailwind)
-  --ui <library>     init 시 UI 라이브러리: shadcn, ark, none (기본: shadcn)
-  --theme            init 시 다크모드 테마 시스템 추가
-  --minimal          init 시 CSS/UI 없이 최소 템플릿 생성 (--css none --ui none)
-  --file <path>      spec-upsert 시 사용할 spec 파일 경로
-  --port <port>      dev/openapi serve 포트 (기본: 3000/8080)
-  --guard            dev 시 Architecture Guard 실시간 감시 활성화 (기본: ON)
-  --no-guard         dev 시 Guard 비활성화
-  --guard-preset <p> dev --guard 시 프리셋 (기본: mandu)
-  --guard-format <f> dev --guard 출력 형식: console, json, agent (기본: 자동)
-  --legacy           FS Routes 비활성화 (레거시 모드)
-  --no-auto-correct  guard 시 자동 수정 비활성화
-  --preset <name>    guard/check 프리셋 (기본: mandu) - fsd, clean, hexagonal, atomic 선택 가능
-  --ci               guard/check CI 모드 (warning도 실패 처리)
-  --quiet            guard/check 요약만 출력
-  --report-format    guard arch 리포트 형식: json, markdown, html
-  --save-stats       guard arch 통계 저장 (트렌드 분석용)
-  --show-trend       guard arch 트렌드 분석 표시
-  --minify           build 시 코드 압축
-  --sourcemap        build 시 소스맵 생성
-  --watch            build/guard arch 파일 감시 모드
-  --summary          monitor 요약 출력 (JSON 로그에서만)
-  --since <duration> monitor 요약 기간 (예: 5m, 30s, 1h)
-  --follow <bool>    monitor follow 모드 (기본: true)
-  --file <path>      monitor 로그 파일 직접 지정
-  --message <msg>    change begin 시 설명 메시지
-  --id <id>          change rollback 시 특정 변경 ID
-  --keep <n>         change prune 시 유지할 스냅샷 수 (기본: 5)
-  --output <path>    openapi/doctor 출력 경로
-  --from <path>      contract diff 기준 레지스트리 경로
-  --to <path>        contract diff 대상 레지스트리 경로
-  --json             contract diff 결과 JSON 출력
-  --format <fmt>     guard/check 출력 형식: console, json, agent (기본: 자동)
-  --format <fmt>     doctor 출력 형식: console, json, markdown (기본: console)
-  --no-llm           doctor에서 LLM 사용 안 함 (템플릿 모드)
-  --model <name>     brain setup 시 모델 이름 (기본: llama3.2)
-  --url <url>        brain setup 시 Ollama URL
-  --verbose          상세 출력
-  --help, -h         도움말 표시
+  --name <name>       init 시 프로젝트 이름 (기본: my-mandu-app)
+  --css <framework>   init 시 CSS 프레임워크: tailwind, panda, none (기본: tailwind)
+  --ui <library>      init 시 UI 라이브러리: shadcn, ark, none (기본: shadcn)
+  --theme             init 시 다크모드 테마 시스템 추가
+  --minimal           init 시 CSS/UI 없이 최소 템플릿 생성 (--css none --ui none)
+  --file <path>       spec-upsert spec 파일/monitor 로그 파일 경로
+  --watch             build/guard arch 파일 감시 모드
+  --output <path>     routes/openapi/doctor/contract/guard 출력 경로
+  --verbose           routes list/watch, contract validate, brain status 상세 출력
+  --from <path>       contract diff 기준 레지스트리 경로
+  --to <path>         contract diff 대상 레지스트리 경로
+  --json              contract diff 결과 JSON 출력
+  --title <title>     openapi generate title
+  --version <ver>     openapi generate version
+  --summary           monitor 요약 출력 (JSON 로그에서만)
+  --since <duration>  monitor 요약 기간 (예: 5m, 30s, 1h)
+  --follow <bool>     monitor follow 모드 (기본: true)
+  --message <msg>     change begin 시 설명 메시지
+  --id <id>           change rollback 시 특정 변경 ID
+  --keep <n>          change prune 시 유지할 스냅샷 수 (기본: 5)
+  --no-llm            doctor에서 LLM 사용 안 함 (템플릿 모드)
+  --status            watch 상태만 출력
+  --debounce <ms>     watch debounce (ms)
+  --model <name>      brain setup 시 모델 이름 (기본: llama3.2)
+  --url <url>         brain setup 시 Ollama URL
+  --skip-check        brain setup 시 모델/서버 체크 건너뜀
+  --help, -h          도움말 표시
+
+Notes:
+  - 출력 포맷은 환경에 따라 자동 결정됩니다 (TTY/CI/MANDU_OUTPUT).
+  - doctor 출력은 .json이면 JSON, 그 외는 markdown으로 저장됩니다.
+  - guard arch 리포트는 .json/.html/.md 확장자를 자동 추론합니다.
+  - 포트는 PORT 환경변수 또는 mandu.config의 server.port로 설정합니다.
+  - 포트 충돌 시 다음 사용 가능한 포트로 자동 변경됩니다.
 
 Examples:
   bunx mandu init --name my-app          # Tailwind + shadcn/ui 기본
   bunx mandu init my-app --minimal       # CSS/UI 없이 최소 템플릿
-  bunx mandu init my-app --theme         # 다크모드 테마 포함
-  bunx mandu init my-app --ui none       # UI 라이브러리 없이
-  bunx mandu check
-  bunx mandu routes list
-  bunx mandu routes generate
-  bunx mandu dev --port 3000
-  bunx mandu dev --no-guard
-  bunx mandu build --minify
+  bunx mandu dev
+  bunx mandu build --watch
   bunx mandu guard
-  bunx mandu guard arch --preset fsd
   bunx mandu guard arch --watch
-  bunx mandu guard arch --ci --format json
-  bunx mandu guard legacy
-  bunx mandu monitor
-  bunx mandu monitor --summary --since 5m
-  bunx mandu doctor
-  bunx mandu brain setup --model codellama
+  bunx mandu guard arch --output guard-report.md
+  bunx mandu check
+  bunx mandu routes list --verbose
   bunx mandu contract create users
-  bunx mandu contract build
-  bunx mandu contract diff
-  bunx mandu openapi generate --output docs/api.json
+  bunx mandu contract validate --verbose
+  bunx mandu contract build --output .mandu/contracts.json
+  bunx mandu contract diff --json
+  bunx mandu openapi generate --output docs/openapi.json
+  bunx mandu openapi serve
+  bunx mandu monitor --summary --since 5m
+  bunx mandu doctor --output reports/doctor.json
+  bunx mandu brain setup --model codellama
   bunx mandu change begin --message "Add new route"
 
 FS Routes Workflow (권장):
@@ -173,31 +157,6 @@ function parseArgs(args: string[]): { command: string; options: Record<string, s
   return { command, options };
 }
 
-/**
- * 포트 옵션 안전하게 파싱
- * - 숫자가 아니면 undefined 반환 (기본값 사용)
- * - 유효 범위: 1-65535
- */
-function parsePort(value: string | undefined, optionName = "port"): number | undefined {
-  if (!value || value === "true") {
-    return undefined; // 기본값 사용
-  }
-
-  const port = Number(value);
-
-  if (Number.isNaN(port)) {
-    console.warn(`⚠️  Invalid --${optionName} value: "${value}" (using default)`);
-    return undefined;
-  }
-
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    console.warn(`⚠️  Invalid --${optionName} range: ${port} (must be 1-65535, using default)`);
-    return undefined;
-  }
-
-  return port;
-}
-
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { command, options } = parseArgs(args);
@@ -229,30 +188,15 @@ async function main(): Promise<void> {
       break;
 
     case "check":
-      success = await check({
-        preset: options.preset as any,
-        format: options.format as any,
-        ci: options.ci === "true",
-        quiet: options.quiet === "true",
-        legacy: options.legacy === "true",
-      });
+      success = await check();
       break;
 
     case "guard": {
       const subCommand = args[1];
       const hasSubCommand = subCommand && !subCommand.startsWith("--");
       const guardArchOptions = {
-        preset: options.preset as any,
         watch: options.watch === "true",
-        ci: options.ci === "true",
-        format: options.format as any,
-        quiet: options.quiet === "true",
-        srcDir: options["src-dir"],
-        listPresets: options["list-presets"] === "true",
         output: options.output,
-        reportFormat: (options["report-format"] as any) || "markdown",
-        saveStats: options["save-stats"] === "true",
-        showTrend: options["show-trend"] === "true",
       };
       switch (subCommand) {
         case "arch":
@@ -260,9 +204,7 @@ async function main(): Promise<void> {
           break;
         case "legacy":
         case "spec":
-          success = await guardCheck({
-            autoCorrect: options["no-auto-correct"] !== "true",
-          });
+          success = await guardCheck();
           break;
         default:
           if (hasSubCommand) {
@@ -281,20 +223,12 @@ async function main(): Promise<void> {
 
     case "build":
       success = await build({
-        minify: options.minify === "true",
-        sourcemap: options.sourcemap === "true",
         watch: options.watch === "true",
       });
       break;
 
     case "dev":
-      await dev({
-        port: parsePort(options.port),
-        guard: options["no-guard"] === "true" ? false : options.guard !== "false",
-        guardPreset: options["guard-preset"] as any,
-        guardFormat: options["guard-format"] as any,
-        legacy: options.legacy === "true",
-      });
+      await dev();
       break;
 
     case "routes": {
@@ -384,9 +318,7 @@ async function main(): Promise<void> {
           });
           break;
         case "serve":
-          success = await openAPIServe({
-            port: parsePort(options.port),
-          });
+          success = await openAPIServe();
           break;
         default:
           printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
@@ -435,7 +367,6 @@ async function main(): Promise<void> {
 
     case "doctor":
       success = await doctor({
-        format: (options.format as "console" | "json" | "markdown") || "console",
         useLLM: options["no-llm"] !== "true",
         output: options.output,
       });
@@ -450,7 +381,6 @@ async function main(): Promise<void> {
 
     case "monitor":
       success = await monitor({
-        format: options.format as any,
         summary: options.summary === "true",
         since: options.since,
         follow: options.follow === "false" ? false : true,

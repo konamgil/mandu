@@ -1,13 +1,15 @@
 {
   "id": "mandu-styling",
   "name": "Mandu Styling",
-  "version": "1.0.0",
-  "description": "CSS framework integration and Island styling patterns",
+  "version": "2.0.0",
+  "description": "Tailwind CSS v4 integration and Island styling patterns for Mandu Framework",
   "author": "mandu",
+  "tailwind": "v4.1+",
   "references": [
     "https://tailwindcss.com/docs",
+    "https://tailwindcss.com/docs/upgrade-guide",
     "https://panda-css.com/docs",
     "https://lightningcss.dev/"
   ],
-  "abstract": "Mandu Island 아키텍처에 최적화된 CSS 스타일링 패턴. Tailwind CSS를 primary로, Panda CSS와 CSS Modules를 대안으로 제공합니다."
+  "abstract": "Mandu Island 아키텍처에 최적화된 Tailwind CSS v4 스타일링 가이드. CSS-first 설정, @theme 블록, Mandu 자동 통합(CSS Auto-Build, HMR)을 지원합니다."
 }

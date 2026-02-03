@@ -43,7 +43,9 @@ bun run dev
 bunx mandu dev
 ```
 
-Your app is now running at `http://localhost:3000`.
+Your app is now running at `http://localhost:3333`.
+
+To change the port, set `PORT` or use `server.port` in `mandu.config`. If the port is in use, Mandu will pick the next available port.
 
 ### 3. Create Pages in `app/` Directory
 
@@ -254,7 +256,6 @@ bunx mandu guard --preset fsd
 
 | Option | Description |
 |--------|-------------|
-| `--port <n>` | Server port (default: 3000) |
 | `--guard` | Enable Guard watching |
 | `--guard-preset <p>` | Guard preset (default: mandu) |
 
@@ -307,7 +308,6 @@ bunx mandu guard --preset fsd
 bunx @mandujs/cli init my-app
 
 # Development
-bunx mandu dev --port 3000
 bunx mandu dev --guard
 
 # Routes

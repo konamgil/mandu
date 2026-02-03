@@ -43,6 +43,8 @@ export interface SSROptions {
   enableClientRouter?: boolean;
   /** 라우트 패턴 (Client-side Routing용) */
   routePattern?: string;
+  /** CSS 파일 경로 (자동 주입, 기본: /.mandu/client/globals.css) */
+  cssPath?: string | false;
 }
 
 /**
@@ -151,7 +153,13 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     hmrPort,
     enableClientRouter = false,
     routePattern,
+    cssPath,
   } = options;
+
+  // CSS 링크 태그 생성 (cssPath가 false가 아닌 경우)
+  const cssLinkTag = cssPath === false
+    ? ""
+    : `<link rel="stylesheet" href="${cssPath || "/.mandu/client/globals.css"}${isDev ? `?t=${Date.now()}` : ""}">`;
 
   let content = renderToString(element);
 
@@ -208,6 +216,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
+  ${cssLinkTag}
   ${headTags}
 </head>
 <body>

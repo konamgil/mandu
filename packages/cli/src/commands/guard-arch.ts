@@ -53,16 +53,25 @@ export interface GuardArchOptions {
   showTrend?: boolean;
 }
 
+function inferReportFormat(output?: string): "json" | "markdown" | "html" | undefined {
+  if (!output) return undefined;
+  const ext = path.extname(output).toLowerCase();
+  if (ext === ".json") return "json";
+  if (ext === ".html" || ext === ".htm") return "html";
+  if (ext === ".md" || ext === ".markdown") return "markdown";
+  return undefined;
+}
+
 export async function guardArch(options: GuardArchOptions = {}): Promise<boolean> {
   const rootDir = resolveFromCwd(".");
   const {
     watch = false,
-    ci = false,
+    ci = process.env.CI === "true",
     format,
     quiet = false,
     listPresets: showPresets = false,
     output,
-    reportFormat = "markdown",
+    reportFormat = inferReportFormat(options.output) ?? "markdown",
     saveStats = false,
     showTrend = false,
   } = options;
@@ -84,7 +93,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
       console.log("");
     }
 
-    console.log("Usage: bunx mandu guard arch --preset <name>");
+    console.log("Usage: set guard.preset in mandu.config to choose a preset");
     return true;
   }
 

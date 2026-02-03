@@ -1,11 +1,18 @@
 # Mandu Styling - Rule Categories
 
 ## Setup
-CSS 프레임워크 초기 설정 및 Bun 통합
+CSS 프레임워크 초기 설정 및 Mandu 통합 (Tailwind v4 CSS-first)
 
 | Impact | Description |
 |--------|-------------|
 | CRITICAL | 프레임워크 설정 없이 스타일링 불가 |
+
+## Gotchas
+Tailwind CSS v4 마이그레이션 주의사항 및 Breaking Changes
+
+| Impact | Description |
+|--------|-------------|
+| HIGH | v3→v4 마이그레이션 시 필수 확인 사항 |
 
 ## Island
 Island 컴포넌트 특화 스타일링 패턴

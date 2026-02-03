@@ -319,12 +319,15 @@ export interface HMRServer {
 }
 
 export interface HMRMessage {
-  type: "connected" | "reload" | "island-update" | "layout-update" | "error" | "ping";
+  type: "connected" | "reload" | "island-update" | "layout-update" | "css-update" | "error" | "ping" | "guard-violation";
   data?: {
     routeId?: string;
     layoutPath?: string;
+    cssPath?: string;
     message?: string;
     timestamp?: number;
+    file?: string;
+    violations?: Array<{ line: number; message: string }>;
   };
 }
 
@@ -495,6 +498,19 @@ export function generateHMRClientScript(port: number): string {
         console.log('[Mandu HMR] Layout updated:', layoutPath);
         // Layout 변경은 항상 전체 리로드
         location.reload();
+        break;
+
+      case 'css-update':
+        console.log('[Mandu HMR] CSS updated');
+        // CSS 핫 리로드 (페이지 새로고침 없이 스타일시트만 교체)
+        var links = document.querySelectorAll('link[rel="stylesheet"]');
+        links.forEach(function(link) {
+          var href = link.getAttribute('href') || '';
+          if (href.includes('globals.css') || href.includes('.mandu/client')) {
+            var baseHref = href.split('?')[0];
+            link.setAttribute('href', baseHref + '?t=' + Date.now());
+          }
+        });
         break;
 
       case 'error':
