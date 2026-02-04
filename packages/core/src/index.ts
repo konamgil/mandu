@@ -14,6 +14,8 @@ export * from "./brain";
 export * from "./watcher";
 export * from "./router";
 export * from "./config";
+export * from "./lockfile";
+export * from "./utils";
 export * from "./seo";
 export * from "./island";
 export * from "./intent";

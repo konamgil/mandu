@@ -18,6 +18,29 @@ Mandu searches in this order and uses the first file found:
 
 `mandu dev`, `mandu build`, and `mandu routes` validate the config and exit with an error if it is invalid.
 
+## Lockfile & Integrity (ont-run adoption)
+
+Mandu can track approved configuration changes using a lockfile.
+
+- **Lockfile path**: `.mandu/lockfile.json`
+- **Generate/Update**: `mandu lock`
+- **Verify**: `mandu lock --verify`
+- **Diff**: `mandu lock --diff` (secrets are redacted by default)
+- **Show secrets**: `mandu lock --diff --show-secrets`
+
+**Policy (recommended)**:
+- dev: warn on mismatch
+- build/ci: fail on mismatch (can be relaxed)
+- prod: block server start on mismatch  
+  → emergency bypass: `MANDU_LOCK_BYPASS=1`
+
+Lockfile covers `mandu.config.*` by default and may optionally include `.mcp.json`.
+
+## MCP Configuration
+
+MCP server settings live in `.mcp.json` and are **separate** from `mandu.config.*`.
+They can be diffed/hashed independently and (optionally) included in lockfile validation.
+
 ## Schema Overview
 
 ### `server`
