@@ -612,6 +612,78 @@ function extractFeatureName(intent: string): string {
     .replace(/[^a-z0-9]/g, "") || "feature";
 }
 
+/**
+ * 프리셋에 따라 구조를 조정
+ * FSD, Clean, Hexagonal 등 프리셋별 레이어 매핑 적용
+ */
+function adjustStructureForPreset(
+  structure: DirectoryProposal[],
+  presetDef: PresetDefinition,
+  preset: GuardPreset
+): DirectoryProposal[] {
+  // 프리셋별 경로 매핑
+  const pathMappings: Record<GuardPreset, Record<string, string>> = {
+    fsd: {
+      "server/domain": "src/entities",
+      "server/application": "src/features",
+      "server/infra": "src/shared/api",
+      "client/widgets": "src/widgets",
+      "client/features": "src/features",
+      "shared": "src/shared",
+      "app/api": "src/app/api",
+    },
+    clean: {
+      "server/domain": "src/domain",
+      "server/application": "src/application",
+      "server/infra": "src/infrastructure",
+      "client/widgets": "src/presentation/components",
+      "client/features": "src/presentation/features",
+      "shared": "src/shared",
+      "app/api": "src/interfaces/http",
+    },
+    hexagonal: {
+      "server/domain": "src/domain",
+      "server/application": "src/application",
+      "server/infra": "src/adapters",
+      "client/widgets": "src/adapters/primary/ui",
+      "client/features": "src/adapters/primary/ui",
+      "shared": "src/shared",
+      "app/api": "src/adapters/primary/api",
+    },
+    atomic: {
+      "server/domain": "src/services",
+      "server/application": "src/hooks",
+      "server/infra": "src/api",
+      "client/widgets": "src/components/organisms",
+      "client/features": "src/components/templates",
+      "shared": "src/utils",
+      "app/api": "src/api",
+    },
+    mandu: {}, // 기본값, 매핑 불필요
+  };
+
+  const mapping = pathMappings[preset] || {};
+  if (Object.keys(mapping).length === 0) {
+    return structure;
+  }
+
+  return structure.map((dir) => {
+    // 경로 매핑 적용
+    let newPath = dir.path;
+    for (const [from, to] of Object.entries(mapping)) {
+      if (dir.path.startsWith(from)) {
+        newPath = dir.path.replace(from, to);
+        break;
+      }
+    }
+
+    return {
+      ...dir,
+      path: newPath,
+    };
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Core Functions
 // ═══════════════════════════════════════════════════════════════════════════
@@ -642,11 +714,17 @@ export async function negotiate(
   const searchTags = [...categoryTags.slice(0, 3), featureName];
   const decisionsResult = await searchDecisions(rootDir, searchTags);
 
-  // 4. 구조 템플릿 선택
+  // 4. 프리셋 정의 로드 및 구조 템플릿 선택
+  const presetDef = getPreset(preset);
   const templateFn = STRUCTURE_TEMPLATES[category] || STRUCTURE_TEMPLATES.other;
-  const structure = templateFn(featureName);
+  let structure = templateFn(featureName);
 
-  // 5. 슬롯 추출
+  // 5. 프리셋에 따른 구조 조정
+  if (presetDef && preset !== "mandu") {
+    structure = adjustStructureForPreset(structure, presetDef, preset);
+  }
+
+  // 6. 슬롯 추출
   const slots: SlotProposal[] = structure
     .flatMap((dir) => dir.files)
     .filter((file) => file.isSlot)
@@ -656,7 +734,7 @@ export async function negotiate(
       constraints: file.suggestedConstraints || ["input-validation", "error-handling"],
     }));
 
-  // 6. 경고 및 권장사항 생성
+  // 7. 경고 및 권장사항 생성
   const warnings: string[] = [];
   const recommendations: string[] = [];
 
@@ -675,7 +753,7 @@ export async function negotiate(
     recommendations.push(`Ensure compatibility with: ${constraints.join(", ")}`);
   }
 
-  // 7. 다음 단계 안내
+  // 8. 다음 단계 안내
   const nextSteps = [
     `1. Review the proposed structure below`,
     `2. Run \`mandu_generate_scaffold\` to create files`,
@@ -683,10 +761,10 @@ export async function negotiate(
     `4. Run \`mandu_guard_heal\` to verify architecture compliance`,
   ];
 
-  // 8. 파일 수 계산
+  // 9. 파일 수 계산
   const estimatedFiles = structure.reduce((sum, dir) => sum + dir.files.length, 0);
 
-  // 9. 관련 결정 포맷
+  // 10. 관련 결정 포맷
   const relatedDecisions: RelatedDecision[] = decisionsResult.decisions.map((d) => ({
     id: d.id,
     title: d.title,
@@ -708,7 +786,7 @@ export async function negotiate(
 }
 
 /**
- * Scaffold 생성
+ * Scaffold 생성 (병렬 처리 최적화)
  */
 export async function generateScaffold(
   structure: DirectoryProposal[],
@@ -722,62 +800,102 @@ export async function generateScaffold(
   const skippedFiles: string[] = [];
   const errors: string[] = [];
 
+  // 1단계: 모든 디렉토리 먼저 생성 (병렬)
+  const dirPaths = new Set<string>();
+  for (const dir of structure) {
+    dirPaths.add(join(rootDir, dir.path));
+    // nested file 경로의 부모 디렉토리도 추가
+    for (const file of dir.files) {
+      dirPaths.add(dirname(join(rootDir, dir.path, file.name)));
+    }
+  }
+
+  if (!dryRun) {
+    const dirResults = await Promise.allSettled(
+      Array.from(dirPaths).map(async (dirPath) => {
+        await mkdir(dirPath, { recursive: true });
+        return dirPath;
+      })
+    );
+
+    for (const result of dirResults) {
+      if (result.status === "fulfilled") {
+        const relativePath = result.value.replace(rootDir, "").replace(/^[/\\]/, "");
+        if (relativePath) createdDirs.push(relativePath);
+      } else {
+        errors.push(`Failed to create directory: ${result.reason}`);
+      }
+    }
+  } else {
+    structure.forEach((dir) => createdDirs.push(dir.path));
+  }
+
+  // 2단계: 모든 파일 정보 수집 및 병렬 처리
+  interface FileTask {
+    filePath: string;
+    relativePath: string;
+    content: string;
+  }
+
+  const fileTasks: FileTask[] = [];
+
   for (const dir of structure) {
     const dirPath = join(rootDir, dir.path);
 
-    // 디렉토리 생성
-    if (!dryRun) {
-      try {
-        await mkdir(dirPath, { recursive: true });
-        createdDirs.push(dir.path);
-      } catch (error) {
-        errors.push(`Failed to create directory ${dir.path}: ${error}`);
-        continue;
-      }
-    } else {
-      createdDirs.push(dir.path);
-    }
-
-    // 파일 생성
     for (const file of dir.files) {
       const filePath = join(dirPath, file.name);
       const relativePath = join(dir.path, file.name);
-
-      // 파일 존재 확인
-      let exists = false;
-      try {
-        await stat(filePath);
-        exists = true;
-      } catch {
-        // 파일 없음
-      }
-
-      if (exists && !overwrite) {
-        skippedFiles.push(relativePath);
-        continue;
-      }
-
-      // 파일 내용 생성
       const content = generateFileContent(
         file.template || "util",
         file.name.replace(/\.\w+$/, ""),
         file.purpose
       );
 
-      if (!dryRun) {
-        try {
-          // 부모 디렉토리 생성 (nested path의 경우)
-          await mkdir(dirname(filePath), { recursive: true });
-          await writeFile(filePath, content, "utf-8");
-          createdFiles.push(relativePath);
-        } catch (error) {
-          errors.push(`Failed to create file ${relativePath}: ${error}`);
-        }
-      } else {
-        createdFiles.push(relativePath);
-      }
+      fileTasks.push({ filePath, relativePath, content });
     }
   }
+
+  // 3단계: 파일 존재 여부 확인 (병렬)
+  const existsResults = await Promise.allSettled(
+    fileTasks.map(async (task) => {
+      try {
+        await stat(task.filePath);
+        return { ...task, exists: true };
+      } catch {
+        return { ...task, exists: false };
+      }
+    })
+  );
+
+  // 4단계: 파일 쓰기 (병렬)
+  const writePromises: Promise<void>[] = [];
+
+  for (const result of existsResults) {
+    if (result.status !== "fulfilled") continue;
+    const { filePath, relativePath, content, exists } = result.value;
+
+    if (exists && !overwrite) {
+      skippedFiles.push(relativePath);
+      continue;
+    }
+
+    if (dryRun) {
+      createdFiles.push(relativePath);
+    } else {
+      writePromises.push(
+        writeFile(filePath, content, "utf-8")
+          .then(() => {
+            createdFiles.push(relativePath);
+          })
+          .catch((error) => {
+            errors.push(`Failed to create file ${relativePath}: ${error}`);
+          })
+      );
+    }
+  }
+
+  // 모든 쓰기 작업 완료 대기
+  await Promise.allSettled(writePromises);
 
   return {
     success: errors.length === 0,

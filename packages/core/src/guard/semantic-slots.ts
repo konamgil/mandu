@@ -352,8 +352,13 @@ export function checkPattern(content: string, pattern: SlotPattern): boolean {
 
   // 문자열 또는 정규식으로 처리
   if (pattern.startsWith("/") && pattern.endsWith("/")) {
-    const regex = new RegExp(pattern.slice(1, -1));
-    return regex.test(content);
+    const regexPattern = pattern.slice(1, -1);
+    const result = safeRegexTest(regexPattern, content);
+    // 에러 발생 시 문자열 검색으로 폴백
+    if (!result.success) {
+      return content.includes(pattern);
+    }
+    return result.matched;
   }
 
   return content.includes(pattern);
@@ -371,6 +376,78 @@ function matchGlob(path: string, pattern: string): boolean {
 
   const regex = new RegExp(`^${regexPattern}$`);
   return regex.test(path);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ReDoS Protection
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** ReDoS 공격 방지를 위한 최대 패턴 길이 */
+const MAX_PATTERN_LENGTH = 200;
+
+/** ReDoS 공격 방지를 위한 최대 콘텐츠 길이 (커스텀 규칙용) */
+const MAX_CONTENT_LENGTH_FOR_CUSTOM_REGEX = 100_000;
+
+/**
+ * 위험한 정규식 패턴 감지
+ * 중첩된 quantifier, 과도한 그룹 등 ReDoS 취약점 유발 패턴 탐지
+ */
+function isUnsafeRegexPattern(pattern: string): boolean {
+  // 패턴 길이 제한
+  if (pattern.length > MAX_PATTERN_LENGTH) {
+    return true;
+  }
+
+  // 위험한 패턴들 (중첩 quantifier, 백트래킹 유발)
+  const dangerousPatterns = [
+    /\([^)]*[+*][^)]*\)[+*]/, // (a+)+ 또는 (a*)*
+    /\([^)]*\|[^)]*\)[+*]/, // (a|b)+ with alternatives
+    /\.[+*]\.[+*]/, // .+.+ 또는 .*.*
+    /\(\?\:[^)]+\)[+*]{2,}/, // (?:...){n}+ 과도한 반복
+  ];
+
+  for (const dangerous of dangerousPatterns) {
+    if (dangerous.test(pattern)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * 안전한 정규식 테스트 실행
+ * @returns 매칭 결과 또는 에러 시 false
+ */
+function safeRegexTest(
+  pattern: string,
+  content: string,
+  maxContentLength = MAX_CONTENT_LENGTH_FOR_CUSTOM_REGEX
+): { success: boolean; matched: boolean; error?: string } {
+  // 패턴 안전성 검사
+  if (isUnsafeRegexPattern(pattern)) {
+    return {
+      success: false,
+      matched: false,
+      error: `Pattern may cause ReDoS: ${pattern.substring(0, 50)}...`,
+    };
+  }
+
+  // 콘텐츠 길이 제한 (ReDoS 방지)
+  const safeContent =
+    content.length > maxContentLength ? content.substring(0, maxContentLength) : content;
+
+  try {
+    const regex = new RegExp(pattern);
+    const matched = regex.test(safeContent);
+    return { success: true, matched };
+  } catch {
+    return {
+      success: false,
+      matched: false,
+      error: `Invalid regex pattern: ${pattern.substring(0, 50)}`,
+    };
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -516,13 +593,22 @@ export async function validateSlotConstraints(
     }
   }
 
-  // 7. 커스텀 규칙 검증
+  // 7. 커스텀 규칙 검증 (ReDoS 방어 적용)
   if (constraints.customRules) {
     for (const rule of constraints.customRules) {
-      const regex = new RegExp(rule.pattern);
-      const matches = regex.test(content);
+      const result = safeRegexTest(rule.pattern, content);
 
-      if (rule.type === "required" && !matches) {
+      // 정규식 에러 시 경고만 추가하고 건너뜀
+      if (!result.success) {
+        violations.push({
+          type: "custom-rule-violation",
+          message: `Unable to apply rule: ${result.error}`,
+          severity: "warn",
+        });
+        continue;
+      }
+
+      if (rule.type === "required" && !result.matched) {
         violations.push({
           type: "custom-rule-violation",
           message: rule.message,
@@ -530,7 +616,7 @@ export async function validateSlotConstraints(
         });
       }
 
-      if (rule.type === "forbidden" && matches) {
+      if (rule.type === "forbidden" && result.matched) {
         violations.push({
           type: "custom-rule-violation",
           message: rule.message,
@@ -583,18 +669,37 @@ export async function extractSlotMetadata(filePath: string): Promise<SlotMetadat
     const descMatch = content.match(/\.description\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/);
     const description = descMatch?.[1];
 
-    // .constraints() 호출 찾기 (간단한 파싱)
+    // .constraints() 호출 찾기
+    // Note: 이 파서는 간단한 객체만 지원합니다.
+    // 복잡한 constraints는 런타임에 getSemanticMetadata()로 조회하세요.
     const constraintsMatch = content.match(/\.constraints\s*\(\s*(\{[\s\S]*?\})\s*\)/);
     let constraints: SlotConstraints | undefined;
     if (constraintsMatch) {
       try {
-        // 안전한 JSON 파싱 시도 (실제로는 AST 파싱이 더 정확)
-        const normalized = constraintsMatch[1]
-          .replace(/(\w+):/g, '"$1":')
-          .replace(/'/g, '"');
-        constraints = JSON.parse(normalized);
+        // 간단한 객체 리터럴 파싱 - 키-값 쌍을 개별 추출
+        const objStr = constraintsMatch[1];
+        const result: Record<string, unknown> = {};
+
+        // 숫자 값 추출 (maxLines: 50 등)
+        const numberMatches = objStr.matchAll(/(\w+)\s*:\s*(\d+)/g);
+        for (const match of numberMatches) {
+          result[match[1]] = parseInt(match[2], 10);
+        }
+
+        // 문자열 배열 추출 (requiredPatterns: ["a", "b"] 등)
+        const arrayMatches = objStr.matchAll(/(\w+)\s*:\s*\[([\s\S]*?)\]/g);
+        for (const match of arrayMatches) {
+          const items = match[2].match(/['"`]([^'"`]+)['"`]/g);
+          if (items) {
+            result[match[1]] = items.map((s) => s.slice(1, -1));
+          }
+        }
+
+        if (Object.keys(result).length > 0) {
+          constraints = result as SlotConstraints;
+        }
       } catch {
-        // 파싱 실패 시 무시
+        // 파싱 실패 시 무시 - 런타임에 getSemanticMetadata() 사용 권장
       }
     }
 

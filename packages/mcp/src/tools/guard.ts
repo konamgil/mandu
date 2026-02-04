@@ -867,10 +867,23 @@ export function guardTools(projectRoot: string) {
         }
       }
 
-      // 파일 경로 정규화
-      const filePath = file.startsWith("/") || file.includes(":")
+      // 파일 경로 정규화 및 보안 검증 (LFI 방지)
+      const path = await import("path");
+      const rawPath = file.startsWith("/") || file.includes(":")
         ? file
-        : `${projectRoot}/${file}`;
+        : path.join(projectRoot, file);
+      const filePath = path.normalize(path.resolve(rawPath));
+      const normalizedRoot = path.normalize(path.resolve(projectRoot));
+
+      // 경로가 프로젝트 루트 내에 있는지 검증
+      if (!filePath.startsWith(normalizedRoot)) {
+        return {
+          error: "Access denied: File path is outside project root",
+          tip: "Only files within the project directory can be validated",
+          requestedPath: file,
+          projectRoot: projectRoot,
+        };
+      }
 
       const result = await validateSlotConstraints(filePath, constraints);
 
