@@ -44,7 +44,27 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     return false;
   }
 
-  // 2. Hydration이 필요한 라우트 확인
+  // 2. Tailwind CSS 빌드 (Island 여부와 무관하게 먼저 실행)
+  const hasTailwind = await isTailwindProject(cwd);
+  const resolvedMinify = options.minify ?? buildConfig.minify ?? true;
+
+  if (hasTailwind) {
+    console.log(`\n🎨 Tailwind CSS v4 빌드 중...`);
+    const cssResult = await buildCSS({
+      rootDir: cwd,
+      minify: resolvedMinify,
+    });
+
+    if (!cssResult.success) {
+      console.error(`\n❌ CSS 빌드 실패: ${cssResult.error}`);
+      return false;
+    }
+
+    console.log(`   ✅ CSS 빌드 완료 (${cssResult.buildTime?.toFixed(0)}ms)`);
+    console.log(`   출력: ${cssResult.outputPath}`);
+  }
+
+  // 3. Hydration이 필요한 라우트 확인
   const hydratedRoutes = manifest.routes.filter(
     (route) =>
       route.kind === "page" &&
@@ -55,6 +75,12 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   if (hydratedRoutes.length === 0) {
     console.log("\n📭 Hydration이 필요한 라우트가 없습니다.");
     console.log("   (clientModule이 없거나 hydration.strategy: none)");
+
+    // CSS만 빌드된 경우도 성공으로 처리
+    if (hasTailwind) {
+      console.log(`\n✅ CSS 빌드 완료`);
+      console.log(`   CSS: .mandu/client/globals.css`);
+    }
     return true;
   }
 
@@ -62,24 +88,6 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   for (const route of hydratedRoutes) {
     const hydration = route.hydration || { strategy: "island", priority: "visible" };
     console.log(`   - ${route.id} (${hydration.strategy}, ${hydration.priority || "visible"})`);
-  }
-
-  // 3. Tailwind CSS 빌드 (감지 시에만)
-  const hasTailwind = await isTailwindProject(cwd);
-  if (hasTailwind) {
-    console.log(`\n🎨 Tailwind CSS v4 빌드 중...`);
-    const cssResult = await buildCSS({
-      rootDir: cwd,
-      minify: options.minify ?? true,
-    });
-
-    if (!cssResult.success) {
-      console.error(`\n❌ CSS 빌드 실패: ${cssResult.error}`);
-      return false;
-    }
-
-    console.log(`   ✅ CSS 빌드 완료 (${cssResult.buildTime?.toFixed(0)}ms)`);
-    console.log(`   출력: ${cssResult.outputPath}`);
   }
 
   // 4. 번들 빌드
