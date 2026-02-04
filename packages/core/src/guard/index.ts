@@ -176,3 +176,24 @@ export {
   type TrendAnalysis,
   type LayerStatistics,
 } from "./statistics";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Self-Healing Guard (NEW)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  // Main API
+  checkWithHealing,
+  generateHealing,
+  applyHealing,
+  healAll,
+  explainRule,
+  // Types
+  type HealingOption,
+  type HealingFixResult,
+  type HealingSuggestion,
+  type HealingContext,
+  type HealingItem,
+  type HealingResult,
+  type RuleExplanation,
+} from "./healing";
