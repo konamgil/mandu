@@ -19,6 +19,12 @@ import {
   validateAndReport,
   isTailwindProject,
   startCSSWatch,
+  readLockfile,
+  readMcpConfig,
+  validateWithPolicy,
+  detectMode,
+  formatPolicyAction,
+  formatValidationResult,
   type RoutesManifest,
   type GuardConfig,
   type Violation,
@@ -45,12 +51,52 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     process.exit(1);
   }
 
+  // Lockfile 검증 (설정 무결성)
+  const lockfile = await readLockfile(rootDir);
+  let mcpConfig: Record<string, unknown> | null = null;
+  try {
+    mcpConfig = await readMcpConfig(rootDir);
+  } catch (error) {
+    console.warn(
+      `⚠️  MCP 설정 로드 실패: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  const { result: lockResult, action, bypassed } = validateWithPolicy(
+    config,
+    lockfile,
+    detectMode(),
+    mcpConfig
+  );
+
+  if (action === "block") {
+    console.error("🛑 서버 시작 차단: Lockfile 불일치");
+    console.error("   설정이 변경되었습니다. 의도한 변경이라면:");
+    console.error("   $ mandu lock");
+    console.error("");
+    console.error("   변경 사항 확인:");
+    console.error("   $ mandu lock --diff");
+    if (lockResult) {
+      console.error("");
+      console.error(formatValidationResult(lockResult));
+    }
+    process.exit(1);
+  }
+
   const serverConfig = config.server ?? {};
   const devConfig = config.dev ?? {};
   const guardConfigFromFile = config.guard ?? {};
   const HMR_OFFSET = 1;
 
   console.log(`🥟 Mandu Dev Server`);
+
+  // Lockfile 상태 출력
+  if (action === "warn") {
+    console.log(`⚠️  ${formatPolicyAction(action, bypassed)}`);
+  } else if (lockfile && lockResult?.valid) {
+    console.log(`🔒 설정 무결성 확인됨 (${lockResult.currentHash?.slice(0, 8)})`);
+  } else if (!lockfile) {
+    console.log(`💡 Lockfile 없음 - 'mandu lock'으로 생성 권장`);
+  }
 
   // .env 파일 로드
   const envResult = await loadEnv({

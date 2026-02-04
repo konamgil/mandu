@@ -176,3 +176,20 @@ export {
   type TrendAnalysis,
   type LayerStatistics,
 } from "./statistics";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Config Guard - 설정 무결성 검증
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  guardConfig,
+  quickConfigGuard,
+  formatConfigGuardResult,
+  formatConfigGuardAsJSON,
+  calculateHealthScore,
+  type ConfigGuardResult,
+  type ConfigGuardError,
+  type ConfigGuardWarning,
+  type ConfigGuardOptions,
+  type UnifiedHealthResult,
+} from "./config-guard";

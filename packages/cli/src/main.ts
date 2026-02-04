@@ -23,6 +23,7 @@ import { watch } from "./commands/watch";
 import { brainSetup, brainStatus } from "./commands/brain";
 import { routesGenerate, routesList, routesWatch } from "./commands/routes";
 import { monitor } from "./commands/monitor";
+import { runLockCommand, lockHelp } from "./commands/lock";
 import { CLI_ERROR_CODES, handleCLIError, printCLIError } from "./errors";
 
 const HELP_TEXT = `
@@ -66,6 +67,10 @@ Commands:
   change list       변경 이력 조회
   change prune      오래된 스냅샷 정리
 
+  lock              Lockfile 생성/갱신
+  lock --verify     Lockfile 검증 (설정 무결성 확인)
+  lock --diff       Lockfile과 현재 설정 비교
+
 Options:
   --name <name>       init 시 프로젝트 이름 (기본: my-mandu-app)
   --css <framework>   init 시 CSS 프레임워크: tailwind, panda, none (기본: tailwind)
@@ -87,6 +92,11 @@ Options:
   --message <msg>     change begin 시 설명 메시지
   --id <id>           change rollback 시 특정 변경 ID
   --keep <n>          change prune 시 유지할 스냅샷 수 (기본: 5)
+  --verify, -v        lock 시 lockfile 검증만 수행
+  --diff, -d          lock 시 lockfile과 현재 설정 비교
+  --show-secrets      lock diff 시 민감정보 출력 허용
+  --include-snapshot  lock 시 설정 스냅샷 포함 (diff 기능에 필요)
+  --mode <mode>       lock verify 시 모드 (development|build|ci|production)
   --no-llm            doctor에서 LLM 사용 안 함 (템플릿 모드)
   --status            watch 상태만 출력
   --debounce <ms>     watch debounce (ms)
@@ -122,6 +132,9 @@ Examples:
   bunx mandu doctor --output reports/doctor.json
   bunx mandu brain setup --model codellama
   bunx mandu change begin --message "Add new route"
+  bunx mandu lock                          # Lockfile 생성/갱신
+  bunx mandu lock --verify                 # 설정 무결성 검증
+  bunx mandu lock --diff --show-secrets    # 변경사항 상세 비교
 
 FS Routes Workflow (권장):
   1. init → 2. app/ 폴더에 page.tsx 생성 → 3. dev → 4. build
@@ -413,6 +426,10 @@ async function main(): Promise<void> {
       }
       break;
     }
+
+    case "lock":
+      success = await runLockCommand(args.slice(1));
+      break;
 
     default:
       printCLIError(CLI_ERROR_CODES.UNKNOWN_COMMAND, { command });
