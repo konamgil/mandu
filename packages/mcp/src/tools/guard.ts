@@ -6,8 +6,16 @@ import {
   ErrorClassifier,
   type ManduError,
   type GeneratedMap,
+  // Self-Healing Guard imports
+  checkWithHealing,
+  applyHealing,
+  healAll,
+  explainRule,
+  type GuardConfig,
+  type ViolationType,
+  type GuardPreset,
 } from "@mandujs/core";
-import { getProjectPaths, readJsonFile } from "../utils/project.js";
+import { getProjectPaths, readJsonFile, readConfig } from "../utils/project.js";
 
 export const guardToolDefinitions: Tool[] = [
   {
@@ -38,6 +46,64 @@ export const guardToolDefinitions: Tool[] = [
         },
       },
       required: ["errorJson"],
+    },
+  },
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Self-Healing Guard Tools (NEW)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    name: "mandu_guard_heal",
+    description:
+      "Run Self-Healing Guard: detect architecture violations and provide actionable fix suggestions with auto-fix capabilities. " +
+      "This tool not only detects violations but also explains WHY they are wrong and HOW to fix them.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        preset: {
+          type: "string",
+          enum: ["fsd", "clean", "hexagonal", "atomic", "mandu"],
+          description: "Architecture preset to use (default: from config or 'mandu')",
+        },
+        autoFix: {
+          type: "boolean",
+          description: "If true, automatically apply the primary fix for all violations",
+        },
+        file: {
+          type: "string",
+          description: "Specific file to check (optional, checks entire project if not specified)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "mandu_guard_explain",
+    description:
+      "Explain a specific guard rule in detail. " +
+      "Provides WHY the rule exists, HOW to fix violations, and code examples.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        type: {
+          type: "string",
+          enum: ["layer-violation", "circular-dependency", "cross-slice", "deep-nesting"],
+          description: "The type of violation to explain",
+        },
+        fromLayer: {
+          type: "string",
+          description: "The source layer (e.g., 'features', 'shared')",
+        },
+        toLayer: {
+          type: "string",
+          description: "The target layer being imported",
+        },
+        preset: {
+          type: "string",
+          enum: ["fsd", "clean", "hexagonal", "atomic", "mandu"],
+          description: "Architecture preset for context",
+        },
+      },
+      required: ["type", "fromLayer", "toLayer"],
     },
   },
 ];
@@ -205,6 +271,170 @@ export function guardTools(projectRoot: string) {
           message: error.message,
           timestamp: error.timestamp,
         },
+      };
+    },
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Self-Healing Guard Tools Implementation
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    mandu_guard_heal: async (args: Record<string, unknown>) => {
+      const {
+        preset: inputPreset,
+        autoFix = false,
+        file,
+      } = args as {
+        preset?: GuardPreset;
+        autoFix?: boolean;
+        file?: string;
+      };
+
+      // Load config to get preset
+      let config: GuardConfig = {};
+      let configLoadError: string | undefined;
+      try {
+        const projectConfig = await readConfig(projectRoot);
+        if (projectConfig?.guard) {
+          config = projectConfig.guard;
+        }
+      } catch (error) {
+        // 설정 로드 실패 시 경고 메시지 저장 (기본값으로 계속 진행)
+        configLoadError = `Config load warning: ${error instanceof Error ? error.message : String(error)}`;
+      }
+
+      // Override preset if specified
+      if (inputPreset) {
+        config.preset = inputPreset;
+      }
+      if (!config.preset) {
+        config.preset = "mandu";
+      }
+
+      // Run Self-Healing check
+      const result = await checkWithHealing(config, projectRoot);
+
+      // Filter by file if specified
+      let items = result.items;
+      if (file) {
+        items = items.filter((item) =>
+          item.violation.filePath.includes(file)
+        );
+      }
+
+      // Auto-fix if requested
+      if (autoFix && items.length > 0) {
+        const healResult = await healAll({
+          ...result,
+          items,
+        });
+
+        // 남은 위반 수 계산: 전체 - 성공적으로 수정된 수
+        const remaining = items.length - healResult.fixed;
+        const allFixed = remaining === 0;
+
+        return {
+          passed: allFixed,
+          totalViolations: items.length,
+          remaining,
+          autoFix: {
+            attempted: true,
+            fixed: healResult.fixed,
+            failed: healResult.failed,
+            results: healResult.results.map((r) => ({
+              success: r.success,
+              message: r.message,
+              changedFiles: r.changedFiles,
+            })),
+          },
+          ...(configLoadError && { configWarning: configLoadError }),
+          message: allFixed
+            ? `✅ All ${healResult.fixed} violations fixed!`
+            : `⚠️ Fixed ${healResult.fixed}, remaining ${remaining} (failed ${healResult.failed})`,
+        };
+      }
+
+      // Return violations with healing suggestions
+      if (items.length === 0) {
+        return {
+          passed: true,
+          totalViolations: 0,
+          message: "✅ No architecture violations found!",
+          preset: config.preset,
+          ...(configLoadError && { configWarning: configLoadError }),
+        };
+      }
+
+      return {
+        passed: false,
+        totalViolations: items.length,
+        autoFixable: items.filter((i) => i.healing.primary.autoFix).length,
+        preset: config.preset,
+        violations: items.map((item) => ({
+          // Violation info
+          type: item.violation.type,
+          file: item.violation.filePath,
+          line: item.violation.line,
+          message: item.violation.ruleDescription,
+          fromLayer: item.violation.fromLayer,
+          toLayer: item.violation.toLayer,
+          importStatement: item.violation.importStatement,
+
+          // Healing info
+          healing: {
+            primary: {
+              label: item.healing.primary.label,
+              explanation: item.healing.primary.explanation,
+              hasAutoFix: !!item.healing.primary.autoFix,
+              codeChange: item.healing.primary.before
+                ? {
+                    before: item.healing.primary.before,
+                    after: item.healing.primary.after,
+                  }
+                : undefined,
+            },
+            alternatives: item.healing.alternatives.map((alt) => ({
+              label: alt.label,
+              explanation: alt.explanation,
+            })),
+            context: {
+              layerHierarchy: item.healing.context.layerHierarchy,
+              allowedLayers: item.healing.context.allowedLayers,
+              documentation: item.healing.context.documentation,
+            },
+          },
+        })),
+        tip: "Use autoFix: true to automatically apply fixes, or review suggestions and apply manually.",
+        ...(configLoadError && { configWarning: configLoadError }),
+      };
+    },
+
+    mandu_guard_explain: async (args: Record<string, unknown>) => {
+      const { type, fromLayer, toLayer, preset } = args as {
+        type: ViolationType;
+        fromLayer: string;
+        toLayer: string;
+        preset?: GuardPreset;
+      };
+
+      const explanation = explainRule(
+        type,
+        fromLayer,
+        toLayer,
+        preset ?? "mandu"
+      );
+
+      return {
+        rule: explanation.rule,
+        explanation: {
+          why: explanation.why,
+          how: explanation.how,
+        },
+        documentation: explanation.documentation,
+        examples: {
+          bad: explanation.examples.bad,
+          good: explanation.examples.good,
+        },
+        preset: preset ?? "mandu",
       };
     },
   };

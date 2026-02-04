@@ -193,3 +193,24 @@ export {
   type ConfigGuardOptions,
   type UnifiedHealthResult,
 } from "./config-guard";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Self-Healing Guard
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  // Main API
+  checkWithHealing,
+  generateHealing,
+  applyHealing,
+  healAll,
+  explainRule,
+  // Types
+  type HealingOption,
+  type HealingFixResult,
+  type HealingSuggestion,
+  type HealingContext,
+  type HealingItem,
+  type HealingResult,
+  type RuleExplanation,
+} from "./healing";
