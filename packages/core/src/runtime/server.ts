@@ -110,7 +110,7 @@ export interface ServerOptions {
    * CSS 파일 경로 (SSR 링크 주입용)
    * - string: 해당 경로로 <link> 주입 (예: "/.mandu/client/globals.css")
    * - false: CSS 링크 주입 비활성화 (Tailwind 미사용 시)
-   * - undefined: 자동 감지 (.mandu/client/globals.css 존재 시 주입)
+   * - undefined: false로 처리 (404 방지, dev/build에서 명시적 전달 필요)
    */
   cssPath?: string | false;
   /**
@@ -206,7 +206,7 @@ export interface ServerRegistrySettings {
    * CSS 파일 경로 (SSR 링크 주입용)
    * - string: 해당 경로로 <link> 주입
    * - false: CSS 링크 주입 비활성화
-   * - undefined: 자동 감지 (.mandu/client/globals.css 존재 시 주입)
+   * - undefined: false로 처리 (404 방지)
    */
   cssPath?: string | false;
 }
