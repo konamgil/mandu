@@ -291,13 +291,15 @@ export function guardTools(projectRoot: string) {
 
       // Load config to get preset
       let config: GuardConfig = {};
+      let configLoadError: string | undefined;
       try {
         const projectConfig = await readConfig(projectRoot);
         if (projectConfig?.guard) {
           config = projectConfig.guard;
         }
-      } catch {
-        // Use defaults
+      } catch (error) {
+        // 설정 로드 실패 시 경고 메시지 저장 (기본값으로 계속 진행)
+        configLoadError = `Config load warning: ${error instanceof Error ? error.message : String(error)}`;
       }
 
       // Override preset if specified
@@ -326,9 +328,14 @@ export function guardTools(projectRoot: string) {
           items,
         });
 
+        // 남은 위반 수 계산: 전체 - 성공적으로 수정된 수
+        const remaining = items.length - healResult.fixed;
+        const allFixed = remaining === 0;
+
         return {
-          passed: healResult.failed === 0,
+          passed: allFixed,
           totalViolations: items.length,
+          remaining,
           autoFix: {
             attempted: true,
             fixed: healResult.fixed,
@@ -339,10 +346,10 @@ export function guardTools(projectRoot: string) {
               changedFiles: r.changedFiles,
             })),
           },
-          message:
-            healResult.failed === 0
-              ? `✅ All ${healResult.fixed} violations fixed!`
-              : `⚠️ Fixed ${healResult.fixed}, failed ${healResult.failed}`,
+          ...(configLoadError && { configWarning: configLoadError }),
+          message: allFixed
+            ? `✅ All ${healResult.fixed} violations fixed!`
+            : `⚠️ Fixed ${healResult.fixed}, remaining ${remaining} (failed ${healResult.failed})`,
         };
       }
 
@@ -353,6 +360,7 @@ export function guardTools(projectRoot: string) {
           totalViolations: 0,
           message: "✅ No architecture violations found!",
           preset: config.preset,
+          ...(configLoadError && { configWarning: configLoadError }),
         };
       }
 
@@ -396,6 +404,7 @@ export function guardTools(projectRoot: string) {
           },
         })),
         tip: "Use autoFix: true to automatically apply fixes, or review suggestions and apply manually.",
+        ...(configLoadError && { configWarning: configLoadError }),
       };
     },
 
