@@ -304,11 +304,15 @@ Current AI coding has a fundamental problem: the more agents code, the more arch
 |---------|-------------|
 | **FS Routes** | File-system based routing - `app/users/page.tsx` → `/users` |
 | **Mandu Guard** | Real-time architecture checker with 5 presets (FSD, Clean, Hexagonal, Atomic, Mandu) |
+| **Self-Healing Guard** | Detect violations AND provide actionable fix suggestions with auto-fix |
 | **Slot System** | Isolated areas where agents safely write business logic |
+| **Semantic Slots** | Purpose & constraints for AI-generated code validation |
+| **Decision Memory** | ADR storage for AI to reference past architecture decisions |
+| **Architecture Negotiation** | AI-Framework dialog before implementation |
 | **Island Hydration** | Selective client-side JavaScript for performance |
 | **Contract API** | Type-safe API contracts with Zod schema validation |
 | **SEO Module** | Next.js Metadata API compatible, sitemap/robots generation, JSON-LD helpers |
-| **MCP Server** | 25+ tools for AI agents to directly manipulate the framework |
+| **MCP Server** | 35+ tools for AI agents to directly manipulate the framework |
 | **HMR Support** | Hot Module Replacement for rapid development |
 | **Transaction API** | Atomic changes with snapshot-based rollback |
 
@@ -620,18 +624,21 @@ Mandu includes a full MCP server for AI agent integration.
 }
 ```
 
-### Tools (30+)
+### Tools (35+)
 
 | Category | Tools |
 |----------|-------|
 | **Spec** | `mandu_list_routes`, `mandu_add_route`, `mandu_update_route`, `mandu_delete_route` |
-| **Guard** | `mandu_guard_check`, `mandu_check_location`, `mandu_check_import` |
+| **Guard** | `mandu_guard_check`, `mandu_guard_heal`, `mandu_explain_rule` |
+| **Decision Memory** | `mandu_search_decisions`, `mandu_save_decision`, `mandu_check_consistency`, `mandu_get_architecture` |
+| **Semantic Slots** | `mandu_validate_slot`, `mandu_validate_slots` |
+| **Negotiation** | `mandu_negotiate`, `mandu_generate_scaffold`, `mandu_analyze_structure` |
 | **Generate** | `mandu_generate` |
 | **Transaction** | `mandu_begin`, `mandu_commit`, `mandu_rollback` |
-| **Slot** | `mandu_read_slot`, `mandu_write_slot`, `mandu_validate_slot` |
+| **Slot** | `mandu_read_slot`, `mandu_write_slot` |
 | **Hydration** | `mandu_build`, `mandu_list_islands`, `mandu_set_hydration` |
 | **SEO** | `mandu_preview_seo`, `mandu_generate_sitemap_preview`, `mandu_generate_robots_preview`, `mandu_create_jsonld`, `mandu_write_seo_file`, `mandu_seo_analyze` |
-| **Brain** | `mandu_doctor`, `mandu_watch_start`, `mandu_get_architecture` |
+| **Brain** | `mandu_doctor`, `mandu_watch_start` |
 
 ### Resources
 
@@ -689,7 +696,7 @@ mandu/
 
 ## Roadmap
 
-### v0.9.x (Current) — 65 features done
+### v0.10.x (Current) — 74 features done
 
 **Core Runtime**
 - [x] Middleware compose & lifecycle hooks
@@ -730,17 +737,23 @@ mandu/
 - [x] Google SEO optimization (viewport, theme-color, resource hints)
 - [x] SSR integration
 
-**AI Integration**
-- [x] MCP server (25+ tools, 7 resources)
+**AI Integration (RFC-001: From Guard to Guide)** 🆕
+- [x] MCP server (35+ tools, 7 resources)
 - [x] Brain (Doctor, Watcher, Architecture analyzer)
 - [x] Transaction API with snapshots
 - [x] Real-time push notifications
+- [x] **Decision Memory** - ADR storage & consistency checking
+- [x] **Semantic Slots** - Purpose & constraint validation for AI code
+- [x] **Architecture Negotiation** - AI-Framework pre-implementation dialog
+- [x] **Self-Healing Guard** - Auto-fix suggestions with explanations
 
 **Security**
 - [x] Path traversal prevention
 - [x] Port validation
+- [x] LFI vulnerability protection
+- [x] ReDoS defense in custom rules
 
-### v0.10.x (Next)
+### v0.11.x (Next)
 
 **Data Layer** *(Astro-inspired)*
 - [ ] Loader API with LoaderContext (store, meta, logger, watcher)
@@ -766,7 +779,7 @@ mandu/
 - [ ] TTFB & TTI measurement
 - [ ] Automated perf test suite
 
-### v0.11.x (Future)
+### v0.13.x (Future)
 
 **AOT Optimization** *(Elysia-inspired)*
 - [ ] AOT Handler Generation (runtime precompile)
