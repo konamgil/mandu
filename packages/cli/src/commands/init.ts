@@ -215,6 +215,9 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     await updatePackageJson(targetDir, css, ui);
   }
 
+  // Setup .mcp.json for AI agent integration
+  const mcpResult = await setupMcpConfig(targetDir);
+
   console.log(`\n✅ 프로젝트 생성 완료!\n`);
   console.log(`📍 위치: ${targetDir}`);
   console.log(`\n🚀 시작하기:`);
@@ -240,6 +243,15 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     console.log(`   src/client/shared/ui/ → UI 컴포넌트 (shadcn)`);
     console.log(`   src/client/shared/lib/utils.ts → 유틸리티 (cn 함수)`);
   }
+
+  // MCP 설정 안내
+  console.log(`\n🤖 AI 에이전트 통합:`);
+  if (mcpResult.created) {
+    console.log(`   .mcp.json 생성됨 (Claude Code 자동 연결)`);
+  } else if (mcpResult.updated) {
+    console.log(`   .mcp.json에 mandu 서버 추가됨`);
+  }
+  console.log(`   AGENTS.md → 에이전트 가이드 (Bun 사용 명시)`);
 
   return true;
 }
@@ -342,4 +354,52 @@ async function updatePackageJson(
   }
 
   await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+}
+
+interface McpConfigResult {
+  created: boolean;
+  updated: boolean;
+}
+
+/**
+ * .mcp.json 설정 (AI 에이전트 통합)
+ * - 파일 없으면 새로 생성
+ * - 파일 있으면 mandu 서버만 추가/업데이트 (다른 설정 유지)
+ */
+async function setupMcpConfig(targetDir: string): Promise<McpConfigResult> {
+  const mcpPath = path.join(targetDir, ".mcp.json");
+
+  const manduServer = {
+    command: "bunx",
+    args: ["@mandujs/mcp"],
+  };
+
+  try {
+    // 기존 파일 확인
+    const existingContent = await fs.readFile(mcpPath, "utf-8");
+    const existing = JSON.parse(existingContent);
+
+    // 기존 설정에 mandu 서버 추가/업데이트
+    if (!existing.mcpServers) {
+      existing.mcpServers = {};
+    }
+
+    const hadMandu = !!existing.mcpServers.mandu;
+    existing.mcpServers.mandu = manduServer;
+
+    await fs.writeFile(mcpPath, JSON.stringify(existing, null, 2) + "\n");
+
+    return { created: false, updated: true };
+  } catch {
+    // 파일 없음 - 새로 생성
+    const newConfig = {
+      mcpServers: {
+        mandu: manduServer,
+      },
+    };
+
+    await fs.writeFile(mcpPath, JSON.stringify(newConfig, null, 2) + "\n");
+
+    return { created: true, updated: false };
+  }
 }
