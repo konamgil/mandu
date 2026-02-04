@@ -69,3 +69,34 @@ export async function writeJsonFile(filePath: string, data: unknown): Promise<vo
   await fs.mkdir(dir, { recursive: true });
   await Bun.write(filePath, JSON.stringify(data, null, 2));
 }
+
+/**
+ * Read Mandu config from mandu.config.ts/js/json
+ */
+export async function readConfig(rootDir: string): Promise<Record<string, unknown> | null> {
+  const configFiles = [
+    "mandu.config.ts",
+    "mandu.config.js",
+    "mandu.config.json",
+  ];
+
+  for (const configFile of configFiles) {
+    const configPath = path.join(rootDir, configFile);
+    try {
+      const file = Bun.file(configPath);
+      if (await file.exists()) {
+        if (configFile.endsWith(".json")) {
+          return await file.json();
+        } else {
+          // For TS/JS files, try to import
+          const module = await import(configPath);
+          return module.default ?? module;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
