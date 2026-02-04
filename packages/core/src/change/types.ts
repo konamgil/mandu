@@ -1,5 +1,6 @@
 import type { RoutesManifest } from "../spec/schema";
 import type { SpecLock } from "../spec/lock";
+import type { ManduLockfile } from "../lockfile";
 
 /**
  * 변경 기록 - 하나의 트랜잭션을 나타냄
@@ -33,6 +34,18 @@ export interface Snapshot {
   lock: SpecLock | null;
   /** Slot 파일 내용만 저장 (Generated 파일은 재생성 가능) */
   slotContents: Record<string, string>;
+  /** 설정 스냅샷 (Lockfile 포함) - ont-run 통합 */
+  configSnapshot?: ConfigSnapshot;
+}
+
+/**
+ * 설정 스냅샷 - mandu.config의 상태를 저장
+ */
+export interface ConfigSnapshot {
+  /** Lockfile 데이터 */
+  lockfile: ManduLockfile;
+  /** 설정 해시 */
+  configHash: string;
 }
 
 /**

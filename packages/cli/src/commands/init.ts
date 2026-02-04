@@ -1,6 +1,11 @@
 import path from "path";
 import fs from "fs/promises";
 import { CLI_ERROR_CODES, printCLIError } from "../errors";
+import {
+  generateLockfile,
+  writeLockfile,
+  LOCKFILE_PATH,
+} from "@mandujs/core";
 
 export type CSSFramework = "tailwind" | "panda" | "none";
 export type UILibrary = "shadcn" | "ark" | "none";
@@ -218,6 +223,9 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   // Setup .mcp.json for AI agent integration
   const mcpResult = await setupMcpConfig(targetDir);
 
+  // Generate initial lockfile for config integrity
+  const lockfileResult = await setupLockfile(targetDir);
+
   console.log(`\n✅ 프로젝트 생성 완료!\n`);
   console.log(`📍 위치: ${targetDir}`);
   console.log(`\n🚀 시작하기:`);
@@ -261,6 +269,15 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     console.log(`   .mcp.json 설정 실패: ${mcpResult.error}`);
   }
   console.log(`   AGENTS.md → 에이전트 가이드 (Bun 사용 명시)`);
+
+  // Lockfile 안내
+  console.log(`\n🔒 설정 무결성:`);
+  if (lockfileResult.success) {
+    console.log(`   ${LOCKFILE_PATH} 생성됨`);
+    console.log(`   해시: ${lockfileResult.hash}`);
+  } else {
+    console.log(`   Lockfile 생성 건너뜀 (설정 없음)`);
+  }
 
   return true;
 }
@@ -452,6 +469,43 @@ async function setupMcpConfig(targetDir: string): Promise<McpConfigResult> {
     }
     return {
       status: "error",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+interface LockfileResult {
+  success: boolean;
+  hash?: string;
+  error?: string;
+}
+
+/**
+ * 초기 Lockfile 생성 (설정 무결성)
+ */
+async function setupLockfile(targetDir: string): Promise<LockfileResult> {
+  try {
+    // 초기 설정 (기본값)
+    const initialConfig = {
+      name: path.basename(targetDir),
+      version: "0.1.0",
+      createdAt: new Date().toISOString(),
+    };
+
+    const lockfile = generateLockfile(initialConfig, {
+      includeSnapshot: true,
+      includeMcpServerHashes: false,
+    });
+
+    await writeLockfile(targetDir, lockfile);
+
+    return {
+      success: true,
+      hash: lockfile.configHash,
+    };
+  } catch (error) {
+    return {
+      success: false,
       error: error instanceof Error ? error.message : String(error),
     };
   }
