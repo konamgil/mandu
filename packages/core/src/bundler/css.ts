@@ -176,8 +176,15 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
   const inputPath = path.join(rootDir, input);
   const outputPath = path.join(rootDir, output);
 
-  // 출력 디렉토리 생성
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  try {
+    // 출력 디렉토리 생성
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  } catch (error) {
+    const err = new Error(`CSS 출력 디렉토리 생성 실패: ${error instanceof Error ? error.message : error}`);
+    console.error(`❌ ${err.message}`);
+    onError?.(err);
+    throw err;
+  }
 
   // Tailwind CLI 인자 구성
   const args = [
@@ -196,11 +203,23 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
   console.log(`   출력: ${output}`);
 
   // Bun subprocess로 Tailwind CLI 실행
-  const proc = spawn(["bunx", ...args], {
-    cwd: rootDir,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  let proc;
+  try {
+    proc = spawn(["bunx", ...args], {
+      cwd: rootDir,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+  } catch (error) {
+    const err = new Error(
+      `Tailwind CLI 실행 실패. @tailwindcss/cli가 설치되어 있는지 확인하세요.\n` +
+      `설치: bun add -d @tailwindcss/cli tailwindcss\n` +
+      `원인: ${error instanceof Error ? error.message : error}`
+    );
+    console.error(`❌ ${err.message}`);
+    onError?.(err);
+    throw err;
+  }
 
   // stdout 모니터링 (빌드 완료 감지)
   (async () => {

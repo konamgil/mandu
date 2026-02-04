@@ -234,8 +234,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   console.log(`   src/shared/schema    → 서버 전용 스키마`);
   console.log(`   src/shared/env       → 서버 전용 환경`);
   if (css !== "none") {
-    console.log(`   app/globals.css   → 전역 CSS (Tailwind)`);
-    console.log(`   tailwind.config.ts → Tailwind 설정`);
+    console.log(`   app/globals.css   → 전역 CSS (Tailwind v4)`);
   }
   if (ui !== "none") {
     console.log(`   src/client/shared/ui/ → UI 컴포넌트 (shadcn)`);
@@ -326,8 +325,10 @@ async function updatePackageJson(
   const pkg = JSON.parse(content);
 
   if (css === "none") {
-    // Remove Tailwind dependencies
+    // Remove Tailwind dependencies (v4)
     delete pkg.devDependencies?.tailwindcss;
+    delete pkg.devDependencies?.["@tailwindcss/cli"];
+    // Legacy v3 (just in case)
     delete pkg.devDependencies?.postcss;
     delete pkg.devDependencies?.autoprefixer;
   }

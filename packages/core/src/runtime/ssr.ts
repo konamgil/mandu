@@ -156,10 +156,12 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     cssPath,
   } = options;
 
-  // CSS 링크 태그 생성 (cssPath가 false가 아닌 경우)
-  const cssLinkTag = cssPath === false
-    ? ""
-    : `<link rel="stylesheet" href="${cssPath || "/.mandu/client/globals.css"}${isDev ? `?t=${Date.now()}` : ""}">`;
+  // CSS 링크 태그 생성
+  // - cssPath가 string이면 해당 경로 사용
+  // - cssPath가 false 또는 undefined이면 링크 미삽입 (404 방지)
+  const cssLinkTag = cssPath && cssPath !== false
+    ? `<link rel="stylesheet" href="${cssPath}${isDev ? `?t=${Date.now()}` : ""}">`
+    : "";
 
   let content = renderToString(element);
 

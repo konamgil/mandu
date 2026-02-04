@@ -949,9 +949,19 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     publicDir = "public",
     cors = false,
     streaming = false,
-    cssPath,
+    cssPath: cssPathOption,
     registry = defaultRegistry,
   } = options;
+
+  // cssPath 처리:
+  // - string: 해당 경로로 <link> 주입
+  // - false: CSS 링크 주입 비활성화
+  // - undefined: false로 처리 (기본적으로 링크 미삽입 - 404 방지)
+  //
+  // dev/build에서 Tailwind 감지 시 명시적으로 cssPath 전달 필요:
+  // - dev.ts: cssPath: hasTailwind ? cssWatcher?.serverPath : false
+  // - 프로덕션: 빌드 후 .mandu/client/globals.css 존재 시 경로 전달
+  const cssPath: string | false = cssPathOption ?? false;
 
   // CORS 옵션 파싱
   const corsOptions: CorsOptions | false = cors === true ? {} : cors;
