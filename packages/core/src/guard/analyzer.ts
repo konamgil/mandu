@@ -4,7 +4,7 @@
  * 파일 분석 및 Import 추출
  */
 
-import { readFile } from "fs/promises";
+import { safeReadFile } from "../utils/safe-io";
 import { dirname, isAbsolute, relative, resolve } from "path";
 import { minimatch } from "minimatch";
 import type {
@@ -263,7 +263,12 @@ export async function analyzeFile(
   layers: LayerDefinition[],
   rootDir: string
 ): Promise<FileAnalysis> {
-  const content = await readFile(filePath, "utf-8");
+  const result = await safeReadFile(filePath);
+  if (!result.ok) {
+    throw new Error(`파일 분석 실패: ${filePath} - ${result.error.message}`);
+  }
+
+  const content = result.value;
   const imports = extractImports(content);
   const layer = resolveFileLayer(filePath, layers, rootDir);
   const slice = layer ? extractSlice(filePath, layer) : undefined;

@@ -27,6 +27,7 @@ import {
   applyCorsToResponse,
   isCorsRequest,
 } from "./cors";
+import { validateImportPath } from "./security";
 
 // ========== MIME Types ==========
 const MIME_TYPES: Record<string, string> = {
@@ -261,47 +262,6 @@ export class ServerRegistry {
   }
 
   /**
-   * Layout 컴포넌트 가져오기 (캐시 또는 로드)
-   */
-  async getLayoutComponent(modulePath: string): Promise<LayoutComponent | null> {
-    // 캐시 확인
-    const cached = this.layoutComponents.get(modulePath);
-    if (cached) {
-      return cached;
-    }
-
-    // 로더로 로드
-    const loader = this.layoutLoaders.get(modulePath);
-    if (loader) {
-      try {
-        const module = await loader();
-        const component = module.default;
-        this.layoutComponents.set(modulePath, component);
-        return component;
-      } catch (error) {
-        console.error(`[Mandu] Failed to load layout: ${modulePath}`, error);
-        return null;
-      }
-    }
-
-    // 동적 import 시도
-    try {
-      const fullPath = path.join(this.settings.rootDir, modulePath);
-      const module = await import(fullPath);
-      const component = module.default;
-      this.layoutComponents.set(modulePath, component);
-      return component;
-    } catch (error) {
-      console.error(`[Mandu] Failed to load layout: ${modulePath}`, error);
-      return null;
-    }
-  }
-
-  setCreateApp(fn: CreateAppFn): void {
-    this.createAppFn = fn;
-  }
-
-  /**
    * Loading 로더 등록
    */
   registerLoadingLoader(modulePath: string, loader: LoadingLoader): void {
@@ -316,65 +276,88 @@ export class ServerRegistry {
   }
 
   /**
-   * Loading 컴포넌트 가져오기 (캐시 또는 로드)
+   * 제네릭 컴포넌트 로더 (DRY)
+   * 캐시 → 로더 → 동적 import 순서로 시도
    */
-  async getLoadingComponent(modulePath: string): Promise<LoadingComponent | null> {
-    const cached = this.loadingComponents.get(modulePath);
+  private async getComponentByType<T>(
+    type: "layout" | "loading" | "error",
+    modulePath: string
+  ): Promise<T | null> {
+    // 타입별 캐시/로더 맵 선택
+    const cacheMap = {
+      layout: this.layoutComponents,
+      loading: this.loadingComponents,
+      error: this.errorComponents,
+    }[type] as Map<string, T>;
+
+    const loaderMap = {
+      layout: this.layoutLoaders,
+      loading: this.loadingLoaders,
+      error: this.errorLoaders,
+    }[type] as Map<string, () => Promise<{ default: T }>>;
+
+    // 1. 캐시 확인
+    const cached = cacheMap.get(modulePath);
     if (cached) return cached;
 
-    const loader = this.loadingLoaders.get(modulePath);
+    // 2. 등록된 로더 시도
+    const loader = loaderMap.get(modulePath);
     if (loader) {
       try {
         const module = await loader();
         const component = module.default;
-        this.loadingComponents.set(modulePath, component);
+        cacheMap.set(modulePath, component);
         return component;
       } catch (error) {
-        console.error(`[Mandu] Failed to load loading component: ${modulePath}`, error);
+        console.error(`[Mandu] Failed to load ${type}: ${modulePath}`, error);
         return null;
       }
     }
 
+    // 3. 동적 import 시도 (보안 검증 포함)
+    const validation = validateImportPath(this.settings.rootDir, modulePath);
+    if (!validation.ok) {
+      console.error(`[Mandu Security] ${validation.error.message}`);
+      return null;
+    }
+
     try {
-      const fullPath = path.join(this.settings.rootDir, modulePath);
-      const module = await import(fullPath);
+      const module = await import(validation.value);
       const component = module.default;
-      this.loadingComponents.set(modulePath, component);
+      cacheMap.set(modulePath, component);
       return component;
-    } catch {
+    } catch (error) {
+      // layout은 에러 로깅, loading/error는 조용히 실패
+      if (type === "layout") {
+        console.error(`[Mandu] Failed to load ${type}: ${modulePath}`, error);
+      }
       return null;
     }
   }
 
   /**
-   * Error 컴포넌트 가져오기 (캐시 또는 로드)
+   * Layout 컴포넌트 가져오기
+   */
+  async getLayoutComponent(modulePath: string): Promise<LayoutComponent | null> {
+    return this.getComponentByType<LayoutComponent>("layout", modulePath);
+  }
+
+  /**
+   * Loading 컴포넌트 가져오기
+   */
+  async getLoadingComponent(modulePath: string): Promise<LoadingComponent | null> {
+    return this.getComponentByType<LoadingComponent>("loading", modulePath);
+  }
+
+  /**
+   * Error 컴포넌트 가져오기
    */
   async getErrorComponent(modulePath: string): Promise<ErrorComponent | null> {
-    const cached = this.errorComponents.get(modulePath);
-    if (cached) return cached;
+    return this.getComponentByType<ErrorComponent>("error", modulePath);
+  }
 
-    const loader = this.errorLoaders.get(modulePath);
-    if (loader) {
-      try {
-        const module = await loader();
-        const component = module.default;
-        this.errorComponents.set(modulePath, component);
-        return component;
-      } catch (error) {
-        console.error(`[Mandu] Failed to load error component: ${modulePath}`, error);
-        return null;
-      }
-    }
-
-    try {
-      const fullPath = path.join(this.settings.rootDir, modulePath);
-      const module = await import(fullPath);
-      const component = module.default;
-      this.errorComponents.set(modulePath, component);
-      return component;
-    } catch {
-      return null;
-    }
+  setCreateApp(fn: CreateAppFn): void {
+    this.createAppFn = fn;
   }
 
   /**
@@ -674,6 +657,237 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
   return result.value;
 }
 
+// ---------- API Route Handler ----------
+
+/**
+ * API 라우트 처리
+ */
+async function handleApiRoute(
+  req: Request,
+  route: { id: string; pattern: string },
+  params: Record<string, string>,
+  registry: ServerRegistry
+): Promise<Result<Response>> {
+  const handler = registry.apiHandlers.get(route.id);
+
+  if (!handler) {
+    return err(createHandlerNotFoundResponse(route.id, route.pattern));
+  }
+
+  try {
+    const response = await handler(req, params);
+    return ok(response);
+  } catch (errValue) {
+    const error = errValue instanceof Error ? errValue : new Error(String(errValue));
+    return err(createSSRErrorResponse(route.id, route.pattern, error));
+  }
+}
+
+// ---------- Page Data Loader ----------
+
+interface PageLoadResult {
+  loaderData: unknown;
+}
+
+/**
+ * 페이지 컴포넌트 및 loader 데이터 로딩
+ */
+async function loadPageData(
+  req: Request,
+  route: { id: string; pattern: string },
+  params: Record<string, string>,
+  registry: ServerRegistry
+): Promise<Result<PageLoadResult>> {
+  let loaderData: unknown;
+
+  // 1. PageHandler 방식 (신규 - filling 포함)
+  const pageHandler = registry.pageHandlers.get(route.id);
+  if (pageHandler) {
+    try {
+      const registration = await pageHandler();
+      const component = registration.component as RouteComponent;
+      registry.registerRouteComponent(route.id, component);
+
+      // Filling의 loader 실행
+      if (registration.filling?.hasLoader()) {
+        const ctx = new ManduContext(req, params);
+        loaderData = await registration.filling.executeLoader(ctx);
+      }
+    } catch (error) {
+      const pageError = createPageLoadErrorResponse(
+        route.id,
+        route.pattern,
+        error instanceof Error ? error : new Error(String(error))
+      );
+      console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
+      return err(pageError);
+    }
+
+    return ok({ loaderData });
+  }
+
+  // 2. PageLoader 방식 (레거시 호환)
+  const loader = registry.pageLoaders.get(route.id);
+  if (loader) {
+    try {
+      const module = await loader();
+      const exported = module.default;
+      const component = typeof exported === "function"
+        ? exported
+        : exported?.component ?? exported;
+      registry.registerRouteComponent(route.id, component);
+
+      // filling이 있으면 loader 실행
+      const filling = typeof exported === "object" ? exported?.filling : null;
+      if (filling?.hasLoader?.()) {
+        const ctx = new ManduContext(req, params);
+        loaderData = await filling.executeLoader(ctx);
+      }
+    } catch (error) {
+      const pageError = createPageLoadErrorResponse(
+        route.id,
+        route.pattern,
+        error instanceof Error ? error : new Error(String(error))
+      );
+      console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
+      return err(pageError);
+    }
+  }
+
+  return ok({ loaderData });
+}
+
+// ---------- SSR Renderer ----------
+
+/**
+ * SSR 렌더링 (Streaming/Non-streaming)
+ */
+async function renderPageSSR(
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: unknown },
+  params: Record<string, string>,
+  loaderData: unknown,
+  url: string,
+  registry: ServerRegistry
+): Promise<Result<Response>> {
+  const settings = registry.settings;
+  const defaultAppCreator = createDefaultAppFactory(registry);
+  const appCreator = registry.createAppFn || defaultAppCreator;
+
+  try {
+    let app = appCreator({
+      routeId: route.id,
+      url,
+      params,
+      loaderData,
+    });
+
+    // 레이아웃 체인 적용
+    if (route.layoutChain && route.layoutChain.length > 0) {
+      app = await wrapWithLayouts(app, route.layoutChain, registry, params);
+    }
+
+    const serverData = loaderData
+      ? { [route.id]: { serverData: loaderData } }
+      : undefined;
+
+    // Streaming SSR 모드 결정
+    const useStreaming = route.streaming !== undefined
+      ? route.streaming
+      : settings.streaming;
+
+    if (useStreaming) {
+      return ok(await renderStreamingResponse(app, {
+        title: `${route.id} - Mandu`,
+        isDev: settings.isDev,
+        hmrPort: settings.hmrPort,
+        routeId: route.id,
+        routePattern: route.pattern,
+        hydration: route.hydration,
+        bundleManifest: settings.bundleManifest,
+        criticalData: loaderData as Record<string, unknown> | undefined,
+        enableClientRouter: true,
+        cssPath: settings.cssPath,
+        onShellReady: () => {
+          if (settings.isDev) {
+            console.log(`[Mandu Streaming] Shell ready: ${route.id}`);
+          }
+        },
+        onMetrics: (metrics) => {
+          if (settings.isDev) {
+            console.log(`[Mandu Streaming] Metrics for ${route.id}:`, {
+              shellReadyTime: `${metrics.shellReadyTime}ms`,
+              allReadyTime: `${metrics.allReadyTime}ms`,
+              hasError: metrics.hasError,
+            });
+          }
+        },
+      }));
+    }
+
+    // 기존 renderToString 방식
+    return ok(renderSSR(app, {
+      title: `${route.id} - Mandu`,
+      isDev: settings.isDev,
+      hmrPort: settings.hmrPort,
+      routeId: route.id,
+      hydration: route.hydration,
+      bundleManifest: settings.bundleManifest,
+      serverData,
+      enableClientRouter: true,
+      routePattern: route.pattern,
+      cssPath: settings.cssPath,
+    }));
+  } catch (error) {
+    const ssrError = createSSRErrorResponse(
+      route.id,
+      route.pattern,
+      error instanceof Error ? error : new Error(String(error))
+    );
+    console.error(`[Mandu] ${ssrError.errorType}:`, ssrError.message);
+    return err(ssrError);
+  }
+}
+
+// ---------- Page Route Handler ----------
+
+/**
+ * 페이지 라우트 처리
+ */
+async function handlePageRoute(
+  req: Request,
+  url: URL,
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: unknown },
+  params: Record<string, string>,
+  registry: ServerRegistry
+): Promise<Result<Response>> {
+  // 1. 데이터 로딩
+  const loadResult = await loadPageData(req, route, params, registry);
+  if (!loadResult.ok) {
+    return loadResult;
+  }
+
+  const { loaderData } = loadResult.value;
+
+  // 2. Client-side Routing: 데이터만 반환 (JSON)
+  if (url.searchParams.has("_data")) {
+    return ok(Response.json({
+      routeId: route.id,
+      pattern: route.pattern,
+      params,
+      loaderData: loaderData ?? null,
+      timestamp: Date.now(),
+    }));
+  }
+
+  // 3. SSR 렌더링
+  return renderPageSSR(route, params, loaderData, req.url, registry);
+}
+
+// ---------- Main Request Dispatcher ----------
+
+/**
+ * 메인 요청 디스패처
+ */
 async function handleRequestInternal(
   req: Request,
   router: Router,
@@ -692,7 +906,6 @@ async function handleRequestInternal(
   // 1. 정적 파일 서빙 시도 (최우선)
   const staticResponse = await serveStaticFile(pathname, settings);
   if (staticResponse) {
-    // 정적 파일에도 CORS 헤더 적용
     if (settings.cors && isCorsRequest(req)) {
       const corsOptions = settings.cors === true ? {} : settings.cors;
       return ok(applyCorsToResponse(staticResponse, req, corsOptions));
@@ -702,180 +915,22 @@ async function handleRequestInternal(
 
   // 2. 라우트 매칭
   const match = router.match(pathname);
-
   if (!match) {
     return err(createNotFoundResponse(pathname));
   }
 
   const { route, params } = match;
 
+  // 3. 라우트 종류별 처리
   if (route.kind === "api") {
-    const handler = registry.apiHandlers.get(route.id);
-    if (!handler) {
-      return err(createHandlerNotFoundResponse(route.id, route.pattern));
-    }
-    try {
-      const response = await handler(req, params);
-      return ok(response);
-    } catch (errValue) {
-      const error = errValue instanceof Error ? errValue : new Error(String(errValue));
-      return err(createSSRErrorResponse(route.id, route.pattern, error));
-    }
+    return handleApiRoute(req, route, params, registry);
   }
 
   if (route.kind === "page") {
-    let loaderData: unknown;
-    let component: RouteComponent | undefined;
-
-    // Client-side Routing: 데이터 요청 감지
-    const isDataRequest = url.searchParams.has("_data");
-
-    // 1. PageHandler 방식 (신규 - filling 포함)
-    const pageHandler = registry.pageHandlers.get(route.id);
-    if (pageHandler) {
-      try {
-        const registration = await pageHandler();
-        component = registration.component as RouteComponent;
-        registry.registerRouteComponent(route.id, component);
-
-        // Filling의 loader 실행
-        if (registration.filling?.hasLoader()) {
-          const ctx = new ManduContext(req, params);
-          loaderData = await registration.filling.executeLoader(ctx);
-        }
-      } catch (error) {
-        const pageError = createPageLoadErrorResponse(
-          route.id,
-          route.pattern,
-          error instanceof Error ? error : new Error(String(error))
-        );
-        console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
-        return err(pageError);
-      }
-    }
-    // 2. PageLoader 방식 (레거시 호환)
-    else {
-      const loader = registry.pageLoaders.get(route.id);
-      if (loader) {
-        try {
-          const module = await loader();
-          // module.default가 { component, filling } 객체인 경우 component 추출
-          const exported = module.default;
-          const component = typeof exported === 'function'
-            ? exported
-            : exported?.component ?? exported;
-          registry.registerRouteComponent(route.id, component);
-
-          // filling이 있으면 loader 실행
-          const filling = typeof exported === 'object' ? exported?.filling : null;
-          if (filling?.hasLoader?.()) {
-            const ctx = new ManduContext(req, params);
-            loaderData = await filling.executeLoader(ctx);
-          }
-        } catch (error) {
-          const pageError = createPageLoadErrorResponse(
-            route.id,
-            route.pattern,
-            error instanceof Error ? error : new Error(String(error))
-          );
-          console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
-          return err(pageError);
-        }
-      }
-    }
-
-    // Client-side Routing: 데이터만 반환 (JSON)
-    if (isDataRequest) {
-      return ok(Response.json({
-        routeId: route.id,
-        pattern: route.pattern,
-        params,
-        loaderData: loaderData ?? null,
-        timestamp: Date.now(),
-      }));
-    }
-
-    // SSR 렌더링
-    const defaultAppCreator = createDefaultAppFactory(registry);
-    const appCreator = registry.createAppFn || defaultAppCreator;
-    try {
-      let app = appCreator({
-        routeId: route.id,
-        url: req.url,
-        params,
-        loaderData,
-      });
-
-      // 레이아웃 체인 적용 (layoutChain이 있는 경우)
-      if (route.layoutChain && route.layoutChain.length > 0) {
-        app = await wrapWithLayouts(app, route.layoutChain, registry, params);
-      }
-
-      // serverData 구조: { [routeId]: { serverData: loaderData } }
-      const serverData = loaderData
-        ? { [route.id]: { serverData: loaderData } }
-        : undefined;
-
-      // Streaming SSR 모드 결정
-      // 우선순위: route.streaming > settings.streaming
-      const useStreaming = route.streaming !== undefined
-        ? route.streaming
-        : settings.streaming;
-
-      if (useStreaming) {
-        return ok(await renderStreamingResponse(app, {
-          title: `${route.id} - Mandu`,
-          isDev: settings.isDev,
-          hmrPort: settings.hmrPort,
-          routeId: route.id,
-          routePattern: route.pattern,
-          hydration: route.hydration,
-          bundleManifest: settings.bundleManifest,
-          criticalData: loaderData as Record<string, unknown> | undefined,
-          enableClientRouter: true,
-          cssPath: settings.cssPath,
-          onShellReady: () => {
-            if (settings.isDev) {
-              console.log(`[Mandu Streaming] Shell ready: ${route.id}`);
-            }
-          },
-          onMetrics: (metrics) => {
-            if (settings.isDev) {
-              console.log(`[Mandu Streaming] Metrics for ${route.id}:`, {
-                shellReadyTime: `${metrics.shellReadyTime}ms`,
-                allReadyTime: `${metrics.allReadyTime}ms`,
-                hasError: metrics.hasError,
-              });
-            }
-          },
-        }));
-      }
-
-      // 기존 renderToString 방식
-      return ok(renderSSR(app, {
-        title: `${route.id} - Mandu`,
-        isDev: settings.isDev,
-        hmrPort: settings.hmrPort,
-        routeId: route.id,
-        hydration: route.hydration,
-        bundleManifest: settings.bundleManifest,
-        serverData,
-        // Client-side Routing 활성화 정보 전달
-        enableClientRouter: true,
-        routePattern: route.pattern,
-        cssPath: settings.cssPath,
-      }));
-    } catch (error) {
-      const ssrError = createSSRErrorResponse(
-        route.id,
-        route.pattern,
-        error instanceof Error ? error : new Error(String(error))
-      );
-      console.error(`[Mandu] ${ssrError.errorType}:`, ssrError.message);
-      return err(ssrError);
-    }
+    return handlePageRoute(req, url, route, params, registry);
   }
 
+  // 4. 알 수 없는 라우트 종류
   return err({
     errorType: "FRAMEWORK_BUG",
     code: "MANDU_F003",
@@ -886,10 +941,7 @@ async function handleRequestInternal(
       file: "spec/routes.manifest.json",
       suggestion: "라우트의 kind는 'api' 또는 'page'여야 합니다",
     },
-    route: {
-      id: route.id,
-      pattern: route.pattern,
-    },
+    route: { id: route.id, pattern: route.pattern },
     timestamp: new Date().toISOString(),
   });
 }
