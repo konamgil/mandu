@@ -72,16 +72,20 @@ const handlers = Mandu.handler(userContract, {
 
 ```
 @mandujs/core
-├── router/      # FS Routes - file-system based routing
-├── guard/       # Mandu Guard - architecture enforcement
-├── runtime/     # Server, SSR, streaming
-├── filling/     # Handler chain API (Mandu.filling())
-├── contract/    # Type-safe API contracts
-├── bundler/     # Client bundling, HMR
-├── client/      # Island hydration, client router
-├── brain/       # Doctor, Watcher, Architecture analyzer
-├── change/      # Transaction & history
-└── spec/        # Manifest schema & validation
+├── router/          # FS Routes - file-system based routing
+├── guard/           # Mandu Guard - architecture enforcement
+│   ├── healing      # Self-Healing Guard with auto-fix
+│   ├── decision-memory   # ADR storage (RFC-001)
+│   ├── semantic-slots    # Constraint validation (RFC-001)
+│   └── negotiation       # AI-Framework dialog (RFC-001)
+├── runtime/         # Server, SSR, streaming
+├── filling/         # Handler chain API (Mandu.filling())
+├── contract/        # Type-safe API contracts
+├── bundler/         # Client bundling, HMR
+├── client/          # Island hydration, client router
+├── brain/           # Doctor, Watcher, Architecture analyzer
+├── change/          # Transaction & history
+└── spec/            # Manifest schema & validation
 ```
 
 ---
@@ -199,6 +203,71 @@ console.log(trend.trend); // "improving" | "stable" | "degrading"
 
 // Generate reports
 const markdown = generateGuardMarkdownReport(report, trend);
+```
+
+### Self-Healing Guard (RFC-001) 🆕
+
+```typescript
+import { checkWithHealing, healAll, explainRule } from "@mandujs/core/guard";
+
+// Detect violations with fix suggestions
+const result = await checkWithHealing({ preset: "mandu" }, process.cwd());
+
+// Auto-fix all fixable violations
+if (result.items.length > 0) {
+  const healResult = await healAll(result);
+  console.log(`Fixed: ${healResult.fixed}, Failed: ${healResult.failed}`);
+}
+
+// Explain any rule
+const explanation = explainRule("layer-dependency");
+console.log(explanation.description, explanation.examples);
+```
+
+### Decision Memory (RFC-001) 🆕
+
+```typescript
+import {
+  searchDecisions,
+  saveDecision,
+  checkConsistency,
+  getCompactArchitecture
+} from "@mandujs/core/guard";
+
+// Search past decisions
+const results = await searchDecisions(rootDir, ["auth", "jwt"]);
+
+// Save new decision (ADR)
+await saveDecision(rootDir, {
+  id: "ADR-002",
+  title: "Use PostgreSQL",
+  status: "accepted",
+  context: "Need relational database",
+  decision: "Use PostgreSQL with Drizzle ORM",
+  consequences: ["Need to manage migrations"],
+  tags: ["database", "orm"]
+});
+
+// Check implementation consistency
+const consistency = await checkConsistency(rootDir);
+```
+
+### Architecture Negotiation (RFC-001) 🆕
+
+```typescript
+import { negotiate, generateScaffold } from "@mandujs/core/guard";
+
+// AI negotiates with framework before implementation
+const plan = await negotiate({
+  intent: "Add user authentication",
+  requirements: ["JWT based", "Refresh tokens"],
+  constraints: ["Use existing User model"]
+}, projectRoot);
+
+if (plan.approved) {
+  // Generate scaffold files
+  await generateScaffold(plan.structure, projectRoot);
+}
 ```
 
 ---

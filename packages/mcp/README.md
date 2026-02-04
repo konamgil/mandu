@@ -64,7 +64,7 @@ bunx @mandujs/mcp --root /path/to/project
 
 ---
 
-## Tools (28+)
+## Tools (35+)
 
 ### Spec Management
 
@@ -105,9 +105,34 @@ bunx @mandujs/mcp --root /path/to/project
 | Tool | Description |
 |------|-------------|
 | `mandu_guard_check` | Run all guard checks |
+| `mandu_guard_heal` | Self-Healing Guard - detect + auto-fix suggestions |
+| `mandu_explain_rule` | Explain architecture rule with examples |
 | `mandu_check_location` | Validate file location before creating |
 | `mandu_check_import` | Validate imports against architecture rules |
 | `mandu_get_architecture` | Get project architecture rules |
+
+### Decision Memory (RFC-001) 🆕
+
+| Tool | Description |
+|------|-------------|
+| `mandu_search_decisions` | Search ADRs by tags or status |
+| `mandu_save_decision` | Save new architecture decision |
+| `mandu_check_consistency` | Check decision-implementation consistency |
+
+### Semantic Slots (RFC-001) 🆕
+
+| Tool | Description |
+|------|-------------|
+| `mandu_validate_slot` | Validate slot against constraints |
+| `mandu_validate_slots` | Batch validate multiple slots |
+
+### Architecture Negotiation (RFC-001) 🆕
+
+| Tool | Description |
+|------|-------------|
+| `mandu_negotiate` | AI-Framework negotiation dialog |
+| `mandu_generate_scaffold` | Generate structure scaffold |
+| `mandu_analyze_structure` | Analyze existing project structure |
 
 ### Brain & Monitoring
 

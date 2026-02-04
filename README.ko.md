@@ -324,13 +324,22 @@ bunx mandu guard arch --watch
 | **코드 생성** | spec에서 라우트, 핸들러, 컴포넌트 자동 생성 |
 | **슬롯 시스템** | 에이전트가 안전하게 비즈니스 로직을 작성하는 격리 영역 |
 | **Guard 시스템** | 아키텍처 규칙 강제 및 오염 방지 |
+| **Self-Healing Guard** | 위반 감지 + 자동 수정 제안 + 설명 제공 |
 | **트랜잭션 API** | 스냅샷 기반 롤백이 가능한 원자적 변경 |
 | **SEO 모듈** | Next.js Metadata API 호환, sitemap/robots 생성, JSON-LD 헬퍼 |
-| **MCP 서버** | AI 에이전트가 프레임워크를 직접 조작 가능 |
+| **MCP 서버** | AI 에이전트가 프레임워크를 직접 조작 (35+ 도구) |
 | **실시간 Watch** | 아키텍처 위반 시 MCP push notification으로 에이전트에 실시간 알림 |
 | **Island Hydration** | 선택적 클라이언트 JavaScript로 성능 최적화 |
 | **HMR 지원** | 빠른 개발을 위한 핫 모듈 교체 |
 | **에러 분류 시스템** | 지능적 에러 분류와 수정 가이드 제공 |
+
+### AI 가이드 시스템 (RFC-001) 🆕
+
+| 기능 | 설명 |
+|------|------|
+| **Decision Memory** | ADR 저장 및 일관성 검사 - AI가 과거 결정을 참조 |
+| **Semantic Slots** | 슬롯에 목적과 제약 명시 - AI 코드 검증 |
+| **Architecture Negotiation** | 구현 전 AI-프레임워크 협상 다이얼로그 |
 
 ---
 
@@ -986,7 +995,33 @@ Mandu는 AI 에이전트가 프레임워크와 직접 상호작용할 수 있는
 | 도구 | 설명 |
 |------|------|
 | `mandu_guard_check` | 모든 guard 검사 실행 |
+| `mandu_guard_heal` | Self-Healing Guard - 위반 감지 + 자동 수정 |
+| `mandu_explain_rule` | 아키텍처 규칙 설명 |
 | `mandu_analyze_error` | 에러 분석 및 수정 제안 |
+
+#### Decision Memory (RFC-001) 🆕
+
+| 도구 | 설명 |
+|------|------|
+| `mandu_search_decisions` | ADR 검색 (태그, 상태) |
+| `mandu_save_decision` | 새 아키텍처 결정 저장 |
+| `mandu_check_consistency` | 결정과 구현 일관성 검사 |
+| `mandu_get_architecture` | 압축 아키텍처 문서 조회 |
+
+#### Semantic Slots (RFC-001) 🆕
+
+| 도구 | 설명 |
+|------|------|
+| `mandu_validate_slot` | 슬롯 제약 조건 검증 |
+| `mandu_validate_slots` | 여러 슬롯 일괄 검증 |
+
+#### Architecture Negotiation (RFC-001) 🆕
+
+| 도구 | 설명 |
+|------|------|
+| `mandu_negotiate` | AI-프레임워크 협상 |
+| `mandu_generate_scaffold` | 구조 스캐폴드 생성 |
+| `mandu_analyze_structure` | 기존 프로젝트 구조 분석 |
 
 #### Hydration & 빌드
 
@@ -1198,7 +1233,7 @@ Mandu는 자동으로 에러를 세 가지 유형으로 분류합니다:
 
 ## 로드맵
 
-### v0.9.x (현재) — 65개 기능 완료
+### v0.10.x (현재) — 74개 기능 완료
 
 **Core Runtime**
 - [x] 미들웨어 compose & 라이프사이클 훅
@@ -1239,17 +1274,23 @@ Mandu는 자동으로 에러를 세 가지 유형으로 분류합니다:
 - [x] Google SEO 최적화 (viewport, theme-color, resource hints)
 - [x] SSR 통합
 
-**AI Integration**
-- [x] MCP 서버 (25+ 도구, 7 리소스)
+**AI Integration (RFC-001: Guard → Guide)** 🆕
+- [x] MCP 서버 (35+ 도구, 7 리소스)
 - [x] Brain (Doctor, Watcher, Architecture analyzer)
 - [x] 스냅샷 포함 트랜잭션 API
 - [x] 실시간 push 알림
+- [x] **Decision Memory** - ADR 저장 & 일관성 검사
+- [x] **Semantic Slots** - 목적 & 제약 검증
+- [x] **Architecture Negotiation** - AI-프레임워크 협상
+- [x] **Self-Healing Guard** - 자동 수정 제안
 
 **Security**
 - [x] Path traversal 방지
 - [x] 포트 유효성 검사
+- [x] LFI 취약점 방어
+- [x] ReDoS 방어
 
-### v0.10.x (다음)
+### v0.11.x (다음)
 
 **Data Layer** *(Astro 패턴)*
 - [ ] Loader API (store, meta, logger, watcher 컨텍스트)
@@ -1275,7 +1316,7 @@ Mandu는 자동으로 에러를 세 가지 유형으로 분류합니다:
 - [ ] TTFB & TTI 측정
 - [ ] 자동화된 성능 테스트 모음
 
-### v0.11.x (예정)
+### v0.12.x (예정)
 
 **AOT 최적화** *(Elysia 패턴)*
 - [ ] AOT 핸들러 생성 (런타임 프리컴파일)
