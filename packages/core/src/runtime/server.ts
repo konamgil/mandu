@@ -965,6 +965,16 @@ function startBunServerWithFallback(options: {
   const { port: startPort, hostname, fetch } = options;
   let lastError: unknown = null;
 
+  // Port 0: let Bun/OS pick an available ephemeral port.
+  if (startPort === 0) {
+    const server = Bun.serve({
+      port: 0,
+      hostname,
+      fetch,
+    });
+    return { server, port: server.port ?? 0, attempts: 0 };
+  }
+
   for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
     const candidate = startPort + attempt;
     if (candidate < 1 || candidate > 65535) {
