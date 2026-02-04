@@ -48,9 +48,23 @@ cd /path/to/project
 bunx @mandujs/mcp
 ```
 
+### Global Mode
+
+Run MCP without project auto-detection (use current directory):
+
+```bash
+bunx @mandujs/mcp --global
+```
+
+Optional: target a specific root directory:
+
+```bash
+bunx @mandujs/mcp --root /path/to/project
+```
+
 ---
 
-## Tools (25+)
+## Tools (28+)
 
 ### Spec Management
 
@@ -103,6 +117,14 @@ bunx @mandujs/mcp
 | `mandu_watch_start` | Start file watcher with notifications |
 | `mandu_watch_status` | Get watcher status |
 | `mandu_watch_stop` | Stop file watcher |
+
+### Project & Dev
+
+| Tool | Description |
+|------|-------------|
+| `mandu_init` | Initialize new Mandu project (init + optional install) |
+| `mandu_dev_start` | Start dev server (bun run dev) |
+| `mandu_dev_stop` | Stop dev server |
 
 ### Hydration & Build
 

@@ -246,10 +246,19 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
 
   // MCP 설정 안내
   console.log(`\n🤖 AI 에이전트 통합:`);
-  if (mcpResult.created) {
+  if (mcpResult.status === "created") {
     console.log(`   .mcp.json 생성됨 (Claude Code 자동 연결)`);
-  } else if (mcpResult.updated) {
-    console.log(`   .mcp.json에 mandu 서버 추가됨`);
+  } else if (mcpResult.status === "updated") {
+    console.log(`   .mcp.json에 mandu 서버 추가/업데이트됨`);
+  } else if (mcpResult.status === "unchanged") {
+    console.log(`   .mcp.json 이미 최신`);
+  } else if (mcpResult.status === "backed-up") {
+    console.log(`   .mcp.json 파싱 실패 → 백업 후 새로 생성됨`);
+    if (mcpResult.backupPath) {
+      console.log(`   백업: ${mcpResult.backupPath}`);
+    }
+  } else if (mcpResult.status === "error") {
+    console.log(`   .mcp.json 설정 실패: ${mcpResult.error}`);
   }
   console.log(`   AGENTS.md → 에이전트 가이드 (Bun 사용 명시)`);
 
@@ -356,9 +365,12 @@ async function updatePackageJson(
   await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
 }
 
+type McpConfigStatus = "created" | "updated" | "unchanged" | "backed-up" | "error";
+
 interface McpConfigResult {
-  created: boolean;
-  updated: boolean;
+  status: McpConfigStatus;
+  backupPath?: string;
+  error?: string;
 }
 
 /**
@@ -374,32 +386,73 @@ async function setupMcpConfig(targetDir: string): Promise<McpConfigResult> {
     args: ["@mandujs/mcp"],
   };
 
-  try {
-    // 기존 파일 확인
-    const existingContent = await fs.readFile(mcpPath, "utf-8");
-    const existing = JSON.parse(existingContent);
+  const writeConfig = async (data: Record<string, unknown>) => {
+    await fs.writeFile(mcpPath, JSON.stringify(data, null, 2) + "\n");
+  };
 
-    // 기존 설정에 mandu 서버 추가/업데이트
-    if (!existing.mcpServers) {
+  const fileExists = async (filePath: string) => {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const getBackupPath = async (basePath: string) => {
+    const base = `${basePath}.bak`;
+    if (!(await fileExists(base))) {
+      return base;
+    }
+    for (let i = 1; i <= 50; i++) {
+      const candidate = `${basePath}.bak.${i}`;
+      if (!(await fileExists(candidate))) {
+        return candidate;
+      }
+    }
+    return `${basePath}.bak.${Date.now()}`;
+  };
+
+  try {
+    const existingContent = await fs.readFile(mcpPath, "utf-8");
+    let existing: Record<string, unknown>;
+
+    try {
+      existing = JSON.parse(existingContent) as Record<string, unknown>;
+    } catch {
+      const backupPath = await getBackupPath(mcpPath);
+      await fs.writeFile(backupPath, existingContent);
+      await writeConfig({ mcpServers: { mandu: manduServer } });
+      return { status: "backed-up", backupPath };
+    }
+
+    if (!existing || typeof existing !== "object") {
+      existing = {};
+    }
+
+    if (!existing.mcpServers || typeof existing.mcpServers !== "object") {
       existing.mcpServers = {};
     }
 
-    const hadMandu = !!existing.mcpServers.mandu;
-    existing.mcpServers.mandu = manduServer;
+    const current = (existing.mcpServers as Record<string, unknown>).mandu;
+    const isSame =
+      current && JSON.stringify(current) === JSON.stringify(manduServer);
 
-    await fs.writeFile(mcpPath, JSON.stringify(existing, null, 2) + "\n");
+    if (isSame) {
+      return { status: "unchanged" };
+    }
 
-    return { created: false, updated: true };
-  } catch {
-    // 파일 없음 - 새로 생성
-    const newConfig = {
-      mcpServers: {
-        mandu: manduServer,
-      },
+    (existing.mcpServers as Record<string, unknown>).mandu = manduServer;
+    await writeConfig(existing);
+    return { status: "updated" };
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "ENOENT") {
+      await writeConfig({ mcpServers: { mandu: manduServer } });
+      return { status: "created" };
+    }
+    return {
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
     };
-
-    await fs.writeFile(mcpPath, JSON.stringify(newConfig, null, 2) + "\n");
-
-    return { created: true, updated: false };
   }
 }

@@ -20,6 +20,7 @@ import { contractTools, contractToolDefinitions } from "./tools/contract.js";
 import { brainTools, brainToolDefinitions } from "./tools/brain.js";
 import { runtimeTools, runtimeToolDefinitions } from "./tools/runtime.js";
 import { seoTools, seoToolDefinitions } from "./tools/seo.js";
+import { projectTools, projectToolDefinitions } from "./tools/project.js";
 import { resourceHandlers, resourceDefinitions } from "./resources/handlers.js";
 import { findProjectRoot } from "./utils/project.js";
 import { applyWarningInjection } from "./utils/withWarnings.js";
@@ -65,6 +66,7 @@ export class ManduMcpServer {
       ...brainToolDefinitions,
       ...runtimeToolDefinitions,
       ...seoToolDefinitions,
+      ...projectToolDefinitions,
     ];
   }
 
@@ -81,6 +83,7 @@ export class ManduMcpServer {
       ...brainTools(this.projectRoot, this.server, this.monitor),
       ...runtimeTools(this.projectRoot),
       ...seoTools(this.projectRoot),
+      ...projectTools(this.projectRoot, this.server, this.monitor),
     };
 
     return applyWarningInjection(handlers);
