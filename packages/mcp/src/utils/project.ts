@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs/promises";
+import { pathToFileURL } from "url";
 
 /**
  * Find the Mandu project root by looking for routes.manifest.json
@@ -88,8 +89,8 @@ export async function readConfig(rootDir: string): Promise<Record<string, unknow
         if (configFile.endsWith(".json")) {
           return await file.json();
         } else {
-          // For TS/JS files, try to import
-          const module = await import(configPath);
+          // For TS/JS files, use pathToFileURL for cross-platform compatibility
+          const module = await import(pathToFileURL(configPath).href);
           return module.default ?? module;
         }
       }

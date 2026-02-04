@@ -24,7 +24,7 @@
 
 import { readFile, writeFile, mkdir, rename, unlink } from "fs/promises";
 import { existsSync } from "fs";
-import { dirname, join, relative, basename } from "path";
+import { dirname, join, relative, basename, extname, resolve, normalize } from "path";
 import type {
   Violation,
   ViolationType,
@@ -339,42 +339,49 @@ function generateLayerViolationOptions(
 
   // 옵션 1: shared로 이동 (가장 권장)
   if (allowedLayers.includes("shared")) {
-    const newPath = `@/shared/${targetModule.toLowerCase()}`;
-    const newFilePath = join(rootDir, "src", "shared", targetModule.toLowerCase() + ".ts");
+    try {
+      const resolvedSourcePath = resolveImportPath(importPath, rootDir);
+      // 원본 파일 확장자 보존 (.ts, .tsx, .jsx 등)
+      const sourceExt = extname(resolvedSourcePath) || ".ts";
+      const newPath = `@/shared/${targetModule.toLowerCase()}`;
+      const newFilePath = join(rootDir, "src", "shared", targetModule.toLowerCase() + sourceExt);
 
-    options.push({
-      label: `"${targetModule}"를 shared 레이어로 이동`,
-      explanation: `이 유틸/컴포넌트는 여러 레이어에서 사용되므로 shared에 위치해야 합니다.`,
-      priority: 1,
-      before: importStatement,
-      after: importStatement.replace(importPath, newPath),
-      moveFile: {
-        from: resolveImportPath(importPath, rootDir),
-        to: newFilePath,
-      },
-      autoFix: createMoveFileAutoFix(
-        filePath,
-        importStatement,
-        importPath,
-        newPath,
-        resolveImportPath(importPath, rootDir),
-        newFilePath,
-        rootDir
-      ),
-    });
+      options.push({
+        label: `"${targetModule}"를 shared 레이어로 이동`,
+        explanation: `이 유틸/컴포넌트는 여러 레이어에서 사용되므로 shared에 위치해야 합니다.`,
+        priority: 1,
+        before: importStatement,
+        after: importStatement.replace(importPath, newPath),
+        moveFile: {
+          from: resolvedSourcePath,
+          to: newFilePath,
+        },
+        autoFix: createMoveFileAutoFix(
+          filePath,
+          importStatement,
+          importPath,
+          newPath,
+          resolvedSourcePath,
+          newFilePath,
+          rootDir
+        ),
+      });
+    } catch {
+      // Path traversal 등 보안 이슈 시 옵션 생략
+    }
   }
 
-  // 옵션 2: import 문 변경 (dynamic import)
+  // 옵션 2: import 문 변경 (dynamic import) - 수동 적용 필요 (async context 필요)
   if (violation.type === "layer-violation") {
     const dynamicImport = `const { ${targetModule} } = await import('${importPath}')`;
 
     options.push({
-      label: "dynamic import로 변경",
-      explanation: "런타임에만 필요하다면 dynamic import로 레이어 의존성을 분리할 수 있습니다.",
+      label: "dynamic import로 변경 (수동)",
+      explanation: "런타임에만 필요하다면 dynamic import로 레이어 의존성을 분리할 수 있습니다. (async 함수 내에서만 사용 가능)",
       priority: 2,
       before: importStatement,
       after: dynamicImport,
-      autoFix: createReplaceImportAutoFix(filePath, importStatement, dynamicImport),
+      // autoFix 제거: dynamic import는 async context가 필요하므로 자동 수정 불가
     });
   }
 
@@ -569,21 +576,36 @@ function createMoveFileAutoFix(
     try {
       const changedFiles: string[] = [];
 
-      // 1. 대상 디렉토리 생성
+      // 0. 보안 검증: 모든 경로가 rootDir 내에 있는지 확인
+      if (!isPathWithinRoot(oldFilePath, rootDir) ||
+          !isPathWithinRoot(newFilePath, rootDir) ||
+          !isPathWithinRoot(importingFile, rootDir)) {
+        return {
+          success: false,
+          message: "보안 오류: 파일 경로가 프로젝트 루트를 벗어납니다.",
+        };
+      }
+
+      // 1. 소스 파일 존재 확인 (필수)
+      if (!existsSync(oldFilePath)) {
+        return {
+          success: false,
+          message: `소스 파일이 존재하지 않습니다: ${oldFilePath}`,
+        };
+      }
+
+      // 2. 대상 디렉토리 생성
       const targetDir = dirname(newFilePath);
       if (!existsSync(targetDir)) {
         await mkdir(targetDir, { recursive: true });
       }
 
-      // 2. 파일 이동
-      if (existsSync(oldFilePath)) {
-        const content = await readFile(oldFilePath, "utf-8");
-        await writeFile(newFilePath, content, "utf-8");
-        await unlink(oldFilePath);
-        changedFiles.push(oldFilePath, newFilePath);
-      }
+      // 3. 파일 복사 (먼저 복사, 나중에 삭제)
+      const content = await readFile(oldFilePath, "utf-8");
+      await writeFile(newFilePath, content, "utf-8");
+      changedFiles.push(newFilePath);
 
-      // 3. import 문 업데이트
+      // 4. import 문 업데이트 (파일 삭제 전에 먼저 수행)
       const importingContent = await readFile(importingFile, "utf-8");
       const newImport = oldImport.replace(oldPath, newPath);
       const newImportingContent = importingContent.replace(oldImport, newImport);
@@ -592,6 +614,10 @@ function createMoveFileAutoFix(
         await writeFile(importingFile, newImportingContent, "utf-8");
         changedFiles.push(importingFile);
       }
+
+      // 5. 모든 작업 성공 후에만 원본 파일 삭제
+      await unlink(oldFilePath);
+      changedFiles.push(oldFilePath);
 
       return {
         success: true,
@@ -671,20 +697,46 @@ function extractModuleName(importPath: string): string {
 }
 
 /**
+ * 경로가 rootDir 내에 있는지 검증 (Path Traversal 방지)
+ */
+function isPathWithinRoot(targetPath: string, rootDir: string): boolean {
+  const normalizedTarget = normalize(resolve(targetPath));
+  const normalizedRoot = normalize(resolve(rootDir));
+  return normalizedTarget.startsWith(normalizedRoot);
+}
+
+/**
  * import 경로를 실제 파일 경로로 변환
+ * @throws Path Traversal 시도 시 에러
  */
 function resolveImportPath(importPath: string, rootDir: string): string {
+  // Path Traversal 패턴 차단
+  if (importPath.includes("..") || importPath.includes("\\..") || importPath.includes("/..")) {
+    throw new Error(`Invalid import path (path traversal attempt): ${importPath}`);
+  }
+
   const cleanPath = importPath.replace(/^[@~]\//, "");
   const extensions = [".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx"];
 
   for (const ext of extensions) {
     const fullPath = join(rootDir, "src", cleanPath + ext);
+
+    // 최종 경로가 rootDir 내에 있는지 검증
+    if (!isPathWithinRoot(fullPath, rootDir)) {
+      throw new Error(`Invalid path (outside project root): ${fullPath}`);
+    }
+
     if (existsSync(fullPath)) {
       return fullPath;
     }
   }
 
-  return join(rootDir, "src", cleanPath + ".ts");
+  const defaultPath = join(rootDir, "src", cleanPath + ".ts");
+  if (!isPathWithinRoot(defaultPath, rootDir)) {
+    throw new Error(`Invalid path (outside project root): ${defaultPath}`);
+  }
+
+  return defaultPath;
 }
 
 /**

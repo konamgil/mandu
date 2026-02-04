@@ -3,8 +3,9 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { mkdir, writeFile, rm } from "fs/promises";
+import { mkdir, writeFile, rm, mkdtemp } from "fs/promises";
 import { join } from "path";
+import { tmpdir } from "os";
 import {
   checkWithHealing,
   generateHealing,
@@ -17,9 +18,13 @@ import type { Violation, GuardConfig } from "./types";
 // Test Setup
 // ═══════════════════════════════════════════════════════════════════════════
 
-const TEST_DIR = join(process.cwd(), ".test-healing");
+// 임시 디렉토리 사용 (고정 경로 대신)
+let TEST_DIR: string;
 
 beforeAll(async () => {
+  // 임시 디렉토리 생성 (안전한 격리된 테스트 환경)
+  TEST_DIR = await mkdtemp(join(tmpdir(), "test-healing-"));
+
   // Create test directory structure
   await mkdir(join(TEST_DIR, "src", "shared", "utils"), { recursive: true });
   await mkdir(join(TEST_DIR, "src", "features", "auth", "model"), { recursive: true });
@@ -227,11 +232,23 @@ describe("Self-Healing Guard", () => {
 
 describe("Healing Context", () => {
   it("should provide correct layer hierarchy for each preset", () => {
-    const presets = ["fsd", "clean", "hexagonal", "atomic", "mandu"] as const;
+    // 각 프리셋별로 기대되는 계층 구조 키워드
+    const expectedKeywords: Record<string, string> = {
+      fsd: "→", // "app → pages → widgets..."
+      clean: "domain", // "api → application → domain..."
+      hexagonal: "ports", // "adapters → ports → domain"
+      atomic: "atoms", // "pages → templates → organisms → molecules → atoms"
+      mandu: "client", // "client(FSD) | shared | server(Clean)"
+    };
 
-    for (const preset of presets) {
-      const explanation = explainRule("layer-violation", "a", "b", preset);
-      expect(explanation.why).toContain(preset === "mandu" ? "client" : "");
+    for (const [preset, keyword] of Object.entries(expectedKeywords)) {
+      const explanation = explainRule(
+        "layer-violation",
+        "a",
+        "b",
+        preset as "fsd" | "clean" | "hexagonal" | "atomic" | "mandu"
+      );
+      expect(explanation.why).toContain(keyword);
     }
   });
 
