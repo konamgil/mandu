@@ -15,7 +15,11 @@ import {
   runGuardCheck,
   buildGuardReport,
   printReportSummary,
+  guardConfig,
+  formatConfigGuardResult,
+  calculateHealthScore,
   type GuardConfig,
+  type ConfigGuardResult,
 } from "@mandujs/core";
 import path from "path";
 import { resolveFromCwd, isDirectory, pathExists } from "../util/fs";
@@ -114,7 +118,7 @@ export async function check(): Promise<boolean> {
   }
 
   // 2) Architecture Guard 검사
-  const guardConfig: GuardConfig = {
+  const archGuardConfig: GuardConfig = {
     preset,
     srcDir: guardConfigFromFile.srcDir ?? "src",
     exclude: guardConfigFromFile.exclude,
@@ -156,7 +160,7 @@ export async function check(): Promise<boolean> {
       : undefined,
   };
 
-  const report = await checkDirectory(guardConfig, rootDir);
+  const report = await checkDirectory(archGuardConfig, rootDir);
   const hasArchErrors = report.bySeverity.error > 0;
   const hasArchWarnings = report.bySeverity.warn > 0;
   if (hasArchErrors || (strictWarnings && hasArchWarnings)) {
@@ -219,15 +223,63 @@ export async function check(): Promise<boolean> {
     }
   }
 
+  // 4) Config Integrity 검사 (Lockfile)
+  const configGuardResult = await guardConfig(rootDir, config);
+
+  if (configGuardResult.action === "error" || configGuardResult.action === "block") {
+    success = false;
+  }
+
+  if (format === "console") {
+    if (!quiet) {
+      log("");
+    }
+    if (quiet) {
+      if (configGuardResult.lockfileValid) {
+        print(`✅ Config: 무결성 확인됨 (${configGuardResult.currentHash?.slice(0, 8) ?? "N/A"})`);
+      } else if (!configGuardResult.lockfileExists) {
+        print(`💡 Config: Lockfile 없음`);
+      } else {
+        print(`❌ Config: 무결성 실패`);
+      }
+    } else {
+      log(formatConfigGuardResult(configGuardResult));
+    }
+  }
+
+  // 5) 통합 헬스 점수
+  const healthScore = calculateHealthScore(
+    report.totalViolations,
+    report.bySeverity.error,
+    configGuardResult
+  );
+
+  if (format === "console" && !quiet) {
+    log("");
+    log("═══════════════════════════════════════");
+    log(`🏥 Health Score: ${healthScore}/100`);
+    log("═══════════════════════════════════════");
+  }
+
   if (format !== "console") {
     const summary = {
       ok: success,
+      healthScore,
       routes: routesSummary,
       architecture: {
         totalViolations: report.totalViolations,
         bySeverity: report.bySeverity,
         byType: report.byType,
         report,
+      },
+      config: {
+        valid: configGuardResult.lockfileValid,
+        exists: configGuardResult.lockfileExists,
+        action: configGuardResult.action,
+        currentHash: configGuardResult.currentHash,
+        lockedHash: configGuardResult.lockedHash,
+        errors: configGuardResult.errors,
+        warnings: configGuardResult.warnings,
       },
       legacy: legacySummary,
     };
