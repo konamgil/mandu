@@ -214,3 +214,84 @@ export {
   type HealingResult,
   type RuleExplanation,
 } from "./healing";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Decision Memory - 아키텍처 결정 기억 시스템
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  // Core API
+  getAllDecisions,
+  getDecisionById,
+  searchDecisions,
+  saveDecision,
+  checkConsistency,
+  getNextDecisionId,
+  // Compact Architecture
+  generateCompactArchitecture,
+  updateCompactArchitecture,
+  getCompactArchitecture,
+  // Utilities
+  parseADRMarkdown,
+  formatADRAsMarkdown,
+  // Constants
+  DECISIONS_DIR,
+  ARCHITECTURE_FILE,
+  // Types
+  type DecisionStatus,
+  type ArchitectureDecision,
+  type DecisionSearchResult,
+  type ConsistencyCheckResult,
+  type CompactArchitecture,
+} from "./decision-memory";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Semantic Slots - 의미론적 슬롯 검증
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  // Validation API
+  validateSlotConstraints,
+  validateSlots,
+  extractSlotMetadata,
+  // Analysis utilities
+  countCodeLines,
+  calculateCyclomaticComplexity,
+  extractImports as extractSlotImports,
+  extractFunctionCalls,
+  checkPattern,
+  // Default constraints
+  DEFAULT_SLOT_CONSTRAINTS,
+  API_SLOT_CONSTRAINTS,
+  READONLY_SLOT_CONSTRAINTS,
+  // Types
+  type SlotConstraints,
+  type SlotPattern,
+  type SlotMetadata,
+  type CustomRule,
+  type ConstraintViolation,
+  type SlotValidationResult,
+} from "./semantic-slots";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Architecture Negotiation - AI-Framework 협상
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  // Core API
+  negotiate,
+  generateScaffold,
+  analyzeExistingStructure,
+  // Utilities
+  detectCategory,
+  // Types
+  type NegotiationRequest,
+  type NegotiationResponse,
+  type FeatureCategory,
+  type DirectoryProposal,
+  type FileProposal,
+  type FileTemplate,
+  type SlotProposal,
+  type RelatedDecision,
+  type ScaffoldResult,
+} from "./negotiation";
