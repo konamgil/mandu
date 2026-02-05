@@ -1,3 +1,14 @@
+/**
+ * Mandu MCP Server v2
+ *
+ * DNA 기능 통합:
+ * - DNA-001: 플러그인 기반 도구 등록
+ * - DNA-006: 설정 핫 리로드
+ * - DNA-007: 에러 추출 및 분류
+ * - DNA-008: 구조화된 로깅
+ * - DNA-016: Pre/Post 도구 훅
+ */
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -5,40 +16,60 @@ import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
-  type Tool,
-  type Resource,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { specTools, specToolDefinitions } from "./tools/spec.js";
-import { generateTools, generateToolDefinitions } from "./tools/generate.js";
-import { transactionTools, transactionToolDefinitions } from "./tools/transaction.js";
-import { historyTools, historyToolDefinitions } from "./tools/history.js";
-import { guardTools, guardToolDefinitions } from "./tools/guard.js";
-import { slotTools, slotToolDefinitions } from "./tools/slot.js";
-import { hydrationTools, hydrationToolDefinitions } from "./tools/hydration.js";
-import { contractTools, contractToolDefinitions } from "./tools/contract.js";
-import { brainTools, brainToolDefinitions } from "./tools/brain.js";
-import { runtimeTools, runtimeToolDefinitions } from "./tools/runtime.js";
-import { seoTools, seoToolDefinitions } from "./tools/seo.js";
-import { projectTools, projectToolDefinitions } from "./tools/project.js";
+import { loadManduConfig, startWatcher, type ManduConfig } from "@mandujs/core";
+
+// DNA-001: 플러그인 기반 도구 레지스트리
+import { mcpToolRegistry } from "./registry/mcp-tool-registry.js";
+import { registerBuiltinTools, getToolsSummary } from "./tools/index.js";
+
+// DNA-007: 에러 처리
+import { createToolResponse, logToolError } from "./executor/error-handler.js";
+import { ToolExecutor, createToolExecutor } from "./executor/tool-executor.js";
+
+// DNA-008: 로깅 통합
+import { setupMcpLogging, teardownMcpLogging } from "./logging/mcp-transport.js";
+
+// DNA-016: 훅 시스템
+import { mcpHookRegistry, registerDefaultMcpHooks, type McpToolContext } from "./hooks/mcp-hooks.js";
+
+// DNA-006: 설정 핫 리로드
+import { startMcpConfigWatcher, type McpConfigWatcher } from "./hooks/config-watcher.js";
+
+// 기존 컴포넌트
 import { resourceHandlers, resourceDefinitions } from "./resources/handlers.js";
 import { findProjectRoot } from "./utils/project.js";
 import { applyWarningInjection } from "./utils/withWarnings.js";
 import { ActivityMonitor } from "./activity-monitor.js";
-import { startWatcher } from "../../core/src/index.js";
 
+/**
+ * MCP 서버 버전
+ */
+const MCP_VERSION = "0.12.0";
+
+/**
+ * ManduMcpServer v2
+ *
+ * DNA 기능들을 통합한 MCP 서버
+ */
 export class ManduMcpServer {
   private server: Server;
   private projectRoot: string;
   private monitor: ActivityMonitor;
+  private config?: ManduConfig;
+  private configWatcher?: McpConfigWatcher;
+  private toolExecutor: ToolExecutor;
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
     this.monitor = new ActivityMonitor(projectRoot);
+
+    // MCP Server 초기화
     this.server = new Server(
       {
         name: "mandu-mcp",
-        version: "0.1.0",
+        version: MCP_VERSION,
       },
       {
         capabilities: {
@@ -49,100 +80,52 @@ export class ManduMcpServer {
       }
     );
 
+    // DNA-001: 플러그인 기반 도구 등록
+    registerBuiltinTools(projectRoot, this.server, this.monitor);
+
+    // DNA-008: 로깅 통합
+    setupMcpLogging({ consoleOutput: false });
+
+    // DNA-016: 기본 훅 등록
+    registerDefaultMcpHooks();
+
+    // Tool Executor 생성
+    this.toolExecutor = createToolExecutor({
+      projectRoot,
+      logTool: (name, args, result, error) => this.monitor.logTool(name, args, result, error),
+      logResult: (name, result) => this.monitor.logResult(name, result),
+    });
+
+    // 핸들러 등록
     this.registerToolHandlers();
     this.registerResourceHandlers();
   }
 
-  private getAllToolDefinitions(): Tool[] {
-    return [
-      ...specToolDefinitions,
-      ...generateToolDefinitions,
-      ...transactionToolDefinitions,
-      ...historyToolDefinitions,
-      ...guardToolDefinitions,
-      ...slotToolDefinitions,
-      ...hydrationToolDefinitions,
-      ...contractToolDefinitions,
-      ...brainToolDefinitions,
-      ...runtimeToolDefinitions,
-      ...seoToolDefinitions,
-      ...projectToolDefinitions,
-    ];
-  }
-
-  private getAllToolHandlers(): Record<string, (args: Record<string, unknown>) => Promise<unknown>> {
-    const handlers = {
-      ...specTools(this.projectRoot),
-      ...generateTools(this.projectRoot),
-      ...transactionTools(this.projectRoot),
-      ...historyTools(this.projectRoot),
-      ...guardTools(this.projectRoot),
-      ...slotTools(this.projectRoot),
-      ...hydrationTools(this.projectRoot),
-      ...contractTools(this.projectRoot),
-      ...brainTools(this.projectRoot, this.server, this.monitor),
-      ...runtimeTools(this.projectRoot),
-      ...seoTools(this.projectRoot),
-      ...projectTools(this.projectRoot, this.server, this.monitor),
-    };
-
-    return applyWarningInjection(handlers);
-  }
-
+  /**
+   * 도구 핸들러 등록 (DNA-001 레지스트리 사용)
+   */
   private registerToolHandlers(): void {
-    const toolHandlers = this.getAllToolHandlers();
-
+    // 도구 목록 요청
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
-        tools: this.getAllToolDefinitions(),
+        tools: mcpToolRegistry.toToolDefinitions(),
       };
     });
 
+    // 도구 실행 요청
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
-      const handler = toolHandlers[name];
-      if (!handler) {
-        this.monitor.logTool(name, args, null, "Unknown tool");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ error: `Unknown tool: ${name}` }),
-            },
-          ],
-          isError: true,
-        };
-      }
+      // DNA-007 + DNA-016: Tool Executor로 실행
+      const result = await this.toolExecutor.execute(name, args || {});
 
-      try {
-        this.monitor.logTool(name, args);
-        const result = await handler(args || {});
-        this.monitor.logResult(name, result);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        this.monitor.logTool(name, args, null, msg);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ error: msg }),
-            },
-          ],
-          isError: true,
-        };
-      }
+      return result.response;
     });
   }
 
+  /**
+   * 리소스 핸들러 등록 (기존 유지)
+   */
   private registerResourceHandlers(): void {
     const handlers = resourceHandlers(this.projectRoot);
 
@@ -157,7 +140,7 @@ export class ManduMcpServer {
 
       const handler = handlers[uri];
       if (!handler) {
-        // Try pattern matching for dynamic resources
+        // 동적 리소스 패턴 매칭
         for (const [pattern, h] of Object.entries(handlers)) {
           if (pattern.includes("{") && matchResourcePattern(pattern, uri)) {
             const params = extractResourceParams(pattern, uri);
@@ -212,12 +195,44 @@ export class ManduMcpServer {
     });
   }
 
+  /**
+   * 서버 실행
+   */
   async run(): Promise<void> {
+    // 설정 로드
+    try {
+      this.config = await loadManduConfig(this.projectRoot);
+      this.toolExecutor.updateConfig(this.config);
+    } catch {
+      // 설정 로드 실패 시 기본값 사용
+      console.error("[MCP] Config load failed, using defaults");
+    }
+
+    // DNA-006: 설정 핫 리로드 시작
+    try {
+      this.configWatcher = await startMcpConfigWatcher(this.projectRoot, {
+        server: this.server,
+        onReload: (newConfig) => {
+          this.config = newConfig;
+          this.toolExecutor.updateConfig(newConfig);
+        },
+        onMcpConfigChange: async () => {
+          // MCP 설정 변경 시 도구 재등록 가능
+          // 현재는 알림만 전송
+        },
+      });
+    } catch {
+      console.error("[MCP] Config watcher start failed (non-critical)");
+    }
+
+    // 서버 연결
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
+
+    // 모니터 시작
     this.monitor.start();
 
-    // Auto-start watcher with activity monitor integration
+    // 와처 자동 시작
     try {
       const watcher = await startWatcher({ rootDir: this.projectRoot });
       watcher.onWarning((warning) => {
@@ -225,9 +240,10 @@ export class ManduMcpServer {
           warning.level || "warn",
           warning.ruleId,
           warning.file,
-          warning.message,
+          warning.message
         );
-        // Also notify Claude Code via MCP
+
+        // Claude Code에 알림
         this.server.sendLoggingMessage({
           level: "warning",
           logger: "mandu-watch",
@@ -243,17 +259,67 @@ export class ManduMcpServer {
           },
         }).catch(() => {});
       });
+
       this.monitor.logEvent("SYSTEM", "Watcher auto-started");
     } catch {
       this.monitor.logEvent("SYSTEM", "Watcher auto-start failed (non-critical)");
     }
 
-    console.error(`Mandu MCP Server running for project: ${this.projectRoot}`);
+    // 시작 로그
+    const summary = getToolsSummary();
+    console.error(`Mandu MCP Server v${MCP_VERSION} running`);
+    console.error(`  Project: ${this.projectRoot}`);
+    console.error(`  Tools: ${summary.total} (${summary.categories.join(", ")})`);
+  }
+
+  /**
+   * 서버 종료
+   */
+  async stop(): Promise<void> {
+    // 설정 감시 중지
+    this.configWatcher?.stop();
+
+    // 로깅 해제
+    teardownMcpLogging();
+
+    // 모니터 종료
+    this.monitor.stop();
+
+    // 훅 정리
+    mcpHookRegistry.clear();
+
+    // 도구 레지스트리 정리
+    mcpToolRegistry.clear();
+  }
+
+  /**
+   * 현재 설정 반환
+   */
+  getConfig(): ManduConfig | undefined {
+    return this.config;
+  }
+
+  /**
+   * 도구 레지스트리 접근
+   */
+  getToolRegistry(): typeof mcpToolRegistry {
+    return mcpToolRegistry;
+  }
+
+  /**
+   * 훅 레지스트리 접근
+   */
+  getHookRegistry(): typeof mcpHookRegistry {
+    return mcpHookRegistry;
   }
 }
 
+// ============================================
+// 유틸리티 함수
+// ============================================
+
 /**
- * Match a resource pattern like "mandu://slots/{routeId}" against a URI
+ * 리소스 패턴 매칭
  */
 function matchResourcePattern(pattern: string, uri: string): boolean {
   const regexPattern = pattern.replace(/\{[^}]+\}/g, "([^/]+)");
@@ -262,7 +328,7 @@ function matchResourcePattern(pattern: string, uri: string): boolean {
 }
 
 /**
- * Extract parameters from a URI based on a pattern
+ * 리소스 파라미터 추출
  */
 function extractResourceParams(pattern: string, uri: string): Record<string, string> {
   const paramNames: string[] = [];
@@ -285,10 +351,15 @@ function extractResourceParams(pattern: string, uri: string): Record<string, str
 }
 
 /**
- * Create and start the MCP server
+ * MCP 서버 시작
  */
 export async function startServer(projectRoot?: string): Promise<void> {
   const root = projectRoot || (await findProjectRoot()) || process.cwd();
   const server = new ManduMcpServer(root);
   await server.run();
 }
+
+// Re-exports
+export { mcpToolRegistry } from "./registry/mcp-tool-registry.js";
+export { mcpHookRegistry } from "./hooks/mcp-hooks.js";
+export { registerBuiltinTools } from "./tools/index.js";
