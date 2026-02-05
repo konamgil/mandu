@@ -23,3 +23,16 @@ export {
   type SafeStreamWriter,
   type SafeStreamWriterOptions,
 } from "./stream-writer.js";
+export {
+  getOutputMode,
+  createFormatContext,
+  formatOutput,
+  formatError,
+  formatSuccess,
+  formatWarning,
+  formatInfo,
+  formatList,
+  type OutputMode,
+  type OutputOptions,
+  type FormatContext,
+} from "./output.js";
