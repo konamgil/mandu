@@ -1,29 +1,14 @@
 #!/usr/bin/env bun
 
-import { specUpsert } from "./commands/spec-upsert";
-import { generateApply } from "./commands/generate-apply";
-import { guardCheck } from "./commands/guard-check";
-import { guardArch } from "./commands/guard-arch";
-import { check } from "./commands/check";
-import { dev } from "./commands/dev";
-import { init } from "./commands/init";
-import { build } from "./commands/build";
-import { contractCreate, contractValidate, contractBuild, contractDiff } from "./commands/contract";
-import { openAPIGenerate, openAPIServe } from "./commands/openapi";
-import {
-  changeBegin,
-  changeCommit,
-  changeRollback,
-  changeStatus,
-  changeList,
-  changePrune,
-} from "./commands/change";
-import { doctor } from "./commands/doctor";
-import { watch } from "./commands/watch";
-import { brainSetup, brainStatus } from "./commands/brain";
-import { routesGenerate, routesList, routesWatch } from "./commands/routes";
-import { monitor } from "./commands/monitor";
-import { runLockCommand, lockHelp } from "./commands/lock";
+/**
+ * Mandu CLI - Agent-Native Fullstack Framework
+ *
+ * DNA-010: Command Registry Pattern 적용
+ * - 선언적 명령어 등록
+ * - 레이지 로딩으로 시작 시간 최적화
+ */
+
+import { commandRegistry, getCommand, type CommandContext } from "./commands/registry";
 import { CLI_ERROR_CODES, handleCLIError, printCLIError } from "./errors";
 import { shouldShowBanner, renderHeroBanner, theme } from "./terminal";
 
@@ -152,20 +137,28 @@ Brain (sLLM) Workflow:
   1. brain setup → 2. doctor (분석) → 3. watch (감시)
 `;
 
+/**
+ * 인자 파싱
+ */
 function parseArgs(args: string[]): { command: string; options: Record<string, string> } {
-  const command = args[0] || "";
   const options: Record<string, string> = {};
+  let command = "";
 
-  for (let i = 1; i < args.length; i++) {
+  for (let i = 0; i < args.length; i++) {
     const arg = args[i];
+
+    // 플래그 처리
     if (arg.startsWith("--")) {
       const key = arg.slice(2);
       const value = args[i + 1] && !args[i + 1].startsWith("--") ? args[++i] : "true";
       options[key] = value;
     } else if (arg === "-h") {
       options["help"] = "true";
+    } else if (!command) {
+      // 첫 번째 비플래그 인자가 명령어
+      command = arg;
     } else if (!options._positional) {
-      // First non-flag argument after command is positional (e.g., project name)
+      // 두 번째 비플래그 인자가 positional
       options._positional = arg;
     }
   }
@@ -173,279 +166,56 @@ function parseArgs(args: string[]): { command: string; options: Record<string, s
   return { command, options };
 }
 
+/**
+ * 메인 함수
+ */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { command, options } = parseArgs(args);
 
+  // 도움말 처리
   if (options.help || command === "help" || !command) {
     console.log(HELP_TEXT);
     process.exit(0);
   }
 
-  // Show hero banner for interactive commands
+  // 히어로 배너 표시
   if (shouldShowBanner(args)) {
     await renderHeroBanner(VERSION);
   }
 
-  let success = true;
+  // DNA-010: 레지스트리에서 명령어 조회
+  const registration = getCommand(command);
 
-  switch (command) {
-    case "init":
-      success = await init({
-        name: options.name || options._positional,
-        css: options.css as any,
-        ui: options.ui as any,
-        theme: options.theme === "true",
-        minimal: options.minimal === "true",
-      });
-      break;
-
-    case "spec-upsert":
-      success = await specUpsert({ file: options.file });
-      break;
-
-    case "generate":
-      success = await generateApply();
-      break;
-
-    case "check":
-      success = await check();
-      break;
-
-    case "guard": {
-      const subCommand = args[1];
-      const hasSubCommand = subCommand && !subCommand.startsWith("--");
-      const guardArchOptions = {
-        watch: options.watch === "true",
-        output: options.output,
-      };
-      switch (subCommand) {
-        case "arch":
-          success = await guardArch(guardArchOptions);
-          break;
-        case "legacy":
-        case "spec":
-          success = await guardCheck();
-          break;
-        default:
-          if (hasSubCommand) {
-            printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
-              command: "guard",
-              subcommand,
-            });
-            console.log("\nUsage: bunx mandu guard <arch|legacy>");
-            process.exit(1);
-          }
-          // 기본값: architecture guard
-          success = await guardArch(guardArchOptions);
-      }
-      break;
-    }
-
-    case "build":
-      success = await build({
-        watch: options.watch === "true",
-      });
-      break;
-
-    case "dev":
-      await dev();
-      break;
-
-    case "routes": {
-      const subCommand = args[1];
-      switch (subCommand) {
-        case "generate":
-          success = await routesGenerate({
-            output: options.output,
-            verbose: options.verbose === "true",
-          });
-          break;
-        case "list":
-          success = await routesList({
-            verbose: options.verbose === "true",
-          });
-          break;
-        case "watch":
-          success = await routesWatch({
-            output: options.output,
-            verbose: options.verbose === "true",
-          });
-          break;
-        default:
-          // 기본값: list
-          if (!subCommand) {
-            success = await routesList({
-              verbose: options.verbose === "true",
-            });
-          } else {
-            printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
-              command: "routes",
-              subcommand,
-            });
-            console.log("\nUsage: bunx mandu routes <generate|list|watch>");
-            process.exit(1);
-          }
-      }
-      break;
-    }
-
-    case "contract": {
-      const subCommand = args[1];
-      switch (subCommand) {
-        case "create": {
-          const routeId = args[2] || options._positional;
-          if (!routeId) {
-            printCLIError(CLI_ERROR_CODES.MISSING_ARGUMENT, { argument: "routeId" });
-            console.log("\nUsage: bunx mandu contract create <routeId>");
-            process.exit(1);
-          }
-          success = await contractCreate({ routeId });
-          break;
-        }
-        case "validate":
-          success = await contractValidate({ verbose: options.verbose === "true" });
-          break;
-        case "build":
-          success = await contractBuild({ output: options.output });
-          break;
-        case "diff":
-          success = await contractDiff({
-            from: options.from,
-            to: options.to,
-            output: options.output,
-            json: options.json === "true",
-          });
-          break;
-        default:
-          printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
-            command: "contract",
-            subcommand,
-          });
-          console.log("\nUsage: bunx mandu contract <create|validate|build|diff>");
-          process.exit(1);
-      }
-      break;
-    }
-
-    case "openapi": {
-      const subCommand = args[1];
-      switch (subCommand) {
-        case "generate":
-          success = await openAPIGenerate({
-            output: options.output,
-            title: options.title,
-            version: options.version,
-          });
-          break;
-        case "serve":
-          success = await openAPIServe();
-          break;
-        default:
-          printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
-            command: "openapi",
-            subcommand,
-          });
-          console.log("\nUsage: bunx mandu openapi <generate|serve>");
-          process.exit(1);
-      }
-      break;
-    }
-
-    case "change": {
-      const subCommand = args[1];
-      switch (subCommand) {
-        case "begin":
-          success = await changeBegin({ message: options.message });
-          break;
-        case "commit":
-          success = await changeCommit();
-          break;
-        case "rollback":
-          success = await changeRollback({ id: options.id });
-          break;
-        case "status":
-          success = await changeStatus();
-          break;
-        case "list":
-          success = await changeList();
-          break;
-        case "prune":
-          success = await changePrune({
-            keep: options.keep ? Number(options.keep) : undefined,
-          });
-          break;
-        default:
-          printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
-            command: "change",
-            subcommand,
-          });
-          console.log(`\nUsage: bunx mandu change <begin|commit|rollback|status|list|prune>`);
-          process.exit(1);
-      }
-      break;
-    }
-
-    case "doctor":
-      success = await doctor({
-        useLLM: options["no-llm"] !== "true",
-        output: options.output,
-      });
-      break;
-
-    case "watch":
-      success = await watch({
-        status: options.status === "true",
-        debounce: options.debounce ? Number(options.debounce) : undefined,
-      });
-      break;
-
-    case "monitor":
-      success = await monitor({
-        summary: options.summary === "true",
-        since: options.since,
-        follow: options.follow === "false" ? false : true,
-        file: options.file,
-      });
-      break;
-
-    case "brain": {
-      const subCommand = args[1];
-      switch (subCommand) {
-        case "setup":
-          success = await brainSetup({
-            model: options.model,
-            url: options.url,
-            skipCheck: options["skip-check"] === "true",
-          });
-          break;
-        case "status":
-          success = await brainStatus({
-            verbose: options.verbose === "true",
-          });
-          break;
-        default:
-          printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
-            command: "brain",
-            subcommand,
-          });
-          console.log("\nUsage: bunx mandu brain <setup|status>");
-          process.exit(1);
-      }
-      break;
-    }
-
-    case "lock":
-      success = await runLockCommand(args.slice(1));
-      break;
-
-    default:
-      printCLIError(CLI_ERROR_CODES.UNKNOWN_COMMAND, { command });
-      console.log(HELP_TEXT);
-      process.exit(1);
+  if (!registration) {
+    printCLIError(CLI_ERROR_CODES.UNKNOWN_COMMAND, { command });
+    console.log(HELP_TEXT);
+    process.exit(1);
   }
 
+  // 명령어 실행 컨텍스트
+  const ctx: CommandContext = { args, options };
+
+  // 명령어 실행
+  const success = await registration.run(ctx);
+
+  // 서브커맨드 에러 처리
   if (!success) {
+    const subCommand = args[1];
+    if (registration.subcommands && subCommand && !subCommand.startsWith("--")) {
+      // 알 수 없는 서브커맨드
+      printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
+        command,
+        subcommand: subCommand,
+      });
+      console.log(`\nUsage: bunx mandu ${command} <${registration.subcommands.join("|")}>`);
+    } else if (registration.subcommands) {
+      // 서브커맨드 필요
+      printCLIError(CLI_ERROR_CODES.MISSING_ARGUMENT, {
+        argument: "subcommand",
+      });
+      console.log(`\nUsage: bunx mandu ${command} <${registration.subcommands.join("|")}>`);
+    }
     process.exit(1);
   }
 }
