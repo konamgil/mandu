@@ -36,3 +36,10 @@ export {
   type OutputOptions,
   type FormatContext,
 } from "./output.js";
+export {
+  renderTable,
+  renderKeyValueTable,
+  type TableColumn,
+  type BorderStyle,
+  type RenderTableOptions,
+} from "./table.js";
