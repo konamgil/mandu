@@ -64,6 +64,7 @@
 | 🟡 P1 | 적응형 출력 포맷 | JSON/Pretty/Plain | 에이전트 친화 |
 | 🟢 P2 | 시맨틱 도움말 | --help 출력 | DX ↑ |
 | 🟢 P2 | Pre-Action 훅 | 배너, 설정 로드 | 일관성 ↑ |
+| 🟡 P1 | **히어로 배너** | CLI 시작 화면 | 브랜딩 ↑↑ |
 
 ---
 
@@ -1026,6 +1027,102 @@ ${theme.accent("  ╰───────────────────�
 
 ---
 
+#### DNA-017: 히어로 배너 (cfonts + 그라데이션) 🆕
+
+**출처**: [cfonts](https://github.com/dominikwilkowski/cfonts) - "Sexy fonts for the console"
+
+**영감**: Claude Code, Vite, Astro 등 유명 CLI의 시작 화면
+
+**구현**:
+```typescript
+// packages/cli/src/terminal/banner.ts
+import cfonts from "cfonts";
+import { MANDU_PALETTE } from "./palette.js";
+
+export function renderHeroBanner(version: string): void {
+  // 터미널 너비 확인
+  const cols = process.stdout.columns ?? 80;
+  if (cols < 60 || !process.stdout.isTTY) {
+    // 좁은 터미널: 미니 배너
+    console.log(`\n  🥟 Mandu v${version}\n`);
+    return;
+  }
+
+  // cfonts로 큰 배너 렌더링
+  cfonts.say("MANDU", {
+    font: "block",                    // block, chrome, 3d, huge 중 선택
+    gradient: [MANDU_PALETTE.accent, MANDU_PALETTE.accentBright],
+    transitionGradient: true,
+    align: "center",
+    space: true,
+    maxLength: Math.min(cols - 4, 80),
+  });
+
+  // 태그라인
+  const tagline = `🥟 Agent-Native Web Framework v${version}`;
+  const padding = Math.max(0, Math.floor((cols - tagline.length) / 2));
+  console.log(" ".repeat(padding) + tagline + "\n");
+}
+```
+
+**출력 예시** (block 폰트 + 분홍 그라데이션):
+```
+
+  ███╗   ███╗ █████╗ ███╗   ██╗██████╗ ██╗   ██╗
+  ████╗ ████║██╔══██╗████╗  ██║██╔══██╗██║   ██║
+  ██╔████╔██║███████║██╔██╗ ██║██║  ██║██║   ██║
+  ██║╚██╔╝██║██╔══██║██║╚██╗██║██║  ██║██║   ██║
+  ██║ ╚═╝ ██║██║  ██║██║ ╚████║██████╔╝╚██████╔╝
+  ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝  ╚═════╝
+
+           🥟 Agent-Native Web Framework v0.10.0
+
+```
+
+**폰트 옵션**:
+
+| 폰트 | 스타일 | 색상 수 | 추천 용도 |
+|------|--------|---------|----------|
+| `block` | 굵은 블록 | 2 | 기본 (추천) |
+| `chrome` | 메탈릭 3D | 3 | 프리미엄 느낌 |
+| `3d` | 입체 | 2 | 게임 느낌 |
+| `huge` | 초대형 | 2 | 와이드 터미널 |
+| `slick` | 날렵한 | 2 | 모던 느낌 |
+| `tiny` | 작은 | 1 | 좁은 터미널 |
+
+**조건부 표시**:
+```typescript
+// packages/cli/src/program/preaction.ts
+function shouldShowBanner(argv: string[]): boolean {
+  // 배너 숨김 조건
+  if (process.env.MANDU_NO_BANNER) return false;
+  if (process.env.CI) return false;
+  if (process.env.CLAUDE_CODE) return false;  // 에이전트 환경
+  if (!process.stdout.isTTY) return false;     // 파이프
+  if (hasJsonFlag(argv)) return false;         // --json
+  if (hasQuietFlag(argv)) return false;        // --quiet, -q
+  return true;
+}
+```
+
+**의존성**:
+```json
+{
+  "dependencies": {
+    "cfonts": "^3.3.0"
+  }
+}
+```
+
+**예상 파일**:
+```
+packages/cli/src/
+└── terminal/
+    └── banner.ts            # 🆕 히어로 배너
+```
+
+---
+
 ## 4. 상세 구현 계획
 
 ### 4.1 DNA-001: 플러그인 어댑터 패턴
@@ -1537,6 +1634,7 @@ export async function withManager<T, R>(params: {
 | **Multi-fallback 프로그레스** | DNA-012 | 2일 | - |
 | **Safe Stream Writer** | DNA-013 | 1일 | - |
 | **적응형 출력 포맷** | DNA-014 | 2일 | - |
+| **히어로 배너 (cfonts)** | DNA-017 | 1일 | - |
 
 ### 7.3 v0.13 (Q3 2026)
 
@@ -1610,7 +1708,8 @@ packages/cli/src/
 │   ├── table.ts              # ANSI-aware 테이블
 │   ├── progress.ts           # 프로그레스 표시
 │   ├── stream-writer.ts      # Safe Stream Writer
-│   └── output.ts             # 적응형 출력
+│   ├── output.ts             # 적응형 출력
+│   └── banner.ts             # 🆕 히어로 배너 (cfonts)
 ├── commands/
 │   └── registry.ts           # 명령어 레지스트리
 └── program/
