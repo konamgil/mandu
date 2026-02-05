@@ -43,3 +43,11 @@ export {
   type BorderStyle,
   type RenderTableOptions,
 } from "./table.js";
+export {
+  createCliProgress,
+  withProgress,
+  startSpinner,
+  runSteps,
+  type ProgressOptions,
+  type ProgressReporter,
+} from "./progress.js";
