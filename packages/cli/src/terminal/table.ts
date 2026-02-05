@@ -169,7 +169,8 @@ function calculateWidths(
   columns: TableColumn[],
   rows: Record<string, unknown>[],
   maxWidth?: number,
-  compact?: boolean
+  compact?: boolean,
+  border: BorderStyle = "unicode"
 ): number[] {
   const padding = compact ? 1 : 2;
 
@@ -192,7 +193,7 @@ function calculateWidths(
 
   // 최대 너비 제약 처리
   if (maxWidth) {
-    const borderWidth = columns.length + 1; // 세로선 개수
+    const borderWidth = border === "none" ? 0 : columns.length + 1; // 세로선 개수
     const totalWidth = widths.reduce((a, b) => a + b, 0) + borderWidth;
 
     if (totalWidth > maxWidth) {
@@ -253,7 +254,7 @@ export function renderTable(options: RenderTableOptions): string {
 
   if (columns.length === 0) return "";
 
-  const widths = calculateWidths(columns, rows, maxWidth, compact);
+  const widths = calculateWidths(columns, rows, maxWidth, compact, border);
   const box = border === "unicode" ? UNICODE_BOX : ASCII_BOX;
   const lines: string[] = [];
 

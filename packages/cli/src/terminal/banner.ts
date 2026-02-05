@@ -59,19 +59,19 @@ function applyGradient(text: string): string {
   if (!isRich()) return text;
 
   const lines = text.split("\n");
-  const colors = [
-    MANDU_PALETTE.accentDim,
-    MANDU_PALETTE.accent,
-    MANDU_PALETTE.accentBright,
-    MANDU_PALETTE.accent,
-    MANDU_PALETTE.accentDim,
+  const colorFns = [
+    theme.accentDim,
+    theme.accent,
+    theme.accentBright,
+    theme.accent,
+    theme.accentDim,
   ];
 
   return lines
     .map((line, i) => {
-      const colorIndex = Math.min(i, colors.length - 1);
-      const color = colors[colorIndex];
-      return theme.accent(line); // Use accent color for now
+      const colorIndex = Math.min(i, colorFns.length - 1);
+      const colorFn = colorFns[colorIndex];
+      return colorFn(line);
     })
     .join("\n");
 }

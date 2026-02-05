@@ -3,7 +3,7 @@
  *
  * 환경에 따라 출력 형식을 자동 결정
  * - TTY: Pretty (색상 + 포맷팅)
- * - CI/pipe: Plain (색상 없음)
+ * - CI/pipe/agent: JSON (자동 처리/에이전트 친화)
  * - --json 플래그: JSON
  * - MANDU_OUTPUT 환경변수: 강제 지정
  */
@@ -32,8 +32,9 @@ export interface OutputOptions {
  * 1. --json 플래그 → "json"
  * 2. --plain 플래그 → "plain"
  * 3. MANDU_OUTPUT 환경변수 → 지정된 값
- * 4. !TTY (파이프, CI) → "plain"
- * 5. 기본값 → "pretty"
+ * 4. 에이전트 환경 → "json"
+ * 5. !TTY (파이프), CI → "json"
+ * 6. 기본값 → "pretty"
  */
 export function getOutputMode(opts: OutputOptions = {}): OutputMode {
   // 플래그 우선
@@ -45,12 +46,28 @@ export function getOutputMode(opts: OutputOptions = {}): OutputMode {
   if (envOutput === "json") return "json";
   if (envOutput === "plain") return "plain";
   if (envOutput === "pretty") return "pretty";
+  if (envOutput === "agent") return "json";
 
-  // TTY가 아니면 plain
-  if (!process.stdout.isTTY) return "plain";
+  // 에이전트 환경이면 JSON
+  const agentSignals = [
+    "MANDU_AGENT",
+    "CODEX_AGENT",
+    "CODEX",
+    "CLAUDE_CODE",
+    "ANTHROPIC_CLAUDE_CODE",
+  ];
+  for (const key of agentSignals) {
+    const value = process.env[key];
+    if (value === "1" || value === "true") {
+      return "json";
+    }
+  }
 
-  // CI 환경이면 plain
-  if (process.env.CI) return "plain";
+  // CI 환경이면 JSON
+  if (process.env.CI) return "json";
+
+  // TTY가 아니면 JSON
+  if (!process.stdout.isTTY) return "json";
 
   return "pretty";
 }

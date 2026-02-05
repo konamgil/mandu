@@ -1,5 +1,6 @@
 export * from "./mandu";
 export * from "./validate";
+export * from "./watcher";
 
 // Symbol 메타데이터 (Phase 3)
 export * from "./symbols.js";

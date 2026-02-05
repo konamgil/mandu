@@ -7,7 +7,7 @@
  * - withProgress() 패턴으로 자동 정리
  */
 
-import { theme, isRich } from "./theme.js";
+import { theme } from "./theme.js";
 
 /**
  * 프로그레스 옵션
@@ -133,14 +133,12 @@ export function createCliProgress(options: ProgressOptions): ProgressReporter {
   } = options;
 
   const isTty = stream.isTTY;
-  const rich = isRich();
 
   let label = initialLabel;
   let completed = 0;
 
-  // TTY + Rich: 스피너 사용
-  const spinner =
-    isTty && rich && fallback === "spinner" ? createSpinner(stream) : null;
+  // TTY: 스피너 사용 (stdout이 pipe여도 stderr TTY면 동작)
+  const spinner = isTty && fallback === "spinner" ? createSpinner(stream) : null;
 
   if (spinner) {
     spinner.start(label);
@@ -264,7 +262,7 @@ export function startSpinner(
 ): (successMessage?: string) => void {
   const isTty = stream.isTTY;
 
-  if (!isTty || !isRich()) {
+  if (!isTty) {
     stream.write(`${label}\n`);
     return (msg) => {
       if (msg) stream.write(`${msg}\n`);

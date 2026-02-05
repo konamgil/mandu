@@ -4,7 +4,9 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
-import "../setup";
+import { setupHappyDom } from "../setup";
+
+setupHappyDom();
 
 // 테스트용 Island 모듈 생성
 function createMockIsland(setupFn?: (data: any) => any, renderFn?: (state: any) => any) {

@@ -7,8 +7,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import {
   startServer,
-  clearDefaultRegistry,
+  createServerRegistry,
   type ManduServer,
+  type ServerRegistry,
 } from "../../src/runtime/server";
 import type { RoutesManifest } from "../../src/spec/schema";
 import path from "path";
@@ -16,6 +17,7 @@ import fs from "fs/promises";
 
 describe("Security - Path Traversal", () => {
   let server: ManduServer | null = null;
+  let registry: ServerRegistry;
   const TEST_DIR = path.join(import.meta.dir, "__fixtures__", "security");
 
   const testManifest: RoutesManifest = {
@@ -24,7 +26,7 @@ describe("Security - Path Traversal", () => {
   };
 
   beforeEach(async () => {
-    clearDefaultRegistry();
+    registry = createServerRegistry();
     // 테스트용 디렉토리 구조 생성
     await fs.mkdir(path.join(TEST_DIR, "public"), { recursive: true });
     await fs.mkdir(path.join(TEST_DIR, ".mandu", "client"), { recursive: true });
@@ -43,7 +45,6 @@ describe("Security - Path Traversal", () => {
       server.stop();
       server = null;
     }
-    clearDefaultRegistry();
     await fs.rm(TEST_DIR, { recursive: true, force: true });
   });
 
@@ -53,6 +54,7 @@ describe("Security - Path Traversal", () => {
         port: 0,
         rootDir: TEST_DIR,
         publicDir: "public",
+        registry,
       });
       const port = server.server.port;
 
@@ -79,6 +81,7 @@ describe("Security - Path Traversal", () => {
         port: 0,
         rootDir: TEST_DIR,
         publicDir: "public",
+        registry,
       });
       const port = server.server.port;
 
@@ -95,6 +98,7 @@ describe("Security - Path Traversal", () => {
         port: 0,
         rootDir: TEST_DIR,
         publicDir: "public",
+        registry,
       });
       const port = server.server.port;
 
@@ -112,6 +116,7 @@ describe("Security - Path Traversal", () => {
         port: 0,
         rootDir: TEST_DIR,
         publicDir: "public",
+        registry,
       });
       const port = server.server.port;
 
@@ -141,6 +146,7 @@ describe("Security - Path Traversal", () => {
       server = startServer(testManifest, {
         port: 0,
         rootDir: TEST_DIR,
+        registry,
       });
       const port = server.server.port;
 
@@ -175,6 +181,7 @@ describe("Security - Path Traversal", () => {
         port: 0,
         rootDir: TEST_DIR,
         publicDir: "public",
+        registry,
       });
       const port = server.server.port;
 
@@ -193,6 +200,7 @@ describe("Security - Path Traversal", () => {
         port: 0,
         rootDir: TEST_DIR,
         publicDir: "public",
+        registry,
       });
       const port = server.server.port;
 

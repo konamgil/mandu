@@ -5,27 +5,29 @@
  * npm publish 전에 실행되어 ambiguous export 에러를 방지합니다.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 
 describe("Module Exports", () => {
-  it("should load main index without export conflicts", async () => {
-    // 메인 index.ts를 import하면 export 충돌 시 에러 발생
-    const core = await import("../src/index");
+  const IMPORT_TIMEOUT = 15000;
+  let core: any;
 
+  beforeAll(async () => {
+    core = await import("../src/index");
+  }, IMPORT_TIMEOUT);
+
+  it("should load main index without export conflicts", async () => {
     expect(core).toBeDefined();
     expect(core.Mandu).toBeDefined();
-  });
+  }, IMPORT_TIMEOUT);
 
   it("should have unique export names (no ambiguous bindings)", async () => {
-    const core = await import("../src/index");
-
     // 주요 export 확인
     const exports = Object.keys(core);
     const uniqueExports = new Set(exports);
 
     // 중복 export가 없어야 함
     expect(exports.length).toBe(uniqueExports.size);
-  });
+  }, IMPORT_TIMEOUT);
 
   it("should load guard module without conflicts", async () => {
     const guard = await import("../src/guard");

@@ -143,6 +143,12 @@ Brain (sLLM) Workflow:
 function parseArgs(args: string[]): { command: string; options: Record<string, string> } {
   const options: Record<string, string> = {};
   let command = "";
+  const shortFlags: Record<string, string> = {
+    h: "help",
+    q: "quiet",
+    v: "verify",
+    d: "diff",
+  };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -152,8 +158,16 @@ function parseArgs(args: string[]): { command: string; options: Record<string, s
       const key = arg.slice(2);
       const value = args[i + 1] && !args[i + 1].startsWith("--") ? args[++i] : "true";
       options[key] = value;
-    } else if (arg === "-h") {
-      options["help"] = "true";
+    } else if (arg.startsWith("-") && arg.length > 1) {
+      const flags = arg.slice(1).split("");
+      for (const flag of flags) {
+        const mapped = shortFlags[flag];
+        if (mapped) {
+          options[mapped] = "true";
+        } else {
+          options[flag] = "true";
+        }
+      }
     } else if (!command) {
       // 첫 번째 비플래그 인자가 명령어
       command = arg;

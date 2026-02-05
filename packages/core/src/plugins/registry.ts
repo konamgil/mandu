@@ -36,15 +36,23 @@ interface RegisteredPlugin<TConfig = unknown> {
 }
 
 /**
+ * 소유자 정보 포함 리소스
+ */
+interface OwnedResource<T> {
+  owner: string;
+  value: T;
+}
+
+/**
  * 플러그인 레지스트리
  */
 export class PluginRegistry {
   private plugins = new Map<string, RegisteredPlugin>();
-  private guardPresets = new Map<string, GuardPresetPlugin>();
-  private buildPlugins = new Map<string, BuildPlugin>();
-  private loggerTransports = new Map<string, LoggerTransportPlugin>();
-  private mcpTools = new Map<string, McpToolPlugin>();
-  private middlewares = new Map<string, MiddlewarePlugin>();
+  private guardPresets = new Map<string, OwnedResource<GuardPresetPlugin>>();
+  private buildPlugins = new Map<string, OwnedResource<BuildPlugin>>();
+  private loggerTransports = new Map<string, OwnedResource<LoggerTransportPlugin>>();
+  private mcpTools = new Map<string, OwnedResource<McpToolPlugin>>();
+  private middlewares = new Map<string, OwnedResource<MiddlewarePlugin>>();
 
   private logger = {
     debug: (msg: string, data?: unknown) =>
@@ -75,7 +83,7 @@ export class PluginRegistry {
 
     // 설정 검증
     let validatedConfig = config;
-    if (plugin.configSchema && config !== undefined) {
+    if (plugin.configSchema) {
       const result = plugin.configSchema.safeParse(config);
       if (!result.success) {
         const error = new Error(
@@ -96,7 +104,7 @@ export class PluginRegistry {
 
     // 로드
     try {
-      const api = this.createPluginApi();
+      const api = this.createPluginApi(id);
       await plugin.register(api, validatedConfig as TConfig);
 
       // onLoad 훅
@@ -132,11 +140,7 @@ export class PluginRegistry {
     }
 
     // 등록된 리소스 정리
-    this.guardPresets.delete(id);
-    this.buildPlugins.delete(id);
-    this.loggerTransports.delete(id);
-    this.mcpTools.delete(id);
-    this.middlewares.delete(id);
+    this.removeOwnedResources(id);
 
     entry.state = "unloaded";
     this.plugins.delete(id);
@@ -169,65 +173,65 @@ export class PluginRegistry {
    * Guard 프리셋 조회
    */
   getGuardPreset(id: string): GuardPresetPlugin | undefined {
-    return this.guardPresets.get(id);
+    return this.guardPresets.get(id)?.value;
   }
 
   /**
    * 모든 Guard 프리셋 목록
    */
   getAllGuardPresets(): GuardPresetPlugin[] {
-    return Array.from(this.guardPresets.values());
+    return Array.from(this.guardPresets.values()).map((entry) => entry.value);
   }
 
   /**
    * 빌드 플러그인 조회
    */
   getBuildPlugin(id: string): BuildPlugin | undefined {
-    return this.buildPlugins.get(id);
+    return this.buildPlugins.get(id)?.value;
   }
 
   /**
    * 모든 빌드 플러그인 목록
    */
   getAllBuildPlugins(): BuildPlugin[] {
-    return Array.from(this.buildPlugins.values());
+    return Array.from(this.buildPlugins.values()).map((entry) => entry.value);
   }
 
   /**
    * 로거 전송 조회
    */
   getLoggerTransport(id: string): LoggerTransportPlugin | undefined {
-    return this.loggerTransports.get(id);
+    return this.loggerTransports.get(id)?.value;
   }
 
   /**
    * 모든 로거 전송 목록
    */
   getAllLoggerTransports(): LoggerTransportPlugin[] {
-    return Array.from(this.loggerTransports.values());
+    return Array.from(this.loggerTransports.values()).map((entry) => entry.value);
   }
 
   /**
    * MCP 도구 조회
    */
   getMcpTool(name: string): McpToolPlugin | undefined {
-    return this.mcpTools.get(name);
+    return this.mcpTools.get(name)?.value;
   }
 
   /**
    * 모든 MCP 도구 목록
    */
   getAllMcpTools(): McpToolPlugin[] {
-    return Array.from(this.mcpTools.values());
+    return Array.from(this.mcpTools.values()).map((entry) => entry.value);
   }
 
   /**
    * 미들웨어 조회 (순서대로)
    */
   getAllMiddlewares(): MiddlewarePlugin[] {
-    return Array.from(this.middlewares.values()).sort(
-      (a, b) => (a.order ?? 100) - (b.order ?? 100)
-    );
+    return Array.from(this.middlewares.values())
+      .map((entry) => entry.value)
+      .sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
   }
 
   /**
@@ -277,13 +281,13 @@ export class PluginRegistry {
   /**
    * 플러그인 API 생성
    */
-  private createPluginApi(): PluginApi {
+  private createPluginApi(ownerId: string): PluginApi {
     return {
       registerGuardPreset: (preset) => {
         if (this.guardPresets.has(preset.id)) {
           throw new Error(`Guard preset "${preset.id}" is already registered`);
         }
-        this.guardPresets.set(preset.id, preset);
+        this.guardPresets.set(preset.id, { owner: ownerId, value: preset });
         this.logger.debug(`Registered guard preset: ${preset.id}`);
       },
 
@@ -291,7 +295,7 @@ export class PluginRegistry {
         if (this.buildPlugins.has(plugin.id)) {
           throw new Error(`Build plugin "${plugin.id}" is already registered`);
         }
-        this.buildPlugins.set(plugin.id, plugin);
+        this.buildPlugins.set(plugin.id, { owner: ownerId, value: plugin });
         this.logger.debug(`Registered build plugin: ${plugin.id}`);
       },
 
@@ -301,7 +305,7 @@ export class PluginRegistry {
             `Logger transport "${transport.id}" is already registered`
           );
         }
-        this.loggerTransports.set(transport.id, transport);
+        this.loggerTransports.set(transport.id, { owner: ownerId, value: transport });
         this.logger.debug(`Registered logger transport: ${transport.id}`);
       },
 
@@ -309,7 +313,7 @@ export class PluginRegistry {
         if (this.mcpTools.has(tool.name)) {
           throw new Error(`MCP tool "${tool.name}" is already registered`);
         }
-        this.mcpTools.set(tool.name, tool);
+        this.mcpTools.set(tool.name, { owner: ownerId, value: tool });
         this.logger.debug(`Registered MCP tool: ${tool.name}`);
       },
 
@@ -319,7 +323,7 @@ export class PluginRegistry {
             `Middleware "${middleware.id}" is already registered`
           );
         }
-        this.middlewares.set(middleware.id, middleware);
+        this.middlewares.set(middleware.id, { owner: ownerId, value: middleware });
         this.logger.debug(`Registered middleware: ${middleware.id}`);
       },
 
@@ -327,6 +331,22 @@ export class PluginRegistry {
 
       logger: this.logger,
     };
+  }
+
+  private removeOwnedResources(ownerId: string): void {
+    const removeOwned = <T>(map: Map<string, OwnedResource<T>>): void => {
+      for (const [id, entry] of map.entries()) {
+        if (entry.owner === ownerId) {
+          map.delete(id);
+        }
+      }
+    };
+
+    removeOwned(this.guardPresets);
+    removeOwned(this.buildPlugins);
+    removeOwned(this.loggerTransports);
+    removeOwned(this.mcpTools);
+    removeOwned(this.middlewares);
   }
 
   /**

@@ -7,14 +7,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import {
   startServer,
-  registerApiHandler,
-  clearDefaultRegistry,
+  createServerRegistry,
   type ManduServer,
+  type ServerRegistry,
 } from "../../src/runtime/server";
 import type { RoutesManifest } from "../../src/spec/schema";
 
 describe("Server API Methods", () => {
   let server: ManduServer | null = null;
+  let registry: ServerRegistry;
 
   const testManifest: RoutesManifest = {
     version: "1.0.0",
@@ -35,7 +36,7 @@ describe("Server API Methods", () => {
   };
 
   beforeEach(() => {
-    clearDefaultRegistry();
+    registry = createServerRegistry();
   });
 
   afterEach(() => {
@@ -43,21 +44,20 @@ describe("Server API Methods", () => {
       server.stop();
       server = null;
     }
-    clearDefaultRegistry();
   });
 
   describe("GET 요청", () => {
     it("GET /api/users - 목록 조회", async () => {
       const users = [{ id: 1, name: "Alice" }, { id: 2, name: "Bob" }];
 
-      registerApiHandler("api/users", async (req) => {
+      registry.registerApiHandler("api/users", async (req) => {
         if (req.method === "GET") {
           return Response.json(users);
         }
         return new Response("Method not allowed", { status: 405 });
       });
 
-      server = startServer(testManifest, { port: 0 });
+      server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/api/users`);
@@ -70,14 +70,14 @@ describe("Server API Methods", () => {
     it("GET /api/users/:id - 단일 조회", async () => {
       const user = { id: 1, name: "Alice" };
 
-      registerApiHandler("api/users/[id]", async (req, params) => {
+      registry.registerApiHandler("api/users/[id]", async (req, params) => {
         if (req.method === "GET") {
           return Response.json({ ...user, id: Number(params.id) });
         }
         return new Response("Method not allowed", { status: 405 });
       });
 
-      server = startServer(testManifest, { port: 0 });
+      server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/api/users/1`);
@@ -90,7 +90,7 @@ describe("Server API Methods", () => {
 
   describe("POST 요청", () => {
     it("POST /api/users - 새 사용자 생성", async () => {
-      registerApiHandler("api/users", async (req) => {
+      registry.registerApiHandler("api/users", async (req) => {
         if (req.method === "POST") {
           const body = await req.json();
           return Response.json(
@@ -101,7 +101,7 @@ describe("Server API Methods", () => {
         return new Response("Method not allowed", { status: 405 });
       });
 
-      server = startServer(testManifest, { port: 0 });
+      server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/api/users`, {
@@ -117,7 +117,7 @@ describe("Server API Methods", () => {
     });
 
     it("POST 빈 body 처리", async () => {
-      registerApiHandler("api/users", async (req) => {
+      registry.registerApiHandler("api/users", async (req) => {
         if (req.method === "POST") {
           try {
             const body = await req.json();
@@ -132,7 +132,7 @@ describe("Server API Methods", () => {
         return new Response("Method not allowed", { status: 405 });
       });
 
-      server = startServer(testManifest, { port: 0 });
+      server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/api/users`, {
@@ -147,7 +147,7 @@ describe("Server API Methods", () => {
 
   describe("PUT 요청", () => {
     it("PUT /api/users/:id - 사용자 수정", async () => {
-      registerApiHandler("api/users/[id]", async (req, params) => {
+      registry.registerApiHandler("api/users/[id]", async (req, params) => {
         if (req.method === "PUT") {
           const body = await req.json();
           return Response.json({
@@ -159,7 +159,7 @@ describe("Server API Methods", () => {
         return new Response("Method not allowed", { status: 405 });
       });
 
-      server = startServer(testManifest, { port: 0 });
+      server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/api/users/1`, {
@@ -176,7 +176,7 @@ describe("Server API Methods", () => {
     });
 
     it("PUT 존재하지 않는 리소스", async () => {
-      registerApiHandler("api/users/[id]", async (req, params) => {
+      registry.registerApiHandler("api/users/[id]", async (req, params) => {
         if (req.method === "PUT") {
           const id = Number(params.id);
           if (id > 100) {
@@ -190,7 +190,7 @@ describe("Server API Methods", () => {
         return new Response("Method not allowed", { status: 405 });
       });
 
-      server = startServer(testManifest, { port: 0 });
+      server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/api/users/999`, {
@@ -205,14 +205,14 @@ describe("Server API Methods", () => {
 
   describe("DELETE 요청", () => {
     it("DELETE /api/users/:id - 사용자 삭제", async () => {
-      registerApiHandler("api/users/[id]", async (req, params) => {
+      registry.registerApiHandler("api/users/[id]", async (req, params) => {
         if (req.method === "DELETE") {
           return new Response(null, { status: 204 });
         }
         return new Response("Method not allowed", { status: 405 });
       });
 
-      server = startServer(testManifest, { port: 0 });
+      server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/api/users/1`, {
@@ -225,7 +225,7 @@ describe("Server API Methods", () => {
     it("DELETE 후 GET 시 404", async () => {
       const deleted = new Set<string>();
 
-      registerApiHandler("api/users/[id]", async (req, params) => {
+      registry.registerApiHandler("api/users/[id]", async (req, params) => {
         const id = params.id;
 
         if (req.method === "DELETE") {
@@ -246,7 +246,7 @@ describe("Server API Methods", () => {
         return new Response("Method not allowed", { status: 405 });
       });
 
-      server = startServer(testManifest, { port: 0 });
+      server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       // 먼저 삭제
@@ -263,11 +263,11 @@ describe("Server API Methods", () => {
 
   describe("에러 핸들링", () => {
     it("핸들러 에러 시 500 응답", async () => {
-      registerApiHandler("api/users", async () => {
+      registry.registerApiHandler("api/users", async () => {
         throw new Error("Internal error");
       });
 
-      server = startServer(testManifest, { port: 0 });
+      server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/api/users`);
@@ -277,7 +277,7 @@ describe("Server API Methods", () => {
 
     it("등록되지 않은 핸들러 404 응답", async () => {
       // 핸들러 등록 없이 서버 시작
-      server = startServer(testManifest, { port: 0 });
+      server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/api/users`);

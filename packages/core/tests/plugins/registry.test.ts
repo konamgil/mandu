@@ -99,6 +99,47 @@ describe("DNA-001: Plugin Registry", () => {
       expect(registry.get(goodPlugin.meta.id)?.state).toBe("loaded");
     });
 
+    it("should apply schema defaults when config is undefined", async () => {
+      let captured: { timeout: number } | undefined;
+
+      const plugin = definePlugin({
+        meta: {
+          id: "defaults-plugin",
+          name: "Defaults Plugin",
+          version: "1.0.0",
+          category: "custom",
+        },
+        configSchema: z
+          .object({
+            timeout: z.number().default(5000),
+          })
+          .default({}),
+        register: (_api, config) => {
+          captured = config;
+        },
+      });
+
+      await registry.register(plugin);
+      expect(captured?.timeout).toBe(5000);
+    });
+
+    it("should throw when required config is missing", async () => {
+      const plugin = definePlugin({
+        meta: {
+          id: "requires-config",
+          name: "Requires Config",
+          version: "1.0.0",
+          category: "custom",
+        },
+        configSchema: z.object({
+          apiKey: z.string().min(1),
+        }),
+        register: vi.fn(),
+      });
+
+      await expect(registry.register(plugin)).rejects.toThrow("Invalid config");
+    });
+
     it("should call onLoad hook", async () => {
       const onLoad = vi.fn();
       const plugin = definePlugin({
@@ -136,6 +177,36 @@ describe("DNA-001: Plugin Registry", () => {
 
       expect(onUnload).toHaveBeenCalled();
       expect(registry.get("removable")).toBeUndefined();
+    });
+
+    it("should remove registered resources on unregister", async () => {
+      const plugin = definePlugin({
+        meta: {
+          id: "resource-owner",
+          name: "Resource Owner",
+          version: "1.0.0",
+          category: "custom",
+        },
+        register: (api) => {
+          api.registerGuardPreset({
+            id: "cleanup-fsd",
+            name: "Cleanup Preset",
+            getRules: () => [],
+          });
+          api.registerBuildPlugin({
+            id: "cleanup-build",
+            name: "Cleanup Build",
+          });
+        },
+      });
+
+      await registry.register(plugin);
+      expect(registry.getGuardPreset("cleanup-fsd")).toBeDefined();
+      expect(registry.getBuildPlugin("cleanup-build")).toBeDefined();
+
+      await registry.unregister("resource-owner");
+      expect(registry.getGuardPreset("cleanup-fsd")).toBeUndefined();
+      expect(registry.getBuildPlugin("cleanup-build")).toBeUndefined();
     });
 
     it("should throw for non-existent plugin", async () => {

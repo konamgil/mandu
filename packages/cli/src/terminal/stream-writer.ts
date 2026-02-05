@@ -6,8 +6,6 @@
  * - Broken pipe 감지 후 추가 쓰기 방지
  */
 
-import type { WriteStream } from "tty";
-
 /**
  * Safe Stream Writer 옵션
  */
@@ -21,6 +19,11 @@ export interface SafeStreamWriterOptions {
    * 조용히 실패 (에러 출력 안 함)
    */
   silent?: boolean;
+
+  /**
+   * Broken pipe 이외의 에러 핸들러 (선택)
+   */
+  onError?: (error: Error, stream: NodeJS.WriteStream) => void;
 }
 
 /**
@@ -95,10 +98,51 @@ function isBrokenPipeError(err: unknown): err is NodeJS.ErrnoException {
 export function createSafeStreamWriter(
   options: SafeStreamWriterOptions = {}
 ): SafeStreamWriter {
-  let closed = false;
+  const closedStreams = new Set<NodeJS.WriteStream>();
+  const errorHandlers = new Map<NodeJS.WriteStream, (err: Error) => void>();
+
+  const ensureErrorHandler = (stream: NodeJS.WriteStream): void => {
+    if (errorHandlers.has(stream)) return;
+
+    const handler = (err: Error) => {
+      if (isBrokenPipeError(err)) {
+        closedStreams.add(stream);
+        options.onBrokenPipe?.(err, stream);
+        return;
+      }
+
+      if (options.onError) {
+        options.onError(err, stream);
+        return;
+      }
+
+      if (!options.silent) {
+        console.error("[SafeStreamWriter] Stream error:", err);
+      }
+
+      // 비정상 에러는 기존 동작을 유지하도록 비동기 재-throw
+      setTimeout(() => {
+        throw err;
+      }, 0);
+    };
+
+    stream.on("error", handler);
+    errorHandlers.set(stream, handler);
+  };
+
+  const isStreamClosed = (stream: NodeJS.WriteStream): boolean => {
+    const anyStream = stream as NodeJS.WriteStream & {
+      destroyed?: boolean;
+      writableEnded?: boolean;
+    };
+    if (anyStream.destroyed || anyStream.writableEnded) return true;
+    return closedStreams.has(stream);
+  };
 
   const write = (stream: NodeJS.WriteStream, text: string): boolean => {
-    if (closed) return false;
+    if (isStreamClosed(stream)) return false;
+
+    ensureErrorHandler(stream);
 
     try {
       stream.write(text);
@@ -108,14 +152,8 @@ export function createSafeStreamWriter(
         throw err;
       }
 
-      closed = true;
+      closedStreams.add(stream);
       options.onBrokenPipe?.(err, stream);
-
-      if (!options.silent) {
-        // EPIPE는 정상적인 상황이므로 에러 출력하지 않음
-        // (예: head, tail, grep 등과 파이프 사용 시)
-      }
-
       return false;
     }
   };
@@ -127,9 +165,13 @@ export function createSafeStreamWriter(
     println: (text) => write(process.stdout, `${text}\n`),
     printError: (text) => write(process.stderr, `${text}\n`),
     reset: () => {
-      closed = false;
+      closedStreams.clear();
+      for (const [stream, handler] of errorHandlers) {
+        stream.removeListener("error", handler);
+      }
+      errorHandlers.clear();
     },
-    isClosed: () => closed,
+    isClosed: () => isStreamClosed(process.stdout),
   };
 }
 

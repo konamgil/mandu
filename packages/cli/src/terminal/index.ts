@@ -3,6 +3,7 @@
  *
  * DNA-009: Color palette & theme
  * DNA-013: Safe Stream Writer
+ * DNA-015: Semantic help system
  * DNA-017: Hero banner
  */
 
@@ -51,3 +52,20 @@ export {
   type ProgressOptions,
   type ProgressReporter,
 } from "./progress.js";
+export {
+  formatHelpExample,
+  formatHelpExampleGroup,
+  formatHelpOption,
+  formatHelpSubcommand,
+  formatSectionTitle,
+  renderHelp,
+  renderCommandHelp,
+  formatUsageHint,
+  formatErrorHint,
+  MANDU_HELP,
+  type HelpExample,
+  type HelpOption,
+  type HelpSubcommand,
+  type HelpSection,
+  type HelpDefinition,
+} from "./help.js";
