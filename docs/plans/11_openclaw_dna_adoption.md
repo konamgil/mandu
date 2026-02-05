@@ -3,7 +3,7 @@
 > **분석 대상**: OpenClaw (멀티채널 AI 메시징 플랫폼)
 > **적용 대상**: Mandu (Agent-Native 웹 프레임워크)
 > **작성일**: 2026-02-05
-> **버전**: v1.0
+> **버전**: v2.0 (CLI DNA 추가)
 
 ---
 
@@ -12,10 +12,15 @@
 1. [Executive Summary](#1-executive-summary)
 2. [OpenClaw 핵심 철학](#2-openclaw-핵심-철학)
 3. [채택할 DNA 목록](#3-채택할-dna-목록)
+   - 3.1 P0: 필수 채택 - Core (v0.11)
+   - 3.2 P1: 권장 채택 - Core (v0.12)
+   - 3.3 P2: 선택 채택 - Core (v0.13+)
+   - 3.4 **🆕 CLI DNA (v0.11-0.12)**
 4. [상세 구현 계획](#4-상세-구현-계획)
-5. [코드 패턴 레퍼런스](#5-코드-패턴-레퍼런스)
-6. [로드맵 통합](#6-로드맵-통합)
-7. [참고하지 않을 DNA](#7-참고하지-않을-dna)
+5. [CLI DNA 상세 구현](#5-cli-dna-상세-구현)
+6. [코드 패턴 레퍼런스](#6-코드-패턴-레퍼런스)
+7. [로드맵 통합](#7-로드맵-통합)
+8. [참고하지 않을 DNA](#8-참고하지-않을-dna)
 
 ---
 
@@ -30,8 +35,11 @@
 | **핵심 기능** | 채널 통합, AI 에이전트 | FS Routes, Guard, SSR |
 | **규모** | 500+ 파일, 12+ 채널 | 200+ 파일, 5 프리셋 |
 | **철학** | "EXFOLIATE!" (계층 분리) | "만두" (wrapper 일정, filling 유연) |
+| **CLI** | Commander.js + 풍부한 UI | 수동 파싱 + 기본 출력 |
 
 ### 1.2 채택 DNA 요약
+
+#### Core DNA (기존)
 
 | 우선순위 | DNA | Mandu 적용 영역 | 예상 효과 |
 |----------|-----|----------------|----------|
@@ -43,6 +51,19 @@
 | 🟡 P1 | 설정 핫 리로드 | mandu.config.ts | DX 개선 |
 | 🟢 P2 | 에러 코드 추출 | ErrorClassifier | 디버깅 ↑ |
 | 🟢 P2 | 구조화된 로깅 | Runtime Logger | 관찰성 ↑ |
+
+#### CLI DNA (신규) 🆕
+
+| 우선순위 | DNA | Mandu 적용 영역 | 예상 효과 |
+|----------|-----|----------------|----------|
+| 🔴 P0 | 색상 테마 시스템 | CLI 전체 출력 | 브랜딩 + UX ↑ |
+| 🔴 P0 | 명령어 레지스트리 | CLI 구조 | 유지보수성 ↑ |
+| 🟡 P1 | ANSI-aware 테이블 | guard, routes 출력 | 가독성 ↑ |
+| 🟡 P1 | Multi-fallback 프로그레스 | build, deploy | 피드백 ↑ |
+| 🟡 P1 | Safe Stream Writer | 파이프 출력 | 안정성 ↑ |
+| 🟡 P1 | 적응형 출력 포맷 | JSON/Pretty/Plain | 에이전트 친화 |
+| 🟢 P2 | 시맨틱 도움말 | --help 출력 | DX ↑ |
+| 🟢 P2 | Pre-Action 훅 | 배너, 설정 로드 | 일관성 ↑ |
 
 ---
 
@@ -83,12 +104,13 @@ OpenClaw의 모토는 **"EXFOLIATE! EXFOLIATE!"** - 복잡한 시스템을 양�
 | Config > Code | JSON5 설정 | TS 설정 | ✅ 양호 |
 | DI > Globals | createDefaultDeps() | 부분 적용 | 🟡 확대 필요 |
 | Type-Safety | Zod .strict() | Zod (일반) | 🟡 강화 필요 |
+| **CLI UX** | 풍부한 테마 + 적응형 출력 | 기본 출력 | 🔴 개선 필요 |
 
 ---
 
 ## 3. 채택할 DNA 목록
 
-### 3.1 P0: 필수 채택 (v0.11)
+### 3.1 P0: 필수 채택 - Core (v0.11)
 
 #### DNA-001: 플러그인 어댑터 패턴
 
@@ -215,7 +237,7 @@ packages/core/src/
 
 ---
 
-### 3.2 P1: 권장 채택 (v0.12)
+### 3.2 P1: 권장 채택 - Core (v0.12)
 
 #### DNA-004: 세션 키 기반 격리
 
@@ -238,13 +260,6 @@ export function buildAgentPeerSessionKey(params: {
 - SSR 상태 격리 (팀별, 사용자별)
 - 캐시 키 생성 (route + params + user)
 - WebSocket 채널 격리 (향후)
-
-**예상 파일**:
-```
-packages/core/src/
-└── runtime/
-    └── session-key.ts        # 세션 키 유틸
-```
 
 **구현 예시**:
 ```typescript
@@ -317,13 +332,6 @@ export function sliceUtf16Safe(input: string, start: number, end?: number): stri
 - API 응답 요약
 - 파일명 정규화
 
-**예상 파일**:
-```
-packages/core/src/
-└── utils/
-    └── string.ts             # 문자열 유틸
-```
-
 ---
 
 #### DNA-006: 설정 핫 리로드
@@ -334,14 +342,6 @@ packages/core/src/
 - `mandu.config.ts` 변경 시 자동 리로드
 - Guard 설정 실시간 반영
 - 개발 서버 재시작 없이 설정 적용
-
-**예상 파일**:
-```
-packages/core/src/
-└── config/
-    ├── watcher.ts            # 설정 파일 감시
-    └── hot-reload.ts         # 리로드 로직
-```
 
 **구현 접근**:
 ```typescript
@@ -365,7 +365,7 @@ export function watchConfig(
 
 ---
 
-### 3.3 P2: 선택 채택 (v0.13+)
+### 3.3 P2: 선택 채택 - Core (v0.13+)
 
 #### DNA-007: 에러 코드 추출 강화
 
@@ -397,11 +397,6 @@ export function formatUncaughtError(err: unknown): string {
 }
 ```
 
-**Mandu 적용**:
-- `ErrorClassifier` 강화
-- 에러 코드 기반 복구 로직
-- 사용자 친화적 에러 메시지
-
 ---
 
 #### DNA-008: 구조화된 로깅 시스템
@@ -424,11 +419,610 @@ export function detachLogTransport(transport: LogTransport) {
 }
 ```
 
+---
+
+### 3.4 CLI DNA (v0.11-0.12) 🆕
+
+#### DNA-009: 색상 테마 시스템
+
+**출처**: `src/terminal/palette.ts`, `src/terminal/theme.ts`
+
+**OpenClaw 구현**:
+```typescript
+// src/terminal/palette.ts - "Lobster Seam" 팔레트
+export const LOBSTER_PALETTE = {
+  accent: "#FF5A2D",         // 주요 요소
+  accentBright: "#FF7A3D",   // 강조
+  accentDim: "#D14A22",      // 약화
+  info: "#FF8A5B",           // 정보성
+  success: "#2FBF71",        // 성공
+  warn: "#FFB020",           // 경고
+  error: "#E23D2D",          // 에러
+  muted: "#8B7F77",          // 보조 텍스트
+} as const;
+
+// src/terminal/theme.ts - Chalk 기반 동적 시스템
+const hasForceColor = process.env.FORCE_COLOR?.trim() !== "0";
+const baseChalk = process.env.NO_COLOR && !hasForceColor
+  ? new Chalk({ level: 0 })
+  : chalk;
+
+export const theme = {
+  accent: hex(LOBSTER_PALETTE.accent),
+  success: hex(LOBSTER_PALETTE.success),
+  warn: hex(LOBSTER_PALETTE.warn),
+  error: hex(LOBSTER_PALETTE.error),
+  muted: hex(LOBSTER_PALETTE.muted),
+  heading: baseChalk.bold.hex(LOBSTER_PALETTE.accent),
+  command: hex(LOBSTER_PALETTE.accentBright),
+  option: hex(LOBSTER_PALETTE.warn),
+} as const;
+
+export const isRich = () => Boolean(baseChalk.level > 0);
+```
+
+**Mandu 적용** - "Mandu" 테마:
+```typescript
+// packages/cli/src/terminal/palette.ts
+export const MANDU_PALETTE = {
+  accent: "#E8B4B8",         // 만두 분홍 (주요)
+  accentBright: "#F5D0D3",   // 밝은 분홍 (강조)
+  accentDim: "#C9A0A4",      // 어두운 분홍
+  info: "#87CEEB",           // 스카이 블루
+  success: "#90EE90",        // 라이트 그린
+  warn: "#FFD700",           // 골드
+  error: "#FF6B6B",          // 코랄 레드
+  muted: "#9CA3AF",          // 그레이
+} as const;
+```
+
+**예상 파일**:
+```
+packages/cli/src/
+└── terminal/
+    ├── palette.ts           # 색상 팔레트 정의
+    ├── theme.ts             # Chalk 테마 시스템
+    └── index.ts             # 내보내기
+```
+
+---
+
+#### DNA-010: 명령어 레지스트리 패턴
+
+**출처**: `src/cli/program/command-registry.ts`
+
+**OpenClaw 구현**:
+```typescript
+// CommandRegistration 인터페이스로 선언적 등록
+export type CommandRegistration = {
+  id: string;
+  register: (ctx: { program: Command }) => void;
+};
+
+export const commandRegistry: CommandRegistration[] = [
+  { id: "setup", register: ({ program }) => registerSetupCommand(program) },
+  { id: "onboard", register: ({ program }) => registerOnboardCommand(program) },
+  { id: "message", register: ({ program }) => registerMessageCommand(program) },
+  // ...
+];
+
+// 런타임 경로 기반 라우팅 (속도 최적화)
+type RouteSpec = {
+  match: (path: string[]) => boolean;
+  loadPlugins?: boolean;
+  run: (argv: string[]) => Promise<boolean>;
+};
+```
+
 **Mandu 적용**:
-- 플러그인 가능한 로그 전송
-- JSON 구조화 로깅
-- 로그 레벨별 필터링
-- 시간대별 로그 롤링
+```typescript
+// packages/cli/src/commands/registry.ts
+export type CommandRegistration = {
+  id: string;
+  description: string;
+  register: (program: Command) => void;
+};
+
+export const commandRegistry: CommandRegistration[] = [
+  { id: "dev", description: "Start dev server", register: registerDevCommand },
+  { id: "build", description: "Build for production", register: registerBuildCommand },
+  { id: "guard", description: "Check architecture", register: registerGuardCommand },
+  { id: "routes", description: "Manage routes", register: registerRoutesCommand },
+  { id: "init", description: "Initialize project", register: registerInitCommand },
+];
+
+// 빌드 시점에 lazy import로 최적화
+export function registerAllCommands(program: Command) {
+  for (const cmd of commandRegistry) {
+    cmd.register(program);
+  }
+}
+```
+
+**예상 파일**:
+```
+packages/cli/src/
+├── commands/
+│   ├── registry.ts          # 명령어 레지스트리
+│   ├── dev.ts               # dev 명령어
+│   ├── build.ts             # build 명령어
+│   ├── guard.ts             # guard 명령어
+│   ├── routes.ts            # routes 명령어
+│   └── init.ts              # init 명령어
+└── program/
+    ├── build-program.ts     # 프로그램 빌드
+    └── preaction.ts         # 전처리 훅
+```
+
+---
+
+#### DNA-011: ANSI-aware 테이블 렌더링
+
+**출처**: `src/terminal/table.ts`
+
+**OpenClaw 구현**:
+```typescript
+export type TableColumn = {
+  key: string;
+  header: string;
+  align?: "left" | "right" | "center";
+  minWidth?: number;
+  maxWidth?: number;
+  flex?: boolean;  // 반응형 너비 조정
+};
+
+export function renderTable(opts: RenderTableOptions): string {
+  const { columns, rows, border = "unicode", maxWidth } = opts;
+
+  // ANSI SGR 패턴 인식 (ESC [ ... m) - 너비 계산에서 제외
+  const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, "");
+
+  // 컬럼 너비 동적 계산
+  const widths = columns.map((c, i) => {
+    const headerW = stripAnsi(c.header).length;
+    const maxCellW = Math.max(...rows.map(r => stripAnsi(String(r[c.key] ?? "")).length));
+    const base = Math.max(headerW, maxCellW) + 2; // padding
+    return c.maxWidth ? Math.min(base, c.maxWidth) : base;
+  });
+
+  // 최대 너비 제약 시 flex 컬럼부터 축소
+  if (maxWidth) {
+    const total = widths.reduce((a, b) => a + b, 0);
+    if (total > maxWidth) {
+      const flexIndices = columns.map((c, i) => c.flex ? i : -1).filter(i => i >= 0);
+      // 축소 로직...
+    }
+  }
+
+  // 유니코드 박스 그리기 문자
+  const box = border === "unicode"
+    ? { tl: "┌", tr: "┐", bl: "└", br: "┘", h: "─", v: "│", t: "┬", b: "┴", ml: "├", mr: "┤", m: "┼" }
+    : { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|", t: "+", b: "+", ml: "+", mr: "+", m: "+" };
+
+  // 테이블 렌더링...
+  return tableString;
+}
+```
+
+**Mandu 적용** - `mandu guard` 출력:
+```typescript
+// packages/cli/src/terminal/table.ts
+import { theme } from "./theme.js";
+
+export function renderViolationsTable(violations: Violation[]): string {
+  return renderTable({
+    columns: [
+      { key: "severity", header: "Sev", minWidth: 5 },
+      { key: "file", header: "File", flex: true, maxWidth: 40 },
+      { key: "rule", header: "Rule", minWidth: 20 },
+      { key: "message", header: "Message", flex: true },
+    ],
+    rows: violations.map(v => ({
+      severity: v.severity === "error" ? theme.error("ERR") : theme.warn("WARN"),
+      file: theme.muted(shortenPath(v.filePath)),
+      rule: v.ruleId,
+      message: v.ruleDescription,
+    })),
+    border: "unicode",
+    maxWidth: process.stdout.columns ?? 120,
+  });
+}
+```
+
+---
+
+#### DNA-012: Multi-fallback 프로그레스
+
+**출처**: `src/cli/progress.ts`
+
+**OpenClaw 구현**:
+```typescript
+export type ProgressOptions = {
+  label: string;
+  total?: number;
+  stream?: NodeJS.WriteStream;
+  fallback?: "spinner" | "line" | "log" | "none";
+};
+
+export function createCliProgress(options: ProgressOptions): ProgressReporter {
+  const stream = options.stream ?? process.stderr;
+  const isTty = stream.isTTY;
+
+  // OSC Progress 프로토콜 지원 (현대 터미널)
+  const canOsc = isTty && supportsOscProgress(process.env, isTty);
+
+  // 다단계 폴백: OSC → Spinner → Line → Log → None
+  const controller = canOsc ? createOscProgressController(stream) : null;
+  const spin = options.fallback === "spinner" ? createSpinner() : null;
+  const renderLine = options.fallback === "line" ? createLineRenderer(stream) : null;
+
+  let label = options.label;
+  let percent = 0;
+  let completed = 0;
+  const total = options.total ?? 100;
+
+  return {
+    setLabel: (next: string) => { label = next; render(); },
+    setPercent: (nextPercent: number) => { percent = Math.max(0, Math.min(100, nextPercent)); render(); },
+    tick: (delta = 1) => { completed = Math.min(total, completed + delta); percent = (completed / total) * 100; render(); },
+    done: () => { cleanup(); },
+  };
+}
+
+// 컨텍스트 패턴으로 자동 정리
+export async function withProgress<T>(
+  options: ProgressOptions,
+  work: (progress: ProgressReporter) => Promise<T>,
+): Promise<T> {
+  const progress = createCliProgress(options);
+  try {
+    return await work(progress);
+  } finally {
+    progress.done();
+  }
+}
+```
+
+**Mandu 적용** - `mandu build`:
+```typescript
+// packages/cli/src/commands/build.ts
+import { withProgress } from "../terminal/progress.js";
+
+export async function runBuild(options: BuildOptions) {
+  await withProgress({ label: "Building...", total: 4 }, async (progress) => {
+    progress.setLabel("Scanning routes...");
+    await scanRoutes();
+    progress.tick();
+
+    progress.setLabel("Bundling client...");
+    await bundleClient();
+    progress.tick();
+
+    progress.setLabel("Generating SSR...");
+    await generateSSR();
+    progress.tick();
+
+    progress.setLabel("Optimizing...");
+    await optimize();
+    progress.tick();
+  });
+
+  console.log(theme.success("✓ Build completed"));
+}
+```
+
+---
+
+#### DNA-013: Safe Stream Writer (EPIPE 처리)
+
+**출처**: `src/terminal/stream-writer.ts`
+
+**OpenClaw 구현**:
+```typescript
+export type SafeStreamWriter = {
+  write: (stream: NodeJS.WriteStream, text: string) => boolean;
+  writeLine: (stream: NodeJS.WriteStream, text: string) => boolean;
+  reset: () => void;
+  isClosed: () => boolean;
+};
+
+export function createSafeStreamWriter(options: SafeStreamWriterOptions = {}): SafeStreamWriter {
+  let closed = false;
+
+  const isBrokenPipeError = (err: unknown): err is NodeJS.ErrnoException =>
+    (err as NodeJS.ErrnoException)?.code === "EPIPE" ||
+    (err as NodeJS.ErrnoException)?.code === "EIO";
+
+  const write = (stream: NodeJS.WriteStream, text: string): boolean => {
+    if (closed) return false;
+    try {
+      stream.write(text);
+      return true;
+    } catch (err) {
+      if (!isBrokenPipeError(err)) throw err;
+      closed = true;
+      options.onBrokenPipe?.(err, stream);
+      return false;
+    }
+  };
+
+  return {
+    write,
+    writeLine: (stream, text) => write(stream, `${text}\n`),
+    reset: () => { closed = false; },
+    isClosed: () => closed,
+  };
+}
+```
+
+**Mandu 적용** - 파이프 출력 안정화:
+```typescript
+// packages/cli/src/terminal/output.ts
+const writer = createSafeStreamWriter({
+  onBrokenPipe: () => {
+    // 조용히 종료 (head, grep 등과 파이프 시)
+  },
+});
+
+export function log(message: string): boolean {
+  return writer.writeLine(process.stdout, message);
+}
+
+export function error(message: string): boolean {
+  return writer.writeLine(process.stderr, message);
+}
+
+// 사용 예: mandu routes --json | head -10
+export function streamRoutes(routes: Route[]) {
+  for (const route of routes) {
+    if (!log(JSON.stringify(route))) {
+      return; // 파이프 끊김 시 조용히 종료
+    }
+  }
+}
+```
+
+---
+
+#### DNA-014: 적응형 출력 포맷 (JSON/Pretty/Plain)
+
+**출처**: `src/cli/logs-cli.ts`
+
+**OpenClaw 구현**:
+```typescript
+// 출력 모드 결정 로직
+function determineOutputMode(opts: CliOptions): OutputMode {
+  if (opts.json) return "json";
+  if (opts.plain || !process.stdout.isTTY) return "plain";
+  return "pretty";
+}
+
+// 적응형 포맷팅
+function formatOutput(data: unknown, mode: OutputMode, rich: boolean): string {
+  if (mode === "json") {
+    return JSON.stringify(data, null, 2);
+  }
+
+  if (mode === "plain") {
+    // 색상 없이 텍스트만
+    return formatPlain(data);
+  }
+
+  // Pretty 모드: 색상 + 포맷팅
+  return formatPretty(data, rich);
+}
+
+// 에이전트 친화적 에러 출력
+function emitError(err: unknown, mode: OutputMode, rich: boolean) {
+  const message = "Gateway not reachable. Is it running?";
+  const hint = `Hint: run \`${theme.command("mandu doctor")}\`.`;
+  const errorText = err instanceof Error ? err.message : String(err);
+
+  if (mode === "json") {
+    return { type: "error", message, error: errorText, hint };
+  }
+
+  return [
+    rich ? theme.error(message) : message,
+    rich ? theme.muted(hint) : hint,
+  ].join("\n");
+}
+```
+
+**Mandu 적용**:
+```typescript
+// packages/cli/src/terminal/output.ts
+export type OutputMode = "json" | "pretty" | "plain";
+
+export function getOutputMode(opts: { json?: boolean; plain?: boolean }): OutputMode {
+  // 에이전트 감지
+  if (process.env.CLAUDE_CODE || process.env.CI) {
+    return opts.json ? "json" : "plain";
+  }
+  if (opts.json) return "json";
+  if (opts.plain || !process.stdout.isTTY) return "plain";
+  return "pretty";
+}
+
+// mandu guard 출력 예시
+export function outputGuardReport(report: ViolationReport, mode: OutputMode) {
+  if (mode === "json") {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  const rich = mode === "pretty";
+
+  console.log(rich ? theme.heading("Guard Report") : "Guard Report");
+  console.log(`Total: ${report.totalViolations} violations`);
+
+  if (report.violations.length > 0) {
+    console.log(rich ? renderViolationsTable(report.violations) : formatPlainViolations(report.violations));
+  }
+}
+```
+
+---
+
+#### DNA-015: 시맨틱 도움말 시스템
+
+**출처**: `src/cli/help-format.ts`, `src/cli/program/help.ts`
+
+**OpenClaw 구현**:
+```typescript
+// 예제 포맷팅
+export type HelpExample = readonly [command: string, description: string];
+
+export function formatHelpExample(command: string, description: string): string {
+  return `  ${theme.command(command)}\n    ${theme.muted(description)}`;
+}
+
+export function formatHelpExampleGroup(
+  label: string,
+  examples: ReadonlyArray<HelpExample>,
+) {
+  return `${theme.muted(label)}\n${examples.map(([cmd, desc]) => formatHelpExample(cmd, desc)).join("\n\n")}`;
+}
+
+// Commander.js configureHelp 커스터마이징
+export function configureProgramHelp(program: Command) {
+  program
+    .configureHelp({
+      optionTerm: (option) => theme.option(option.flags),
+      subcommandTerm: (cmd) => theme.command(cmd.name()),
+    })
+    .configureOutput({
+      writeOut: (str) => {
+        const colored = str
+          .replace(/^Usage:/gm, theme.heading("Usage:"))
+          .replace(/^Options:/gm, theme.heading("Options:"))
+          .replace(/^Commands:/gm, theme.heading("Commands:"));
+        process.stdout.write(colored);
+      },
+      outputError: (str, write) => write(theme.error(str)),
+    })
+    .addHelpText("after", formatHelpExampleGroup("Examples:", [
+      ["mandu dev", "Start development server with HMR"],
+      ["mandu build --prod", "Build for production"],
+      ["mandu guard --fix", "Check architecture and auto-fix"],
+    ]));
+}
+```
+
+**Mandu 적용**:
+```typescript
+// packages/cli/src/program/help.ts
+import { theme } from "../terminal/theme.js";
+
+const EXAMPLES: HelpExample[] = [
+  ["mandu dev", "Start dev server with HMR"],
+  ["mandu build", "Build for production"],
+  ["mandu guard", "Check architecture rules"],
+  ["mandu guard --heal", "Auto-fix violations"],
+  ["mandu routes list --json", "List routes as JSON"],
+];
+
+export function configureProgramHelp(program: Command) {
+  program
+    .name("mandu")
+    .description("Agent-Native Web Framework")
+    .configureHelp({
+      optionTerm: (opt) => theme.option(opt.flags),
+      subcommandTerm: (cmd) => theme.command(cmd.name()),
+    })
+    .addHelpText("after", `\n${formatHelpExampleGroup("Examples:", EXAMPLES)}`);
+}
+```
+
+---
+
+#### DNA-016: Pre-Action 훅 패턴
+
+**출처**: `src/cli/program/preaction.ts`
+
+**OpenClaw 구현**:
+```typescript
+export function registerPreActionHooks(program: Command, programVersion: string) {
+  program.hook("preAction", async (_thisCommand, actionCommand) => {
+    // 1. 프로세스 타이틀 설정
+    setProcessTitleForCommand(actionCommand);
+
+    const argv = process.argv;
+    if (hasHelpOrVersion(argv)) return;
+
+    const commandPath = getCommandPath(argv, 2);
+
+    // 2. 조건부 배너 표시
+    const hideBanner =
+      isTruthyEnvValue(process.env.MANDU_HIDE_BANNER) ||
+      commandPath[0] === "completion";
+    if (!hideBanner && process.stdout.isTTY) {
+      emitCliBanner(programVersion);
+    }
+
+    // 3. Verbose 모드 설정
+    const verbose = getVerboseFlag(argv);
+    setVerbose(verbose);
+
+    // 4. 설정 로드 (일부 명령어 제외)
+    const SKIP_CONFIG = new Set(["init", "completion", "help"]);
+    if (!SKIP_CONFIG.has(commandPath[0])) {
+      await ensureConfigReady();
+    }
+  });
+}
+```
+
+**Mandu 적용**:
+```typescript
+// packages/cli/src/program/preaction.ts
+import { theme, isRich } from "../terminal/theme.js";
+import { loadConfig } from "@mandujs/core";
+
+export function registerPreActionHooks(program: Command, version: string) {
+  program.hook("preAction", async (_thisCommand, actionCommand) => {
+    const argv = process.argv;
+    const commandPath = getCommandPath(argv);
+
+    // 1. 배너 표시 (TTY + 비 JSON 모드)
+    if (process.stdout.isTTY && !hasJsonFlag(argv) && !process.env.MANDU_NO_BANNER) {
+      printBanner(version);
+    }
+
+    // 2. Verbose/Debug 모드
+    if (hasVerboseFlag(argv)) {
+      process.env.MANDU_VERBOSE = "1";
+    }
+
+    // 3. 설정 로드 (init, help 제외)
+    const SKIP_CONFIG = new Set(["init", "help", "--help", "-h"]);
+    if (!SKIP_CONFIG.has(commandPath[0])) {
+      try {
+        await loadConfig(process.cwd());
+      } catch (err) {
+        // 설정 없어도 일부 명령어는 실행 가능
+        if (commandPath[0] !== "guard") {
+          console.warn(theme.warn("Warning: No mandu.config.ts found"));
+        }
+      }
+    }
+  });
+}
+
+function printBanner(version: string) {
+  if (!isRich()) {
+    console.log(`Mandu v${version}`);
+    return;
+  }
+
+  console.log(`
+${theme.accent("  ╭─────────────────────────╮")}
+${theme.accent("  │")}  ${theme.heading("🥟 Mandu")} ${theme.muted(`v${version}`)}        ${theme.accent("│")}
+${theme.accent("  │")}  ${theme.muted("Agent-Native Framework")} ${theme.accent("│")}
+${theme.accent("  ╰─────────────────────────╯")}
+  `);
+}
+```
 
 ---
 
@@ -580,7 +1174,6 @@ class PluginRegistry {
   private createApi(): ManduPluginApi {
     return {
       registerGuardPreset: (preset) => {
-        // Guard 프리셋 레지스트리에 등록
         guardPresetRegistry.register(preset);
       },
       registerBuildPlugin: (plugin) => {
@@ -601,77 +1194,9 @@ class PluginRegistry {
 export const pluginRegistry = new PluginRegistry();
 ```
 
-#### Phase 3: Guard 프리셋 플러그인화
-
-```typescript
-// packages/core/src/guard/presets/plugin.ts
-
-import type { ManduPlugin, ManduPluginApi } from "../../plugins/types.js";
-import type { PresetDefinition, LayerDefinition } from "../types.js";
-import { z } from "zod";
-
-/**
- * Guard 프리셋 플러그인 인터페이스
- */
-export interface GuardPresetPlugin {
-  /** 프리셋 ID (예: "fsd", "clean") */
-  id: string;
-
-  /** 프리셋 이름 */
-  name: string;
-
-  /** 설명 */
-  description: string;
-
-  /** 레이어 정의 */
-  layers: LayerDefinition[];
-
-  /** 기본 제외 패턴 */
-  defaultExclude?: string[];
-}
-
-/**
- * Guard 프리셋 플러그인 생성 헬퍼
- */
-export function createGuardPresetPlugin(
-  preset: GuardPresetPlugin
-): ManduPlugin {
-  return {
-    meta: {
-      id: `guard-preset-${preset.id}`,
-      name: preset.name,
-      version: "1.0.0",
-      description: preset.description,
-    },
-    category: "guard-preset",
-    configSchema: z.object({}).optional(),
-    register: (api: ManduPluginApi) => {
-      api.registerGuardPreset(preset);
-    },
-  };
-}
-
-// 예시: FSD 프리셋 플러그인
-export const fsdPresetPlugin = createGuardPresetPlugin({
-  id: "fsd",
-  name: "Feature-Sliced Design",
-  description: "Frontend-focused architecture",
-  layers: [
-    { name: "app", level: 6 },
-    { name: "pages", level: 5 },
-    { name: "widgets", level: 4 },
-    { name: "features", level: 3 },
-    { name: "entities", level: 2 },
-    { name: "shared", level: 1 },
-  ],
-});
-```
-
 ---
 
 ### 4.2 DNA-002: 의존성 주입 패턴
-
-#### Filling 핸들러 DI 적용
 
 ```typescript
 // packages/core/src/filling/deps.ts
@@ -680,20 +1205,20 @@ export const fsdPresetPlugin = createGuardPresetPlugin({
  * Filling 핸들러 의존성 타입
  */
 export interface FillingDeps {
-  /** 데이터베이스 접근 (추상화) */
+  /** 데이터베이스 접근 */
   db?: {
     query: <T>(sql: string, params?: unknown[]) => Promise<T>;
     transaction: <T>(fn: () => Promise<T>) => Promise<T>;
   };
 
-  /** 캐시 접근 (추상화) */
+  /** 캐시 접근 */
   cache?: {
     get: <T>(key: string) => Promise<T | null>;
     set: <T>(key: string, value: T, ttl?: number) => Promise<void>;
     delete: (key: string) => Promise<void>;
   };
 
-  /** 외부 HTTP 클라이언트 */
+  /** HTTP 클라이언트 */
   fetch?: typeof fetch;
 
   /** 로거 */
@@ -746,109 +1271,184 @@ export function createMockDeps(overrides: Partial<FillingDeps> = {}): FillingDep
 }
 ```
 
-#### Context에 Deps 주입
+---
+
+## 5. CLI DNA 상세 구현
+
+### 5.1 파일 구조
+
+```
+packages/cli/src/
+├── terminal/
+│   ├── palette.ts           # 🆕 색상 팔레트
+│   ├── theme.ts             # 🆕 Chalk 테마
+│   ├── table.ts             # 🆕 ANSI-aware 테이블
+│   ├── progress.ts          # 🆕 프로그레스 표시
+│   ├── stream-writer.ts     # 🆕 Safe Stream Writer
+│   ├── output.ts            # 🆕 적응형 출력
+│   └── index.ts
+├── commands/
+│   ├── registry.ts          # 🆕 명령어 레지스트리
+│   ├── dev.ts               # 수정: 테마 적용
+│   ├── build.ts             # 수정: 프로그레스 적용
+│   ├── guard.ts             # 수정: 테이블 출력
+│   └── routes.ts            # 수정: JSON/Pretty 출력
+├── program/
+│   ├── build-program.ts     # 🆕 프로그램 빌드
+│   ├── preaction.ts         # 🆕 Pre-Action 훅
+│   └── help.ts              # 🆕 도움말 커스터마이징
+└── index.ts
+```
+
+### 5.2 DNA-009: 색상 테마 구현
 
 ```typescript
-// packages/core/src/filling/context.ts (수정)
+// packages/cli/src/terminal/palette.ts
+export const MANDU_PALETTE = {
+  // 브랜드 컬러
+  accent: "#E8B4B8",         // 만두 분홍
+  accentBright: "#F5D0D3",   // 밝은 분홍
+  accentDim: "#C9A0A4",      // 어두운 분홍
 
-import type { FillingDeps } from "./deps.js";
+  // 시맨틱 컬러
+  info: "#87CEEB",           // 스카이 블루
+  success: "#90EE90",        // 라이트 그린
+  warn: "#FFD700",           // 골드
+  error: "#FF6B6B",          // 코랄 레드
 
-export class FillingContext<TState = {}> {
-  private deps: FillingDeps;
+  // 뉴트럴
+  muted: "#9CA3AF",          // 그레이
+  dim: "#6B7280",            // 다크 그레이
+} as const;
 
-  constructor(
-    private request: Request,
-    private state: TState,
-    deps?: FillingDeps
-  ) {
-    this.deps = deps ?? createDefaultDeps();
-  }
+// packages/cli/src/terminal/theme.ts
+import chalk, { Chalk } from "chalk";
+import { MANDU_PALETTE } from "./palette.js";
 
-  /** 의존성 접근 */
-  get db() { return this.deps.db; }
-  get cache() { return this.deps.cache; }
-  get fetch() { return this.deps.fetch ?? globalThis.fetch; }
-  get logger() { return this.deps.logger ?? console; }
-  get now() { return this.deps.now ?? (() => new Date()); }
+// NO_COLOR / FORCE_COLOR 지원
+const hasForceColor = process.env.FORCE_COLOR?.trim() !== "0";
+const baseChalk = process.env.NO_COLOR && !hasForceColor
+  ? new Chalk({ level: 0 })
+  : chalk;
 
-  // ... 기존 메서드들
+const hex = (color: string) => baseChalk.hex(color);
+
+export const theme = {
+  // 시맨틱
+  accent: hex(MANDU_PALETTE.accent),
+  success: hex(MANDU_PALETTE.success),
+  warn: hex(MANDU_PALETTE.warn),
+  error: hex(MANDU_PALETTE.error),
+  info: hex(MANDU_PALETTE.info),
+  muted: hex(MANDU_PALETTE.muted),
+
+  // 복합
+  heading: baseChalk.bold.hex(MANDU_PALETTE.accent),
+  command: hex(MANDU_PALETTE.accentBright),
+  option: hex(MANDU_PALETTE.warn),
+  path: hex(MANDU_PALETTE.info),
+
+  // 강조
+  bold: baseChalk.bold,
+  dim: baseChalk.dim,
+} as const;
+
+export const isRich = () => baseChalk.level > 0;
+
+export function colorize(rich: boolean, colorFn: (s: string) => string, text: string): string {
+  return rich ? colorFn(text) : text;
 }
 ```
 
-#### 테스트 예시
+### 5.3 DNA-012: 프로그레스 구현
 
 ```typescript
-// packages/core/tests/filling/handler.test.ts
+// packages/cli/src/terminal/progress.ts
+import ora from "ora";
+import { theme, isRich } from "./theme.js";
 
-import { describe, it, expect, vi } from "bun:test";
-import { Mandu } from "../../src/index.js";
-import { createMockDeps } from "../../src/filling/deps.js";
+export type ProgressOptions = {
+  label: string;
+  total?: number;
+  stream?: NodeJS.WriteStream;
+};
 
-describe("Filling Handler with DI", () => {
-  it("should use injected db", async () => {
-    const mockQuery = vi.fn().mockResolvedValue([{ id: 1, name: "Test" }]);
+export type ProgressReporter = {
+  setLabel: (label: string) => void;
+  setPercent: (percent: number) => void;
+  tick: (delta?: number) => void;
+  done: () => void;
+  fail: (message?: string) => void;
+};
 
-    const handler = Mandu.filling()
-      .get(async (ctx) => {
-        const users = await ctx.db!.query("SELECT * FROM users");
-        return ctx.ok({ data: users });
-      });
+export function createCliProgress(options: ProgressOptions): ProgressReporter {
+  const stream = options.stream ?? process.stderr;
+  const isTty = stream.isTTY;
+  const total = options.total ?? 100;
 
-    const deps = createMockDeps({
-      db: { query: mockQuery, transaction: async (fn) => fn() },
-    });
+  let label = options.label;
+  let completed = 0;
 
-    const result = await handler.handle(
-      new Request("http://localhost/api/users"),
-      deps
-    );
+  // TTY: 스피너 사용
+  const spinner = isTty && isRich() ? ora({ text: label, stream }).start() : null;
 
-    expect(mockQuery).toHaveBeenCalledWith("SELECT * FROM users");
-    expect(result.status).toBe(200);
-  });
+  const render = () => {
+    const percent = Math.round((completed / total) * 100);
+    const text = `${label} (${percent}%)`;
 
-  it("should use injected time for testing", async () => {
-    const fixedDate = new Date("2026-06-15T10:00:00Z");
+    if (spinner) {
+      spinner.text = text;
+    } else if (isTty) {
+      stream.write(`\r${text}`);
+    }
+  };
 
-    const handler = Mandu.filling()
-      .get(async (ctx) => {
-        return ctx.ok({ timestamp: ctx.now().toISOString() });
-      });
+  return {
+    setLabel: (next: string) => { label = next; render(); },
+    setPercent: (percent: number) => { completed = (percent / 100) * total; render(); },
+    tick: (delta = 1) => { completed = Math.min(total, completed + delta); render(); },
+    done: () => {
+      if (spinner) {
+        spinner.succeed(theme.success(`${label} completed`));
+      } else if (isTty) {
+        stream.write(`\r${label} completed\n`);
+      } else {
+        stream.write(`${label} completed\n`);
+      }
+    },
+    fail: (message?: string) => {
+      if (spinner) {
+        spinner.fail(theme.error(message ?? `${label} failed`));
+      } else {
+        stream.write(`${message ?? `${label} failed`}\n`);
+      }
+    },
+  };
+}
 
-    const deps = createMockDeps({ now: () => fixedDate });
-
-    const result = await handler.handle(
-      new Request("http://localhost/api/time"),
-      deps
-    );
-
-    const body = await result.json();
-    expect(body.timestamp).toBe("2026-06-15T10:00:00.000Z");
-  });
-});
+export async function withProgress<T>(
+  options: ProgressOptions,
+  work: (progress: ProgressReporter) => Promise<T>,
+): Promise<T> {
+  const progress = createCliProgress(options);
+  try {
+    return await work(progress);
+  } catch (err) {
+    progress.fail();
+    throw err;
+  }
+}
 ```
 
 ---
 
-## 5. 코드 패턴 레퍼런스
+## 6. 코드 패턴 레퍼런스
 
-### 5.1 OpenClaw 패턴 → Mandu 적용
+### 6.1 OpenClaw 패턴 → Mandu 적용
 
 #### 패턴 1: 정규화 함수
 
 ```typescript
-// OpenClaw: src/utils.ts
-export function normalizeAgentId(value: string): string {
-  const trimmed = (value ?? "").trim();
-  if (SAFE_ID_RE.test(trimmed)) {
-    return trimmed.toLowerCase();
-  }
-  return trimmed
-    .toLowerCase()
-    .replace(UNSAFE_CHARS_RE, "-")
-    .slice(0, 64) || "unknown";
-}
-
 // Mandu 적용: src/utils/normalize.ts
 export function normalizeRouteId(value: string): string {
   const trimmed = (value ?? "").trim();
@@ -861,20 +1461,12 @@ export function normalizeRouteId(value: string): string {
     .replace(/-+/g, "-")
     .slice(0, 64) || "route";
 }
-
-export function normalizeSlotPath(value: string): string {
-  return value
-    .replace(/\\/g, "/")
-    .replace(/\/+/g, "/")
-    .replace(/^\//, "")
-    .replace(/\/$/, "");
-}
 ```
 
 #### 패턴 2: 에러 래핑
 
 ```typescript
-// OpenClaw: src/infra/errors.ts
+// Mandu 적용: src/errors/wrap.ts
 export class ManduError extends Error {
   constructor(
     message: string,
@@ -887,45 +1479,40 @@ export class ManduError extends Error {
 }
 
 export function wrapError(err: unknown, context: string): ManduError {
-  if (err instanceof ManduError) {
-    return err;
-  }
-
+  if (err instanceof ManduError) return err;
   const message = err instanceof Error ? err.message : String(err);
-  return new ManduError(
-    `${context}: ${message}`,
-    "WRAPPED_ERROR",
-    { originalError: err }
-  );
+  return new ManduError(`${context}: ${message}`, "WRAPPED_ERROR", { originalError: err });
 }
 ```
 
-#### 패턴 3: 안전한 JSON 파싱
+#### 패턴 3: Managed Resource
 
 ```typescript
-// OpenClaw 패턴 적용
-export function safeJsonParse<T>(
-  input: string,
-  fallback: T
-): { success: true; data: T } | { success: false; error: Error; data: T } {
+// Mandu 적용: src/utils/resource.ts
+export async function withManager<T, R>(params: {
+  getManager: () => Promise<{ manager: T | null; error?: string }>;
+  onMissing: (error?: string) => void;
+  run: (manager: T) => Promise<R>;
+  close: (manager: T) => Promise<void>;
+}): Promise<R | undefined> {
+  const { manager, error } = await params.getManager();
+  if (!manager) {
+    params.onMissing(error);
+    return undefined;
+  }
   try {
-    const data = JSON.parse(input) as T;
-    return { success: true, data };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error : new Error(String(error)),
-      data: fallback,
-    };
+    return await params.run(manager);
+  } finally {
+    await params.close(manager);
   }
 }
 ```
 
 ---
 
-## 6. 로드맵 통합
+## 7. 로드맵 통합
 
-### 6.1 v0.11 (Q1 2026)
+### 7.1 v0.11 (Q1 2026)
 
 | 항목 | DNA | 예상 공수 | 담당 |
 |------|-----|----------|------|
@@ -934,8 +1521,10 @@ export function safeJsonParse<T>(
 | Guard 프리셋 플러그인화 | DNA-001 | 2일 | - |
 | Filling DI 패턴 | DNA-002 | 3일 | - |
 | Zod .strict() 전면 적용 | DNA-003 | 1일 | - |
+| **CLI 색상 테마 시스템** | DNA-009 | 1일 | - |
+| **명령어 레지스트리** | DNA-010 | 2일 | - |
 
-### 6.2 v0.12 (Q2 2026)
+### 7.2 v0.12 (Q2 2026)
 
 | 항목 | DNA | 예상 공수 | 담당 |
 |------|-----|----------|------|
@@ -944,20 +1533,26 @@ export function safeJsonParse<T>(
 | 설정 핫 리로드 | DNA-006 | 3일 | - |
 | MCP 도구 플러그인 API | DNA-001 | 3일 | - |
 | 빌드 플러그인 API | DNA-001 | 3일 | - |
+| **ANSI-aware 테이블** | DNA-011 | 2일 | - |
+| **Multi-fallback 프로그레스** | DNA-012 | 2일 | - |
+| **Safe Stream Writer** | DNA-013 | 1일 | - |
+| **적응형 출력 포맷** | DNA-014 | 2일 | - |
 
-### 6.3 v0.13 (Q3 2026)
+### 7.3 v0.13 (Q3 2026)
 
 | 항목 | DNA | 예상 공수 | 담당 |
 |------|-----|----------|------|
 | 에러 코드 추출 강화 | DNA-007 | 2일 | - |
 | 구조화된 로깅 시스템 | DNA-008 | 4일 | - |
 | 로깅 전송 플러그인 | DNA-001 | 2일 | - |
+| **시맨틱 도움말** | DNA-015 | 1일 | - |
+| **Pre-Action 훅** | DNA-016 | 1일 | - |
 
 ---
 
-## 7. 참고하지 않을 DNA
+## 8. 참고하지 않을 DNA
 
-### 7.1 비적합 DNA 목록
+### 8.1 비적합 DNA 목록
 
 | DNA | OpenClaw 용도 | 비적합 이유 |
 |-----|--------------|------------|
@@ -968,8 +1563,9 @@ export function safeJsonParse<T>(
 | **채널 라우팅** | 멀티채널 메시지 전달 | 웹 프레임워크 불필요 |
 | **E164 정규화** | 전화번호 처리 | 도메인 특화 |
 | **WhatsApp JID 변환** | WhatsApp 식별자 | 플랫폼 특화 |
+| **ASCII 아트 배너** | 복잡한 로고 표시 | 단순한 배너로 충분 |
 
-### 7.2 향후 검토 가능 DNA
+### 8.2 향후 검토 가능 DNA
 
 | DNA | 조건 | 검토 시점 |
 |-----|------|----------|
@@ -981,7 +1577,7 @@ export function safeJsonParse<T>(
 
 ## 부록 A: 파일 변경 요약
 
-### 신규 파일
+### 신규 파일 (Core)
 
 ```
 packages/core/src/
@@ -1004,20 +1600,23 @@ packages/core/src/
     └── normalize.ts          # 정규화 함수
 ```
 
-### 수정 파일
+### 신규 파일 (CLI) 🆕
 
 ```
-packages/core/src/
-├── filling/
-│   ├── context.ts            # deps 주입 추가
-│   └── filling.ts            # deps 전달
-├── guard/
-│   ├── types.ts              # .strict() 추가
-│   └── presets/index.ts      # 플러그인 연동
-├── config/
-│   └── validate.ts           # .strict() 추가
-└── contract/
-    └── schema.ts             # .strict() 추가
+packages/cli/src/
+├── terminal/
+│   ├── palette.ts            # 색상 팔레트
+│   ├── theme.ts              # Chalk 테마
+│   ├── table.ts              # ANSI-aware 테이블
+│   ├── progress.ts           # 프로그레스 표시
+│   ├── stream-writer.ts      # Safe Stream Writer
+│   └── output.ts             # 적응형 출력
+├── commands/
+│   └── registry.ts           # 명령어 레지스트리
+└── program/
+    ├── build-program.ts      # 프로그램 빌드
+    ├── preaction.ts          # Pre-Action 훅
+    └── help.ts               # 도움말 커스터마이징
 ```
 
 ---
@@ -1035,6 +1634,14 @@ packages/core/src/
 | `src/logging/logger.ts` | 로깅 시스템 |
 | `src/routing/session-key.ts` | 세션 키 생성 |
 | `extensions/*/index.ts` | 플러그인 구조 |
+| `src/terminal/palette.ts` | 🆕 색상 팔레트 |
+| `src/terminal/theme.ts` | 🆕 테마 시스템 |
+| `src/terminal/table.ts` | 🆕 테이블 렌더링 |
+| `src/cli/progress.ts` | 🆕 프로그레스 표시 |
+| `src/terminal/stream-writer.ts` | 🆕 Safe Writer |
+| `src/cli/program/command-registry.ts` | 🆕 명령어 레지스트리 |
+| `src/cli/program/preaction.ts` | 🆕 Pre-Action 훅 |
+| `src/cli/help-format.ts` | 🆕 도움말 포맷 |
 
 ### 관련 문서
 
@@ -1044,4 +1651,4 @@ packages/core/src/
 
 ---
 
-*문서 끝*
+*문서 끝 - v2.0 (CLI DNA 추가)*
