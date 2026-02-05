@@ -25,11 +25,14 @@ import { routesGenerate, routesList, routesWatch } from "./commands/routes";
 import { monitor } from "./commands/monitor";
 import { runLockCommand, lockHelp } from "./commands/lock";
 import { CLI_ERROR_CODES, handleCLIError, printCLIError } from "./errors";
+import { shouldShowBanner, renderHeroBanner, theme } from "./terminal";
+
+const VERSION = "0.10.0";
 
 const HELP_TEXT = `
-🥟 Mandu CLI - Agent-Native Fullstack Framework
+${theme.heading("🥟 Mandu CLI")} ${theme.muted(`v${VERSION}`)} - Agent-Native Fullstack Framework
 
-Usage: bunx mandu <command> [options]
+${theme.heading("Usage:")} ${theme.command("bunx mandu")} ${theme.option("<command>")} [options]
 
 Commands:
   init              새 프로젝트 생성 (Tailwind + shadcn/ui 기본 포함)
@@ -177,6 +180,11 @@ async function main(): Promise<void> {
   if (options.help || command === "help" || !command) {
     console.log(HELP_TEXT);
     process.exit(0);
+  }
+
+  // Show hero banner for interactive commands
+  if (shouldShowBanner(args)) {
+    await renderHeroBanner(VERSION);
   }
 
   let success = true;

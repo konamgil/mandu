@@ -32,7 +32,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@mandujs/core": "workspace:*"
+    "@mandujs/core": "workspace:*",
+    "cfonts": "^3.3.0"
   },
   "engines": {
     "bun": ">=1.0.0"
