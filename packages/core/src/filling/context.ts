@@ -1,12 +1,15 @@
 /**
  * Mandu Context - 만두 접시 🥟
  * Request/Response를 래핑하여 편리한 API 제공
+ *
+ * DNA-002: 의존성 주입 패턴 지원
  */
 
 import type { ZodSchema } from "zod";
 import type { ContractSchema, ContractMethod } from "../contract/schema";
 import type { InferBody, InferHeaders, InferParams, InferQuery, InferResponse } from "../contract/types";
 import { ContractValidator, type ContractValidatorOptions } from "../contract/validator";
+import { type FillingDeps, createDefaultDeps, globalDeps } from "./deps";
 
 type ContractInput<
   TContract extends ContractSchema,
@@ -227,14 +230,39 @@ export class ManduContext {
   private _params: Record<string, string>;
   private _query: Record<string, string>;
   private _cookies: CookieManager;
+  private _deps: FillingDeps;
 
   constructor(
     public readonly request: Request,
-    params: Record<string, string> = {}
+    params: Record<string, string> = {},
+    deps?: FillingDeps
   ) {
     this._params = params;
     this._query = this.parseQuery();
     this._cookies = new CookieManager(request);
+    this._deps = deps ?? globalDeps.get();
+  }
+
+  /**
+   * DNA-002: 의존성 접근
+   *
+   * @example
+   * ```ts
+   * // 데이터베이스 쿼리
+   * const users = await ctx.deps.db?.query("SELECT * FROM users");
+   *
+   * // 캐시 사용
+   * const cached = await ctx.deps.cache?.get("user:123");
+   *
+   * // 로깅
+   * ctx.deps.logger?.info("User logged in", { userId });
+   *
+   * // 현재 시간 (테스트에서 목킹 가능)
+   * const now = ctx.deps.now?.() ?? new Date();
+   * ```
+   */
+  get deps(): FillingDeps {
+    return this._deps;
   }
 
   private parseQuery(): Record<string, string> {

@@ -1,10 +1,13 @@
 /**
  * Mandu Filling - 만두소 🥟
  * 체이닝 API로 비즈니스 로직 정의
+ *
+ * DNA-002: 의존성 주입 패턴 지원
  */
 
 import { ManduContext, ValidationError } from "./context";
 import { AuthenticationError, AuthorizationError } from "./auth";
+import { type FillingDeps, globalDeps } from "./deps";
 import { ErrorClassifier, formatErrorResponse, ErrorCode } from "../error";
 import { TIMEOUTS } from "../constants";
 import { createContract, type ContractDefinition, type ContractInstance } from "../contract";
@@ -310,9 +313,10 @@ export class ManduFilling<TLoaderData = unknown> {
     request: Request,
     params: Record<string, string> = {},
     routeContext?: { routeId: string; pattern: string },
-    options?: ExecuteOptions
+    options?: ExecuteOptions & { deps?: FillingDeps }
   ): Promise<Response> {
-    const ctx = new ManduContext(request, params);
+    const deps = options?.deps ?? globalDeps.get();
+    const ctx = new ManduContext(request, params, deps);
     const method = request.method.toUpperCase() as HttpMethod;
     const handler = this.config.handlers.get(method);
     if (!handler) {
