@@ -63,7 +63,6 @@ const DEFAULT_COMMON_DIRS = [
   "client",
   "src/islands",
   "islands",
-  "apps/web",
 ];
 
 /**

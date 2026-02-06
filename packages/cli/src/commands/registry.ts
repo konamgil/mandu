@@ -98,6 +98,16 @@ registerCommand({
 });
 
 registerCommand({
+  id: "start",
+  description: "프로덕션 서버 실행 (build 후)",
+  async run() {
+    const { start } = await import("./start");
+    await start();
+    return true;
+  },
+});
+
+registerCommand({
   id: "check",
   description: "FS Routes + Guard 통합 검사",
   async run() {

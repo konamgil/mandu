@@ -118,7 +118,11 @@ export type FileTemplate =
   | "util"
   | "type"
   | "test"
-  | "slot";
+  | "slot"
+  | "command"
+  | "query"
+  | "event"
+  | "dto";
 
 /**
  * 협상 응답
@@ -439,6 +443,341 @@ const STRUCTURE_TEMPLATES: Record<FeatureCategory, (featureName: string) => Dire
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// CQRS Structure Templates
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * CQRS 프리셋 전용 구조 템플릿
+ *
+ * application 레이어를 commands/queries/dto/events/mappers로 세분화
+ */
+const CQRS_STRUCTURE_TEMPLATES: Record<FeatureCategory, (featureName: string) => DirectoryProposal[]> = {
+  auth: (name) => [
+    {
+      path: `src/domain/${name}`,
+      purpose: `${name} 도메인 모델`,
+      layer: "domain",
+      files: [
+        { name: `${name}.entity.ts`, purpose: "사용자/인증 엔티티", template: "type" },
+        { name: `${name}.service.ts`, purpose: "도메인 서비스 인터페이스", template: "service" },
+        { name: `${name}.repository.ts`, purpose: "Repository 인터페이스", template: "repository" },
+      ],
+    },
+    {
+      path: `src/application/commands/${name}`,
+      purpose: `${name} 쓰기 경로`,
+      layer: "application/commands",
+      files: [
+        { name: `login.command.ts`, purpose: "로그인 커맨드 핸들러", template: "command" },
+        { name: `logout.command.ts`, purpose: "로그아웃 커맨드 핸들러", template: "command" },
+        { name: `refresh-token.command.ts`, purpose: "토큰 갱신 커맨드 핸들러", template: "command" },
+      ],
+    },
+    {
+      path: `src/application/queries/${name}`,
+      purpose: `${name} 읽기 경로`,
+      layer: "application/queries",
+      files: [
+        { name: `get-session.query.ts`, purpose: "세션 조회 쿼리 핸들러", template: "query" },
+        { name: `verify-token.query.ts`, purpose: "토큰 검증 쿼리 핸들러", template: "query" },
+      ],
+    },
+    {
+      path: `src/application/dto/${name}`,
+      purpose: `${name} DTO`,
+      layer: "application/dto",
+      files: [
+        { name: `login.dto.ts`, purpose: "로그인 요청/응답 DTO", template: "dto" },
+        { name: `token.dto.ts`, purpose: "토큰 DTO", template: "dto" },
+      ],
+    },
+    {
+      path: `src/application/events/${name}`,
+      purpose: `${name} 도메인 이벤트`,
+      layer: "application/events",
+      files: [
+        { name: `user-logged-in.event.ts`, purpose: "로그인 성공 이벤트", template: "event" },
+        { name: `user-logged-out.event.ts`, purpose: "로그아웃 이벤트", template: "event" },
+      ],
+    },
+    {
+      path: `src/infra/${name}`,
+      purpose: `${name} 인프라 어댑터`,
+      layer: "infrastructure",
+      files: [
+        { name: `token.provider.ts`, purpose: "토큰 생성/검증 구현", template: "service" },
+        { name: `session.repository.ts`, purpose: "세션 저장소 구현", template: "repository" },
+      ],
+    },
+    {
+      path: `src/api/${name}`,
+      purpose: `${name} API 라우트`,
+      layer: "api",
+      files: [
+        { name: `login/route.ts`, purpose: "로그인 API → LoginCommand 디스패치", template: "route", isSlot: true },
+        { name: `logout/route.ts`, purpose: "로그아웃 API → LogoutCommand 디스패치", template: "route", isSlot: true },
+        { name: `refresh/route.ts`, purpose: "토큰 갱신 API → RefreshTokenCommand 디스패치", template: "route", isSlot: true },
+        { name: `session/route.ts`, purpose: "세션 조회 API → GetSessionQuery 디스패치", template: "route", isSlot: true },
+      ],
+    },
+  ],
+
+  crud: (name) => [
+    {
+      path: `src/domain/${name}`,
+      purpose: `${name} 도메인`,
+      layer: "domain",
+      files: [
+        { name: `${name}.entity.ts`, purpose: "엔티티 정의", template: "type" },
+        { name: `${name}.repository.ts`, purpose: "Repository 인터페이스", template: "repository" },
+      ],
+    },
+    {
+      path: `src/application/commands/${name}`,
+      purpose: `${name} 쓰기 커맨드`,
+      layer: "application/commands",
+      files: [
+        { name: `create-${name}.command.ts`, purpose: "생성 커맨드 핸들러", template: "command" },
+        { name: `update-${name}.command.ts`, purpose: "수정 커맨드 핸들러", template: "command" },
+        { name: `delete-${name}.command.ts`, purpose: "삭제 커맨드 핸들러", template: "command" },
+      ],
+    },
+    {
+      path: `src/application/queries/${name}`,
+      purpose: `${name} 읽기 쿼리`,
+      layer: "application/queries",
+      files: [
+        { name: `get-${name}.query.ts`, purpose: "단건 조회 쿼리 핸들러", template: "query" },
+        { name: `list-${name}.query.ts`, purpose: "목록 조회 쿼리 핸들러", template: "query" },
+      ],
+    },
+    {
+      path: `src/application/dto/${name}`,
+      purpose: `${name} DTO`,
+      layer: "application/dto",
+      files: [
+        { name: `create-${name}.dto.ts`, purpose: "생성 요청 DTO", template: "dto" },
+        { name: `update-${name}.dto.ts`, purpose: "수정 요청 DTO", template: "dto" },
+        { name: `${name}-response.dto.ts`, purpose: "응답 DTO", template: "dto" },
+      ],
+    },
+    {
+      path: `src/infra/${name}`,
+      purpose: `${name} Repository 구현`,
+      layer: "infrastructure",
+      files: [
+        { name: `${name}.repository-impl.ts`, purpose: "Repository 구현체", template: "repository" },
+      ],
+    },
+    {
+      path: `src/api/${name}`,
+      purpose: `${name} API`,
+      layer: "api",
+      files: [
+        { name: `route.ts`, purpose: "목록/생성 API (GET→ListQuery, POST→CreateCommand)", template: "route", isSlot: true },
+        { name: `[id]/route.ts`, purpose: "상세/수정/삭제 API (GET→GetQuery, PUT→UpdateCommand, DELETE→DeleteCommand)", template: "route", isSlot: true },
+      ],
+    },
+  ],
+
+  api: (name) => [
+    {
+      path: `src/domain/${name}`,
+      purpose: `${name} 도메인`,
+      layer: "domain",
+      files: [
+        { name: `${name}.service.ts`, purpose: "도메인 서비스", template: "service" },
+        { name: `${name}.types.ts`, purpose: "타입 정의", template: "type" },
+      ],
+    },
+    {
+      path: `src/application/commands/${name}`,
+      purpose: `${name} 커맨드`,
+      layer: "application/commands",
+      files: [
+        { name: `${name}.command.ts`, purpose: "커맨드 핸들러", template: "command" },
+      ],
+    },
+    {
+      path: `src/application/queries/${name}`,
+      purpose: `${name} 쿼리`,
+      layer: "application/queries",
+      files: [
+        { name: `${name}.query.ts`, purpose: "쿼리 핸들러", template: "query" },
+      ],
+    },
+    {
+      path: `src/api/${name}`,
+      purpose: `${name} API 엔드포인트`,
+      layer: "api",
+      files: [
+        { name: `route.ts`, purpose: "API 핸들러 → Command/Query 디스패치", template: "route", isSlot: true },
+      ],
+    },
+  ],
+
+  ui: (name) => [
+    {
+      path: `src/application/queries/${name}`,
+      purpose: `${name} 데이터 조회`,
+      layer: "application/queries",
+      files: [
+        { name: `get-${name}.query.ts`, purpose: "UI용 데이터 조회 쿼리", template: "query" },
+      ],
+    },
+    {
+      path: `src/application/dto/${name}`,
+      purpose: `${name} DTO`,
+      layer: "application/dto",
+      files: [
+        { name: `${name}-view.dto.ts`, purpose: "뷰 모델 DTO", template: "dto" },
+      ],
+    },
+    {
+      path: `src/api/${name}`,
+      purpose: `${name} API`,
+      layer: "api",
+      files: [
+        { name: `route.ts`, purpose: "UI 데이터 API", template: "route", isSlot: true },
+      ],
+    },
+  ],
+
+  integration: (name) => [
+    {
+      path: `src/domain/${name}`,
+      purpose: `${name} 도메인 포트`,
+      layer: "domain",
+      files: [
+        { name: `${name}.port.ts`, purpose: "포트 인터페이스", template: "type" },
+      ],
+    },
+    {
+      path: `src/application/commands/${name}`,
+      purpose: `${name} 동기화 커맨드`,
+      layer: "application/commands",
+      files: [
+        { name: `sync-${name}.command.ts`, purpose: "외부 서비스 동기화 커맨드", template: "command" },
+      ],
+    },
+    {
+      path: `src/application/events/${name}`,
+      purpose: `${name} 연동 이벤트`,
+      layer: "application/events",
+      files: [
+        { name: `${name}-synced.event.ts`, purpose: "동기화 완료 이벤트", template: "event" },
+      ],
+    },
+    {
+      path: `src/infra/${name}`,
+      purpose: `${name} 외부 서비스 어댑터`,
+      layer: "infrastructure",
+      files: [
+        { name: `${name}.client.ts`, purpose: "외부 API 클라이언트", template: "service" },
+        { name: `${name}.config.ts`, purpose: "연동 설정", template: "util" },
+      ],
+    },
+    {
+      path: `src/api/webhooks/${name}`,
+      purpose: `${name} 웹훅`,
+      layer: "api",
+      files: [
+        { name: `route.ts`, purpose: "웹훅 핸들러", template: "route", isSlot: true },
+      ],
+    },
+  ],
+
+  data: (name) => [
+    {
+      path: `src/domain/${name}`,
+      purpose: `${name} 데이터 처리 도메인`,
+      layer: "domain",
+      files: [
+        { name: `${name}.types.ts`, purpose: "타입 정의", template: "type" },
+      ],
+    },
+    {
+      path: `src/application/commands/${name}`,
+      purpose: `${name} 데이터 처리 커맨드`,
+      layer: "application/commands",
+      files: [
+        { name: `import-${name}.command.ts`, purpose: "데이터 임포트 커맨드", template: "command" },
+        { name: `transform-${name}.command.ts`, purpose: "데이터 변환 커맨드", template: "command" },
+      ],
+    },
+    {
+      path: `src/application/queries/${name}`,
+      purpose: `${name} 데이터 조회`,
+      layer: "application/queries",
+      files: [
+        { name: `export-${name}.query.ts`, purpose: "데이터 익스포트 쿼리", template: "query" },
+      ],
+    },
+    {
+      path: `src/application/dto/${name}`,
+      purpose: `${name} DTO`,
+      layer: "application/dto",
+      files: [
+        { name: `${name}-import.dto.ts`, purpose: "임포트 DTO", template: "dto" },
+      ],
+    },
+  ],
+
+  util: (name) => [
+    {
+      path: `src/shared/${name}`,
+      purpose: `${name} 유틸리티`,
+      layer: "shared",
+      files: [
+        { name: `${name}.ts`, purpose: "유틸리티 함수", template: "util" },
+        { name: `${name}.test.ts`, purpose: "테스트", template: "test" },
+        { name: `index.ts`, purpose: "Public API", template: "util" },
+      ],
+    },
+  ],
+
+  config: (name) => [
+    {
+      path: `src/shared/config`,
+      purpose: "설정 관리",
+      layer: "shared",
+      files: [
+        { name: `${name}.config.ts`, purpose: `${name} 설정`, template: "util" },
+        { name: `${name}.schema.ts`, purpose: "설정 스키마 (Zod)", template: "type" },
+      ],
+    },
+  ],
+
+  other: (name) => [
+    {
+      path: `src/domain/${name}`,
+      purpose: `${name} 도메인`,
+      layer: "domain",
+      files: [
+        { name: `${name}.service.ts`, purpose: "도메인 서비스", template: "service" },
+        { name: `${name}.types.ts`, purpose: "타입 정의", template: "type" },
+      ],
+    },
+    {
+      path: `src/application/commands/${name}`,
+      purpose: `${name} 커맨드`,
+      layer: "application/commands",
+      files: [
+        { name: `${name}.command.ts`, purpose: "커맨드 핸들러", template: "command" },
+      ],
+    },
+    {
+      path: `src/application/queries/${name}`,
+      purpose: `${name} 쿼리`,
+      layer: "application/queries",
+      files: [
+        { name: `${name}.query.ts`, purpose: "쿼리 핸들러", template: "query" },
+      ],
+    },
+  ],
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // File Templates
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -559,6 +898,91 @@ describe("${name}", () => {
 });
 `;
 
+    case "command":
+      return `/**
+ * ${purpose}
+ *
+ * Command Handler - 쓰기 경로
+ */
+
+export interface ${toPascalCase(name)}Command {
+  // TODO: Define command payload
+}
+
+export interface ${toPascalCase(name)}Result {
+  // TODO: Define command result
+}
+
+export class ${toPascalCase(name)}Handler {
+  async execute(command: ${toPascalCase(name)}Command): Promise<${toPascalCase(name)}Result> {
+    // TODO: Implement command handler
+    throw new Error("Not implemented");
+  }
+}
+`;
+
+    case "query":
+      return `/**
+ * ${purpose}
+ *
+ * Query Handler - 읽기 경로
+ */
+
+export interface ${toPascalCase(name)}Query {
+  // TODO: Define query parameters
+}
+
+export interface ${toPascalCase(name)}Result {
+  // TODO: Define query result
+}
+
+export class ${toPascalCase(name)}Handler {
+  async execute(query: ${toPascalCase(name)}Query): Promise<${toPascalCase(name)}Result> {
+    // TODO: Implement query handler
+    throw new Error("Not implemented");
+  }
+}
+`;
+
+    case "event":
+      return `/**
+ * ${purpose}
+ *
+ * Domain Event
+ */
+
+export interface ${toPascalCase(name)}Event {
+  readonly type: "${name}";
+  readonly occurredAt: Date;
+  // TODO: Define event payload
+}
+
+export function create${toPascalCase(name)}Event(
+  // TODO: Define factory parameters
+): ${toPascalCase(name)}Event {
+  return {
+    type: "${name}",
+    occurredAt: new Date(),
+  };
+}
+`;
+
+    case "dto":
+      return `/**
+ * ${purpose}
+ *
+ * Data Transfer Object
+ */
+
+export interface ${toPascalCase(name)}Dto {
+  // TODO: Define DTO fields
+}
+
+export interface ${toPascalCase(name)}ResponseDto {
+  // TODO: Define response DTO fields
+}
+`;
+
     case "util":
     default:
       return `/**
@@ -659,6 +1083,7 @@ function adjustStructureForPreset(
       "shared": "src/utils",
       "app/api": "src/api",
     },
+    cqrs: {},  // CQRS 전용 템플릿이 자체 경로 사용
     mandu: {}, // 기본값, 매핑 불필요
   };
 
@@ -716,11 +1141,12 @@ export async function negotiate(
 
   // 4. 프리셋 정의 로드 및 구조 템플릿 선택
   const presetDef = getPreset(preset);
-  const templateFn = STRUCTURE_TEMPLATES[category] || STRUCTURE_TEMPLATES.other;
+  const templates = preset === "cqrs" ? CQRS_STRUCTURE_TEMPLATES : STRUCTURE_TEMPLATES;
+  const templateFn = templates[category] || templates.other;
   let structure = templateFn(featureName);
 
-  // 5. 프리셋에 따른 구조 조정
-  if (presetDef && preset !== "mandu") {
+  // 5. 프리셋에 따른 구조 조정 (cqrs, mandu는 자체 경로 사용)
+  if (presetDef && preset !== "mandu" && preset !== "cqrs") {
     structure = adjustStructureForPreset(structure, presetDef, preset);
   }
 

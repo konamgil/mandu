@@ -32,11 +32,18 @@
       "Bash(bun test:*)",
       "Bash(bun typecheck:*)",
       "Bash(bun -e:*)",
-      "Bash(bun install:*)"
+      "Bash(bun install:*)",
+      "Bash(bunx @mandujs/cli init:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh api:*)",
+      "Bash(bun:*)",
+      "Bash(git remote get-url:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "mandu"
-  ]
+  ],
+  "outputStyle": "Learning"
 }

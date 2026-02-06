@@ -669,6 +669,8 @@ function getLayerHierarchy(preset?: GuardPreset): string {
       return "adapters → ports → domain";
     case "atomic":
       return "pages → templates → organisms → molecules → atoms";
+    case "cqrs":
+      return "api → commands|queries → dto/events → domain → shared";
     case "mandu":
       return "client(FSD) | shared | server(Clean)";
     default:

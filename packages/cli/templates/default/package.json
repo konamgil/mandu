@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "mandu dev",
     "build": "mandu build",
+    "start": "mandu start",
     "check": "mandu check",
     "guard": "mandu guard",
     "test": "bun test"

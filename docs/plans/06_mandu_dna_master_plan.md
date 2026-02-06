@@ -4,7 +4,7 @@
 > **버전**: 1.1
 > **작성일**: 2026-01-28
 > **대상**: mandu 코어/플랫폼 팀
-> **참조**: `DNA/DNA_ADOPTION_PLAN.md`, `docs/product/01_mandu_product_brief.md`, `docs/architecture/02_mandu_technical_architecture.md`
+> **참조**: `DNA/DNA_ADOPTION_PLAN.md`, `docs/product/01_mandu_product_brief.md`, `docs/architecture/02_mandu_technical_architecture.md`, `docs/plans/08_ont-run_adoption_plan.md`
 
 ---
 
@@ -27,6 +27,7 @@ Mandu는 **Agent-Native Fullstack Framework**로서, AI 에이전트가 코드�
 - **Contract 기반 타입 추론 + OpenAPI** 자동 생성 체계 강화
 - **아일랜드 하이드레이션/직렬화** 개선
 - **콘텐츠/데이터 로더 + 빌드 통합 훅** 설계
+- **설정 무결성/lockfile** 워크플로우 도입 (ont-run adoption plan과 연동)
 
 ### Out-of-Scope (이번 계획서 기준)
 - 전면적인 런타임 교체(Bun/Node/Deno 전환)

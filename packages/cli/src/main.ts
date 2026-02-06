@@ -27,6 +27,7 @@ Commands:
   routes watch      실시간 라우트 감시
   dev               개발 서버 실행 (FS Routes + Guard 기본)
   build             클라이언트 번들 빌드 (Hydration)
+  start             프로덕션 서버 실행 (build 후)
   guard             아키텍처 위반 검사 (기본)
   guard arch        아키텍처 위반 검사 (FSD/Clean/Hexagonal)
   guard legacy      레거시 Spec Guard 검사
@@ -125,7 +126,7 @@ Examples:
   bunx mandu lock --diff --show-secrets    # 변경사항 상세 비교
 
 FS Routes Workflow (권장):
-  1. init → 2. app/ 폴더에 page.tsx 생성 → 3. dev → 4. build
+  1. init → 2. app/ 폴더에 page.tsx 생성 → 3. dev → 4. build → 5. start
 
 Legacy Workflow:
   1. init → 2. spec-upsert → 3. generate → 4. build → 5. guard → 6. dev

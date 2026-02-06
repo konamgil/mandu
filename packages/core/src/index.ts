@@ -21,6 +21,7 @@ export * from "./seo";
 export * from "./island";
 export * from "./intent";
 export * from "./devtools";
+export * from "./paths";
 
 // Consolidated Mandu namespace
 import { ManduFilling, ManduContext, ManduFillingFactory } from "./filling";

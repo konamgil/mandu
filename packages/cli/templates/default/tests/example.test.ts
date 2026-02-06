@@ -43,7 +43,7 @@ describe("Example Tests", () => {
 });
 
 // API 핸들러 테스트 예제 (실제 핸들러 import 후 사용)
-// import handler from "../apps/server/generated/routes/health.route";
+// import handler from "../.mandu/generated/server/routes/health.route";
 //
 // describe("API: GET /api/health", () => {
 //   it("should return 200 with status ok", async () => {

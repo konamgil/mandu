@@ -139,11 +139,13 @@ export {
   cleanPreset,
   hexagonalPreset,
   atomicPreset,
+  cqrsPreset,
   manduPreset,
   FSD_HIERARCHY,
   CLEAN_HIERARCHY,
   HEXAGONAL_HIERARCHY,
   ATOMIC_HIERARCHY,
+  CQRS_HIERARCHY,
 } from "./presets";
 
 // ═══════════════════════════════════════════════════════════════════════════

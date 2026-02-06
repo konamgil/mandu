@@ -32,9 +32,9 @@ export function getProjectPaths(rootDir: string) {
     lockPath: path.join(rootDir, "spec", "spec.lock.json"),
     slotsDir: path.join(rootDir, "spec", "slots"),
     historyDir: path.join(rootDir, "spec", "history"),
-    generatedMapPath: path.join(rootDir, "packages", "core", "map", "generated.map.json"),
-    serverRoutesDir: path.join(rootDir, "apps", "server", "generated", "routes"),
-    webRoutesDir: path.join(rootDir, "apps", "web", "generated", "routes"),
+    generatedMapPath: path.join(rootDir, ".mandu", "generated", "generated.map.json"),
+    serverRoutesDir: path.join(rootDir, ".mandu", "generated", "server", "routes"),
+    webRoutesDir: path.join(rootDir, ".mandu", "generated", "web", "routes"),
   };
 }
 

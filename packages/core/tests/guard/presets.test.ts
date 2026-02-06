@@ -41,8 +41,8 @@ describe("presets", () => {
 
   it("should list all presets", () => {
     const list = listPresets();
-    expect(list).toHaveLength(5);
-    expect(list.map((p) => p.name)).toEqual(["fsd", "clean", "hexagonal", "atomic", "mandu"]);
+    expect(list).toHaveLength(6);
+    expect(list.map((p) => p.name)).toEqual(["fsd", "clean", "hexagonal", "atomic", "cqrs", "mandu"]);
   });
 });
 

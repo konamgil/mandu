@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { loadManifest, generateRoutes, type GeneratedMap } from "@mandujs/core";
+import { loadManifest, generateRoutes, GENERATED_RELATIVE_PATHS, type GeneratedMap } from "@mandujs/core";
 import { getProjectPaths, readJsonFile } from "../utils/project.js";
 
 export const generateToolDefinitions: Tool[] = [
@@ -50,11 +50,11 @@ export function generateTools(projectRoot: string) {
 
         for (const route of routes) {
           // Server handler
-          wouldCreate.push(`apps/server/generated/routes/${route.id}.route.ts`);
+          wouldCreate.push(`${GENERATED_RELATIVE_PATHS.serverRoutes}/${route.id}.route.ts`);
 
           // Page component (for page kind)
           if (route.kind === "page") {
-            wouldCreate.push(`apps/web/generated/routes/${route.id}.route.tsx`);
+            wouldCreate.push(`${GENERATED_RELATIVE_PATHS.webRoutes}/${route.id}.route.tsx`);
           }
 
           // Slot file (only if not exists)

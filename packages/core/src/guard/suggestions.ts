@@ -35,6 +35,12 @@ const DOCS: Record<GuardPreset | "default", Record<string, string>> = {
     molecules: "https://bradfrost.com/blog/post/atomic-web-design/#molecules",
     organisms: "https://bradfrost.com/blog/post/atomic-web-design/#organisms",
   },
+  cqrs: {
+    base: "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs",
+    commands: "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs#solution",
+    queries: "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs#solution",
+    layers: "https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html",
+  },
   mandu: {
     base: "https://github.com/mandujs/mandu/docs/guard",
     layers: "https://github.com/mandujs/mandu/docs/guard#layers",

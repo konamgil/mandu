@@ -17,9 +17,7 @@
     "app/**/*.ts",
     "app/**/*.tsx",
     "src/**/*.ts",
-    "src/**/*.tsx",
-    "apps/**/*.ts",
-    "apps/**/*.tsx"
+    "src/**/*.tsx"
   ],
   "exclude": ["node_modules"]
 }

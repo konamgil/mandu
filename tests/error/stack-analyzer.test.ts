@@ -108,7 +108,7 @@ describe("StackTraceAnalyzer", () => {
 
       expect(analyzer.isFrameworkFile("src/components/App.tsx")).toBe(false);
       expect(analyzer.isFrameworkFile("spec/slots/users.slot.ts")).toBe(false);
-      expect(analyzer.isFrameworkFile("apps/server/index.ts")).toBe(false);
+      expect(analyzer.isFrameworkFile("app/api/users/route.ts")).toBe(false);
     });
 
     test("should not identify external node_modules as framework files", () => {

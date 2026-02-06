@@ -9,12 +9,14 @@ import { fsdPreset, FSD_HIERARCHY } from "./fsd";
 import { cleanPreset, CLEAN_HIERARCHY } from "./clean";
 import { hexagonalPreset, HEXAGONAL_HIERARCHY } from "./hexagonal";
 import { atomicPreset, ATOMIC_HIERARCHY } from "./atomic";
+import { cqrsPreset, CQRS_HIERARCHY } from "./cqrs";
 
 // Re-export
 export { fsdPreset, FSD_HIERARCHY } from "./fsd";
 export { cleanPreset, CLEAN_HIERARCHY } from "./clean";
 export { hexagonalPreset, HEXAGONAL_HIERARCHY } from "./hexagonal";
 export { atomicPreset, ATOMIC_HIERARCHY } from "./atomic";
+export { cqrsPreset, CQRS_HIERARCHY } from "./cqrs";
 
 /**
  * Mandu 권장 프리셋 (FSD + Clean 조합)
@@ -263,6 +265,7 @@ export const presets: Record<GuardPreset, PresetDefinition> = {
   clean: cleanPreset,
   hexagonal: hexagonalPreset,
   atomic: atomicPreset,
+  cqrs: cqrsPreset,
   mandu: manduPreset,
 };
 

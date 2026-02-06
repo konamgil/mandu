@@ -1,9 +1,5 @@
 import {
   startServer,
-  registerApiHandler,
-  registerPageLoader,
-  registerPageHandler,
-  registerLayoutLoader,
   startDevBundler,
   createHMRServer,
   needsHydration,
@@ -36,6 +32,7 @@ import { CLI_ERROR_CODES, printCLIError } from "../errors";
 import { importFresh } from "../util/bun";
 import { resolveManifest } from "../util/manifest";
 import { resolveAvailablePort } from "../util/port";
+import { registerManifestHandlers } from "../util/handlers";
 import path from "path";
 
 export interface DevOptions {
@@ -202,70 +199,13 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   // Layout 경로 추적 (중복 등록 방지)
   const registeredLayouts = new Set<string>();
 
-  // 핸들러 등록 함수
-  const registerHandlers = async (manifest: RoutesManifest, isReload = false) => {
-    // 리로드 시 레이아웃 캐시 클리어
-    if (isReload) {
-      registeredLayouts.clear();
-    }
-
-    for (const route of manifest.routes) {
-      if (route.kind === "api") {
-        const modulePath = path.resolve(rootDir, route.module);
-        try {
-          // 캐시 무효화 (HMR용)
-          const module = await importFresh(modulePath);
-          let handler = module.default || module.handler || module;
-
-          // ManduFilling 인스턴스를 핸들러 함수로 래핑
-          if (handler && typeof handler.handle === 'function') {
-            console.log(`  🔄 ManduFilling 래핑: ${route.id}`);
-            const filling = handler;
-            handler = async (req: Request, params?: Record<string, string>) => {
-              return filling.handle(req, params);
-            };
-          } else {
-            console.log(`  ⚠️ 핸들러 타입: ${typeof handler}, handle: ${typeof handler?.handle}`);
-          }
-
-          registerApiHandler(route.id, handler);
-          console.log(`  📡 API: ${route.pattern} -> ${route.id}`);
-        } catch (error) {
-          console.error(`  ❌ API 핸들러 로드 실패: ${route.id}`, error);
-        }
-      } else if (route.kind === "page" && route.componentModule) {
-        const componentPath = path.resolve(rootDir, route.componentModule);
-        const isIsland = needsHydration(route);
-        const hasLayout = route.layoutChain && route.layoutChain.length > 0;
-
-        // Layout 로더 등록
-        if (route.layoutChain) {
-          for (const layoutPath of route.layoutChain) {
-            if (!registeredLayouts.has(layoutPath)) {
-              const absLayoutPath = path.resolve(rootDir, layoutPath);
-              registerLayoutLoader(layoutPath, async () => {
-                // 캐시 무효화 (HMR용)
-                return importFresh(absLayoutPath);
-              });
-              registeredLayouts.add(layoutPath);
-              console.log(`  🎨 Layout: ${layoutPath}`);
-            }
-          }
-        }
-
-        // slotModule이 있으면 PageHandler 사용 (filling.loader 지원)
-        if (route.slotModule) {
-          registerPageHandler(route.id, async () => {
-            const module = await importFresh(componentPath);
-            return module.default;
-          });
-          console.log(`  📄 Page: ${route.pattern} -> ${route.id} (with loader)${isIsland ? " 🏝️" : ""}${hasLayout ? " 🎨" : ""}`);
-        } else {
-          registerPageLoader(route.id, () => importFresh(componentPath));
-          console.log(`  📄 Page: ${route.pattern} -> ${route.id}${isIsland ? " 🏝️" : ""}${hasLayout ? " 🎨" : ""}`);
-        }
-      }
-    }
+  // 핸들러 등록 함수 (공유 유틸 사용)
+  const registerHandlers = async (m: RoutesManifest, isReload = false) => {
+    await registerManifestHandlers(m, rootDir, {
+      importFn: importFresh,
+      registeredLayouts,
+      isReload,
+    });
   };
 
   // 초기 핸들러 등록

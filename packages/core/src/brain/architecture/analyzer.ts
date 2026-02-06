@@ -46,22 +46,24 @@ export const DEFAULT_ARCHITECTURE_CONFIG: ArchitectureConfig = {
       description: "자동 생성 파일. 직접 수정 금지",
       readonly: true,
     },
-    "apps/server/": {
-      pattern: "apps/server/**",
-      description: "백엔드 로직",
+    ".mandu/generated/server/": {
+      pattern: ".mandu/generated/server/**",
+      description: "서버 생성 파일",
       allowedFiles: ["*.ts"],
+      readonly: true,
     },
-    "apps/web/": {
-      pattern: "apps/web/**",
-      description: "프론트엔드 컴포넌트",
+    ".mandu/generated/web/": {
+      pattern: ".mandu/generated/web/**",
+      description: "웹 생성 파일",
       allowedFiles: ["*.ts", "*.tsx"],
+      readonly: true,
     },
   },
   imports: [
     {
-      source: "apps/web/**",
+      source: ".mandu/generated/web/**",
       forbid: ["fs", "child_process", "path", "crypto"],
-      reason: "프론트엔드에서 Node.js 내장 모듈 사용 금지",
+      reason: "프론트엔드 생성 파일에서 Node.js 내장 모듈 사용 금지",
     },
     {
       source: "**/generated/**",
@@ -87,7 +89,7 @@ export const DEFAULT_ARCHITECTURE_CONFIG: ArchitectureConfig = {
     },
     {
       name: "app",
-      folders: ["apps/**"],
+      folders: ["app/**", "src/**"],
       canDependOn: ["spec", "generated"],
     },
   ],
@@ -449,7 +451,7 @@ export class ArchitectureAnalyzer {
    */
   private getImportSuggestion(importPath: string, sourceFile: string): string {
     if (importPath === "fs") {
-      if (sourceFile.includes("apps/web")) {
+      if (sourceFile.includes(".mandu/generated/web") || sourceFile.includes("client")) {
         return "프론트엔드에서는 fetch API를 사용하세요";
       }
       return "Bun.file() 또는 Bun.write()를 사용하세요";
@@ -513,7 +515,7 @@ ${JSON.stringify(this.config.folders, null, 2)}
       ]);
 
       // 응답에서 경로 추출 시도
-      const pathMatch = result.content.match(/(?:spec\/|apps\/|packages\/)[^\s,)]+/);
+      const pathMatch = result.content.match(/(?:spec\/|\.mandu\/|app\/|src\/|packages\/)[^\s,)]+/);
 
       return {
         suggestion: result.content,

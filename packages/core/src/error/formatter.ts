@@ -134,7 +134,7 @@ export function createHandlerNotFoundResponse(
     message: `Handler not registered for route: ${routeId}`,
     summary: "핸들러 미등록 - generate 재실행 필요",
     fix: {
-      file: `apps/server/generated/routes/${routeId}.route.ts`,
+      file: `.mandu/generated/server/routes/${routeId}.route.ts`,
       suggestion: "bunx mandu generate를 실행하세요",
     },
     route: {
@@ -160,7 +160,7 @@ export function createPageLoadErrorResponse(
     message: originalError?.message || `Failed to load page module for route: ${routeId}`,
     summary: `페이지 모듈 로드 실패 - ${routeId}.route.tsx 확인 필요`,
     fix: {
-      file: `apps/web/generated/routes/${routeId}.route.tsx`,
+      file: `.mandu/generated/web/routes/${routeId}.route.tsx`,
       suggestion: "import 경로와 컴포넌트 export를 확인하세요",
     },
     route: {
@@ -196,7 +196,7 @@ export function createSSRErrorResponse(
     message: originalError?.message || `SSR rendering failed for route: ${routeId}`,
     summary: `SSR 렌더링 실패 - 컴포넌트 확인 필요`,
     fix: {
-      file: `apps/web/generated/routes/${routeId}.route.tsx`,
+      file: `.mandu/generated/web/routes/${routeId}.route.tsx`,
       suggestion: "React 컴포넌트가 서버에서 렌더링 가능한지 확인하세요 (브라우저 전용 API 사용 금지)",
     },
     route: {

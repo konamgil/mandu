@@ -303,6 +303,11 @@ export const guardToolDefinitions: Tool[] = [
           enum: ["auth", "crud", "api", "ui", "integration", "data", "util", "config", "other"],
           description: "Feature category (auto-detected if not specified)",
         },
+        preset: {
+          type: "string",
+          enum: ["fsd", "clean", "hexagonal", "atomic", "cqrs", "mandu"],
+          description: "Architecture preset (default: mandu). Use 'cqrs' for Command/Query separation.",
+        },
       },
       required: ["intent"],
     },
@@ -331,6 +336,11 @@ export const guardToolDefinitions: Tool[] = [
         overwrite: {
           type: "boolean",
           description: "If true, overwrite existing files (default: false)",
+        },
+        preset: {
+          type: "string",
+          enum: ["fsd", "clean", "hexagonal", "atomic", "cqrs", "mandu"],
+          description: "Architecture preset (default: mandu)",
         },
       },
       required: ["intent"],
@@ -966,11 +976,12 @@ Mandu.filling()
     // ═══════════════════════════════════════════════════════════════════════════
 
     mandu_negotiate: async (args: Record<string, unknown>) => {
-      const { intent, requirements, constraints, category } = args as {
+      const { intent, requirements, constraints, category, preset } = args as {
         intent: string;
         requirements?: string[];
         constraints?: string[];
         category?: FeatureCategory;
+        preset?: GuardPreset;
       };
 
       if (!intent) {
@@ -985,6 +996,7 @@ Mandu.filling()
         requirements,
         constraints,
         category,
+        preset,
       };
 
       const result = await negotiate(request, projectRoot);
@@ -1029,11 +1041,12 @@ Mandu.filling()
     },
 
     mandu_generate_scaffold: async (args: Record<string, unknown>) => {
-      const { intent, category, dryRun = false, overwrite = false } = args as {
+      const { intent, category, dryRun = false, overwrite = false, preset } = args as {
         intent: string;
         category?: FeatureCategory;
         dryRun?: boolean;
         overwrite?: boolean;
+        preset?: GuardPreset;
       };
 
       if (!intent) {
@@ -1044,7 +1057,7 @@ Mandu.filling()
       }
 
       // 먼저 협상하여 구조 계획 얻기
-      const plan = await negotiate({ intent, category }, projectRoot);
+      const plan = await negotiate({ intent, category, preset }, projectRoot);
 
       if (!plan.approved) {
         return {

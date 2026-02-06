@@ -20,6 +20,7 @@ export type GuardPreset =
   | "clean"      // Clean Architecture
   | "hexagonal"  // Hexagonal Architecture
   | "atomic"     // Atomic Design
+  | "cqrs"       // CQRS (Command Query Responsibility Segregation)
   | "mandu";     // Mandu 권장 (FSD + Clean 조합)
 
 /**

@@ -116,8 +116,8 @@ export async function checkInvalidGeneratedImport(
   // Scan non-generated source files
   const sourceDirs = [
     path.join(rootDir, "packages"),
-    path.join(rootDir, "apps/server"),
-    path.join(rootDir, "apps/web"),
+    path.join(rootDir, "src"),
+    path.join(rootDir, "app"),
   ];
 
   for (const sourceDir of sourceDirs) {
@@ -339,7 +339,7 @@ export async function checkSpecDirNaming(
           ruleId: GUARD_RULES.SLOT_DIR_INVALID_FILE.id,
           file: `spec/slots/${file}`,
           message: `spec/slots/에 .slot.ts가 아닌 파일: ${file}`,
-          suggestion: `.slot.ts로 이름을 바꾸거나, 이 파일이 client slot이면 apps/web/components/로 이동하세요`,
+          suggestion: `.slot.ts로 이름을 바꾸거나, 이 파일이 client slot이면 spec/slots/로 .client.ts 접미사로 이동하세요`,
         });
       }
     }
@@ -371,7 +371,7 @@ export async function runGuardCheck(
   const config = await loadManduConfig(rootDir);
 
   const lockPath = path.join(rootDir, "spec/spec.lock.json");
-  const mapPath = path.join(rootDir, "packages/core/map/generated.map.json");
+  const mapPath = path.join(rootDir, ".mandu/generated/generated.map.json");
 
   // ============================================
   // Phase 1: 독립적인 검사 병렬 실행

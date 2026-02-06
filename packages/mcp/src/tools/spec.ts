@@ -3,6 +3,7 @@ import {
   loadManifest,
   validateManifest,
   writeLock,
+  GENERATED_RELATIVE_PATHS,
   type RouteSpec,
   type RoutesManifest,
 } from "@mandujs/core";
@@ -181,12 +182,12 @@ export function specTools(projectRoot: string) {
         id,
         pattern,
         kind,
-        module: `apps/server/generated/routes/${id}.route.ts`,
+        module: `${GENERATED_RELATIVE_PATHS.serverRoutes}/${id}.route.ts`,
         slotModule: slotModule || `spec/slots/${id}.slot.ts`,
       };
 
       if (kind === "page") {
-        newRoute.componentModule = componentModule || `apps/web/generated/routes/${id}.route.tsx`;
+        newRoute.componentModule = componentModule || `${GENERATED_RELATIVE_PATHS.webRoutes}/${id}.route.tsx`;
       }
 
       // Validate new route

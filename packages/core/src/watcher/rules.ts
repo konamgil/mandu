@@ -88,7 +88,7 @@ export const MVP_RULES: ArchRule[] = [
     id: "ISLAND_FIRST_MODIFIED",
     name: "Island-First ComponentModule Modified",
     description: "Island-First 방식으로 생성된 componentModule이 수동으로 변경되었습니다",
-    pattern: "apps/web/generated/routes/**",
+    pattern: ".mandu/generated/web/routes/**",
     action: "warn",
     message: "Island-First componentModule이 수동 수정되었습니다. mandu generate를 실행하세요.",
     agentAction: "regenerate",
