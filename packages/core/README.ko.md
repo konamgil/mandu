@@ -25,11 +25,16 @@ bun add @mandujs/core
 
 ```
 @mandujs/core
-├── spec/      # Spec 스키마 및 로딩
-├── generator/ # 코드 생성
+├── router/    # 파일 시스템 기반 라우팅
 ├── guard/     # 아키텍처 검사 및 자동 수정
-├── runtime/   # 서버 및 라우터
-└── report/    # Guard 리포트 생성
+├── runtime/   # 서버, SSR, 스트리밍
+├── filling/   # 핸들러 체인 API
+├── contract/  # 타입 안전 API 계약
+├── content/   # Content Layer - 빌드 타임 콘텐츠 로딩 🆕
+├── bundler/   # 클라이언트 번들링, HMR
+├── client/    # Island 하이드레이션, 클라이언트 라우터
+├── brain/     # Doctor, Watcher, 아키텍처 분석
+└── change/    # 트랜잭션 & 히스토리
 ```
 
 ## Spec 모듈
@@ -133,6 +138,73 @@ if (!result.passed) {
 | `COMPONENT_NOT_FOUND` | 컴포넌트 파일 없음 | ❌ |
 | `SLOT_NOT_FOUND` | slot 파일 없음 | ✅ |
 
+## Content Layer 🆕
+
+Astro에서 영감받은 빌드 타임 콘텐츠 로딩 시스템.
+
+```typescript
+// content.config.ts
+import { defineContentConfig, glob, file, api } from "@mandujs/core/content";
+import { z } from "zod";
+
+const postSchema = z.object({
+  title: z.string(),
+  date: z.coerce.date(),
+  tags: z.array(z.string()).default([]),
+});
+
+export default defineContentConfig({
+  collections: {
+    // Markdown 파일 (프론트매터 지원)
+    posts: {
+      loader: glob({ pattern: "content/posts/**/*.md" }),
+      schema: postSchema,
+    },
+    // 단일 JSON/YAML 파일
+    settings: {
+      loader: file({ path: "data/settings.json" }),
+    },
+    // 외부 API
+    products: {
+      loader: api({
+        url: "https://api.example.com/products",
+        cacheTTL: 3600,
+      }),
+    },
+  },
+});
+```
+
+### 콘텐츠 조회
+
+```typescript
+import { getCollection, getEntry } from "@mandujs/core/content";
+
+// 전체 컬렉션 조회
+const posts = await getCollection("posts");
+
+// 단일 엔트리 조회
+const post = await getEntry("posts", "hello-world");
+console.log(post?.data.title, post?.body);
+```
+
+### 내장 로더
+
+| 로더 | 설명 | 예시 |
+|------|------|------|
+| `file()` | 단일 파일 (JSON, YAML, TOML) | `file({ path: "data/config.json" })` |
+| `glob()` | 패턴 매칭 (Markdown, JSON) | `glob({ pattern: "content/**/*.md" })` |
+| `api()` | HTTP API (캐싱 지원) | `api({ url: "https://...", cacheTTL: 3600 })` |
+
+### 주요 기능
+
+- **Digest 기반 캐싱**: 변경된 파일만 재파싱
+- **Zod 검증**: 스키마 기반 타입 안전 콘텐츠
+- **프론트매터 지원**: Markdown YAML 프론트매터
+- **Dev 모드 감시**: 콘텐츠 변경 시 자동 리로드
+
+---
+
 ## Contract 모듈
 
 Zod 기반 계약(Contract) 정의 및 타입 안전 클라이언트 생성.
@@ -209,6 +281,11 @@ import type {
   GuardViolation,
   GenerateResult,
   AutoCorrectResult,
+  // Content Layer
+  DataEntry,
+  ContentConfig,
+  CollectionConfig,
+  Loader,
 } from "@mandujs/core";
 ```
 
