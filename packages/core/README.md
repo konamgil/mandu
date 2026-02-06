@@ -81,6 +81,8 @@ const handlers = Mandu.handler(userContract, {
 ├── runtime/         # Server, SSR, streaming
 ├── filling/         # Handler chain API (Mandu.filling())
 ├── contract/        # Type-safe API contracts
+├── content/         # Content Layer - build-time content loading 🆕
+│   └── loaders      # file(), glob(), api() loaders
 ├── bundler/         # Client bundling, HMR
 ├── client/          # Island hydration, client router
 ├── brain/           # Doctor, Watcher, Architecture analyzer
@@ -453,6 +455,78 @@ function Navigation() {
 
 ---
 
+## Content Layer 🆕
+
+Astro-inspired build-time content loading system.
+
+```typescript
+// content.config.ts
+import { defineContentConfig, glob, file, api } from "@mandujs/core/content";
+import { z } from "zod";
+
+const postSchema = z.object({
+  title: z.string(),
+  date: z.coerce.date(),
+  tags: z.array(z.string()).default([]),
+});
+
+export default defineContentConfig({
+  collections: {
+    // Markdown files with frontmatter
+    posts: {
+      loader: glob({ pattern: "content/posts/**/*.md" }),
+      schema: postSchema,
+    },
+    // Single JSON/YAML file
+    settings: {
+      loader: file({ path: "data/settings.json" }),
+    },
+    // External API
+    products: {
+      loader: api({
+        url: "https://api.example.com/products",
+        headers: () => ({ Authorization: `Bearer ${process.env.API_KEY}` }),
+        cacheTTL: 3600,
+      }),
+    },
+  },
+});
+```
+
+### Querying Content
+
+```typescript
+import { getCollection, getEntry } from "@mandujs/core/content";
+
+// Get all entries
+const posts = await getCollection("posts");
+posts.forEach(post => {
+  console.log(post.id, post.data.title);
+});
+
+// Get single entry
+const post = await getEntry("posts", "hello-world");
+console.log(post?.data.title, post?.body);
+```
+
+### Built-in Loaders
+
+| Loader | Description | Example |
+|--------|-------------|---------|
+| `file()` | Single file (JSON, YAML, TOML) | `file({ path: "data/config.json" })` |
+| `glob()` | Pattern matching (Markdown, JSON) | `glob({ pattern: "content/**/*.md" })` |
+| `api()` | HTTP API with caching | `api({ url: "https://...", cacheTTL: 3600 })` |
+
+### Features
+
+- **Digest-based caching**: Only re-parse changed files
+- **Zod validation**: Type-safe content with schema validation
+- **Frontmatter support**: YAML frontmatter in Markdown files
+- **Dev mode watching**: Auto-reload on content changes
+- **Incremental updates**: Efficient builds with change detection
+
+---
+
 ## Brain (AI Assistant)
 
 Doctor and architecture analyzer.
@@ -551,6 +625,13 @@ import type {
 
   // Filling
   ManduContext,
+
+  // Content Layer
+  DataEntry,
+  ContentConfig,
+  CollectionConfig,
+  Loader,
+  LoaderContext,
 } from "@mandujs/core";
 ```
 
