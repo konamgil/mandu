@@ -12,6 +12,7 @@ import type {
   BundleStats,
   BundlerOptions,
 } from "./types";
+import { HYDRATION } from "../constants";
 import path from "path";
 import fs from "fs/promises";
 
@@ -58,19 +59,93 @@ function getHydratedRoutes(manifest: RoutesManifest): RouteSpec[] {
 function generateRuntimeSource(): string {
   return `
 /**
- * Mandu Hydration Runtime v0.8.0 (Generated)
+ * Mandu Hydration Runtime v0.9.0 (Generated)
  * Fresh-style dynamic import architecture
+ * + Error Boundary & Loading fallback support
  */
 
 // React 정적 import (Island와 같은 인스턴스 공유)
-import React from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 
-// Hydrated roots 추적 (unmount용)
-const hydratedRoots = new Map();
+// Hydrated roots 추적 (unmount용) - 전역 초기화
+window.__MANDU_ROOTS__ = window.__MANDU_ROOTS__ || new Map();
+const hydratedRoots = window.__MANDU_ROOTS__;
 
 // 서버 데이터
 const getServerData = (id) => (window.__MANDU_DATA__ || {})[id]?.serverData || {};
+
+/**
+ * Error Boundary 컴포넌트 (Class Component)
+ * Island의 errorBoundary 옵션을 지원
+ */
+class IslandErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('[Mandu] Island error:', this.props.islandId, error, errorInfo);
+  }
+
+  reset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      // 커스텀 errorBoundary가 있으면 사용
+      if (this.props.errorBoundary) {
+        return this.props.errorBoundary(this.state.error, this.reset);
+      }
+      // 기본 에러 UI
+      return React.createElement('div', {
+        className: 'mandu-island-error',
+        style: {
+          padding: '16px',
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: '8px',
+          color: '#dc2626',
+        }
+      }, [
+        React.createElement('strong', { key: 'title' }, '⚠️ 오류 발생'),
+        React.createElement('p', { key: 'msg', style: { margin: '8px 0', fontSize: '14px' } },
+          this.state.error?.message || '알 수 없는 오류'
+        ),
+        React.createElement('button', {
+          key: 'btn',
+          onClick: this.reset,
+          style: {
+            padding: '6px 12px',
+            background: '#dc2626',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }
+        }, '다시 시도')
+      ]);
+    }
+    return this.props.children;
+  }
+}
+
+/**
+ * Loading Wrapper 컴포넌트
+ * Island의 loading 옵션을 지원
+ */
+function IslandLoadingWrapper({ children, loading, isReady }) {
+  if (!isReady && loading) {
+    return loading();
+  }
+  return children;
+}
 
 /**
  * Hydration 스케줄러
@@ -121,6 +196,7 @@ function scheduleHydration(element, src, priority) {
 /**
  * Island 로드 및 hydrate (핵심 함수)
  * Dynamic import로 Island 모듈 로드 후 렌더링
+ * Error Boundary 및 Loading fallback 지원
  */
 async function loadAndHydrate(element, src) {
   const id = element.getAttribute('data-mandu-island');
@@ -138,10 +214,31 @@ async function loadAndHydrate(element, src) {
     const { definition } = island;
     const data = getServerData(id);
 
-    // Island 컴포넌트 (정적 import된 React 사용)
+    // Island 컴포넌트 (Error Boundary + Loading 지원)
     function IslandComponent() {
+      const [isReady, setIsReady] = useState(false);
+
+      useEffect(() => {
+        setIsReady(true);
+      }, []);
+
+      // setup 호출 및 render
       const setupResult = definition.setup(data);
-      return definition.render(setupResult);
+      const content = definition.render(setupResult);
+
+      // Loading wrapper 적용
+      const wrappedContent = definition.loading
+        ? React.createElement(IslandLoadingWrapper, {
+            loading: definition.loading,
+            isReady,
+          }, content)
+        : content;
+
+      // Error Boundary 적용
+      return React.createElement(IslandErrorBoundary, {
+        islandId: id,
+        errorBoundary: definition.errorBoundary,
+      }, wrappedContent);
     }
 
     // Hydrate (SSR DOM 재사용 + 이벤트 연결)
@@ -166,6 +263,12 @@ async function loadAndHydrate(element, src) {
   } catch (error) {
     console.error('[Mandu] Hydration failed for', id, error);
     element.setAttribute('data-mandu-error', 'true');
+
+    // 에러 이벤트 발송
+    element.dispatchEvent(new CustomEvent('mandu:hydration-error', {
+      bubbles: true,
+      detail: { id, error: error.message }
+    }));
   }
 }
 
@@ -174,16 +277,24 @@ async function loadAndHydrate(element, src) {
  */
 function hydrateIslands() {
   const islands = document.querySelectorAll('[data-mandu-island]');
+  const seenIds = new Set();
 
   for (const el of islands) {
     const id = el.getAttribute('data-mandu-island');
     const src = el.getAttribute('data-mandu-src');
-    const priority = el.getAttribute('data-mandu-priority') || 'visible';
+    const priority = el.getAttribute('data-mandu-priority') || '${HYDRATION.DEFAULT_PRIORITY}';
 
     if (!id || !src) {
       console.warn('[Mandu] Island missing id or src:', el);
       continue;
     }
+
+    // 중복 ID 경고
+    if (seenIds.has(id)) {
+      console.warn('[Mandu] Duplicate island id detected:', id, '- skipping');
+      continue;
+    }
+    seenIds.add(id);
 
     scheduleHydration(el, src, priority);
   }
@@ -749,7 +860,8 @@ async function buildVendorShims(
   options: BundlerOptions
 ): Promise<VendorBuildResult> {
   const errors: string[] = [];
-  const results: Record<string, string> = {
+  type VendorShimKey = "react" | "reactDom" | "reactDomClient" | "jsxRuntime" | "jsxDevRuntime";
+  const results: Record<VendorShimKey, string> = {
     react: "",
     reactDom: "",
     reactDomClient: "",
@@ -757,7 +869,7 @@ async function buildVendorShims(
     jsxDevRuntime: "",
   };
 
-  const shims = [
+  const shims: Array<{ name: string; source: string; key: VendorShimKey }> = [
     { name: "_react", source: generateReactShimSource(), key: "react" },
     { name: "_react-dom", source: generateReactDOMShimSource(), key: "reactDom" },
     { name: "_react-dom-client", source: generateReactDOMClientShimSource(), key: "reactDomClient" },
@@ -765,25 +877,23 @@ async function buildVendorShims(
     { name: "_jsx-dev-runtime", source: generateJsxDevRuntimeShimSource(), key: "jsxDevRuntime" },
   ];
 
-  for (const shim of shims) {
+  const buildShim = async (
+    shim: { name: string; source: string; key: VendorShimKey }
+  ): Promise<{ key: VendorShimKey; outputPath?: string; error?: string }> => {
     const srcPath = path.join(outDir, `${shim.name}.src.js`);
     const outputName = `${shim.name}.js`;
 
     try {
       await Bun.write(srcPath, shim.source);
 
-      // _react.js와 jsx-runtime들은 완전히 번들링 (external 없음)
+      // _react.js는 external 없이 React 전체를 번들링
       // _react-dom*, jsx-runtime은 react를 external로 처리하여 동일한 React 인스턴스 공유
-      // jsx-runtime은 Fragment를 react에서 가져오므로 react만 external
       let shimExternal: string[] = [];
       if (shim.name === "_react-dom" || shim.name === "_react-dom-client") {
         shimExternal = ["react"];
       } else if (shim.name === "_jsx-runtime" || shim.name === "_jsx-dev-runtime") {
-        // jsx-runtime은 react를 external로 (Fragment 때문에),
-        // 하지만 react/jsx-runtime은 번들링되어야 함
         shimExternal = ["react"];
       }
-      // _react.js는 external 없이 React 전체를 번들링
 
       const result = await Bun.build({
         entrypoints: [srcPath],
@@ -802,13 +912,31 @@ async function buildVendorShims(
       await fs.unlink(srcPath).catch(() => {});
 
       if (!result.success) {
-        errors.push(`[${shim.name}] ${result.logs.map((l) => l.message).join(", ")}`);
-      } else {
-        results[shim.key] = `/.mandu/client/${outputName}`;
+        return {
+          key: shim.key,
+          error: `[${shim.name}] ${result.logs.map((l) => l.message).join(", ")}`,
+        };
       }
+
+      return {
+        key: shim.key,
+        outputPath: `/.mandu/client/${outputName}`,
+      };
     } catch (error) {
       await fs.unlink(srcPath).catch(() => {});
-      errors.push(`[${shim.name}] ${String(error)}`);
+      return {
+        key: shim.key,
+        error: `[${shim.name}] ${String(error)}`,
+      };
+    }
+  };
+
+  const buildResults = await Promise.all(shims.map((shim) => buildShim(shim)));
+  for (const result of buildResults) {
+    if (result.error) {
+      errors.push(result.error);
+    } else if (result.outputPath) {
+      results[result.key] = result.outputPath;
     }
   }
 
@@ -841,14 +969,15 @@ async function buildIsland(
     await Bun.write(entryPath, generateIslandEntry(route.id, clientModulePath));
 
     // 빌드
+    // splitting 옵션: true면 공통 코드를 별도 청크로 추출
     const result = await Bun.build({
       entrypoints: [entryPath],
       outdir: outDir,
-      naming: outputName,
+      naming: options.splitting ? "[name]-[hash].js" : outputName,
       minify: options.minify ?? process.env.NODE_ENV === "production",
       sourcemap: options.sourcemap ? "external" : "none",
       target: "browser",
-      splitting: false, // Island 단위로 이미 분리됨
+      splitting: options.splitting ?? false,
       external: ["react", "react-dom", "react-dom/client", ...(options.external || [])],
       define: {
         "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),
@@ -864,15 +993,36 @@ async function buildIsland(
     }
 
     // 출력 파일 정보
-    const outputPath = path.join(outDir, outputName);
-    const outputFile = Bun.file(outputPath);
+    // splitting 활성화 시 Bun.build 결과에서 실제 출력 파일 찾기
+    let actualOutputPath: string;
+    let actualOutputName: string;
+
+    if (options.splitting && result.outputs.length > 0) {
+      // splitting 모드: 결과에서 엔트리 파일 찾기
+      const entryOutput = result.outputs.find(
+        (o) => o.kind === "entry-point" || o.path.includes(route.id)
+      );
+      if (entryOutput) {
+        actualOutputPath = entryOutput.path;
+        actualOutputName = path.basename(entryOutput.path);
+      } else {
+        actualOutputPath = result.outputs[0].path;
+        actualOutputName = path.basename(result.outputs[0].path);
+      }
+    } else {
+      // 일반 모드: 예상 경로 사용
+      actualOutputPath = path.join(outDir, outputName);
+      actualOutputName = outputName;
+    }
+
+    const outputFile = Bun.file(actualOutputPath);
     const content = await outputFile.text();
     const gzipped = Bun.gzipSync(Buffer.from(content));
 
     return {
       routeId: route.id,
       entrypoint: route.clientModule!,
-      outputPath: `/.mandu/client/${outputName}`,
+      outputPath: `/.mandu/client/${actualOutputName}`,
       size: outputFile.size,
       gzipSize: gzipped.length,
     };
@@ -902,7 +1052,7 @@ function createBundleManifest(
     bundles[output.routeId] = {
       js: output.outputPath,
       dependencies: ["_runtime", "_react"],
-      priority: hydration?.priority || "visible",
+      priority: hydration?.priority || HYDRATION.DEFAULT_PRIORITY,
     };
   }
 
@@ -986,12 +1136,23 @@ export async function buildClientBundles(
   // 1. Hydration이 필요한 라우트 필터링
   const hydratedRoutes = getHydratedRoutes(manifest);
 
+  // 2. 출력 디렉토리 생성 (항상 필요 - 매니페스트 저장용)
+  const outDir = options.outDir || path.join(rootDir, ".mandu/client");
+  await fs.mkdir(outDir, { recursive: true });
+
+  // Hydration 라우트가 없어도 빈 매니페스트를 저장해야 함
+  // (이전 빌드의 stale 매니페스트 참조 방지)
   if (hydratedRoutes.length === 0) {
+    const emptyManifest = createEmptyManifest(env);
+    await fs.writeFile(
+      path.join(rootDir, ".mandu/manifest.json"),
+      JSON.stringify(emptyManifest, null, 2)
+    );
     return {
       success: true,
       outputs: [],
       errors: [],
-      manifest: createEmptyManifest(env),
+      manifest: emptyManifest,
       stats: {
         totalSize: 0,
         totalGzipSize: 0,
@@ -1001,10 +1162,6 @@ export async function buildClientBundles(
       },
     };
   }
-
-  // 2. 출력 디렉토리 생성
-  const outDir = options.outDir || path.join(rootDir, ".mandu/client");
-  await fs.mkdir(outDir, { recursive: true });
 
   // 3. Runtime 번들 빌드
   const runtimeResult = await buildRuntime(outDir, options);

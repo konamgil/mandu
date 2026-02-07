@@ -75,6 +75,8 @@ export interface ManduError {
   errorType: ErrorType;
   /** 에러 코드 */
   code: ErrorCode | string;
+  /** HTTP 상태 코드 (선택) */
+  httpStatus?: number;
   /** 에러 메시지 */
   message: string;
   /** 한줄 요약 (에이전트용) */

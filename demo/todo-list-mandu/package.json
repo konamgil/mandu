@@ -1,0 +1,30 @@
+{
+  "name": "todo-list-mandu",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "mandu dev",
+    "build": "mandu build",
+    "check": "mandu check",
+    "guard": "mandu guard",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@mandujs/core": "workspace:*",
+    "@radix-ui/react-slot": "^1.1.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^2.5.2"
+  },
+  "devDependencies": {
+    "@mandujs/cli": "workspace:*",
+    "@tailwindcss/cli": "^4.1.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.0.0"
+  }
+}

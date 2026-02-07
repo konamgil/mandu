@@ -5,14 +5,20 @@ import type { ManduFilling } from "../filling/filling";
 import { ManduContext } from "../filling/context";
 import { Router } from "./router";
 import { renderSSR, renderStreamingResponse } from "./ssr";
-import React from "react";
+import { PageBoundary, DefaultLoading, DefaultError, type ErrorFallbackProps } from "./boundary";
+import React, { type ReactNode } from "react";
 import path from "path";
+import fs from "fs/promises";
+import { PORTS } from "../constants";
 import {
-  formatErrorResponse,
   createNotFoundResponse,
   createHandlerNotFoundResponse,
   createPageLoadErrorResponse,
   createSSRErrorResponse,
+  errorToResponse,
+  err,
+  ok,
+  type Result,
 } from "../error";
 import {
   type CorsOptions,
@@ -21,6 +27,7 @@ import {
   applyCorsToResponse,
   isCorsRequest,
 } from "./cors";
+import { validateImportPath } from "./security";
 
 // ========== MIME Types ==========
 const MIME_TYPES: Record<string, string> = {
@@ -100,16 +107,61 @@ export interface ServerOptions {
    * - false: 기존 renderToString 사용 (기본값)
    */
   streaming?: boolean;
+  /**
+   * CSS 파일 경로 (SSR 링크 주입용)
+   * - string: 해당 경로로 <link> 주입 (예: "/.mandu/client/globals.css")
+   * - false: CSS 링크 주입 비활성화 (Tailwind 미사용 시)
+   * - undefined: false로 처리 (404 방지, dev/build에서 명시적 전달 필요)
+   */
+  cssPath?: string | false;
+  /**
+   * 커스텀 레지스트리 (핸들러/설정 분리)
+   * - 제공하지 않으면 기본 전역 레지스트리 사용
+   * - 테스트나 멀티앱 시나리오에서 createServerRegistry()로 생성한 인스턴스 전달
+   */
+  registry?: ServerRegistry;
 }
 
 export interface ManduServer {
   server: Server;
   router: Router;
+  /** 이 서버 인스턴스의 레지스트리 */
+  registry: ServerRegistry;
   stop: () => void;
 }
 
 export type ApiHandler = (req: Request, params: Record<string, string>) => Response | Promise<Response>;
 export type PageLoader = () => Promise<{ default: React.ComponentType<{ params: Record<string, string> }> }>;
+
+/**
+ * Layout 컴포넌트 타입
+ * children을 받아서 감싸는 구조
+ */
+export type LayoutComponent = React.ComponentType<{
+  children: React.ReactNode;
+  params?: Record<string, string>;
+}>;
+
+/**
+ * Layout 로더 타입
+ */
+export type LayoutLoader = () => Promise<{ default: LayoutComponent }>;
+
+/**
+ * Loading 컴포넌트 타입
+ */
+export type LoadingComponent = React.ComponentType<Record<string, never>>;
+
+/**
+ * Error 컴포넌트 타입
+ */
+export type ErrorComponent = React.ComponentType<ErrorFallbackProps>;
+
+/**
+ * Loading/Error 로더 타입
+ */
+export type LoadingLoader = () => Promise<{ default: LoadingComponent }>;
+export type ErrorLoader = () => Promise<{ default: ErrorComponent }>;
 
 /**
  * Page 등록 정보
@@ -137,15 +189,13 @@ export interface AppContext {
 type RouteComponent = (props: { params: Record<string, string>; loaderData?: unknown }) => React.ReactElement;
 type CreateAppFn = (context: AppContext) => React.ReactElement;
 
-// Registry
-const apiHandlers: Map<string, ApiHandler> = new Map();
-const pageLoaders: Map<string, PageLoader> = new Map();
-const pageHandlers: Map<string, PageHandler> = new Map();
-const routeComponents: Map<string, RouteComponent> = new Map();
-let createAppFn: CreateAppFn | null = null;
+// ========== Server Registry (인스턴스별 분리) ==========
 
-// Server settings (module-level for handleRequest access)
-let serverSettings: {
+/**
+ * 서버 인스턴스별 핸들러/설정 레지스트리
+ * 같은 프로세스에서 여러 서버를 띄울 때 핸들러가 섞이는 문제 방지
+ */
+export interface ServerRegistrySettings {
   isDev: boolean;
   hmrPort?: number;
   bundleManifest?: BundleManifest;
@@ -153,20 +203,209 @@ let serverSettings: {
   publicDir: string;
   cors?: CorsOptions | false;
   streaming: boolean;
-} = {
-  isDev: false,
-  rootDir: process.cwd(),
-  publicDir: "public",
-  cors: false,
-  streaming: false,
-};
+  /**
+   * CSS 파일 경로 (SSR 링크 주입용)
+   * - string: 해당 경로로 <link> 주입
+   * - false: CSS 링크 주입 비활성화
+   * - undefined: false로 처리 (404 방지)
+   */
+  cssPath?: string | false;
+}
+
+export class ServerRegistry {
+  readonly apiHandlers: Map<string, ApiHandler> = new Map();
+  readonly pageLoaders: Map<string, PageLoader> = new Map();
+  readonly pageHandlers: Map<string, PageHandler> = new Map();
+  readonly routeComponents: Map<string, RouteComponent> = new Map();
+  /** Layout 컴포넌트 캐시 (모듈 경로 → 컴포넌트) */
+  readonly layoutComponents: Map<string, LayoutComponent> = new Map();
+  /** Layout 로더 (모듈 경로 → 로더 함수) */
+  readonly layoutLoaders: Map<string, LayoutLoader> = new Map();
+  /** Loading 컴포넌트 캐시 (모듈 경로 → 컴포넌트) */
+  readonly loadingComponents: Map<string, LoadingComponent> = new Map();
+  /** Loading 로더 (모듈 경로 → 로더 함수) */
+  readonly loadingLoaders: Map<string, LoadingLoader> = new Map();
+  /** Error 컴포넌트 캐시 (모듈 경로 → 컴포넌트) */
+  readonly errorComponents: Map<string, ErrorComponent> = new Map();
+  /** Error 로더 (모듈 경로 → 로더 함수) */
+  readonly errorLoaders: Map<string, ErrorLoader> = new Map();
+  createAppFn: CreateAppFn | null = null;
+  settings: ServerRegistrySettings = {
+    isDev: false,
+    rootDir: process.cwd(),
+    publicDir: "public",
+    cors: false,
+    streaming: false,
+  };
+
+  registerApiHandler(routeId: string, handler: ApiHandler): void {
+    this.apiHandlers.set(routeId, handler);
+  }
+
+  registerPageLoader(routeId: string, loader: PageLoader): void {
+    this.pageLoaders.set(routeId, loader);
+  }
+
+  registerPageHandler(routeId: string, handler: PageHandler): void {
+    this.pageHandlers.set(routeId, handler);
+  }
+
+  registerRouteComponent(routeId: string, component: RouteComponent): void {
+    this.routeComponents.set(routeId, component);
+  }
+
+  /**
+   * Layout 로더 등록
+   */
+  registerLayoutLoader(modulePath: string, loader: LayoutLoader): void {
+    this.layoutLoaders.set(modulePath, loader);
+  }
+
+  /**
+   * Loading 로더 등록
+   */
+  registerLoadingLoader(modulePath: string, loader: LoadingLoader): void {
+    this.loadingLoaders.set(modulePath, loader);
+  }
+
+  /**
+   * Error 로더 등록
+   */
+  registerErrorLoader(modulePath: string, loader: ErrorLoader): void {
+    this.errorLoaders.set(modulePath, loader);
+  }
+
+  /**
+   * 제네릭 컴포넌트 로더 (DRY)
+   * 캐시 → 로더 → 동적 import 순서로 시도
+   */
+  private async getComponentByType<T>(
+    type: "layout" | "loading" | "error",
+    modulePath: string
+  ): Promise<T | null> {
+    // 타입별 캐시/로더 맵 선택
+    const cacheMap = {
+      layout: this.layoutComponents,
+      loading: this.loadingComponents,
+      error: this.errorComponents,
+    }[type] as Map<string, T>;
+
+    const loaderMap = {
+      layout: this.layoutLoaders,
+      loading: this.loadingLoaders,
+      error: this.errorLoaders,
+    }[type] as Map<string, () => Promise<{ default: T }>>;
+
+    // 1. 캐시 확인
+    const cached = cacheMap.get(modulePath);
+    if (cached) return cached;
+
+    // 2. 등록된 로더 시도
+    const loader = loaderMap.get(modulePath);
+    if (loader) {
+      try {
+        const module = await loader();
+        const component = module.default;
+        cacheMap.set(modulePath, component);
+        return component;
+      } catch (error) {
+        console.error(`[Mandu] Failed to load ${type}: ${modulePath}`, error);
+        return null;
+      }
+    }
+
+    // 3. 동적 import 시도 (보안 검증 포함)
+    const validation = validateImportPath(this.settings.rootDir, modulePath);
+    if (!validation.ok) {
+      console.error(`[Mandu Security] ${validation.error.message}`);
+      return null;
+    }
+
+    try {
+      const module = await import(validation.value);
+      const component = module.default;
+      cacheMap.set(modulePath, component);
+      return component;
+    } catch (error) {
+      // layout은 에러 로깅, loading/error는 조용히 실패
+      if (type === "layout") {
+        console.error(`[Mandu] Failed to load ${type}: ${modulePath}`, error);
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Layout 컴포넌트 가져오기
+   */
+  async getLayoutComponent(modulePath: string): Promise<LayoutComponent | null> {
+    return this.getComponentByType<LayoutComponent>("layout", modulePath);
+  }
+
+  /**
+   * Loading 컴포넌트 가져오기
+   */
+  async getLoadingComponent(modulePath: string): Promise<LoadingComponent | null> {
+    return this.getComponentByType<LoadingComponent>("loading", modulePath);
+  }
+
+  /**
+   * Error 컴포넌트 가져오기
+   */
+  async getErrorComponent(modulePath: string): Promise<ErrorComponent | null> {
+    return this.getComponentByType<ErrorComponent>("error", modulePath);
+  }
+
+  setCreateApp(fn: CreateAppFn): void {
+    this.createAppFn = fn;
+  }
+
+  /**
+   * 모든 핸들러/컴포넌트 초기화 (테스트용)
+   */
+  clear(): void {
+    this.apiHandlers.clear();
+    this.pageLoaders.clear();
+    this.pageHandlers.clear();
+    this.routeComponents.clear();
+    this.layoutComponents.clear();
+    this.layoutLoaders.clear();
+    this.loadingComponents.clear();
+    this.loadingLoaders.clear();
+    this.errorComponents.clear();
+    this.errorLoaders.clear();
+    this.createAppFn = null;
+  }
+}
+
+/**
+ * 기본 전역 레지스트리 (하위 호환성)
+ */
+const defaultRegistry = new ServerRegistry();
+
+/**
+ * 새 레지스트리 인스턴스 생성
+ * 테스트나 멀티앱 시나리오에서 사용
+ */
+export function createServerRegistry(): ServerRegistry {
+  return new ServerRegistry();
+}
+
+/**
+ * 기본 레지스트리 초기화 (테스트용)
+ */
+export function clearDefaultRegistry(): void {
+  defaultRegistry.clear();
+}
+
+// ========== 하위 호환성을 위한 전역 함수들 (defaultRegistry 사용) ==========
 
 export function registerApiHandler(routeId: string, handler: ApiHandler): void {
-  apiHandlers.set(routeId, handler);
+  defaultRegistry.registerApiHandler(routeId, handler);
 }
 
 export function registerPageLoader(routeId: string, loader: PageLoader): void {
-  pageLoaders.set(routeId, loader);
+  defaultRegistry.registerPageLoader(routeId, loader);
 }
 
 /**
@@ -174,54 +413,158 @@ export function registerPageLoader(routeId: string, loader: PageLoader): void {
  * filling이 있으면 loader를 실행하여 serverData 전달
  */
 export function registerPageHandler(routeId: string, handler: PageHandler): void {
-  pageHandlers.set(routeId, handler);
+  defaultRegistry.registerPageHandler(routeId, handler);
 }
 
 export function registerRouteComponent(routeId: string, component: RouteComponent): void {
-  routeComponents.set(routeId, component);
+  defaultRegistry.registerRouteComponent(routeId, component);
 }
 
 export function setCreateApp(fn: CreateAppFn): void {
-  createAppFn = fn;
+  defaultRegistry.setCreateApp(fn);
 }
 
-// Default createApp implementation
-function defaultCreateApp(context: AppContext): React.ReactElement {
-  const Component = routeComponents.get(context.routeId);
+/**
+ * Layout 로더 등록 (전역)
+ */
+export function registerLayoutLoader(modulePath: string, loader: LayoutLoader): void {
+  defaultRegistry.registerLayoutLoader(modulePath, loader);
+}
 
-  if (!Component) {
-    return React.createElement("div", null,
-      React.createElement("h1", null, "404 - Route Not Found"),
-      React.createElement("p", null, `Route ID: ${context.routeId}`)
-    );
+/**
+ * Loading 로더 등록 (전역)
+ */
+export function registerLoadingLoader(modulePath: string, loader: LoadingLoader): void {
+  defaultRegistry.registerLoadingLoader(modulePath, loader);
+}
+
+/**
+ * Error 로더 등록 (전역)
+ */
+export function registerErrorLoader(modulePath: string, loader: ErrorLoader): void {
+  defaultRegistry.registerErrorLoader(modulePath, loader);
+}
+
+/**
+ * 레이아웃 체인으로 컨텐츠 래핑
+ *
+ * @param content 페이지 컴포넌트로 렌더된 React Element
+ * @param layoutChain 레이아웃 모듈 경로 배열 (외부 → 내부)
+ * @param registry ServerRegistry 인스턴스
+ * @param params URL 파라미터
+ * @returns 래핑된 React Element
+ */
+async function wrapWithLayouts(
+  content: React.ReactElement,
+  layoutChain: string[],
+  registry: ServerRegistry,
+  params: Record<string, string>
+): Promise<React.ReactElement> {
+  if (!layoutChain || layoutChain.length === 0) {
+    return content;
   }
 
-  return React.createElement(Component, {
-    params: context.params,
-    loaderData: context.loaderData,
-  });
+  // 레이아웃 로드 (병렬)
+  const layouts = await Promise.all(
+    layoutChain.map((modulePath) => registry.getLayoutComponent(modulePath))
+  );
+
+  // 내부 → 외부 순서로 래핑 (역순)
+  let wrapped = content;
+  for (let i = layouts.length - 1; i >= 0; i--) {
+    const Layout = layouts[i];
+    if (Layout) {
+      wrapped = React.createElement(Layout, { params }, wrapped);
+    }
+  }
+
+  return wrapped;
+}
+
+// Default createApp implementation (registry 기반)
+function createDefaultAppFactory(registry: ServerRegistry) {
+  return function defaultCreateApp(context: AppContext): React.ReactElement {
+    const Component = registry.routeComponents.get(context.routeId);
+
+    if (!Component) {
+      return React.createElement("div", null,
+        React.createElement("h1", null, "404 - Route Not Found"),
+        React.createElement("p", null, `Route ID: ${context.routeId}`)
+      );
+    }
+
+    return React.createElement(Component, {
+      params: context.params,
+      loaderData: context.loaderData,
+    });
+  };
 }
 
 // ========== Static File Serving ==========
+
+/**
+ * 경로가 허용된 디렉토리 내에 있는지 검증
+ * Path traversal 공격 방지
+ */
+async function isPathSafe(filePath: string, allowedDir: string): Promise<boolean> {
+  try {
+    const resolvedPath = path.resolve(filePath);
+    const resolvedAllowedDir = path.resolve(allowedDir);
+
+    if (!resolvedPath.startsWith(resolvedAllowedDir + path.sep) &&
+        resolvedPath !== resolvedAllowedDir) {
+      return false;
+    }
+
+    // 파일이 없으면 안전 (존재하지 않는 경로)
+    try {
+      await fs.access(resolvedPath);
+    } catch {
+      return true;
+    }
+
+    // Symlink 해결 후 재검증
+    const realPath = await fs.realpath(resolvedPath);
+    const realAllowedDir = await fs.realpath(resolvedAllowedDir);
+
+    return realPath.startsWith(realAllowedDir + path.sep) ||
+           realPath === realAllowedDir;
+  } catch (error) {
+    console.warn(`[Mandu Security] Path validation failed: ${filePath}`, error);
+    return false;
+  }
+}
 
 /**
  * 정적 파일 서빙
  * - /.mandu/client/* : 클라이언트 번들 (Island hydration)
  * - /public/* : 정적 에셋 (이미지, CSS 등)
  * - /favicon.ico : 파비콘
+ *
+ * 보안: Path traversal 공격 방지를 위해 모든 경로를 검증합니다.
  */
-async function serveStaticFile(pathname: string): Promise<Response | null> {
+async function serveStaticFile(pathname: string, settings: ServerRegistrySettings): Promise<Response | null> {
   let filePath: string | null = null;
   let isBundleFile = false;
+  let allowedBaseDir: string;
+  let relativePath: string;
+
+  // Path traversal 시도 조기 차단 (정규화 전 raw 체크)
+  if (pathname.includes("..")) {
+    return null;
+  }
 
   // 1. 클라이언트 번들 파일 (/.mandu/client/*)
   if (pathname.startsWith("/.mandu/client/")) {
-    filePath = path.join(serverSettings.rootDir, pathname);
+    // pathname에서 prefix 제거 후 안전하게 조합
+    relativePath = pathname.slice("/.mandu/client/".length);
+    allowedBaseDir = path.join(settings.rootDir, ".mandu", "client");
     isBundleFile = true;
   }
-  // 2. Public 폴더 파일 (/public/* 또는 직접 접근)
+  // 2. Public 폴더 파일 (/public/*)
   else if (pathname.startsWith("/public/")) {
-    filePath = path.join(serverSettings.rootDir, pathname);
+    relativePath = pathname.slice("/public/".length);
+    allowedBaseDir = path.join(settings.rootDir, settings.publicDir);
   }
   // 3. Public 폴더의 루트 파일 (favicon.ico, robots.txt 등)
   else if (
@@ -230,11 +573,42 @@ async function serveStaticFile(pathname: string): Promise<Response | null> {
     pathname === "/sitemap.xml" ||
     pathname === "/manifest.json"
   ) {
-    filePath = path.join(serverSettings.rootDir, serverSettings.publicDir, pathname);
+    // 고정된 파일명만 허용 (이미 위에서 정확히 매칭됨)
+    relativePath = path.basename(pathname);
+    allowedBaseDir = path.join(settings.rootDir, settings.publicDir);
+  } else {
+    return null; // 정적 파일이 아님
   }
 
-  if (!filePath) {
-    return null; // 정적 파일이 아님
+  // URL 디코딩 (실패 시 차단)
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(relativePath);
+  } catch {
+    return null;
+  }
+
+  // 정규화 + Null byte 방지
+  const normalizedPath = path.posix.normalize(decodedPath);
+  if (normalizedPath.includes("\0")) {
+    console.warn(`[Mandu Security] Null byte attack detected: ${pathname}`);
+    return null;
+  }
+
+  // 선행 슬래시 제거 → path.join이 base를 무시하지 않도록 보장
+  const safeRelativePath = normalizedPath.replace(/^\/+/, "");
+
+  // 상대 경로 탈출 차단
+  if (safeRelativePath.startsWith("..")) {
+    return null;
+  }
+
+  filePath = path.join(allowedBaseDir, safeRelativePath);
+
+  // 최종 경로 검증: 허용된 디렉토리 내에 있는지 확인
+  if (!(await isPathSafe(filePath, allowedBaseDir!))) {
+    console.warn(`[Mandu Security] Path traversal attempt blocked: ${pathname}`);
+    return null;
   }
 
   try {
@@ -249,7 +623,7 @@ async function serveStaticFile(pathname: string): Promise<Response | null> {
 
     // Cache-Control 헤더 설정
     let cacheControl: string;
-    if (serverSettings.isDev) {
+    if (settings.isDev) {
       // 개발 모드: 캐시 없음
       cacheControl = "no-cache, no-store, must-revalidate";
     } else if (isBundleFile) {
@@ -273,221 +647,355 @@ async function serveStaticFile(pathname: string): Promise<Response | null> {
 
 // ========== Request Handler ==========
 
-async function handleRequest(req: Request, router: Router): Promise<Response> {
+async function handleRequest(req: Request, router: Router, registry: ServerRegistry): Promise<Response> {
+  const result = await handleRequestInternal(req, router, registry);
+
+  if (!result.ok) {
+    return errorToResponse(result.error, registry.settings.isDev);
+  }
+
+  return result.value;
+}
+
+// ---------- API Route Handler ----------
+
+/**
+ * API 라우트 처리
+ */
+async function handleApiRoute(
+  req: Request,
+  route: { id: string; pattern: string },
+  params: Record<string, string>,
+  registry: ServerRegistry
+): Promise<Result<Response>> {
+  const handler = registry.apiHandlers.get(route.id);
+
+  if (!handler) {
+    return err(createHandlerNotFoundResponse(route.id, route.pattern));
+  }
+
+  try {
+    const response = await handler(req, params);
+    return ok(response);
+  } catch (errValue) {
+    const error = errValue instanceof Error ? errValue : new Error(String(errValue));
+    return err(createSSRErrorResponse(route.id, route.pattern, error));
+  }
+}
+
+// ---------- Page Data Loader ----------
+
+interface PageLoadResult {
+  loaderData: unknown;
+}
+
+/**
+ * 페이지 컴포넌트 및 loader 데이터 로딩
+ */
+async function loadPageData(
+  req: Request,
+  route: { id: string; pattern: string },
+  params: Record<string, string>,
+  registry: ServerRegistry
+): Promise<Result<PageLoadResult>> {
+  let loaderData: unknown;
+
+  // 1. PageHandler 방식 (신규 - filling 포함)
+  const pageHandler = registry.pageHandlers.get(route.id);
+  if (pageHandler) {
+    try {
+      const registration = await pageHandler();
+      const component = registration.component as RouteComponent;
+      registry.registerRouteComponent(route.id, component);
+
+      // Filling의 loader 실행
+      if (registration.filling?.hasLoader()) {
+        const ctx = new ManduContext(req, params);
+        loaderData = await registration.filling.executeLoader(ctx);
+      }
+    } catch (error) {
+      const pageError = createPageLoadErrorResponse(
+        route.id,
+        route.pattern,
+        error instanceof Error ? error : new Error(String(error))
+      );
+      console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
+      return err(pageError);
+    }
+
+    return ok({ loaderData });
+  }
+
+  // 2. PageLoader 방식 (레거시 호환)
+  const loader = registry.pageLoaders.get(route.id);
+  if (loader) {
+    try {
+      const module = await loader();
+      const exported = module.default;
+      const component = typeof exported === "function"
+        ? exported
+        : exported?.component ?? exported;
+      registry.registerRouteComponent(route.id, component);
+
+      // filling이 있으면 loader 실행
+      const filling = typeof exported === "object" ? exported?.filling : null;
+      if (filling?.hasLoader?.()) {
+        const ctx = new ManduContext(req, params);
+        loaderData = await filling.executeLoader(ctx);
+      }
+    } catch (error) {
+      const pageError = createPageLoadErrorResponse(
+        route.id,
+        route.pattern,
+        error instanceof Error ? error : new Error(String(error))
+      );
+      console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
+      return err(pageError);
+    }
+  }
+
+  return ok({ loaderData });
+}
+
+// ---------- SSR Renderer ----------
+
+/**
+ * SSR 렌더링 (Streaming/Non-streaming)
+ */
+async function renderPageSSR(
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: unknown },
+  params: Record<string, string>,
+  loaderData: unknown,
+  url: string,
+  registry: ServerRegistry
+): Promise<Result<Response>> {
+  const settings = registry.settings;
+  const defaultAppCreator = createDefaultAppFactory(registry);
+  const appCreator = registry.createAppFn || defaultAppCreator;
+
+  try {
+    let app = appCreator({
+      routeId: route.id,
+      url,
+      params,
+      loaderData,
+    });
+
+    // 레이아웃 체인 적용
+    if (route.layoutChain && route.layoutChain.length > 0) {
+      app = await wrapWithLayouts(app, route.layoutChain, registry, params);
+    }
+
+    const serverData = loaderData
+      ? { [route.id]: { serverData: loaderData } }
+      : undefined;
+
+    // Streaming SSR 모드 결정
+    const useStreaming = route.streaming !== undefined
+      ? route.streaming
+      : settings.streaming;
+
+    if (useStreaming) {
+      return ok(await renderStreamingResponse(app, {
+        title: `${route.id} - Mandu`,
+        isDev: settings.isDev,
+        hmrPort: settings.hmrPort,
+        routeId: route.id,
+        routePattern: route.pattern,
+        hydration: route.hydration,
+        bundleManifest: settings.bundleManifest,
+        criticalData: loaderData as Record<string, unknown> | undefined,
+        enableClientRouter: true,
+        cssPath: settings.cssPath,
+        onShellReady: () => {
+          if (settings.isDev) {
+            console.log(`[Mandu Streaming] Shell ready: ${route.id}`);
+          }
+        },
+        onMetrics: (metrics) => {
+          if (settings.isDev) {
+            console.log(`[Mandu Streaming] Metrics for ${route.id}:`, {
+              shellReadyTime: `${metrics.shellReadyTime}ms`,
+              allReadyTime: `${metrics.allReadyTime}ms`,
+              hasError: metrics.hasError,
+            });
+          }
+        },
+      }));
+    }
+
+    // 기존 renderToString 방식
+    return ok(renderSSR(app, {
+      title: `${route.id} - Mandu`,
+      isDev: settings.isDev,
+      hmrPort: settings.hmrPort,
+      routeId: route.id,
+      hydration: route.hydration,
+      bundleManifest: settings.bundleManifest,
+      serverData,
+      enableClientRouter: true,
+      routePattern: route.pattern,
+      cssPath: settings.cssPath,
+    }));
+  } catch (error) {
+    const ssrError = createSSRErrorResponse(
+      route.id,
+      route.pattern,
+      error instanceof Error ? error : new Error(String(error))
+    );
+    console.error(`[Mandu] ${ssrError.errorType}:`, ssrError.message);
+    return err(ssrError);
+  }
+}
+
+// ---------- Page Route Handler ----------
+
+/**
+ * 페이지 라우트 처리
+ */
+async function handlePageRoute(
+  req: Request,
+  url: URL,
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: unknown },
+  params: Record<string, string>,
+  registry: ServerRegistry
+): Promise<Result<Response>> {
+  // 1. 데이터 로딩
+  const loadResult = await loadPageData(req, route, params, registry);
+  if (!loadResult.ok) {
+    return loadResult;
+  }
+
+  const { loaderData } = loadResult.value;
+
+  // 2. Client-side Routing: 데이터만 반환 (JSON)
+  if (url.searchParams.has("_data")) {
+    return ok(Response.json({
+      routeId: route.id,
+      pattern: route.pattern,
+      params,
+      loaderData: loaderData ?? null,
+      timestamp: Date.now(),
+    }));
+  }
+
+  // 3. SSR 렌더링
+  return renderPageSSR(route, params, loaderData, req.url, registry);
+}
+
+// ---------- Main Request Dispatcher ----------
+
+/**
+ * 메인 요청 디스패처
+ */
+async function handleRequestInternal(
+  req: Request,
+  router: Router,
+  registry: ServerRegistry
+): Promise<Result<Response>> {
   const url = new URL(req.url);
   const pathname = url.pathname;
+  const settings = registry.settings;
 
   // 0. CORS Preflight 요청 처리
-  if (serverSettings.cors && isPreflightRequest(req)) {
-    const corsOptions = serverSettings.cors === true ? {} : serverSettings.cors;
-    return handlePreflightRequest(req, corsOptions);
+  if (settings.cors && isPreflightRequest(req)) {
+    const corsOptions = settings.cors === true ? {} : settings.cors;
+    return ok(handlePreflightRequest(req, corsOptions));
   }
 
   // 1. 정적 파일 서빙 시도 (최우선)
-  const staticResponse = await serveStaticFile(pathname);
+  const staticResponse = await serveStaticFile(pathname, settings);
   if (staticResponse) {
-    // 정적 파일에도 CORS 헤더 적용
-    if (serverSettings.cors && isCorsRequest(req)) {
-      const corsOptions = serverSettings.cors === true ? {} : serverSettings.cors;
-      return applyCorsToResponse(staticResponse, req, corsOptions);
+    if (settings.cors && isCorsRequest(req)) {
+      const corsOptions = settings.cors === true ? {} : settings.cors;
+      return ok(applyCorsToResponse(staticResponse, req, corsOptions));
     }
-    return staticResponse;
+    return ok(staticResponse);
   }
 
   // 2. 라우트 매칭
   const match = router.match(pathname);
-
   if (!match) {
-    const error = createNotFoundResponse(pathname);
-    const response = formatErrorResponse(error, {
-      isDev: process.env.NODE_ENV !== "production",
-    });
-    return Response.json(response, { status: 404 });
+    return err(createNotFoundResponse(pathname));
   }
 
   const { route, params } = match;
 
+  // 3. 라우트 종류별 처리
   if (route.kind === "api") {
-    const handler = apiHandlers.get(route.id);
-    if (!handler) {
-      const error = createHandlerNotFoundResponse(route.id, route.pattern);
-      const response = formatErrorResponse(error, {
-        isDev: process.env.NODE_ENV !== "production",
-      });
-      return Response.json(response, { status: 500 });
-    }
-    return handler(req, params);
+    return handleApiRoute(req, route, params, registry);
   }
 
   if (route.kind === "page") {
-    let loaderData: unknown;
-    let component: RouteComponent | undefined;
-
-    // Client-side Routing: 데이터 요청 감지
-    const isDataRequest = url.searchParams.has("_data");
-
-    // 1. PageHandler 방식 (신규 - filling 포함)
-    const pageHandler = pageHandlers.get(route.id);
-    if (pageHandler) {
-      try {
-        const registration = await pageHandler();
-        component = registration.component as RouteComponent;
-        registerRouteComponent(route.id, component);
-
-        // Filling의 loader 실행
-        if (registration.filling?.hasLoader()) {
-          const ctx = new ManduContext(req, params);
-          loaderData = await registration.filling.executeLoader(ctx);
-        }
-      } catch (err) {
-        const pageError = createPageLoadErrorResponse(
-          route.id,
-          route.pattern,
-          err instanceof Error ? err : new Error(String(err))
-        );
-        console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
-        const response = formatErrorResponse(pageError, {
-          isDev: process.env.NODE_ENV !== "production",
-        });
-        return Response.json(response, { status: 500 });
-      }
-    }
-    // 2. PageLoader 방식 (레거시 호환)
-    else {
-      const loader = pageLoaders.get(route.id);
-      if (loader) {
-        try {
-          const module = await loader();
-          // module.default가 { component, filling } 객체인 경우 component 추출
-          const exported = module.default;
-          const component = typeof exported === 'function'
-            ? exported
-            : exported?.component ?? exported;
-          registerRouteComponent(route.id, component);
-
-          // filling이 있으면 loader 실행
-          const filling = typeof exported === 'object' ? exported?.filling : null;
-          if (filling?.hasLoader?.()) {
-            const ctx = new ManduContext(req, params);
-            loaderData = await filling.executeLoader(ctx);
-          }
-        } catch (err) {
-          const pageError = createPageLoadErrorResponse(
-            route.id,
-            route.pattern,
-            err instanceof Error ? err : new Error(String(err))
-          );
-          console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
-          const response = formatErrorResponse(pageError, {
-            isDev: process.env.NODE_ENV !== "production",
-          });
-          return Response.json(response, { status: 500 });
-        }
-      }
-    }
-
-    // Client-side Routing: 데이터만 반환 (JSON)
-    if (isDataRequest) {
-      return Response.json({
-        routeId: route.id,
-        pattern: route.pattern,
-        params,
-        loaderData: loaderData ?? null,
-        timestamp: Date.now(),
-      });
-    }
-
-    // SSR 렌더링
-    const appCreator = createAppFn || defaultCreateApp;
-    try {
-      const app = appCreator({
-        routeId: route.id,
-        url: req.url,
-        params,
-        loaderData,
-      });
-
-      // serverData 구조: { [routeId]: { serverData: loaderData } }
-      const serverData = loaderData
-        ? { [route.id]: { serverData: loaderData } }
-        : undefined;
-
-      // Streaming SSR 모드 결정
-      // 우선순위: route.streaming > serverSettings.streaming
-      const useStreaming = route.streaming !== undefined
-        ? route.streaming
-        : serverSettings.streaming;
-
-      if (useStreaming) {
-        return await renderStreamingResponse(app, {
-          title: `${route.id} - Mandu`,
-          isDev: serverSettings.isDev,
-          hmrPort: serverSettings.hmrPort,
-          routeId: route.id,
-          routePattern: route.pattern,
-          hydration: route.hydration,
-          bundleManifest: serverSettings.bundleManifest,
-          criticalData: loaderData as Record<string, unknown> | undefined,
-          enableClientRouter: true,
-          onShellReady: () => {
-            if (serverSettings.isDev) {
-              console.log(`[Mandu Streaming] Shell ready: ${route.id}`);
-            }
-          },
-          onMetrics: (metrics) => {
-            if (serverSettings.isDev) {
-              console.log(`[Mandu Streaming] Metrics for ${route.id}:`, {
-                shellReadyTime: `${metrics.shellReadyTime}ms`,
-                allReadyTime: `${metrics.allReadyTime}ms`,
-                hasError: metrics.hasError,
-              });
-            }
-          },
-        });
-      }
-
-      // 기존 renderToString 방식
-      return renderSSR(app, {
-        title: `${route.id} - Mandu`,
-        isDev: serverSettings.isDev,
-        hmrPort: serverSettings.hmrPort,
-        routeId: route.id,
-        hydration: route.hydration,
-        bundleManifest: serverSettings.bundleManifest,
-        serverData,
-        // Client-side Routing 활성화 정보 전달
-        enableClientRouter: true,
-        routePattern: route.pattern,
-      });
-    } catch (err) {
-      const ssrError = createSSRErrorResponse(
-        route.id,
-        route.pattern,
-        err instanceof Error ? err : new Error(String(err))
-      );
-      console.error(`[Mandu] ${ssrError.errorType}:`, ssrError.message);
-      const response = formatErrorResponse(ssrError, {
-        isDev: process.env.NODE_ENV !== "production",
-      });
-      return Response.json(response, { status: 500 });
-    }
+    return handlePageRoute(req, url, route, params, registry);
   }
 
-  return Response.json({
+  // 4. 알 수 없는 라우트 종류
+  return err({
     errorType: "FRAMEWORK_BUG",
     code: "MANDU_F003",
+    httpStatus: 500,
     message: `Unknown route kind: ${route.kind}`,
     summary: "알 수 없는 라우트 종류 - 프레임워크 버그",
     fix: {
       file: "spec/routes.manifest.json",
       suggestion: "라우트의 kind는 'api' 또는 'page'여야 합니다",
     },
-    route: {
-      id: route.id,
-      pattern: route.pattern,
-    },
+    route: { id: route.id, pattern: route.pattern },
     timestamp: new Date().toISOString(),
-  }, { status: 500 });
+  });
+}
+
+// ========== Port Selection ==========
+
+const MAX_PORT_ATTEMPTS = 10;
+
+function isPortInUseError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: string }).code;
+  const message = (error as { message?: string }).message ?? "";
+  return code === "EADDRINUSE" || message.includes("EADDRINUSE") || message.includes("address already in use");
+}
+
+function startBunServerWithFallback(options: {
+  port: number;
+  hostname?: string;
+  fetch: (req: Request) => Promise<Response>;
+}): { server: Server; port: number; attempts: number } {
+  const { port: startPort, hostname, fetch } = options;
+  let lastError: unknown = null;
+
+  // Port 0: let Bun/OS pick an available ephemeral port.
+  if (startPort === 0) {
+    const server = Bun.serve({
+      port: 0,
+      hostname,
+      fetch,
+    });
+    return { server, port: server.port ?? 0, attempts: 0 };
+  }
+
+  for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
+    const candidate = startPort + attempt;
+    if (candidate < 1 || candidate > 65535) {
+      continue;
+    }
+    try {
+      const server = Bun.serve({
+        port: candidate,
+        hostname,
+        fetch,
+      });
+      return { server, port: server.port ?? candidate, attempts: attempt };
+    } catch (error) {
+      if (!isPortInUseError(error)) {
+        throw error;
+      }
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error(`No available port found starting at ${startPort}`);
 }
 
 // ========== Server Startup ==========
@@ -503,13 +1011,32 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     publicDir = "public",
     cors = false,
     streaming = false,
+    cssPath: cssPathOption,
+    registry = defaultRegistry,
   } = options;
+
+  // cssPath 처리:
+  // - string: 해당 경로로 <link> 주입
+  // - false: CSS 링크 주입 비활성화
+  // - undefined: false로 처리 (기본적으로 링크 미삽입 - 404 방지)
+  //
+  // dev/build에서 Tailwind 감지 시 명시적으로 cssPath 전달 필요:
+  // - dev.ts: cssPath: hasTailwind ? cssWatcher?.serverPath : false
+  // - 프로덕션: 빌드 후 .mandu/client/globals.css 존재 시 경로 전달
+  const cssPath: string | false = cssPathOption ?? false;
 
   // CORS 옵션 파싱
   const corsOptions: CorsOptions | false = cors === true ? {} : cors;
 
-  // Server settings 저장
-  serverSettings = {
+  if (!isDev && cors === true) {
+    console.warn("⚠️  [Security Warning] CORS is set to allow all origins.");
+    console.warn("   This is not recommended for production environments.");
+    console.warn("   Consider specifying allowed origins explicitly:");
+    console.warn("   cors: { origin: ['https://yourdomain.com'] }");
+  }
+
+  // Registry settings 저장 (초기값)
+  registry.settings = {
     isDev,
     hmrPort,
     bundleManifest,
@@ -517,13 +1044,14 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     publicDir,
     cors: corsOptions,
     streaming,
+    cssPath,
   };
 
   const router = new Router(manifest.routes);
 
-  // Fetch handler with CORS support
+  // Fetch handler with CORS support (registry를 클로저로 캡처)
   const fetchHandler = async (req: Request): Promise<Response> => {
-    const response = await handleRequest(req, router);
+    const response = await handleRequest(req, router, registry);
 
     // API 라우트 응답에 CORS 헤더 적용
     if (corsOptions && isCorsRequest(req)) {
@@ -533,16 +1061,24 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     return response;
   };
 
-  const server = Bun.serve({
+  const { server, port: actualPort, attempts } = startBunServerWithFallback({
     port,
     hostname,
     fetch: fetchHandler,
   });
 
+  if (attempts > 0) {
+    console.warn(`⚠️  Port ${port} is in use. Using ${actualPort} instead.`);
+  }
+
+  if (hmrPort !== undefined && hmrPort === port && actualPort !== port) {
+    registry.settings = { ...registry.settings, hmrPort: actualPort };
+  }
+
   if (isDev) {
-    console.log(`🥟 Mandu Dev Server running at http://${hostname}:${port}`);
-    if (hmrPort) {
-      console.log(`🔥 HMR enabled on port ${hmrPort + 1}`);
+    console.log(`🥟 Mandu Dev Server running at http://${hostname}:${actualPort}`);
+    if (registry.settings.hmrPort) {
+      console.log(`🔥 HMR enabled on port ${registry.settings.hmrPort + PORTS.HMR_OFFSET}`);
     }
     console.log(`📂 Static files: /${publicDir}/, /.mandu/client/`);
     if (corsOptions) {
@@ -552,7 +1088,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
       console.log(`🌊 Streaming SSR enabled`);
     }
   } else {
-    console.log(`🥟 Mandu server running at http://${hostname}:${port}`);
+    console.log(`🥟 Mandu server running at http://${hostname}:${actualPort}`);
     if (streaming) {
       console.log(`🌊 Streaming SSR enabled`);
     }
@@ -561,17 +1097,18 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   return {
     server,
     router,
+    registry,
     stop: () => server.stop(),
   };
 }
 
-// Clear registries (useful for testing)
+// Clear registries (useful for testing) - deprecated, use clearDefaultRegistry()
 export function clearRegistry(): void {
-  apiHandlers.clear();
-  pageLoaders.clear();
-  pageHandlers.clear();
-  routeComponents.clear();
-  createAppFn = null;
+  clearDefaultRegistry();
 }
 
-export { apiHandlers, pageLoaders, pageHandlers, routeComponents };
+// Export registry maps for backward compatibility (defaultRegistry 사용)
+export const apiHandlers = defaultRegistry.apiHandlers;
+export const pageLoaders = defaultRegistry.pageLoaders;
+export const pageHandlers = defaultRegistry.pageHandlers;
+export const routeComponents = defaultRegistry.routeComponents;

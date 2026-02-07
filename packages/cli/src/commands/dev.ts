@@ -1,28 +1,99 @@
 import {
-  loadManifest,
   startServer,
-  registerApiHandler,
-  registerPageLoader,
-  registerPageHandler,
   startDevBundler,
   createHMRServer,
   needsHydration,
   loadEnv,
+  watchFSRoutes,
+  clearDefaultRegistry,
+  createGuardWatcher,
+  checkDirectory,
+  printReport,
+  formatReportForAgent,
+  formatReportAsAgentJSON,
+  getPreset,
+  validateAndReport,
+  isTailwindProject,
+  startCSSWatch,
+  readLockfile,
+  readMcpConfig,
+  validateWithPolicy,
+  detectMode,
+  formatPolicyAction,
+  formatValidationResult,
+  type RoutesManifest,
+  type GuardConfig,
+  type Violation,
+  type CSSWatcher,
 } from "@mandujs/core";
 import { resolveFromCwd } from "../util/fs";
+import { resolveOutputFormat } from "../util/output";
+import { CLI_ERROR_CODES, printCLIError } from "../errors";
+import { importFresh } from "../util/bun";
+import { resolveManifest } from "../util/manifest";
+import { resolveAvailablePort } from "../util/port";
+import { registerManifestHandlers } from "../util/handlers";
 import path from "path";
 
 export interface DevOptions {
   port?: number;
-  /** HMR 비활성화 */
-  noHmr?: boolean;
 }
 
 export async function dev(options: DevOptions = {}): Promise<void> {
-  const specPath = resolveFromCwd("spec/routes.manifest.json");
   const rootDir = resolveFromCwd(".");
+  const config = await validateAndReport(rootDir);
+
+  if (!config) {
+    printCLIError(CLI_ERROR_CODES.CONFIG_VALIDATION_FAILED);
+    process.exit(1);
+  }
+
+  // Lockfile 검증 (설정 무결성)
+  const lockfile = await readLockfile(rootDir);
+  let mcpConfig: Record<string, unknown> | null = null;
+  try {
+    mcpConfig = await readMcpConfig(rootDir);
+  } catch (error) {
+    console.warn(
+      `⚠️  MCP 설정 로드 실패: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  const { result: lockResult, action, bypassed } = validateWithPolicy(
+    config,
+    lockfile,
+    detectMode(),
+    mcpConfig
+  );
+
+  if (action === "block") {
+    console.error("🛑 서버 시작 차단: Lockfile 불일치");
+    console.error("   설정이 변경되었습니다. 의도한 변경이라면:");
+    console.error("   $ mandu lock");
+    console.error("");
+    console.error("   변경 사항 확인:");
+    console.error("   $ mandu lock --diff");
+    if (lockResult) {
+      console.error("");
+      console.error(formatValidationResult(lockResult));
+    }
+    process.exit(1);
+  }
+
+  const serverConfig = config.server ?? {};
+  const devConfig = config.dev ?? {};
+  const guardConfigFromFile = config.guard ?? {};
+  const HMR_OFFSET = 1;
 
   console.log(`🥟 Mandu Dev Server`);
+
+  // Lockfile 상태 출력
+  if (action === "warn") {
+    console.log(`⚠️  ${formatPolicyAction(action, bypassed)}`);
+  } else if (lockfile && lockResult?.valid) {
+    console.log(`🔒 설정 무결성 확인됨 (${lockResult.currentHash?.slice(0, 8)})`);
+  } else if (!lockfile) {
+    console.log(`💡 Lockfile 없음 - 'mandu lock'으로 생성 권장`);
+  }
 
   // .env 파일 로드
   const envResult = await loadEnv({
@@ -34,63 +105,171 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     console.log(`🔐 환경 변수 로드: ${envResult.loaded.join(", ")}`);
   }
 
-  console.log(`📄 Spec 파일: ${specPath}\n`);
+  // 라우트 스캔 (FS Routes 우선, 없으면 spec manifest)
+  console.log(`📂 라우트 스캔 중...`);
+  let manifest: RoutesManifest;
+  let enableFsRoutes = false;
 
-  const result = await loadManifest(specPath);
+  try {
+    const resolved = await resolveManifest(rootDir, { fsRoutes: config.fsRoutes });
+    manifest = resolved.manifest;
+    enableFsRoutes = resolved.source === "fs";
 
-  if (!result.success || !result.data) {
-    console.error("❌ Spec 로드 실패:");
-    result.errors?.forEach((e) => console.error(`  - ${e}`));
+    if (manifest.routes.length === 0) {
+      printCLIError(CLI_ERROR_CODES.DEV_NO_ROUTES);
+      console.log("💡 app/ 폴더에 page.tsx 파일을 생성하세요:");
+      console.log("");
+      console.log("  app/page.tsx        → /");
+      console.log("  app/blog/page.tsx   → /blog");
+      console.log("  app/api/users/route.ts → /api/users");
+      console.log("");
+      process.exit(1);
+    }
+
+    console.log(`✅ ${manifest.routes.length}개 라우트 발견\n`);
+  } catch (error) {
+    printCLIError(CLI_ERROR_CODES.DEV_MANIFEST_NOT_FOUND);
+    console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   }
+  const guardPreset = guardConfigFromFile.preset || "mandu";
+  const guardFormat = resolveOutputFormat();
+  const guardConfig: GuardConfig | null =
+    guardConfigFromFile.realtime === false
+      ? null
+      : {
+          preset: guardPreset,
+          srcDir: guardConfigFromFile.srcDir || "src",
+          realtime: guardConfigFromFile.realtime ?? true,
+          exclude: guardConfigFromFile.exclude,
+          realtimeOutput: guardFormat,
+          fsRoutes: enableFsRoutes
+            ? {
+                noPageToPage: true,
+                pageCanImport: [
+                  "client/pages",
+                  "client/widgets",
+                  "client/features",
+                  "client/entities",
+                  "client/shared",
+                  "shared/contracts",
+                  "shared/types",
+                  "shared/utils/client",
+                ],
+                layoutCanImport: [
+                  "client/app",
+                  "client/widgets",
+                  "client/shared",
+                  "shared/contracts",
+                  "shared/types",
+                  "shared/utils/client",
+                ],
+                routeCanImport: [
+                  "server/api",
+                  "server/application",
+                  "server/domain",
+                  "server/infra",
+                  "server/core",
+                  "shared/contracts",
+                  "shared/schema",
+                  "shared/types",
+                  "shared/utils/client",
+                  "shared/utils/server",
+                  "shared/env",
+                ],
+              }
+            : undefined,
+        };
 
-  const manifest = result.data;
-  console.log(`✅ Spec 로드 완료: ${manifest.routes.length}개 라우트`);
-
-  // 핸들러 등록
-  for (const route of manifest.routes) {
-    if (route.kind === "api") {
-      const modulePath = path.resolve(rootDir, route.module);
-      try {
-        const module = await import(modulePath);
-        registerApiHandler(route.id, module.default || module.handler);
-        console.log(`  📡 API: ${route.pattern} -> ${route.id}`);
-      } catch (error) {
-        console.error(`  ❌ API 핸들러 로드 실패: ${route.id}`, error);
-      }
-    } else if (route.kind === "page" && route.componentModule) {
-      const componentPath = path.resolve(rootDir, route.componentModule);
-      const isIsland = needsHydration(route);
-
-      // slotModule이 있으면 PageHandler 사용 (filling.loader 지원)
-      if (route.slotModule) {
-        registerPageHandler(route.id, async () => {
-          const module = await import(componentPath);
-          // module.default = { component, filling }
-          return module.default;
-        });
-        console.log(`  📄 Page: ${route.pattern} -> ${route.id} (with loader)${isIsland ? " 🏝️" : ""}`);
+  if (guardConfig) {
+    const preflightReport = await checkDirectory(guardConfig, rootDir);
+    if (preflightReport.bySeverity.error > 0) {
+      if (guardFormat === "json") {
+        console.log(formatReportAsAgentJSON(preflightReport, guardPreset));
+      } else if (guardFormat === "agent") {
+        console.log(formatReportForAgent(preflightReport, guardPreset));
       } else {
-        // slotModule이 없으면 기존 PageLoader 사용
-        registerPageLoader(route.id, () => import(componentPath));
-        console.log(`  📄 Page: ${route.pattern} -> ${route.id}${isIsland ? " 🏝️" : ""}`);
+        printReport(preflightReport, getPreset(guardPreset).hierarchy);
       }
+      console.error("\n❌ Architecture Guard failed. Fix errors before starting dev server.");
+      process.exit(1);
     }
   }
 
+  // Layout 경로 추적 (중복 등록 방지)
+  const registeredLayouts = new Set<string>();
+
+  // 핸들러 등록 함수 (공유 유틸 사용)
+  const registerHandlers = async (m: RoutesManifest, isReload = false) => {
+    await registerManifestHandlers(m, rootDir, {
+      importFn: importFresh,
+      registeredLayouts,
+      isReload,
+    });
+  };
+
+  // 초기 핸들러 등록
+  await registerHandlers(manifest);
   console.log("");
 
-  const port = options.port || Number(process.env.PORT) || 3000;
-
-  // HMR 서버 시작 (클라이언트 슬롯이 있는 경우)
-  let hmrServer: ReturnType<typeof createHMRServer> | null = null;
-  let devBundler: Awaited<ReturnType<typeof startDevBundler>> | null = null;
+  const envPort = process.env.PORT ? Number(process.env.PORT) : undefined;
+  const desiredPort =
+    options.port ??
+    (envPort && Number.isFinite(envPort) ? envPort : undefined) ??
+    serverConfig.port ??
+    3333;
 
   const hasIslands = manifest.routes.some(
     (r) => r.kind === "page" && r.clientModule && needsHydration(r)
   );
+  const hmrEnabled = devConfig.hmr ?? true;
 
-  if (hasIslands && !options.noHmr) {
+  const { port } = await resolveAvailablePort(desiredPort, {
+    hostname: serverConfig.hostname,
+    offsets: hasIslands && hmrEnabled ? [0, HMR_OFFSET] : [0],
+  });
+
+  if (port !== desiredPort) {
+    console.warn(`⚠️  Port ${desiredPort} is in use. Using ${port} instead.`);
+  }
+
+  // HMR 서버 시작 (클라이언트 슬롯이 있는 경우)
+  let hmrServer: ReturnType<typeof createHMRServer> | null = null;
+  let devBundler: Awaited<ReturnType<typeof startDevBundler>> | null = null;
+  let cssWatcher: CSSWatcher | null = null;
+
+  // CSS 빌드 시작 (Tailwind v4 감지 시에만)
+  const hasTailwind = await isTailwindProject(rootDir);
+  if (hasTailwind) {
+    cssWatcher = await startCSSWatch({
+      rootDir,
+      watch: true,
+      onBuild: (result) => {
+        if (result.success && hmrServer) {
+          // cssWatcher.serverPath 사용 (경로 일관성)
+          hmrServer.broadcast({
+            type: "css-update",
+            data: {
+              cssPath: cssWatcher?.serverPath || "/.mandu/client/globals.css",
+              timestamp: Date.now(),
+            },
+          });
+        }
+      },
+      onError: (error) => {
+        if (hmrServer) {
+          hmrServer.broadcast({
+            type: "error",
+            data: {
+              message: `CSS Error: ${error.message}`,
+            },
+          });
+        }
+      },
+    });
+  }
+
+  if (hasIslands && hmrEnabled) {
     // HMR 서버 시작
     hmrServer = createHMRServer(port);
 
@@ -98,15 +277,25 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     devBundler = await startDevBundler({
       rootDir,
       manifest,
+      watchDirs: devConfig.watchDirs,
       onRebuild: (result) => {
         if (result.success) {
-          hmrServer?.broadcast({
-            type: "island-update",
-            data: {
-              routeId: result.routeId,
-              timestamp: Date.now(),
-            },
-          });
+          if (result.routeId === "*") {
+            hmrServer?.broadcast({
+              type: "reload",
+              data: {
+                timestamp: Date.now(),
+              },
+            });
+          } else {
+            hmrServer?.broadcast({
+              type: "island-update",
+              data: {
+                routeId: result.routeId,
+                timestamp: Date.now(),
+              },
+            });
+          }
         } else {
           hmrServer?.broadcast({
             type: "error",
@@ -132,11 +321,57 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   // 메인 서버 시작
   const server = startServer(manifest, {
     port,
+    hostname: serverConfig.hostname,
     rootDir,
     isDev: true,
     hmrPort: hmrServer ? port : undefined,
     bundleManifest: devBundler?.initialBuild.manifest,
+    cors: serverConfig.cors,
+    streaming: serverConfig.streaming,
+    // Tailwind 감지 시에만 CSS 링크 주입
+    cssPath: hasTailwind ? cssWatcher?.serverPath : false,
   });
+
+  const actualPort = server.server.port ?? port;
+  if (actualPort !== port) {
+    if (hmrServer) {
+      hmrServer.close();
+      hmrServer = createHMRServer(actualPort);
+      server.registry.settings.hmrPort = actualPort;
+      console.log(`🔁 HMR port updated: ${actualPort + HMR_OFFSET}`);
+    }
+  }
+
+  // FS Routes 실시간 감시
+  const routesWatcher = await watchFSRoutes(rootDir, {
+    skipLegacy: true,
+    onChange: async (result) => {
+      const timestamp = new Date().toLocaleTimeString();
+      console.log(`\n🔄 [${timestamp}] 라우트 변경 감지`);
+
+      // 레지스트리 클리어 (layout 캐시 포함)
+      clearDefaultRegistry();
+
+      // 새 매니페스트로 서버 업데이트
+      manifest = result.manifest;
+      console.log(`   📋 라우트: ${manifest.routes.length}개`);
+
+      // 라우트 재등록 (isReload = true)
+      await registerHandlers(manifest, true);
+
+      // HMR 브로드캐스트 (전체 리로드)
+      if (hmrServer) {
+        hmrServer.broadcast({
+          type: "reload",
+          data: { timestamp: Date.now() },
+        });
+      }
+    },
+  });
+
+  // Architecture Guard 실시간 감시 (선택적)
+  let archGuardWatcher: ReturnType<typeof createGuardWatcher> | null = null;
+  let guardFailed = false;
 
   // 정리 함수
   const cleanup = () => {
@@ -144,8 +379,47 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     server.stop();
     devBundler?.close();
     hmrServer?.close();
+    cssWatcher?.close();
+    routesWatcher.close();
+    archGuardWatcher?.close();
     process.exit(0);
   };
+
+  const stopOnGuardError = (violation: Violation) => {
+    if (violation.severity !== "error" || guardFailed) {
+      return;
+    }
+    guardFailed = true;
+    console.error("\n❌ Architecture Guard violation detected. Stopping dev server.");
+    cleanup();
+  };
+
+  if (guardConfig) {
+    console.log(`🛡️  Architecture Guard 활성화 (${guardPreset})`);
+
+    archGuardWatcher = createGuardWatcher({
+      config: guardConfig,
+      rootDir,
+      onViolation: stopOnGuardError,
+      onFileAnalyzed: (analysis, violations) => {
+        if (violations.length > 0) {
+          // HMR 에러로 브로드캐스트
+          hmrServer?.broadcast({
+            type: "guard-violation",
+            data: {
+              file: analysis.filePath,
+              violations: violations.map((v) => ({
+                line: v.line,
+                message: `${v.fromLayer} → ${v.toLayer}: ${v.ruleDescription}`,
+              })),
+            },
+          });
+        }
+      },
+    });
+
+    archGuardWatcher.start();
+  }
 
   process.on("SIGINT", cleanup);
   process.on("SIGTERM", cleanup);

@@ -24,6 +24,247 @@
 
 ---
 
+## Quick Start
+
+### 사전 요구사항
+
+- **Bun** v1.0.0 이상 ([Bun 설치하기](https://bun.sh/docs/installation))
+
+```bash
+# Bun 버전 확인
+bun --version
+```
+
+### 1. 새 프로젝트 생성
+
+```bash
+bunx @mandujs/cli init my-app
+cd my-app
+bun install
+```
+
+### 2. 개발 서버 시작
+
+```bash
+bun run dev
+```
+
+앱이 `http://localhost:3000`에서 실행됩니다.
+
+### 3. 첫 페이지 만들기
+
+`app/page.tsx` 파일 생성:
+
+```tsx
+export default function Home() {
+  return (
+    <div>
+      <h1>Mandu에 오신 것을 환영합니다!</h1>
+      <p>이 파일을 수정하면 변경사항이 즉시 반영됩니다.</p>
+    </div>
+  );
+}
+```
+
+### 4. API 라우트 추가
+
+`app/api/hello/route.ts` 파일 생성:
+
+```typescript
+export function GET() {
+  return Response.json({ message: "안녕하세요, Mandu입니다!" });
+}
+```
+
+이제 `http://localhost:3000/api/hello`에서 확인할 수 있습니다.
+
+### 5. 프로덕션 빌드
+
+```bash
+bun run build
+```
+
+이게 전부입니다! Mandu로 개발할 준비가 되었습니다.
+
+---
+
+## 입문 가이드
+
+Mandu를 처음 사용하신다면 이 섹션이 도움이 됩니다.
+
+### 프로젝트 생성 후 구조
+
+```
+my-app/
+├── app/                    # 코드 작성 영역 (FS Routes)
+│   ├── page.tsx           # 홈 페이지 (/)
+│   └── api/
+│       └── health/
+│           └── route.ts   # Health check API (/api/health)
+├── src/                    # 아키텍처 레이어
+│   ├── client/             # 클라이언트 (FSD)
+│   ├── server/             # 서버 (Clean)
+│   └── shared/             # 공용
+│       ├── contracts/      # client-safe 계약
+│       ├── types/
+│       ├── utils/
+│       │   ├── client/     # 클라이언트 safe 유틸
+│       │   └── server/     # 서버 전용 유틸
+│       ├── schema/         # 서버 전용 스키마
+│       └── env/            # 서버 전용 환경
+├── spec/
+│   └── routes.manifest.json  # 라우트 정의 (자동 관리)
+├── .mandu/                 # 빌드 출력 (자동 생성)
+├── package.json
+└── tsconfig.json
+```
+
+### 파일 이름 규칙
+
+| 파일 이름 | 용도 | URL |
+|-----------|------|-----|
+| `app/page.tsx` | 홈 페이지 | `/` |
+| `app/about/page.tsx` | About 페이지 | `/about` |
+| `app/users/[id]/page.tsx` | 동적 사용자 페이지 | `/users/123` |
+| `app/api/users/route.ts` | 사용자 API | `/api/users` |
+| `app/layout.tsx` | 공유 레이아웃 | 모든 페이지 감싸기 |
+
+### 일반적인 작업
+
+#### 새 페이지 추가하기
+
+`app/about/page.tsx` 생성:
+
+```tsx
+export default function About() {
+  return (
+    <div>
+      <h1>회사 소개</h1>
+      <p>저희 사이트에 오신 것을 환영합니다!</p>
+    </div>
+  );
+}
+```
+
+`http://localhost:3000/about` 에서 확인
+
+#### 동적 라우트 추가하기
+
+`app/users/[id]/page.tsx` 생성:
+
+```tsx
+export default function UserProfile({ params }: { params: { id: string } }) {
+  return (
+    <div>
+      <h1>사용자 프로필</h1>
+      <p>사용자 ID: {params.id}</p>
+    </div>
+  );
+}
+```
+
+`http://localhost:3000/users/123` 에서 확인
+
+#### 여러 메서드를 가진 API 추가하기
+
+`app/api/users/route.ts` 생성:
+
+```typescript
+// GET /api/users
+export function GET() {
+  return Response.json({
+    users: [
+      { id: 1, name: "Alice" },
+      { id: 2, name: "Bob" }
+    ]
+  });
+}
+
+// POST /api/users
+export async function POST(request: Request) {
+  const body = await request.json();
+  return Response.json({
+    message: "사용자 생성됨",
+    user: body
+  }, { status: 201 });
+}
+```
+
+#### 레이아웃 추가하기
+
+`app/layout.tsx` 생성:
+
+```tsx
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <head>
+        <title>My Mandu App</title>
+      </head>
+      <body>
+        <nav>
+          <a href="/">홈</a>
+          <a href="/about">소개</a>
+        </nav>
+        <main>{children}</main>
+        <footer>© 2025 My App</footer>
+      </body>
+    </html>
+  );
+}
+```
+
+### 초보자를 위한 CLI 명령어
+
+| 명령어 | 설명 |
+|--------|------|
+| `bunx @mandujs/cli init my-app` | "my-app" 이름으로 새 프로젝트 생성 |
+| `bun install` | 모든 의존성 설치 |
+| `bun run dev` | http://localhost:3000 에서 개발 서버 시작 |
+| `bun run build` | 프로덕션 빌드 |
+| `bun run test` | 테스트 실행 |
+
+#### 추가 CLI 명령어
+
+```bash
+# 사용 가능한 모든 명령어 확인
+bunx mandu --help
+
+# 앱의 모든 라우트 표시
+bunx mandu routes list
+
+# 아키텍처 규칙 검사
+bunx mandu guard arch
+
+# 아키텍처 위반 실시간 감시
+bunx mandu guard arch --watch
+```
+
+### 기술 스택
+
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| **Bun** | 1.0+ | JavaScript 런타임 & 패키지 매니저 |
+| **React** | 19.x | UI 라이브러리 |
+| **TypeScript** | 5.x | 타입 안전성 |
+
+### 다음 단계
+
+1. **[FS Routes](#fs-routes) 섹션 읽기** - 라우팅 패턴 이해하기
+2. **[Mandu Guard](#mandu-guard-시스템) 사용해보기** - 아키텍처 규칙 강제
+3. **[MCP Server](#mcp-서버-ai-에이전트-통합) 탐색하기** - AI 에이전트 통합
+
+### 문제 해결
+
+| 문제 | 해결 방법 |
+|------|----------|
+| `command not found: bun` | Bun 설치: `curl -fsSL https://bun.sh/install \| bash` |
+| 포트 3000 사용 중 | 다른 서버 중지 또는 `PORT=3001 bun run dev` |
+| 변경사항 미반영 | `bun run dev`로 개발 서버 재시작 |
+| TypeScript 에러 | `bun install`로 타입 설치 확인 |
+
+---
+
 ## 문서
 
 - `docs/README.ko.md` — 문서 인덱스
@@ -83,12 +324,22 @@
 | **코드 생성** | spec에서 라우트, 핸들러, 컴포넌트 자동 생성 |
 | **슬롯 시스템** | 에이전트가 안전하게 비즈니스 로직을 작성하는 격리 영역 |
 | **Guard 시스템** | 아키텍처 규칙 강제 및 오염 방지 |
+| **Self-Healing Guard** | 위반 감지 + 자동 수정 제안 + 설명 제공 |
 | **트랜잭션 API** | 스냅샷 기반 롤백이 가능한 원자적 변경 |
-| **MCP 서버** | AI 에이전트가 프레임워크를 직접 조작 가능 |
+| **SEO 모듈** | Next.js Metadata API 호환, sitemap/robots 생성, JSON-LD 헬퍼 |
+| **MCP 서버** | AI 에이전트가 프레임워크를 직접 조작 (35+ 도구) |
 | **실시간 Watch** | 아키텍처 위반 시 MCP push notification으로 에이전트에 실시간 알림 |
 | **Island Hydration** | 선택적 클라이언트 JavaScript로 성능 최적화 |
 | **HMR 지원** | 빠른 개발을 위한 핫 모듈 교체 |
 | **에러 분류 시스템** | 지능적 에러 분류와 수정 가이드 제공 |
+
+### AI 가이드 시스템 (RFC-001) 🆕
+
+| 기능 | 설명 |
+|------|------|
+| **Decision Memory** | ADR 저장 및 일관성 검사 - AI가 과거 결정을 참조 |
+| **Semantic Slots** | 슬롯에 목적과 제약 명시 - AI 코드 검증 |
+| **Architecture Negotiation** | 구현 전 AI-프레임워크 협상 다이얼로그 |
 
 ---
 
@@ -188,7 +439,7 @@ mandu/
 │   │   └── commands/        # init, spec-upsert, generate, guard, build, dev
 │   │
 │   └── mcp/                  # @mandujs/mcp
-│       ├── tools/           # MCP 도구 (20개 이상)
+│       ├── tools/           # MCP 도구 (30개 이상)
 │       └── resources/       # MCP 리소스 (5개)
 │
 └── tests/                    # 프레임워크 테스트
@@ -640,6 +891,49 @@ bunx mandu guard --auto-correct
 
 ---
 
+## 설정
+
+Mandu는 `mandu.config.ts`, `mandu.config.js`, `mandu.config.json`을 읽습니다.  
+Guard 전용 설정은 `.mandu/guard.json`도 지원합니다.
+
+- `mandu dev`, `mandu build` 실행 시 설정을 검증하고 오류를 출력합니다
+- CLI 옵션이 설정값보다 우선합니다
+
+```ts
+// mandu.config.ts
+export default {
+  server: {
+    port: 3000,
+    hostname: "localhost",
+    cors: false,
+    streaming: false,
+  },
+  dev: {
+    hmr: true,
+    watchDirs: ["src/shared", "shared"],
+  },
+  build: {
+    outDir: ".mandu",
+    minify: true,
+    sourcemap: false,
+  },
+  guard: {
+    preset: "mandu",
+    srcDir: "src",
+    exclude: ["**/*.test.ts"],
+    realtime: true,
+    // rules/contractRequired는 레거시 spec guard에서 사용
+  },
+  seo: {
+    enabled: true,
+    defaultTitle: "My App",
+    titleTemplate: "%s | My App",
+  },
+};
+```
+
+---
+
 ## MCP 서버 (AI 에이전트 통합)
 
 Mandu는 AI 에이전트가 프레임워크와 직접 상호작용할 수 있는 완전한 MCP (Model Context Protocol) 서버를 포함합니다.
@@ -701,7 +995,33 @@ Mandu는 AI 에이전트가 프레임워크와 직접 상호작용할 수 있는
 | 도구 | 설명 |
 |------|------|
 | `mandu_guard_check` | 모든 guard 검사 실행 |
+| `mandu_guard_heal` | Self-Healing Guard - 위반 감지 + 자동 수정 |
+| `mandu_explain_rule` | 아키텍처 규칙 설명 |
 | `mandu_analyze_error` | 에러 분석 및 수정 제안 |
+
+#### Decision Memory (RFC-001) 🆕
+
+| 도구 | 설명 |
+|------|------|
+| `mandu_search_decisions` | ADR 검색 (태그, 상태) |
+| `mandu_save_decision` | 새 아키텍처 결정 저장 |
+| `mandu_check_consistency` | 결정과 구현 일관성 검사 |
+| `mandu_get_architecture` | 압축 아키텍처 문서 조회 |
+
+#### Semantic Slots (RFC-001) 🆕
+
+| 도구 | 설명 |
+|------|------|
+| `mandu_validate_slot` | 슬롯 제약 조건 검증 |
+| `mandu_validate_slots` | 여러 슬롯 일괄 검증 |
+
+#### Architecture Negotiation (RFC-001) 🆕
+
+| 도구 | 설명 |
+|------|------|
+| `mandu_negotiate` | AI-프레임워크 협상 |
+| `mandu_generate_scaffold` | 구조 스캐폴드 생성 |
+| `mandu_analyze_structure` | 기존 프로젝트 구조 분석 |
 
 #### Hydration & 빌드
 
@@ -731,6 +1051,17 @@ Mandu는 AI 에이전트가 프레임워크와 직접 상호작용할 수 있는
 |------|------|
 | `mandu_list_changes` | 변경 히스토리 조회 |
 | `mandu_prune_history` | 오래된 스냅샷 정리 |
+
+#### SEO
+
+| 도구 | 설명 |
+|------|------|
+| `mandu_preview_seo` | SEO 메타데이터 HTML 미리보기 |
+| `mandu_generate_sitemap_preview` | sitemap.xml 미리보기 생성 |
+| `mandu_generate_robots_preview` | robots.txt 미리보기 생성 |
+| `mandu_create_jsonld` | JSON-LD 구조화 데이터 생성 |
+| `mandu_write_seo_file` | sitemap.ts/robots.ts 파일 생성 |
+| `mandu_seo_analyze` | SEO 메타데이터 분석 및 권장사항 제공 |
 
 ### MCP 리소스
 
@@ -902,23 +1233,106 @@ Mandu는 자동으로 에러를 세 가지 유형으로 분류합니다:
 
 ## 로드맵
 
-### v0.9.x (현재)
-- [x] Island hydration 시스템
-- [x] HMR (Hot Module Replacement)
-- [x] 20개 이상의 도구를 포함한 MCP 서버
-- [x] 스냅샷 포함 트랜잭션 API
-- [x] 에러 분류 시스템
-- [x] 슬롯 자동 수정
-- [x] Contract-first API + 타입 추론
-- [x] MCP push notification 기반 실시간 아키텍처 감시
-- [x] Brain v0.1 (Doctor, Architecture analyzer, File watcher)
-- [x] 클라이언트 라우터 + NavLink
+### v0.10.x (현재) — 74개 기능 완료
 
-### v1.0.x (다음)
-- [ ] WebSocket 플랫폼
+**Core Runtime**
+- [x] 미들웨어 compose & 라이프사이클 훅
+- [x] Streaming SSR
+- [x] Filling API (guard, hooks, middleware)
+- [x] 런타임 로거 & trace 시스템
+
+**Routing**
+- [x] FS Routes (스캐너, 패턴, 제너레이터, 와처)
+- [x] 레이아웃 시스템 (layoutChain, loading, error)
+- [x] 고급 라우트 (catch-all, optional params)
+- [x] 클라이언트 라우터 (Link, NavLink, hooks)
+
+**Architecture**
+- [x] Mandu Guard 5가지 프리셋 (mandu, fsd, clean, hexagonal, atomic)
+- [x] AST 기반 import 분석
+- [x] 통계 & 트렌드 추적
+- [x] 실시간 위반 감지
+
+**API & Types**
+- [x] Zod 기반 Contract API
+- [x] 타입 안전 핸들러 & 클라이언트
+- [x] OpenAPI 3.0 생성기
+- [x] 스키마 정규화
+
+**Hydration**
+- [x] Island hydration (visible, idle, interaction)
+- [x] Partials & slots
+- [x] Error boundary & loading states
+- [x] HMR 지원
+
+**SEO (검색 엔진 최적화)**
+- [x] Next.js Metadata API 호환 타입
+- [x] 레이아웃 체인 메타데이터 병합
+- [x] Open Graph & Twitter Cards
+- [x] JSON-LD 구조화 데이터 (12개 헬퍼)
+- [x] sitemap.xml & robots.txt 생성
+- [x] Google SEO 최적화 (viewport, theme-color, resource hints)
+- [x] SSR 통합
+
+**AI Integration (RFC-001: Guard → Guide)** 🆕
+- [x] MCP 서버 (35+ 도구, 7 리소스)
+- [x] Brain (Doctor, Watcher, Architecture analyzer)
+- [x] 스냅샷 포함 트랜잭션 API
+- [x] 실시간 push 알림
+- [x] **Decision Memory** - ADR 저장 & 일관성 검사
+- [x] **Semantic Slots** - 목적 & 제약 검증
+- [x] **Architecture Negotiation** - AI-프레임워크 협상
+- [x] **Self-Healing Guard** - 자동 수정 제안
+
+**Security**
+- [x] Path traversal 방지
+- [x] 포트 유효성 검사
+- [x] LFI 취약점 방어
+- [x] ReDoS 방어
+
+### v0.11.x (다음)
+
+**Data Layer** *(Astro 패턴)*
+- [ ] Loader API (store, meta, logger, watcher 컨텍스트)
+- [ ] File Loader & API Loader 구현
+- [ ] DataStore & MetaStore (digest 추적)
+- [ ] Cache Store 어댑터 (Redis, in-memory)
 - [ ] ISR (Incremental Static Regeneration)
-- [ ] CacheStore 어댑터
-- [ ] 프로덕션 배포 가이드
+
+**Realtime** *(Phoenix 패턴)*
+- [ ] WebSocket Channels (join/handle_in/handle_out)
+- [ ] Channel/Socket 분리 모델
+- [ ] Serializer 기반 메시지 프로토콜
+- [ ] Server-sent events (SSE)
+
+**Build & Integration** *(Astro/Fresh 패턴)*
+- [ ] Build Hooks (start/setup/done 라이프사이클)
+- [ ] 빌드 확장 Plugin API
+- [ ] 타임아웃 경고 포함 통합 훅 & 전용 로거
+- [ ] 번들 분석기
+
+**Observability**
+- [ ] 성능 벤치마크 (라우팅, SSR, hydration)
+- [ ] TTFB & TTI 측정
+- [ ] 자동화된 성능 테스트 모음
+
+### v0.12.x (예정)
+
+**AOT 최적화** *(Elysia 패턴)*
+- [ ] AOT 핸들러 생성 (런타임 프리컴파일)
+- [ ] Sucrose 스타일 컨텍스트 추론
+- [ ] JIT/AOT 모드 선택 (`mandu build --aot`)
+
+**고급 Hydration** *(Qwik/Fresh 패턴)*
+- [ ] Client Reviver (DOM marker 기반 복원)
+- [ ] Resumable POC / QRL-lite (지연 이벤트 핸들러 로딩)
+- [ ] Serializer Registry (플러그인 타입 직렬화)
+- [ ] Progressive Hydration 개선
+
+**개발자 경험**
+- [ ] 개발 환경 에러 오버레이
+- [ ] 향상된 TypeScript 추론
+- [ ] 프로젝트 템플릿 & 스캐폴딩
 
 ---
 

@@ -178,3 +178,112 @@ type Middleware = (ctx: ManduContext, next: () => Promise<void>) =>
 | `ValidationError` | Schema validation errors |
 | `AuthenticationError` | Auth required |
 | `AuthorizationError` | Permission denied |
+
+---
+
+## SEO (`@mandujs/core`)
+
+### Metadata Types
+
+```typescript
+import type { Metadata, MetadataParams, GenerateMetadata } from '@mandujs/core'
+
+// Static metadata (page.tsx or layout.tsx)
+export const metadata: Metadata = {
+  title: 'Page Title',
+  description: 'Page description',
+}
+
+// Dynamic metadata
+export const generateMetadata: GenerateMetadata = async ({ params }) => ({
+  title: `Article: ${params.slug}`,
+})
+```
+
+### Metadata API
+
+| API | Description |
+|-----|-------------|
+| `resolveMetadata(items, params?, searchParams?)` | Resolve metadata chain |
+| `mergeMetadata(parent, child)` | Merge two metadata objects |
+| `createDefaultMetadata()` | Create default resolved metadata |
+| `resolveTitle(title, parentTemplate)` | Resolve title with template |
+| `renderMetadata(resolved)` | Render to HTML string |
+
+### Open Graph & Twitter
+
+| API | Description |
+|-----|-------------|
+| `resolveOpenGraph(og, metadataBase)` | Resolve Open Graph metadata |
+| `resolveTwitter(twitter, metadataBase)` | Resolve Twitter Card metadata |
+| `renderOpenGraph(metadata)` | Render OG tags |
+| `renderTwitter(metadata)` | Render Twitter Card tags |
+
+### JSON-LD Helpers
+
+| API | Description |
+|-----|-------------|
+| `createArticleJsonLd(options)` | Article structured data |
+| `createWebSiteJsonLd(options)` | WebSite with search action |
+| `createOrganizationJsonLd(options)` | Organization info |
+| `createBreadcrumbJsonLd(items)` | Breadcrumb navigation |
+| `createFAQJsonLd(questions)` | FAQ page |
+| `createProductJsonLd(options)` | Product with offers/ratings |
+| `createLocalBusinessJsonLd(options)` | Local business info |
+| `createVideoJsonLd(options)` | Video object |
+| `createReviewJsonLd(options)` | Review with ratings |
+| `createCourseJsonLd(options)` | Course/education content |
+| `createEventJsonLd(options)` | Event (physical/virtual) |
+| `createSoftwareAppJsonLd(options)` | Software application |
+
+### Sitemap & Robots
+
+| API | Description |
+|-----|-------------|
+| `renderSitemap(entries)` | Generate sitemap.xml content |
+| `renderSitemapIndex(sitemaps)` | Generate sitemap index |
+| `renderRobots(config)` | Generate robots.txt content |
+| `createSitemapHandler(fn)` | Create sitemap route handler |
+| `createRobotsHandler(fn)` | Create robots route handler |
+| `createDefaultRobots(sitemapUrl)` | Default robots config |
+
+### SSR Integration
+
+| API | Description |
+|-----|-------------|
+| `resolveSEO(options)` | Resolve SEO for SSR (async) |
+| `resolveSEOSync(metadata)` | Resolve SEO synchronously |
+| `injectSEOIntoOptions(options, seoOptions)` | Inject SEO into streaming options |
+| `layoutEntriesToMetadataItems(entries)` | Convert layout entries to items |
+
+### Google SEO Rendering
+
+| API | Description |
+|-----|-------------|
+| `renderGoogle(metadata)` | Google-specific meta (nositelinkssearchbox, notranslate) |
+| `renderViewport(metadata)` | Viewport meta tag |
+| `renderThemeColor(metadata)` | Theme color with media query support |
+| `renderFormatDetection(metadata)` | iOS Safari format detection |
+| `renderResourceHints(metadata)` | preconnect, dns-prefetch, preload, prefetch |
+| `renderAppLinks(metadata)` | iOS/Android app link meta tags |
+
+---
+
+## MCP SEO Tools (`@mandujs/mcp`)
+
+### SEO Tools
+
+| Tool | Description |
+|------|-------------|
+| `mandu_preview_seo` | Preview rendered SEO HTML for given metadata |
+| `mandu_generate_sitemap_preview` | Generate sitemap.xml preview from entries |
+| `mandu_generate_robots_preview` | Generate robots.txt preview from configuration |
+| `mandu_create_jsonld` | Create JSON-LD structured data (Article, WebSite, Organization, etc.) |
+| `mandu_write_seo_file` | Write sitemap.ts or robots.ts to app directory |
+| `mandu_seo_analyze` | Analyze SEO metadata for common issues and recommendations |
+
+### MCP SEO Guides
+
+| Guide | Description |
+|-------|-------------|
+| `seo` | Complete SEO guide (metadata, Open Graph, JSON-LD, Sitemap) |

@@ -34,7 +34,17 @@ export {
   formatPatch,
   printDoctorReport,
   generateJsonReport,
-  generateMarkdownReport,
+  generateDoctorMarkdownReport,
   formatDoctorReport,
   type ReportFormat,
 } from "./reporter";
+
+export {
+  analyzeConfigMismatch,
+  analyzeConfigMismatchWithLLM,
+  formatConfigAnalysisReport,
+  type ConfigMismatchAnalysis,
+  type ConfigAnalysisReport,
+  type ConfigIssueCategory,
+  type ConfigIssueSeverity,
+} from "./config-analyzer";

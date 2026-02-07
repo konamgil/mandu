@@ -79,12 +79,24 @@ export class RouterError extends Error {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * Wildcard 설정
+ */
+interface WildcardConfig {
+  /** 파라미터 이름 (예: "path" for :path*) */
+  name: string;
+  /** optional 여부 (예: :path*? 는 optional) */
+  optional: boolean;
+  /** 라우트 정보 */
+  route: RouteSpec;
+}
+
+/**
  * Trie node for dynamic route matching
  *
  * Structure:
  * - children: Map for static segments
  * - paramChild: Single param child with name tracking (P0-4)
- * - wildcardRoute: Route for wildcard (*) matching
+ * - wildcardConfig: Wildcard with param name and optional flag
  * - route: Route that terminates at this node
  */
 class TrieNode {
@@ -94,11 +106,16 @@ class TrieNode {
   /** Parameter child with name for conflict detection */
   paramChild: { name: string; node: TrieNode } | null = null;
 
-  /** Wildcard route (only valid at leaf) */
-  wildcardRoute: RouteSpec | null = null;
+  /** Wildcard config with param name (only valid at leaf) */
+  wildcardConfig: WildcardConfig | null = null;
 
   /** Route terminating at this node */
   route: RouteSpec | null = null;
+
+  /** @deprecated Use wildcardConfig instead */
+  get wildcardRoute(): RouteSpec | null {
+    return this.wildcardConfig?.route ?? null;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -142,6 +159,24 @@ function safeDecodeURIComponent(str: string): string | null {
   }
 
   return decoded;
+}
+
+/**
+ * Decode wildcard segments safely (per-segment)
+ */
+function decodeWildcardSegments(segments: string[]): string | null {
+  if (segments.length === 0) return "";
+
+  const decodedSegments: string[] = [];
+  for (const segment of segments) {
+    const decoded = safeDecodeURIComponent(segment);
+    if (decoded === null) {
+      return null;
+    }
+    decodedSegments.push(decoded);
+  }
+
+  return decodedSegments.join("/");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -305,7 +340,8 @@ export class Router {
     }
 
     // P0-2: Segment-based wildcard validation
-    const wildcardIdx = segments.findIndex((s) => s === "*");
+    // Wildcard formats: * (legacy), :param*, :param*? (optional)
+    const wildcardIdx = segments.findIndex((s) => s === "*" || s.includes("*"));
     if (wildcardIdx !== -1 && wildcardIdx !== segments.length - 1) {
       throw new RouterError(
         `Wildcard must be the last segment in pattern "${pattern}"`,
@@ -338,14 +374,55 @@ export class Router {
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
 
-      // Wildcard handling
+      // Legacy wildcard: *
       if (seg === "*") {
-        node.wildcardRoute = route;
+        if (node.wildcardConfig) {
+          throw new RouterError(
+            `Wildcard conflict in pattern "${pattern}"`,
+            "ROUTE_CONFLICT",
+            route.id,
+            node.wildcardConfig.route.id
+          );
+        }
+        node.wildcardConfig = {
+          name: WILDCARD_PARAM_KEY,
+          optional: false,
+          route,
+        };
         return;
       }
 
-      // Parameter handling
+      // Parameter handling (including wildcards)
       if (seg.startsWith(":")) {
+        // Check for wildcard pattern: :param* or :param*?
+        const wildcardMatch = seg.match(/^:([^*?]+)\*(\?)?$/);
+        if (wildcardMatch) {
+          const paramName = wildcardMatch[1];
+          const isOptional = wildcardMatch[2] === "?";
+
+          if (node.wildcardConfig) {
+            throw new RouterError(
+              `Wildcard conflict in pattern "${pattern}"`,
+              "ROUTE_CONFLICT",
+              route.id,
+              node.wildcardConfig.route.id
+            );
+          }
+
+          node.wildcardConfig = {
+            name: paramName,
+            optional: isOptional,
+            route,
+          };
+
+          // Optional wildcard: 현재 노드도 매칭 가능하게 route 설정
+          if (isOptional && !node.route) {
+            node.route = route;
+          }
+          return;
+        }
+
+        // Regular parameter: :param
         const paramName = seg.slice(1);
 
         // P0-3: Param name conflict detection
@@ -385,14 +462,14 @@ export class Router {
     let node = this.trie;
 
     // Track wildcard candidate for backtracking
-    let wildcardMatch: { route: RouteSpec; consumed: number } | null = null;
+    let wildcardMatch: { config: WildcardConfig; consumed: number } | null = null;
 
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
 
       // Save wildcard candidate before advancing
-      if (node.wildcardRoute) {
-        wildcardMatch = { route: node.wildcardRoute, consumed: i };
+      if (node.wildcardConfig) {
+        wildcardMatch = { config: node.wildcardConfig, consumed: i };
       }
 
       // 1. Try static child first (higher priority)
@@ -419,13 +496,17 @@ export class Router {
 
       // 3. No match - try wildcard fallback
       if (wildcardMatch) {
-        const remaining = segments.slice(wildcardMatch.consumed).join("/");
+        const remainingSegments = segments.slice(wildcardMatch.consumed);
+        const remaining = decodeWildcardSegments(remainingSegments);
+        if (remaining === null) {
+          return null;
+        }
         if (this.debug) {
-          console.log(`[Router] Wildcard match: ${wildcardMatch.route.id} with ${remaining}`);
+          console.log(`[Router] Wildcard match: ${wildcardMatch.config.route.id} with ${remaining}`);
         }
         return {
-          route: wildcardMatch.route,
-          params: { [WILDCARD_PARAM_KEY]: remaining },
+          route: wildcardMatch.config.route,
+          params: { ...params, [wildcardMatch.config.name]: remaining },
         };
       }
 
@@ -442,20 +523,33 @@ export class Router {
     }
 
     // Check for wildcard at current node (but with no remaining segments)
-    // Policy A: /files/* does NOT match /files
-    if (node.wildcardRoute) {
-      // Don't match - wildcard requires at least one segment
+    if (node.wildcardConfig) {
+      // Optional wildcard: /files/:path*? matches /files (with empty path param)
+      if (node.wildcardConfig.optional) {
+        if (this.debug) {
+          console.log(`[Router] Optional wildcard match: ${node.wildcardConfig.route.id} with empty path`);
+        }
+        return {
+          route: node.wildcardConfig.route,
+          params,
+        };
+      }
+      // Non-optional wildcard: /files/:path* does NOT match /files
       if (this.debug) {
-        console.log(`[Router] Wildcard policy A: ${pathname} does not match wildcard`);
+        console.log(`[Router] Wildcard policy: ${pathname} does not match non-optional wildcard`);
       }
     }
 
     // Try wildcard fallback from earlier in the path
     if (wildcardMatch) {
-      const remaining = segments.slice(wildcardMatch.consumed).join("/");
+      const remainingSegments = segments.slice(wildcardMatch.consumed);
+      const remaining = decodeWildcardSegments(remainingSegments);
+      if (remaining === null) {
+        return null;
+      }
       return {
-        route: wildcardMatch.route,
-        params: { [WILDCARD_PARAM_KEY]: remaining },
+        route: wildcardMatch.config.route,
+        params: { ...params, [wildcardMatch.config.name]: remaining },
       };
     }
 
@@ -470,8 +564,11 @@ export class Router {
       routes.push(node.route);
     }
 
-    if (node.wildcardRoute) {
-      routes.push(node.wildcardRoute);
+    if (node.wildcardConfig) {
+      // Optional wildcard의 경우 route가 이미 추가되었을 수 있음
+      if (!node.route || node.wildcardConfig.route !== node.route) {
+        routes.push(node.wildcardConfig.route);
+      }
     }
 
     for (const child of node.children.values()) {

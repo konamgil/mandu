@@ -17,6 +17,18 @@ import type {
 type InferZod<T> = T extends z.ZodTypeAny ? z.infer<T> : never;
 
 /**
+ * Extract inferred type from response schema (supports ResponseSchemaWithExamples)
+ */
+export type InferResponseSchema<T> =
+  T extends { schema: infer S }
+    ? S extends z.ZodTypeAny
+      ? z.infer<S>
+      : never
+    : T extends z.ZodTypeAny
+      ? z.infer<T>
+      : never;
+
+/**
  * Infer request schema types for a single method
  */
 type InferMethodRequest<T extends MethodRequestSchema | undefined> = T extends MethodRequestSchema
@@ -39,7 +51,7 @@ type InferContractRequest<T extends ContractRequestSchema> = {
  * Infer all response schemas
  */
 type InferContractResponse<T extends ContractResponseSchema> = {
-  [K in keyof T]: T[K] extends z.ZodTypeAny ? z.infer<T[K]> : never;
+  [K in keyof T]: InferResponseSchema<T[K]>;
 };
 
 /**
@@ -113,12 +125,24 @@ export type InferParams<
   : undefined;
 
 /**
+ * Extract headers type for a specific method
+ */
+export type InferHeaders<
+  T extends ContractSchema,
+  M extends keyof T["request"]
+> = T["request"][M] extends MethodRequestSchema
+  ? T["request"][M]["headers"] extends z.ZodTypeAny
+    ? z.infer<T["request"][M]["headers"]>
+    : undefined
+  : undefined;
+
+/**
  * Extract response type for a specific status code
  */
 export type InferResponse<
   T extends ContractSchema,
   S extends keyof T["response"]
-> = T["response"][S] extends z.ZodTypeAny ? z.infer<T["response"][S]> : never;
+> = InferResponseSchema<T["response"][S]>;
 
 /**
  * Helper type to get all defined methods in a contract
@@ -159,21 +183,20 @@ export type RequiredFields<
 /**
  * Get the success response type (200 or 201)
  */
-export type SuccessResponse<T extends ContractSchema> = T["response"][200] extends z.ZodTypeAny
-  ? z.infer<T["response"][200]>
-  : T["response"][201] extends z.ZodTypeAny
-    ? z.infer<T["response"][201]>
-    : never;
+export type SuccessResponse<T extends ContractSchema> =
+  InferResponseSchema<T["response"][200]> extends never
+    ? InferResponseSchema<T["response"][201]>
+    : InferResponseSchema<T["response"][200]>;
 
 /**
  * Get the error response type (400, 404, 500, etc.)
  */
 export type ErrorResponse<T extends ContractSchema> =
-  | (T["response"][400] extends z.ZodTypeAny ? z.infer<T["response"][400]> : never)
-  | (T["response"][401] extends z.ZodTypeAny ? z.infer<T["response"][401]> : never)
-  | (T["response"][403] extends z.ZodTypeAny ? z.infer<T["response"][403]> : never)
-  | (T["response"][404] extends z.ZodTypeAny ? z.infer<T["response"][404]> : never)
-  | (T["response"][500] extends z.ZodTypeAny ? z.infer<T["response"][500]> : never);
+  | InferResponseSchema<T["response"][400]>
+  | InferResponseSchema<T["response"][401]>
+  | InferResponseSchema<T["response"][403]>
+  | InferResponseSchema<T["response"][404]>
+  | InferResponseSchema<T["response"][500]>;
 
 /**
  * Utility type for strict contract enforcement
@@ -211,7 +234,7 @@ export type ContractFetchOptions<
  * Response type union for a contract
  */
 export type ContractResponseUnion<T extends ContractSchema> = {
-  [K in keyof T["response"]]: T["response"][K] extends z.ZodTypeAny
-    ? { status: K; data: z.infer<T["response"][K]> }
-    : never;
+  [K in keyof T["response"]]: InferResponseSchema<T["response"][K]> extends never
+    ? never
+    : { status: K; data: InferResponseSchema<T["response"][K]> };
 }[keyof T["response"]];

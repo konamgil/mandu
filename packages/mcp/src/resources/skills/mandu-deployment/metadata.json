@@ -1,0 +1,13 @@
+{
+  "id": "mandu-deployment",
+  "name": "Mandu Deployment",
+  "version": "1.0.0",
+  "description": "Production deployment patterns for Mandu applications",
+  "author": "mandu",
+  "references": [
+    "https://bun.sh/docs/bundler",
+    "https://render.com/docs",
+    "https://docs.docker.com/"
+  ],
+  "abstract": "Mandu 앱을 프로덕션 환경에 배포하기 위한 패턴과 가이드. Bun 빌드 최적화, Render/Docker 배포, CI/CD 파이프라인, 환경 설정을 다룹니다."
+}

@@ -36,6 +36,9 @@ const FORBIDDEN_IMPORTS = [
   "node:worker_threads",
 ];
 
+// Slot에서 직접 import를 피해야 하는 모듈
+const DISCOURAGED_SLOT_IMPORTS = ["zod"];
+
 // 필수 패턴들 (더 엄격한 검사)
 const REQUIRED_PATTERNS = {
   manduImport: /import\s+.*\bMandu\b.*from\s+['"]@mandujs\/core['"]/,
@@ -163,6 +166,26 @@ export function validateSlotContent(content: string): SlotValidationResult {
           line: i + 1,
           suggestion: `'${forbidden}' 대신 Bun의 안전한 API 또는 adapter를 사용하세요`,
           autoFixable: true,
+        });
+      }
+    }
+
+    for (const discouraged of DISCOURAGED_SLOT_IMPORTS) {
+      const importPattern = new RegExp(
+        `import\\s+.*from\\s+['"]${discouraged}['"]`
+      );
+      const requirePattern = new RegExp(
+        `require\\s*\\(\\s*['"]${discouraged}['"]\\s*\\)`
+      );
+
+      if (importPattern.test(line) || requirePattern.test(line)) {
+        issues.push({
+          code: "ZOD_DIRECT_IMPORT",
+          severity: "error",
+          message: `Slot에서 '${discouraged}' 직접 import 금지`,
+          line: i + 1,
+          suggestion: "계약은 spec/contracts/*.contract.ts에 정의하고 ctx.input()으로 검증하세요",
+          autoFixable: false,
         });
       }
     }

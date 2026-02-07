@@ -6,6 +6,7 @@
 import type { RoutesManifest, RouteSpec } from "../spec/schema";
 import { buildClientBundles } from "./build";
 import type { BundleResult } from "./types";
+import { PORTS, TIMEOUTS } from "../constants";
 import path from "path";
 import fs from "fs";
 
@@ -18,6 +19,17 @@ export interface DevBundlerOptions {
   onRebuild?: (result: RebuildResult) => void;
   /** 에러 콜백 */
   onError?: (error: Error, routeId?: string) => void;
+  /**
+   * 추가 watch 디렉토리 (공통 컴포넌트 등)
+   * 상대 경로 또는 절대 경로 모두 지원
+   * 기본값: ["src/components", "components", "src/shared", "shared", "src/lib", "lib", "src/hooks", "hooks", "src/utils", "utils"]
+   */
+  watchDirs?: string[];
+  /**
+   * 기본 watch 디렉토리 비활성화
+   * true로 설정하면 watchDirs만 감시
+   */
+  disableDefaultWatchDirs?: boolean;
 }
 
 export interface RebuildResult {
@@ -34,12 +46,38 @@ export interface DevBundler {
   close: () => void;
 }
 
+// 기본 공통 컴포넌트 디렉토리 목록
+const DEFAULT_COMMON_DIRS = [
+  "src/components",
+  "components",
+  "src/shared",
+  "shared",
+  "src/lib",
+  "lib",
+  "src/hooks",
+  "hooks",
+  "src/utils",
+  "utils",
+  // Islands & Client 디렉토리
+  "src/client",
+  "client",
+  "src/islands",
+  "islands",
+];
+
 /**
  * 개발 모드 번들러 시작
  * 파일 변경 감시 및 자동 재빌드
  */
 export async function startDevBundler(options: DevBundlerOptions): Promise<DevBundler> {
-  const { rootDir, manifest, onRebuild, onError } = options;
+  const {
+    rootDir,
+    manifest,
+    onRebuild,
+    onError,
+    watchDirs: customWatchDirs = [],
+    disableDefaultWatchDirs = false,
+  } = options;
 
   // 초기 빌드
   console.log("🔨 Initial client bundle build...");
@@ -57,6 +95,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
   // clientModule 경로에서 routeId 매핑 생성
   const clientModuleToRoute = new Map<string, string>();
   const watchDirs = new Set<string>();
+  const commonWatchDirs = new Set<string>(); // 공통 디렉토리 (전체 재빌드 트리거)
 
   for (const route of manifest.routes) {
     if (route.clientModule) {
@@ -79,22 +118,103 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     // slots 디렉토리 없으면 무시
   }
 
+  // 공통 컴포넌트 디렉토리 추가 (기본 + 커스텀)
+  const commonDirsToCheck = disableDefaultWatchDirs
+    ? customWatchDirs
+    : [...DEFAULT_COMMON_DIRS, ...customWatchDirs];
+
+  const addCommonDir = async (dir: string): Promise<void> => {
+    const absPath = path.isAbsolute(dir) ? dir : path.join(rootDir, dir);
+    try {
+      const stat = await fs.promises.stat(absPath);
+      const watchPath = stat.isDirectory() ? absPath : path.dirname(absPath);
+      await fs.promises.access(watchPath);
+      commonWatchDirs.add(watchPath);
+      watchDirs.add(watchPath);
+    } catch {
+      // 디렉토리 없으면 무시
+    }
+  };
+
+  for (const dir of commonDirsToCheck) {
+    await addCommonDir(dir);
+  }
+
   // 파일 감시 설정
   const watchers: fs.FSWatcher[] = [];
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // 파일이 공통 디렉토리에 있는지 확인
+  const isInCommonDir = (filePath: string): boolean => {
+    const normalizedFile = path.resolve(filePath).replace(/\\/g, "/");
+    for (const commonDir of commonWatchDirs) {
+      const normalizedCommon = path.resolve(commonDir).replace(/\\/g, "/");
+      if (normalizedFile.startsWith(normalizedCommon + "/")) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   const handleFileChange = async (changedFile: string) => {
     const normalizedPath = changedFile.replace(/\\/g, "/");
+
+    // 공통 컴포넌트 디렉토리 변경 → 전체 재빌드
+    if (isInCommonDir(changedFile)) {
+      console.log(`\n🔄 Common file changed: ${path.basename(changedFile)}`);
+      console.log(`   Rebuilding all islands...`);
+      const startTime = performance.now();
+
+      try {
+        const result = await buildClientBundles(manifest, rootDir, {
+          minify: false,
+          sourcemap: true,
+        });
+
+        const buildTime = performance.now() - startTime;
+
+        if (result.success) {
+          console.log(`✅ Rebuilt ${result.stats.bundleCount} islands in ${buildTime.toFixed(0)}ms`);
+          onRebuild?.({
+            routeId: "*", // 전체 재빌드 표시
+            success: true,
+            buildTime,
+          });
+        } else {
+          console.error(`❌ Build failed:`, result.errors);
+          onRebuild?.({
+            routeId: "*",
+            success: false,
+            buildTime,
+            error: result.errors.join(", "),
+          });
+        }
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        console.error(`❌ Build error:`, err.message);
+        onError?.(err, "*");
+      }
+      return;
+    }
 
     // clientModule 매핑에서 routeId 찾기
     let routeId = clientModuleToRoute.get(normalizedPath);
 
-    // .client.ts 파일인 경우 파일명에서 routeId 추출
-    if (!routeId && changedFile.endsWith(".client.ts")) {
-      const basename = path.basename(changedFile, ".client.ts");
-      const route = manifest.routes.find((r) => r.id === basename);
-      if (route) {
-        routeId = route.id;
+    // .client.ts 또는 .client.tsx 파일인 경우 파일명에서 routeId 추출
+    if (!routeId) {
+      let basename: string | null = null;
+
+      if (changedFile.endsWith(".client.ts")) {
+        basename = path.basename(changedFile, ".client.ts");
+      } else if (changedFile.endsWith(".client.tsx")) {
+        basename = path.basename(changedFile, ".client.tsx");
+      }
+
+      if (basename) {
+        const route = manifest.routes.find((r) => r.id === basename);
+        if (route) {
+          routeId = route.id;
+        }
       }
     }
 
@@ -153,7 +273,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
           clearTimeout(debounceTimer);
         }
 
-        debounceTimer = setTimeout(() => handleFileChange(fullPath), 100);
+        debounceTimer = setTimeout(() => handleFileChange(fullPath), TIMEOUTS.WATCHER_DEBOUNCE);
       });
 
       watchers.push(watcher);
@@ -164,6 +284,12 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
 
   if (watchers.length > 0) {
     console.log(`👀 Watching ${watchers.length} directories for changes...`);
+    if (commonWatchDirs.size > 0) {
+      const commonDirNames = Array.from(commonWatchDirs)
+        .map(d => path.relative(rootDir, d) || ".")
+        .join(", ");
+      console.log(`📦 Common dirs (full rebuild): ${commonDirNames}`);
+    }
   }
 
   return {
@@ -192,11 +318,15 @@ export interface HMRServer {
 }
 
 export interface HMRMessage {
-  type: "connected" | "reload" | "island-update" | "error" | "ping";
+  type: "connected" | "reload" | "island-update" | "layout-update" | "css-update" | "error" | "ping" | "guard-violation";
   data?: {
     routeId?: string;
+    layoutPath?: string;
+    cssPath?: string;
     message?: string;
     timestamp?: number;
+    file?: string;
+    violations?: Array<{ line: number; message: string }>;
   };
 }
 
@@ -205,7 +335,7 @@ export interface HMRMessage {
  */
 export function createHMRServer(port: number): HMRServer {
   const clients = new Set<any>();
-  const hmrPort = port + 1;
+  const hmrPort = port + PORTS.HMR_OFFSET;
 
   const server = Bun.serve({
     port: hmrPort,
@@ -289,15 +419,15 @@ export function createHMRServer(port: number): HMRServer {
  * 브라우저에서 실행되어 HMR 서버와 연결
  */
 export function generateHMRClientScript(port: number): string {
-  const hmrPort = port + 1;
+  const hmrPort = port + PORTS.HMR_OFFSET;
 
   return `
 (function() {
   const HMR_PORT = ${hmrPort};
   let ws = null;
   let reconnectAttempts = 0;
-  const maxReconnectAttempts = 10;
-  const reconnectDelay = 1000;
+  const maxReconnectAttempts = ${TIMEOUTS.HMR_MAX_RECONNECT};
+  const reconnectDelay = ${TIMEOUTS.HMR_RECONNECT_DELAY};
 
   function connect() {
     try {
@@ -360,6 +490,28 @@ export function generateHMRClientScript(port: number): string {
           console.log('[Mandu HMR] Reloading page for island update');
           location.reload();
         }
+        break;
+
+      case 'layout-update':
+        const layoutPath = message.data?.layoutPath;
+        console.log('[Mandu HMR] Layout updated:', layoutPath);
+        // Layout 변경은 항상 전체 리로드
+        location.reload();
+        break;
+
+      case 'css-update':
+        console.log('[Mandu HMR] CSS updated');
+        // CSS 핫 리로드 (페이지 새로고침 없이 스타일시트만 교체)
+        var targetCssPath = message.data?.cssPath || '/.mandu/client/globals.css';
+        var links = document.querySelectorAll('link[rel="stylesheet"]');
+        links.forEach(function(link) {
+          var href = link.getAttribute('href') || '';
+          var baseHref = href.split('?')[0];
+          // 정확한 경로 매칭 우선, fallback으로 기존 패턴 매칭
+          if (baseHref === targetCssPath || href.includes('globals.css') || href.includes('.mandu/client')) {
+            link.setAttribute('href', baseHref + '?t=' + Date.now());
+          }
+        });
         break;
 
       case 'error':

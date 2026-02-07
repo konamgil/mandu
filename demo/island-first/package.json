@@ -1,13 +1,17 @@
 {
   "name": "mandu-demo-island-first",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mandujs/core": "^0.9.15",
-    "@mandujs/mcp": "^0.9.15",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "@mandujs/core": "workspace:*",
+    "@mandujs/mcp": "workspace:*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0"
   }
 }

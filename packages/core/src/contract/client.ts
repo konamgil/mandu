@@ -13,6 +13,8 @@ import type {
   ContractMethod,
   MethodRequestSchema,
 } from "./schema";
+import type { InferResponseSchema } from "./types";
+import { TIMEOUTS } from "../constants";
 
 /**
  * Client options for making requests
@@ -73,11 +75,11 @@ type InferRequestOptions<T extends MethodRequestSchema | undefined> =
  * Infer success response from contract
  */
 type InferSuccessResponse<TResponse extends ContractSchema["response"]> =
-  TResponse[200] extends z.ZodTypeAny
-    ? z.infer<TResponse[200]>
-    : TResponse[201] extends z.ZodTypeAny
-      ? z.infer<TResponse[201]>
-      : unknown;
+  InferResponseSchema<TResponse[200]> extends never
+    ? InferResponseSchema<TResponse[201]> extends never
+      ? unknown
+      : InferResponseSchema<TResponse[201]>
+    : InferResponseSchema<TResponse[200]>;
 
 /**
  * Contract client method
@@ -175,7 +177,7 @@ export function createClient<T extends ContractSchema>(
     baseUrl,
     headers: defaultHeaders = {},
     fetch: customFetch = fetch,
-    timeout = 30000,
+    timeout = TIMEOUTS.CLIENT_DEFAULT,
   } = options;
 
   const methods: ContractMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -285,7 +287,7 @@ export async function contractFetch<
   const {
     headers: defaultHeaders = {},
     fetch: customFetch = fetch,
-    timeout = 30000,
+    timeout = TIMEOUTS.CLIENT_DEFAULT,
   } = clientOptions;
 
   // Build URL

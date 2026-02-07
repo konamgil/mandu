@@ -4,7 +4,9 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
-import "../setup";
+import { setupHappyDom } from "../setup";
+
+setupHappyDom();
 
 function createIslandElement(
   id: string,

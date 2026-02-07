@@ -3,6 +3,7 @@ import { generateApiHandler, generatePageComponent, generateSlotLogic } from "./
 import { generateContractTypeGlue, generateContractTemplate, generateContractTypesIndex } from "./contract-glue";
 import { computeHash } from "../spec/lock";
 import { getWatcher } from "../watcher/watcher";
+import { resolveGeneratedPaths, GENERATED_RELATIVE_PATHS } from "../paths";
 import path from "path";
 import fs from "fs/promises";
 import fsSync from "fs";
@@ -141,10 +142,11 @@ export async function generateRoutes(
   const watcher = getWatcher();
   watcher?.suppress();
 
-  const serverRoutesDir = path.join(rootDir, "apps/server/generated/routes");
-  const webRoutesDir = path.join(rootDir, "apps/web/generated/routes");
-  const typesDir = path.join(rootDir, "apps/server/generated/types");
-  const mapDir = path.join(rootDir, "packages/core/map");
+  const generatedPaths = resolveGeneratedPaths(rootDir);
+  const serverRoutesDir = generatedPaths.serverRoutesDir;
+  const webRoutesDir = generatedPaths.webRoutesDir;
+  const typesDir = generatedPaths.typesDir;
+  const mapDir = generatedPaths.mapDir;
 
   await ensureDir(serverRoutesDir);
   await ensureDir(webRoutesDir);
@@ -221,19 +223,19 @@ export async function generateRoutes(
         const typeFilePath = path.join(typesDir, typeFileName);
         expectedTypeFiles.add(typeFileName);
 
-        const typeGlueContent = generateContractTypeGlue(route, "apps/server/generated/types");
+        const typeGlueContent = generateContractTypeGlue(route, GENERATED_RELATIVE_PATHS.types);
         await Bun.write(typeFilePath, typeGlueContent);
         result.created.push(typeFilePath);
 
         contractMapping = {
           contractPath: route.contractModule,
-          typeGluePath: `apps/server/generated/types/${typeFileName}`,
+          typeGluePath: `${GENERATED_RELATIVE_PATHS.types}/${typeFileName}`,
         };
 
         routesWithContracts.push(route.id);
       }
 
-      generatedMap.files[`apps/server/generated/routes/${serverFileName}`] = {
+      generatedMap.files[`${GENERATED_RELATIVE_PATHS.serverRoutes}/${serverFileName}`] = {
         routeId: route.id,
         kind: route.kind as "api" | "page",
         specLocation,
@@ -269,7 +271,7 @@ export async function generateRoutes(
         await Bun.write(webFilePath, componentContent);
         result.created.push(webFilePath);
 
-        generatedMap.files[`apps/web/generated/routes/${webFileName}`] = {
+        generatedMap.files[`${GENERATED_RELATIVE_PATHS.webRoutes}/${webFileName}`] = {
           routeId: route.id,
           kind: route.kind,
           specLocation,

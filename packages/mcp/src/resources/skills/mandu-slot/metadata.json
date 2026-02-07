@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "organization": "Mandu Framework",
+  "date": "February 2026",
+  "abstract": "Mandu Slot API를 사용한 비즈니스 로직 작성 가이드. Mandu.filling()을 통한 HTTP 핸들러 정의, ctx 응답 메서드, guard 인증, 라이프사이클 훅을 다룹니다. 4개 카테고리의 규칙으로 구성되어 있으며, 에이전트가 올바른 slot 코드를 생성할 수 있도록 안내합니다.",
+  "references": [
+    "https://github.com/aspect-build/rules_esbuild",
+    "https://bun.sh/docs/api/http",
+    "https://hono.dev/concepts/context"
+  ],
+  "tags": ["slot", "api", "business-logic", "mandu"]
+}

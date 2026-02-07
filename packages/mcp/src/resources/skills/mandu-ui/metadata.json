@@ -1,0 +1,13 @@
+{
+  "id": "mandu-ui",
+  "name": "Mandu UI",
+  "version": "1.0.0",
+  "description": "UI component library integration and accessibility patterns",
+  "author": "mandu",
+  "references": [
+    "https://ui.shadcn.com/docs",
+    "https://www.radix-ui.com/primitives",
+    "https://www.w3.org/WAI/ARIA/apg/"
+  ],
+  "abstract": "shadcn/ui, Radix UI 등 UI 라이브러리를 Mandu Island 아키텍처에 통합하고 접근성을 보장하는 패턴을 제공합니다."
+}
