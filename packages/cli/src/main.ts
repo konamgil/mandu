@@ -233,6 +233,8 @@ async function main(): Promise<void> {
     }
     process.exit(1);
   }
+
+  process.exit(0);
 }
 
 main().catch((error) => handleCLIError(error));
