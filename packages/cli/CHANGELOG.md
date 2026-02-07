@@ -1,5 +1,21 @@
 # @mandujs/cli
 
+## 0.13.1
+
+### Patch Changes
+
+- fix: add process.exit(0) after successful command execution to prevent CLI from hanging
+
+## 0.13.0
+
+### Minor Changes
+
+- 터미널 종료 관련 업데이트
+
+### Patch Changes
+
+- fix: add process.exit(0) after successful command execution to prevent CLI from hanging
+
 ## 0.12.2
 
 ### Patch Changes
