@@ -4,6 +4,7 @@
  */
 
 import type { RouteSpec } from "../spec/schema";
+import { GENERATED_RELATIVE_PATHS } from "../paths";
 
 /**
  * Convert string to PascalCase
@@ -63,7 +64,7 @@ function computeRelativePath(fromDir: string, toPath: string): string {
  */
 export function generateContractTypeGlue(
   route: RouteSpec,
-  typesDir: string = "apps/server/generated/types"
+  typesDir: string = GENERATED_RELATIVE_PATHS.types
 ): string {
   if (!route.contractModule) {
     return "";

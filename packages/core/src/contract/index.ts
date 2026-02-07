@@ -14,11 +14,15 @@ export * from "./validator";
 export * from "./handler";
 export * from "./client";
 export * from "./normalize";
+export * from "./registry";
+export * from "./client-safe";
+export * from "./protection";
 
 import type { ContractDefinition, ContractInstance, ContractSchema } from "./schema";
 import type { ContractHandlers, RouteDefinition } from "./handler";
 import { defineHandler, defineRoute } from "./handler";
 import { createClient, contractFetch, type ClientOptions } from "./client";
+import { createClientContract } from "./client-safe";
 
 /**
  * Create a Mandu API Contract
@@ -178,6 +182,12 @@ export const ManduContract = {
    * ```
    */
   client: createClient,
+
+  /**
+   * Create a client-safe contract
+   * Client에서 노출할 스키마만 선택
+   */
+  clientContract: createClientContract,
 
   /**
    * Single type-safe fetch call

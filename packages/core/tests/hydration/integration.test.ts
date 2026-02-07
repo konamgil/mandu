@@ -4,7 +4,9 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import "../setup";
+import { setupHappyDom } from "../setup";
+
+setupHappyDom();
 import React from "react";
 
 // Island 함수 시뮬레이션 (실제 island() 함수와 동일한 구조)

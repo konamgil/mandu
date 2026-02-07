@@ -1,11 +1,15 @@
 /**
  * Mandu Filling - 만두소 🥟
  * 체이닝 API로 비즈니스 로직 정의
+ *
+ * DNA-002: 의존성 주입 패턴 지원
  */
 
 import { ManduContext, ValidationError } from "./context";
 import { AuthenticationError, AuthorizationError } from "./auth";
+import { type FillingDeps, globalDeps } from "./deps";
 import { ErrorClassifier, formatErrorResponse, ErrorCode } from "../error";
+import { TIMEOUTS } from "../constants";
 import { createContract, type ContractDefinition, type ContractInstance } from "../contract";
 import {
   type Middleware as RuntimeMiddleware,
@@ -25,6 +29,7 @@ import {
   executeLifecycle,
   type ExecuteOptions,
 } from "../runtime/lifecycle";
+import type { SlotMetadata, SlotConstraints } from "../guard/semantic-slots";
 
 /** Handler function type */
 export type Handler = (ctx: ManduContext) => Response | Promise<Response>;
@@ -59,6 +64,8 @@ interface FillingConfig<TLoaderData = unknown> {
   loader?: Loader<TLoaderData>;
   lifecycle: LifecycleStore;
   middleware: MiddlewareEntry[];
+  /** Semantic slot metadata */
+  semantic: SlotMetadata;
 }
 
 export class ManduFilling<TLoaderData = unknown> {
@@ -66,7 +73,86 @@ export class ManduFilling<TLoaderData = unknown> {
     handlers: new Map(),
     lifecycle: createLifecycleStore(),
     middleware: [],
+    semantic: {},
   };
+
+  /**
+   * Semantic Slot: 슬롯의 목적 정의
+   * AI가 이 슬롯의 역할을 이해하고 적절한 구현을 하도록 안내
+   *
+   * @example
+   * ```typescript
+   * Mandu.filling()
+   *   .purpose("사용자 목록 조회 API")
+   *   .get(async (ctx) => { ... });
+   * ```
+   */
+  purpose(purposeText: string): this {
+    this.config.semantic.purpose = purposeText;
+    return this;
+  }
+
+  /**
+   * Semantic Slot: 상세 설명 추가
+   *
+   * @example
+   * ```typescript
+   * Mandu.filling()
+   *   .purpose("사용자 목록 조회 API")
+   *   .description("페이지네이션된 사용자 목록 반환. 관리자 전용.")
+   *   .get(async (ctx) => { ... });
+   * ```
+   */
+  description(descText: string): this {
+    this.config.semantic.description = descText;
+    return this;
+  }
+
+  /**
+   * Semantic Slot: 제약 조건 정의
+   * AI가 이 범위 내에서만 구현하도록 제한
+   *
+   * @example
+   * ```typescript
+   * Mandu.filling()
+   *   .purpose("사용자 목록 조회 API")
+   *   .constraints({
+   *     maxLines: 50,
+   *     maxCyclomaticComplexity: 10,
+   *     requiredPatterns: ["input-validation", "error-handling"],
+   *     forbiddenPatterns: ["direct-db-write"],
+   *     allowedImports: ["server/domain/user/*", "shared/utils/*"],
+   *   })
+   *   .get(async (ctx) => { ... });
+   * ```
+   */
+  constraints(constraintsConfig: SlotConstraints): this {
+    this.config.semantic.constraints = constraintsConfig;
+    return this;
+  }
+
+  /**
+   * Semantic Slot: 태그 추가 (검색 및 분류용)
+   */
+  tags(...tagList: string[]): this {
+    this.config.semantic.tags = tagList;
+    return this;
+  }
+
+  /**
+   * Semantic Slot: 소유자/담당자 지정
+   */
+  owner(ownerName: string): this {
+    this.config.semantic.owner = ownerName;
+    return this;
+  }
+
+  /**
+   * 슬롯 메타데이터 가져오기
+   */
+  getSemanticMetadata(): SlotMetadata {
+    return { ...this.config.semantic };
+  }
 
   loader(loaderFn: Loader<TLoaderData>): this {
     this.config.loader = loaderFn;
@@ -80,7 +166,7 @@ export class ManduFilling<TLoaderData = unknown> {
     if (!this.config.loader) {
       return undefined;
     }
-    const { timeout = 5000, fallback } = options;
+    const { timeout = TIMEOUTS.LOADER_DEFAULT, fallback } = options;
     try {
       const loaderPromise = Promise.resolve(this.config.loader(ctx));
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -227,9 +313,10 @@ export class ManduFilling<TLoaderData = unknown> {
     request: Request,
     params: Record<string, string> = {},
     routeContext?: { routeId: string; pattern: string },
-    options?: ExecuteOptions
+    options?: ExecuteOptions & { deps?: FillingDeps }
   ): Promise<Response> {
-    const ctx = new ManduContext(request, params);
+    const deps = options?.deps ?? globalDeps.get();
+    const ctx = new ManduContext(request, params, deps);
     const method = request.method.toUpperCase() as HttpMethod;
     const handler = this.config.handlers.get(method);
     if (!handler) {

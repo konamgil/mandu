@@ -94,6 +94,17 @@ export const RouteSpec = z
     // - false: 이 라우트에 전통적 SSR 적용
     // - undefined: 서버 설정 따름
     streaming: z.boolean().optional(),
+
+    // Layout 체인 [NEW v0.9.33]
+    // - 페이지에 적용할 레이아웃 모듈 경로 배열
+    // - 배열 순서: 외부 → 내부 (Root → Parent → Child)
+    layoutChain: z.array(z.string()).optional(),
+
+    // Loading UI 모듈 경로 [NEW v0.9.33]
+    loadingModule: z.string().optional(),
+
+    // Error UI 모듈 경로 [NEW v0.9.33]
+    errorModule: z.string().optional(),
   })
   .refine(
     (route) => {

@@ -2,11 +2,13 @@
  * mandu build - 클라이언트 번들 빌드
  *
  * Hydration이 필요한 Island들을 번들링합니다.
+ * Tailwind v4 프로젝트는 CSS도 함께 빌드합니다.
  */
 
-import { loadManifest, buildClientBundles, printBundleStats } from "@mandujs/core";
+import { buildClientBundles, printBundleStats, validateAndReport, isTailwindProject, buildCSS, type RoutesManifest } from "@mandujs/core";
 import path from "path";
 import fs from "fs/promises";
+import { resolveManifest } from "../util/manifest";
 
 export interface BuildOptions {
   /** 코드 압축 (기본: production에서 true) */
@@ -21,24 +23,48 @@ export interface BuildOptions {
 
 export async function build(options: BuildOptions = {}): Promise<boolean> {
   const cwd = process.cwd();
-  const specPath = path.join(cwd, "spec", "routes.manifest.json");
 
   console.log("📦 Mandu Build - Client Bundle Builder\n");
 
-  // 1. Spec 로드
-  const specResult = await loadManifest(specPath);
-  if (!specResult.success) {
-    console.error("❌ Spec 로드 실패:");
-    for (const error of specResult.errors) {
-      console.error(`   ${error}`);
-    }
+  const config = await validateAndReport(cwd);
+  if (!config) {
+    return false;
+  }
+  const buildConfig = config.build ?? {};
+
+  // 1. 라우트 매니페스트 로드 (FS Routes 우선)
+  let manifest: Awaited<ReturnType<typeof resolveManifest>>["manifest"];
+  try {
+    const resolved = await resolveManifest(cwd, { fsRoutes: config.fsRoutes });
+    manifest = resolved.manifest;
+    console.log(`✅ 라우트 로드 완료 (${resolved.source}): ${manifest.routes.length}개 라우트`);
+  } catch (error) {
+    console.error("❌ 라우트 로드 실패:");
+    console.error(`   ${error instanceof Error ? error.message : error}`);
     return false;
   }
 
-  const manifest = specResult.data!;
-  console.log(`✅ Spec 로드 완료: ${manifest.routes.length}개 라우트`);
+  // 2. Tailwind CSS 빌드 (Island 여부와 무관하게 먼저 실행)
+  const hasTailwind = await isTailwindProject(cwd);
+  const resolvedMinify = options.minify ?? buildConfig.minify ?? true;
 
-  // 2. Hydration이 필요한 라우트 확인
+  if (hasTailwind) {
+    console.log(`\n🎨 Tailwind CSS v4 빌드 중...`);
+    const cssResult = await buildCSS({
+      rootDir: cwd,
+      minify: resolvedMinify,
+    });
+
+    if (!cssResult.success) {
+      console.error(`\n❌ CSS 빌드 실패: ${cssResult.error}`);
+      return false;
+    }
+
+    console.log(`   ✅ CSS 빌드 완료 (${cssResult.buildTime?.toFixed(0)}ms)`);
+    console.log(`   출력: ${cssResult.outputPath}`);
+  }
+
+  // 3. Hydration이 필요한 라우트 확인
   const hydratedRoutes = manifest.routes.filter(
     (route) =>
       route.kind === "page" &&
@@ -49,6 +75,12 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   if (hydratedRoutes.length === 0) {
     console.log("\n📭 Hydration이 필요한 라우트가 없습니다.");
     console.log("   (clientModule이 없거나 hydration.strategy: none)");
+
+    // CSS만 빌드된 경우도 성공으로 처리
+    if (hasTailwind) {
+      console.log(`\n✅ CSS 빌드 완료`);
+      console.log(`   CSS: .mandu/client/globals.css`);
+    }
     return true;
   }
 
@@ -58,15 +90,16 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     console.log(`   - ${route.id} (${hydration.strategy}, ${hydration.priority || "visible"})`);
   }
 
-  // 3. 번들 빌드
+  // 4. 번들 빌드
   const startTime = performance.now();
-  const result = await buildClientBundles(manifest, cwd, {
-    minify: options.minify,
-    sourcemap: options.sourcemap,
-    outDir: options.outDir,
-  });
+  const resolvedBuildOptions: BuildOptions = {
+    minify: options.minify ?? buildConfig.minify,
+    sourcemap: options.sourcemap ?? buildConfig.sourcemap,
+    outDir: options.outDir ?? buildConfig.outDir,
+  };
+  const result = await buildClientBundles(manifest, cwd, resolvedBuildOptions);
 
-  // 4. 결과 출력
+  // 5. 결과 출력
   console.log("");
   printBundleStats(result);
 
@@ -78,13 +111,16 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   const elapsed = (performance.now() - startTime).toFixed(0);
   console.log(`\n✅ 빌드 완료 (${elapsed}ms)`);
   console.log(`   출력: .mandu/client/`);
+  if (hasTailwind) {
+    console.log(`   CSS: .mandu/client/globals.css`);
+  }
 
-  // 5. 감시 모드
+  // 6. 감시 모드
   if (options.watch) {
     console.log("\n👀 파일 감시 모드...");
     console.log("   Ctrl+C로 종료\n");
 
-    await watchAndRebuild(manifest, cwd, options);
+    await watchAndRebuild(manifest, cwd, resolvedBuildOptions);
   }
 
   return true;
@@ -94,7 +130,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
  * 파일 감시 및 재빌드
  */
 async function watchAndRebuild(
-  manifest: Awaited<ReturnType<typeof loadManifest>>["manifest"],
+  manifest: RoutesManifest,
   rootDir: string,
   options: BuildOptions
 ): Promise<void> {

@@ -103,4 +103,12 @@ export interface BundlerOptions {
   external?: string[];
   /** 환경 변수 주입 */
   define?: Record<string, string>;
+  /**
+   * 코드 스플리팅 활성화
+   * - true: Island들 간 공통 코드를 별도 청크로 추출 (캐시 효율 향상)
+   * - false: 각 Island가 독립 번들로 생성 (기본값)
+   *
+   * 주의: splitting=true인 경우 청크 파일 관리가 필요합니다.
+   */
+  splitting?: boolean;
 }

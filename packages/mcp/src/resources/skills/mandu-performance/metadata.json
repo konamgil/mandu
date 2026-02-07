@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "organization": "Mandu Framework",
+  "date": "February 2026",
+  "abstract": "Mandu 애플리케이션 성능 최적화 가이드. 워터폴 제거 (Promise.all), 번들 최적화 (직접 import, lazy loading), 캐싱 전략 (React.cache, LRU), Bun 런타임 활용 (Bun.serve, Bun.file)을 다룹니다. Vercel React Best Practices 기반으로 Mandu 컨텍스트에 맞게 변환되었습니다.",
+  "references": [
+    "https://vercel.com/blog/how-we-optimized-package-imports-in-next-js",
+    "https://vercel.com/blog/how-we-made-the-vercel-dashboard-twice-as-fast",
+    "https://bun.sh/docs/api/http",
+    "https://bun.sh/docs/api/file-io",
+    "https://react.dev/reference/react/cache"
+  ],
+  "tags": ["performance", "async", "bundle", "cache", "bun", "mandu"]
+}

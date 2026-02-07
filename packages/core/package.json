@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/core",
-  "version": "0.9.25",
+  "version": "0.12.2",
   "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
   "main": "./src/index.ts",
@@ -35,7 +35,7 @@
     "directory": "packages/core"
   },
   "author": "konamgil",
-  "license": "MIT",
+  "license": "MPL-2.0",
   "publishConfig": {
     "access": "public"
   },
@@ -43,12 +43,15 @@
     "bun": ">=1.0.0"
   },
   "peerDependencies": {
-    "react": ">=18.0.0",
-    "react-dom": ">=18.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "zod": ">=3.0.0"
   },
   "dependencies": {
     "chokidar": "^5.0.0",
+    "fast-glob": "^3.3.2",
+    "glob": "^13.0.0",
+    "minimatch": "^10.1.1",
     "ollama": "^0.6.3"
   }
 }

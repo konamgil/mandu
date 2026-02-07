@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/cli",
-  "version": "0.9.10",
+  "version": "0.12.2",
   "description": "Agent-Native Fullstack Framework - 에이전트가 코딩해도 아키텍처가 무너지지 않는 개발 OS",
   "type": "module",
   "main": "./src/main.ts",
@@ -27,12 +27,13 @@
     "url": "git+https://github.com/konamgil/mandu.git"
   },
   "author": "konamgil",
-  "license": "MIT",
+  "license": "MPL-2.0",
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
-    "@mandujs/core": "0.9.10"
+    "@mandujs/core": "workspace:*",
+    "cfonts": "^3.3.0"
   },
   "engines": {
     "bun": ">=1.0.0"

@@ -4,7 +4,9 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import "../setup";
+import { setupHappyDom } from "../setup";
+
+setupHappyDom();
 
 function createIslandElement(id: string, src: string, priority = "visible"): HTMLElement {
   const el = document.createElement("div");

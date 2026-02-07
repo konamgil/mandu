@@ -1,5 +1,7 @@
 /**
  * Mandu Filling Module - 만두소 🥟
+ *
+ * DNA-002: 의존성 주입 패턴 지원
  */
 
 export { ManduContext, ValidationError, CookieManager } from "./context";
@@ -19,3 +21,19 @@ export {
   createRoleGuard,
 } from "./auth";
 export type { BaseUser, UserWithRole, UserWithRoles } from "./auth";
+
+// DNA-002: Dependency Injection
+export {
+  createDefaultDeps,
+  createMockDeps,
+  mergeDeps,
+  globalDeps,
+} from "./deps";
+export type {
+  FillingDeps,
+  DbDeps,
+  CacheDeps,
+  LoggerDeps,
+  EventBusDeps,
+  InjectDeps,
+} from "./deps";

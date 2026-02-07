@@ -3,9 +3,10 @@
  * OpenAPI 스펙 생성 명령어
  */
 
-import { loadManifest, generateOpenAPIDocument, openAPIToJSON } from "@mandujs/core";
+import { generateOpenAPIDocument, openAPIToJSON, validateAndReport } from "@mandujs/core";
 import path from "path";
 import fs from "fs/promises";
+import { resolveManifest } from "../util/manifest";
 
 interface OpenAPIGenerateOptions {
   output?: string;
@@ -17,23 +18,74 @@ interface OpenAPIServeOptions {
   port?: number;
 }
 
+function normalizePort(value: string | number | undefined, label: string): number | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const port = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(port) || !Number.isInteger(port)) {
+    console.warn(`⚠️  Invalid ${label} value: "${value}" (using default)`);
+    return undefined;
+  }
+  if (port < 1 || port > 65535) {
+    console.warn(`⚠️  Invalid ${label} range: ${port} (must be 1-65535, using default)`);
+    return undefined;
+  }
+  return port;
+}
+
+function isPortInUse(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: string }).code;
+  const message = (error as { message?: string }).message ?? "";
+  return code === "EADDRINUSE" || message.includes("EADDRINUSE") || message.includes("address already in use");
+}
+
+function serveWithAutoPort(
+  startPort: number,
+  fetch: (req: Request) => Response
+): { server: ReturnType<typeof Bun.serve>; port: number; attempts: number } {
+  const maxAttempts = 10;
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const candidate = startPort + attempt;
+    if (candidate < 1 || candidate > 65535) {
+      continue;
+    }
+    try {
+      const server = Bun.serve({ port: candidate, fetch });
+      return { server, port: server.port ?? candidate, attempts: attempt };
+    } catch (error) {
+      if (!isPortInUse(error)) {
+        throw error;
+      }
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error(`No available port found starting at ${startPort}`);
+}
+
 /**
  * Generate OpenAPI specification from contracts
  */
 export async function openAPIGenerate(options: OpenAPIGenerateOptions = {}): Promise<boolean> {
   const rootDir = process.cwd();
-  const manifestPath = path.join(rootDir, "spec/routes.manifest.json");
 
   console.log(`\n📄 Generating OpenAPI specification...\n`);
 
-  // Load manifest
-  const manifestResult = await loadManifest(manifestPath);
-  if (!manifestResult.success) {
-    console.error("❌ Failed to load manifest:", manifestResult.errors);
+  // Load manifest (FS Routes 우선)
+  let manifest: Awaited<ReturnType<typeof resolveManifest>>["manifest"];
+  try {
+    const config = await validateAndReport(rootDir);
+    if (!config) return false;
+    const resolved = await resolveManifest(rootDir, { fsRoutes: config.fsRoutes });
+    manifest = resolved.manifest;
+  } catch (error) {
+    console.error("❌ Failed to load manifest:", error instanceof Error ? error.message : error);
     return false;
   }
-
-  const manifest = manifestResult.data!;
 
   // Count routes with contracts
   const contractRoutes = manifest.routes.filter((r) => r.contractModule);
@@ -98,7 +150,13 @@ export async function openAPIGenerate(options: OpenAPIGenerateOptions = {}): Pro
  */
 export async function openAPIServe(options: OpenAPIServeOptions = {}): Promise<boolean> {
   const rootDir = process.cwd();
-  const port = options.port || 8080;
+  const config = await validateAndReport(rootDir);
+  if (!config) return false;
+
+  const optionPort = normalizePort(options.port, "openapi.port");
+  const envPort = normalizePort(process.env.PORT, "PORT");
+  const configPort = normalizePort(config.server?.port, "mandu.config server.port");
+  const desiredPort = optionPort ?? envPort ?? configPort ?? 8080;
   const openAPIPath = path.join(rootDir, "openapi.json");
 
   console.log(`\n🌐 Starting OpenAPI documentation server...\n`);
@@ -154,10 +212,8 @@ export async function openAPIServe(options: OpenAPIServeOptions = {}): Promise<b
 </html>
   `.trim();
 
-  // Start server
-  const server = Bun.serve({
-    port,
-    fetch(req) {
+  // Start server (auto port fallback)
+  const { port, attempts } = serveWithAutoPort(desiredPort, (req) => {
       const url = new URL(req.url);
 
       if (url.pathname === "/openapi.json") {
@@ -169,8 +225,11 @@ export async function openAPIServe(options: OpenAPIServeOptions = {}): Promise<b
       return new Response(swaggerHTML, {
         headers: { "Content-Type": "text/html" },
       });
-    },
   });
+
+  if (attempts > 0) {
+    console.warn(`⚠️  Port ${desiredPort} is in use. Using ${port} instead.`);
+  }
 
   console.log(`✅ Swagger UI is running at http://localhost:${port}`);
   console.log(`   OpenAPI spec: http://localhost:${port}/openapi.json`);

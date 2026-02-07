@@ -2,6 +2,14 @@
   "version": 1,
   "routes": [
     {
+      "id": "home-page",
+      "pattern": "/",
+      "kind": "page",
+      "module": "apps/server/generated/routes/about-page.route.ts",
+      "componentModule": "apps/web/generated/routes/about-page.route.tsx",
+      "slotModule": "spec/slots/about-page.slot.ts"
+    },
+    {
       "id": "counter-page",
       "pattern": "/counter",
       "kind": "page",

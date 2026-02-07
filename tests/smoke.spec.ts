@@ -24,14 +24,14 @@ const testManifest: RoutesManifest = {
       id: "home",
       pattern: "/",
       kind: "page",
-      module: "apps/server/generated/routes/home.route.ts",
-      componentModule: "apps/web/generated/routes/home.route.tsx",
+      module: ".mandu/generated/server/routes/home.route.ts",
+      componentModule: ".mandu/generated/web/routes/home.route.tsx",
     },
     {
       id: "health",
       pattern: "/api/health",
       kind: "api",
-      module: "apps/server/generated/routes/health.route.ts",
+      module: ".mandu/generated/server/routes/health.route.ts",
     },
   ],
 };

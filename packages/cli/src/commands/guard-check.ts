@@ -19,7 +19,7 @@ export async function guardCheck(options: GuardCheckOptions = {}): Promise<boole
   const specPath = resolveFromCwd("spec/routes.manifest.json");
   const rootDir = getRootDir();
 
-  console.log(`🥟 Mandu Guard`);
+  console.log(`🥟 Mandu Guard (Legacy Spec)`);
   console.log(`📄 Spec 파일: ${specPath}`);
   console.log(`🔧 Auto-correct: ${autoCorrect ? "ON" : "OFF"}\n`);
 

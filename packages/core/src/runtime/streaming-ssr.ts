@@ -17,6 +17,9 @@ import React, { Suspense } from "react";
 import type { BundleManifest } from "../bundler/types";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 import { serializeProps } from "../client/serialize";
+import type { Metadata, MetadataItem } from "../seo/types";
+import { injectSEOIntoOptions, resolveSEO, type SEOOptions } from "../seo/integration/ssr";
+import { PORTS, TIMEOUTS } from "../constants";
 
 // ========== Types ==========
 
@@ -73,7 +76,7 @@ export interface StreamingMetrics {
 }
 
 export interface StreamingSSROptions {
-  /** 페이지 타이틀 */
+  /** 페이지 타이틀 (SEO metadata 사용 시 자동 설정됨) */
   title?: string;
   /** HTML lang 속성 */
   lang?: string;
@@ -88,8 +91,18 @@ export interface StreamingSSROptions {
   hydration?: HydrationConfig;
   /** 번들 매니페스트 */
   bundleManifest?: BundleManifest;
-  /** 추가 head 태그 */
+  /** 추가 head 태그 (SEO metadata와 병합됨) */
   headTags?: string;
+  /**
+   * SEO 메타데이터 (Layout 체인 또는 단일 객체)
+   * - 배열: [rootLayout, ...nestedLayouts, page] 순서로 병합
+   * - 객체: 단일 정적 메타데이터
+   */
+  metadata?: MetadataItem[] | Metadata;
+  /** 라우트 파라미터 (동적 메타데이터용) */
+  routeParams?: Record<string, string>;
+  /** 쿼리 파라미터 (동적 메타데이터용) */
+  searchParams?: Record<string, string>;
   /** 개발 모드 여부 */
   isDev?: boolean;
   /** HMR 포트 */
@@ -125,6 +138,8 @@ export interface StreamingSSROptions {
    * true이면 </body></html>을 생략하여 deferred 스크립트 삽입 지점 확보
    */
   _skipHtmlClose?: boolean;
+  /** CSS 파일 경로 (자동 주입, 기본: /.mandu/client/globals.css) */
+  cssPath?: string | false;
 }
 
 export interface StreamingLoaderResult<T = unknown> {
@@ -354,7 +369,16 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     bundleManifest,
     routeId,
     hydration,
+    cssPath,
+    isDev = false,
   } = options;
+
+  // CSS 링크 태그 생성
+  // - cssPath가 string이면 해당 경로 사용
+  // - cssPath가 false 또는 undefined이면 링크 미삽입 (404 방지)
+  const cssLinkTag = cssPath && cssPath !== false
+    ? `<link rel="stylesheet" href="${cssPath}${isDev ? `?t=${Date.now()}` : ""}">`
+    : "";
 
   // Import map (module scripts 전에 위치해야 함)
   let importMapScript = "";
@@ -401,6 +425,7 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
+  ${cssLinkTag}
   ${loadingStyles}
   ${importMapScript}
   ${headTags}
@@ -461,7 +486,26 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
   // 3. Streaming 완료 마커 (클라이언트에서 감지용)
   scripts.push(`<script>window.__MANDU_STREAMING_SHELL_READY__ = true;</script>`);
 
-  // 4. Island modulepreload
+  // 4. Vendor modulepreload (React, ReactDOM 등 - 캐시 효율 극대화)
+  if (bundleManifest?.shared.vendor) {
+    scripts.push(`<link rel="modulepreload" href="${bundleManifest.shared.vendor}">`);
+  }
+  if (bundleManifest?.importMap?.imports) {
+    const imports = bundleManifest.importMap.imports;
+    if (imports["react-dom"] && imports["react-dom"] !== bundleManifest.shared.vendor) {
+      scripts.push(`<link rel="modulepreload" href="${imports["react-dom"]}">`);
+    }
+    if (imports["react-dom/client"]) {
+      scripts.push(`<link rel="modulepreload" href="${imports["react-dom/client"]}">`);
+    }
+  }
+
+  // 5. Runtime modulepreload (hydration 실행 전 미리 로드)
+  if (bundleManifest?.shared.runtime) {
+    scripts.push(`<link rel="modulepreload" href="${bundleManifest.shared.runtime}">`);
+  }
+
+  // 6. Island modulepreload
   if (bundleManifest && routeId) {
     const bundle = bundleManifest.bundles[routeId];
     if (bundle) {
@@ -469,17 +513,17 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
     }
   }
 
-  // 5. Runtime 로드
+  // 7. Runtime 로드
   if (bundleManifest?.shared.runtime) {
     scripts.push(`<script type="module" src="${bundleManifest.shared.runtime}"></script>`);
   }
 
-  // 6. Router 스크립트
+  // 8. Router 스크립트
   if (enableClientRouter && bundleManifest?.shared?.router) {
     scripts.push(`<script type="module" src="${bundleManifest.shared.router}"></script>`);
   }
 
-  // 7. HMR 스크립트 (개발 모드)
+  // 9. HMR 스크립트 (개발 모드)
   if (isDev && hmrPort) {
     scripts.push(generateHMRScript(hmrPort));
   }
@@ -533,12 +577,12 @@ function generateDeferredDataScript(routeId: string, key: string, data: unknown)
  * HMR 스크립트 생성
  */
 function generateHMRScript(port: number): string {
-  const hmrPort = port + 1;
+  const hmrPort = port + PORTS.HMR_OFFSET;
   return `<script>
 (function() {
   var ws = null;
   var reconnectAttempts = 0;
-  var maxReconnectAttempts = 10;
+  var maxReconnectAttempts = ${TIMEOUTS.HMR_MAX_RECONNECT};
 
   function connect() {
     try {
@@ -559,11 +603,11 @@ function generateHMRScript(port: number): string {
       ws.onclose = function() {
         if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
-          setTimeout(connect, 1000 * reconnectAttempts);
+          setTimeout(connect, ${TIMEOUTS.HMR_RECONNECT_DELAY} * reconnectAttempts);
         }
       };
     } catch(err) {
-      setTimeout(connect, 1000);
+      setTimeout(connect, ${TIMEOUTS.HMR_RECONNECT_DELAY});
     }
   }
   connect();
@@ -969,57 +1013,71 @@ export async function renderWithDeferredData(
     },
   });
 
-  // 3. TransformStream: base stream 통과 + tail 이후 deferred 스크립트 주입
-  const transformStream = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      // base stream chunk 그대로 전달
-      controller.enqueue(chunk);
+  // 3. 수동 스트림 파이프라인 (Bun pipeThrough 호환성 문제 해결)
+  //    base stream을 읽고 → 변환 후 → 새 스트림으로 출력
+  const reader = baseStream.getReader();
+
+  const finalStream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+
+        if (!done && value) {
+          // base stream chunk 그대로 전달
+          controller.enqueue(value);
+          return;
+        }
+
+        // base stream 완료 → flush 로직 실행
+        // deferred가 아직 안 끝났으면 잠시 대기 (단, deferredTimeout 내에서만)
+        if (!allDeferredSettled) {
+          const elapsed = Date.now() - startTime;
+          let remainingTime = deferredTimeout - elapsed;
+          if (streamTimeout && streamTimeout > 0) {
+            const remainingStream = streamTimeout - elapsed;
+            remainingTime = Math.min(remainingTime, remainingStream);
+          }
+          remainingTime = Math.max(0, remainingTime);
+          if (remainingTime > 0) {
+            await Promise.race([
+              deferredSettledPromise,
+              new Promise(resolve => setTimeout(resolve, remainingTime)),
+            ]);
+          }
+        }
+
+        // 준비된 deferred 스크립트만 주입 (실제 enqueue 기준 카운트)
+        let injectedCount = 0;
+        for (const script of readyScripts) {
+          controller.enqueue(encoder.encode(script));
+          injectedCount++;
+        }
+
+        if (isDev && injectedCount > 0) {
+          console.log(`[Mandu Streaming] Injected ${injectedCount} deferred scripts`);
+        }
+
+        // HTML 닫기 태그 추가 (</body></html>)
+        controller.enqueue(encoder.encode(generateHTMLClose()));
+
+        // 최종 메트릭 보고 (injectedCount가 실제 메트릭)
+        if (onMetrics && baseMetrics) {
+          onMetrics({
+            ...baseMetrics,
+            deferredChunkCount: injectedCount,
+            allReadyTime: Date.now() - startTime,
+          });
+        }
+
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
     },
-    async flush(controller) {
-      // base stream 완료 후, deferred가 아직 안 끝났으면 잠시 대기
-      // (단, deferredTimeout 내에서만)
-      if (!allDeferredSettled) {
-        const elapsed = Date.now() - startTime;
-        let remainingTime = deferredTimeout - elapsed;
-        if (streamTimeout && streamTimeout > 0) {
-          const remainingStream = streamTimeout - elapsed;
-          remainingTime = Math.min(remainingTime, remainingStream);
-        }
-        remainingTime = Math.max(0, remainingTime);
-        if (remainingTime > 0) {
-          await Promise.race([
-            deferredSettledPromise,
-            new Promise(resolve => setTimeout(resolve, remainingTime)),
-          ]);
-        }
-      }
-
-      // 준비된 deferred 스크립트만 주입 (실제 enqueue 기준 카운트)
-      let injectedCount = 0;
-      for (const script of readyScripts) {
-        controller.enqueue(encoder.encode(script));
-        injectedCount++;
-      }
-
-      if (isDev && injectedCount > 0) {
-        console.log(`[Mandu Streaming] Injected ${injectedCount} deferred scripts`);
-      }
-
-      // HTML 닫기 태그 추가 (</body></html>)
-      controller.enqueue(encoder.encode(generateHTMLClose()));
-
-      // 최종 메트릭 보고 (injectedCount가 실제 메트릭)
-      if (onMetrics && baseMetrics) {
-        onMetrics({
-          ...baseMetrics,
-          deferredChunkCount: injectedCount,
-          allReadyTime: Date.now() - startTime,
-        });
-      }
+    cancel() {
+      reader.cancel();
     },
   });
-
-  const finalStream = baseStream.pipeThrough(transformStream);
 
   return new Response(finalStream, {
     status: 200,
@@ -1069,6 +1127,111 @@ export function defer<T>(promise: Promise<T>): Promise<T> {
   return promise;
 }
 
+// ========== SEO Integration ==========
+
+/**
+ * SEO 메타데이터와 함께 Streaming SSR 렌더링
+ *
+ * Layout 체인에서 메타데이터를 자동으로 수집하고 병합하여
+ * HTML head에 삽입합니다.
+ *
+ * @example
+ * ```typescript
+ * // 정적 메타데이터
+ * const response = await renderWithSEO(<Page />, {
+ *   metadata: {
+ *     title: 'Home',
+ *     description: 'Welcome to my site',
+ *     openGraph: { type: 'website' },
+ *   },
+ * })
+ *
+ * // Layout 체인 메타데이터
+ * const response = await renderWithSEO(<Page />, {
+ *   metadata: [
+ *     layoutMetadata,  // { title: { template: '%s | Site' } }
+ *     pageMetadata,    // { title: 'Blog Post' }
+ *   ],
+ *   routeParams: { slug: 'hello' },
+ * })
+ * // → title: "Blog Post | Site"
+ * ```
+ */
+export async function renderWithSEO(
+  element: ReactElement,
+  options: StreamingSSROptions = {}
+): Promise<Response> {
+  const { metadata, routeParams, searchParams, ...restOptions } = options;
+
+  // SEO 메타데이터 처리
+  if (metadata) {
+    const seoOptions: SEOOptions = {
+      routeParams,
+      searchParams,
+    };
+
+    // 배열이면 Layout 체인, 아니면 단일 메타데이터
+    if (Array.isArray(metadata)) {
+      seoOptions.metadata = metadata;
+    } else {
+      seoOptions.staticMetadata = metadata as Metadata;
+    }
+
+    // SEO를 옵션에 주입
+    const optionsWithSEO = await injectSEOIntoOptions(restOptions, seoOptions);
+    return renderStreamingResponse(element, optionsWithSEO);
+  }
+
+  // SEO 없이 기본 렌더링
+  return renderStreamingResponse(element, restOptions);
+}
+
+/**
+ * Deferred 데이터 + SEO 메타데이터와 함께 Streaming SSR 렌더링
+ *
+ * @example
+ * ```typescript
+ * const response = await renderWithDeferredDataAndSEO(<Page />, {
+ *   metadata: {
+ *     title: post.title,
+ *     openGraph: { images: [post.image] },
+ *   },
+ *   deferredPromises: {
+ *     comments: fetchComments(postId),
+ *     related: fetchRelatedPosts(postId),
+ *   },
+ * })
+ * ```
+ */
+export async function renderWithDeferredDataAndSEO(
+  element: ReactElement,
+  options: StreamingSSROptions & {
+    deferredPromises?: Record<string, Promise<unknown>>;
+    deferredTimeout?: number;
+  } = {}
+): Promise<Response> {
+  const { metadata, routeParams, searchParams, ...restOptions } = options;
+
+  // SEO 메타데이터 처리
+  if (metadata) {
+    const seoOptions: SEOOptions = {
+      routeParams,
+      searchParams,
+    };
+
+    if (Array.isArray(metadata)) {
+      seoOptions.metadata = metadata;
+    } else {
+      seoOptions.staticMetadata = metadata as Metadata;
+    }
+
+    const optionsWithSEO = await injectSEOIntoOptions(restOptions, seoOptions);
+    return renderWithDeferredData(element, optionsWithSEO);
+  }
+
+  return renderWithDeferredData(element, restOptions);
+}
+
 // ========== Exports ==========
 
 export {
@@ -1076,3 +1239,7 @@ export {
   generateHTMLTail,
   generateDeferredDataScript,
 };
+
+// Re-export SEO integration utilities
+export { resolveSEO, injectSEOIntoOptions } from "../seo/integration/ssr";
+export type { SEOOptions, SEOResult } from "../seo/integration/ssr";

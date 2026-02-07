@@ -10,7 +10,7 @@ import {
   runGuardCheck,
   analyzeViolations,
   printDoctorReport,
-  generateMarkdownReport,
+  generateDoctorMarkdownReport,
   initializeBrain,
   getBrain,
 } from "../../../core/src/index";
@@ -28,7 +28,9 @@ export interface DoctorOptions {
 }
 
 export async function doctor(options: DoctorOptions = {}): Promise<boolean> {
-  const { format = "console", useLLM = true, output } = options;
+  const { format, useLLM = true, output } = options;
+  const inferredFormat = format ?? (output ? (path.extname(output).toLowerCase() === ".json" ? "json" : "markdown") : undefined);
+  const resolvedFormat = inferredFormat ?? "console";
 
   const specPath = resolveFromCwd("spec/routes.manifest.json");
   const rootDir = getRootDir();
@@ -80,7 +82,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<boolean> {
   });
 
   // Output based on format
-  switch (format) {
+  switch (resolvedFormat) {
     case "console":
       printDoctorReport(analysis);
       break;
@@ -108,7 +110,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<boolean> {
     }
 
     case "markdown": {
-      const md = generateMarkdownReport(analysis);
+      const md = generateDoctorMarkdownReport(analysis);
 
       if (output) {
         await fs.writeFile(output, md, "utf-8");

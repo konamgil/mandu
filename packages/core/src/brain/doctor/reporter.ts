@@ -222,9 +222,9 @@ export function generateJsonReport(analysis: DoctorAnalysis): string {
 }
 
 /**
- * Generate a Markdown report
+ * Generate a Markdown report (Doctor Analysis)
  */
-export function generateMarkdownReport(analysis: DoctorAnalysis): string {
+export function generateDoctorMarkdownReport(analysis: DoctorAnalysis): string {
   const lines: string[] = [];
 
   lines.push("# 🩺 Mandu Doctor Report");
@@ -328,7 +328,7 @@ export function formatDoctorReport(
       return generateJsonReport(analysis);
 
     case "markdown":
-      return generateMarkdownReport(analysis);
+      return generateDoctorMarkdownReport(analysis);
 
     default:
       printDoctorReport(analysis);

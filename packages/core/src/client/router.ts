@@ -4,6 +4,16 @@
  */
 
 import type { ReactNode } from "react";
+import {
+  getManduData,
+  getManduRoute,
+  getRouterListeners,
+  getRouterState as getWindowRouterState,
+  setRouterState as setWindowRouterState,
+  setServerData,
+} from "./window-state";
+import { LRUCache } from "../utils/lru-cache";
+import { LIMITS } from "../constants";
 
 // ========== Types ==========
 
@@ -33,51 +43,38 @@ export interface NavigateOptions {
 
 type RouterListener = (state: RouterState) => void;
 
-// ========== Global Router State (모든 모듈에서 동일 인스턴스 공유) ==========
-
-declare global {
-  interface Window {
-    __MANDU_ROUTER_STATE__?: RouterState;
-    __MANDU_ROUTER_LISTENERS__?: Set<RouterListener>;
-  }
-}
-
 function getGlobalRouterState(): RouterState {
   if (typeof window === "undefined") {
     return { currentRoute: null, loaderData: undefined, navigation: { state: "idle" } };
   }
-  if (!window.__MANDU_ROUTER_STATE__) {
+  if (!getWindowRouterState()) {
     // SSR에서 주입된 __MANDU_ROUTE__에서 초기화
-    const route = (window as any).__MANDU_ROUTE__;
-    const data = (window as any).__MANDU_DATA__;
+    const route = getManduRoute();
+    const data = getManduData();
 
-    window.__MANDU_ROUTER_STATE__ = {
-      currentRoute: route ? {
-        id: route.id,
-        pattern: route.pattern,
-        params: route.params || {},
-      } : null,
+    setWindowRouterState({
+      currentRoute: route
+        ? {
+            id: route.id,
+            pattern: route.pattern,
+            params: route.params || {},
+          }
+        : null,
       loaderData: route && data?.[route.id]?.serverData,
       navigation: { state: "idle" },
-    };
+    });
   }
-  return window.__MANDU_ROUTER_STATE__;
+  return getWindowRouterState()!;
 }
 
 function setGlobalRouterState(state: RouterState): void {
   if (typeof window !== "undefined") {
-    window.__MANDU_ROUTER_STATE__ = state;
+    setWindowRouterState(state);
   }
 }
 
 function getGlobalListeners(): Set<RouterListener> {
-  if (typeof window === "undefined") {
-    return new Set();
-  }
-  if (!window.__MANDU_ROUTER_LISTENERS__) {
-    window.__MANDU_ROUTER_LISTENERS__ = new Set();
-  }
-  return window.__MANDU_ROUTER_LISTENERS__;
+  return getRouterListeners();
 }
 
 // Getter for routerState (전역 상태 참조)
@@ -91,8 +88,8 @@ const listeners = { get current() { return getGlobalListeners(); } };
 function initializeFromServer(): void {
   if (typeof window === "undefined") return;
 
-  const route = (window as any).__MANDU_ROUTE__;
-  const data = (window as any).__MANDU_DATA__;
+  const route = getManduRoute();
+  const data = getManduData();
 
   if (route) {
     // URL에서 실제 params 추출
@@ -117,7 +114,7 @@ interface CompiledPattern {
   paramNames: string[];
 }
 
-const patternCache = new Map<string, CompiledPattern>();
+const patternCache = new LRUCache<string, CompiledPattern>(LIMITS.ROUTER_PATTERN_CACHE);
 
 /**
  * 패턴을 정규식으로 컴파일
@@ -237,12 +234,7 @@ export async function navigate(
     });
 
     // __MANDU_DATA__ 업데이트
-    if (typeof window !== "undefined") {
-      (window as any).__MANDU_DATA__ = {
-        ...(window as any).__MANDU_DATA__,
-        [data.routeId]: { serverData: data.loaderData },
-      };
-    }
+    setServerData(data.routeId, data.loaderData);
 
     notifyListeners();
 
@@ -271,7 +263,7 @@ function handlePopState(event: PopStateEvent): void {
     });
   } else {
     // 직접 URL 입력 등으로 방문한 페이지 - 상태만 업데이트
-    const route = (window as any).__MANDU_ROUTE__;
+    const route = getManduRoute();
     setGlobalRouterState({
       currentRoute: route ? {
         id: route.id,
@@ -380,7 +372,7 @@ function handleLinkClick(event: MouseEvent): void {
 
 // ========== Prefetch ==========
 
-const prefetchedUrls = new Set<string>();
+const prefetchedUrls = new LRUCache<string, true>(LIMITS.ROUTER_PREFETCH_CACHE);
 
 /**
  * 페이지 데이터 미리 로드
@@ -391,7 +383,7 @@ export async function prefetch(url: string): Promise<void> {
   try {
     const dataUrl = `${url}${url.includes("?") ? "&" : "?"}_data=1`;
     await fetch(dataUrl, { priority: "low" } as RequestInit);
-    prefetchedUrls.add(url);
+    prefetchedUrls.set(url, true);
   } catch {
     // Prefetch 실패는 무시
   }

@@ -138,6 +138,41 @@ describe("Wildcard Matching", () => {
     expect(result!.params).toEqual({ [WILDCARD_PARAM_KEY]: "a/b/c" });
   });
 
+  test("matches named wildcard with remaining path", () => {
+    const router = createRouter([
+      makeRoute("docs", "/docs/:path*"),
+    ]);
+
+    const result = router.match("/docs/a/b/c");
+
+    expect(result).not.toBeNull();
+    expect(result!.route.id).toBe("docs");
+    expect(result!.params).toEqual({ path: "a/b/c" });
+  });
+
+  test("optional wildcard matches base path without param", () => {
+    const router = createRouter([
+      makeRoute("docs", "/docs/:path*?"),
+    ]);
+
+    const result = router.match("/docs");
+
+    expect(result).not.toBeNull();
+    expect(result!.route.id).toBe("docs");
+    expect(result!.params).toEqual({});
+  });
+
+  test("optional wildcard matches with remaining path", () => {
+    const router = createRouter([
+      makeRoute("docs", "/docs/:path*?"),
+    ]);
+
+    const result = router.match("/docs/intro");
+
+    expect(result).not.toBeNull();
+    expect(result!.params).toEqual({ path: "intro" });
+  });
+
   test("wildcard with single segment", () => {
     const router = createRouter([
       makeRoute("docs", "/docs/*"),
@@ -306,6 +341,24 @@ describe("Validation Errors", () => {
       ]);
     } catch (e) {
       expect((e as RouterError).code).toBe("WILDCARD_NOT_LAST");
+    }
+  });
+
+  test("throws ROUTE_CONFLICT for wildcard conflicts", () => {
+    expect(() => {
+      createRouter([
+        makeRoute("files-legacy", "/files/*"),
+        makeRoute("files-named", "/files/:path*"),
+      ]);
+    }).toThrow(RouterError);
+
+    try {
+      createRouter([
+        makeRoute("files-legacy", "/files/*"),
+        makeRoute("files-named", "/files/:path*"),
+      ]);
+    } catch (e) {
+      expect((e as RouterError).code).toBe("ROUTE_CONFLICT");
     }
   });
 });

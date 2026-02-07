@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "organization": "Mandu Framework",
+  "date": "February 2026",
+  "abstract": "Mandu 애플리케이션 테스트 패턴 가이드. Bun test를 활용한 slot 단위/통합 테스트, Island 컴포넌트 테스트, Playwright E2E 테스트, 모킹 패턴을 다룹니다.",
+  "references": [
+    "https://bun.sh/docs/cli/test",
+    "https://playwright.dev/docs/intro",
+    "https://testing-library.com/docs/react-testing-library/intro",
+    "https://kentcdodds.com/blog/write-tests"
+  ],
+  "tags": ["testing", "bun-test", "playwright", "e2e", "unit", "mandu"]
+}

@@ -70,6 +70,12 @@ export const GUARD_RULES: Record<string, GuardRule> = {
     description: "Slot 파일에 Mandu.filling() 패턴이 없습니다",
     severity: "error",
   },
+  SLOT_ZOD_DIRECT_IMPORT: {
+    id: "SLOT_ZOD_DIRECT_IMPORT",
+    name: "Zod Direct Import in Slot",
+    description: "Slot 파일에서 zod를 직접 import 했습니다",
+    severity: "error",
+  },
   // Contract-related rules
   CONTRACT_MISSING: {
     id: "CONTRACT_MISSING",

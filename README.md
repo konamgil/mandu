@@ -24,49 +24,274 @@
 
 ---
 
-## Docs
+## Quick Start
 
-- `docs/README.md` — Documentation index
-- `docs/api/api-reference.md` — API reference
-- `docs/status.md` — Implementation status
+### Prerequisites
 
-## The Problem
+- **Bun** v1.0.0 or higher ([install Bun](https://bun.sh/docs/installation))
 
-### AI Coding's Structural Challenge
+```bash
+# Check Bun version
+bun --version
+```
 
-Current AI-assisted development has a fundamental problem:
+### 1. Create a New Project
 
-- **Architecture Decay**: The more agents code, the more folder structures, layer rules, and patterns deteriorate
-- **Post-hoc Cleanup Fails**: Trying to fix with linters causes side effects and wasted time
-- **Reproducibility Loss**: Each project ends up with different architecture, making maintenance nightmarish
+```bash
+bunx @mandujs/cli init my-app
+cd my-app
+bun install
+```
 
-### What We're Really Solving
+### 2. Start Development Server
 
-> Not "how fast AI can code" but
-> **enforcing architecture that AI cannot break (Architecture Preservation)**
+```bash
+bun run dev
+```
+
+Your app is now running at `http://localhost:3000`
+
+### 3. Create Your First Page
+
+Create `app/page.tsx`:
+
+```tsx
+export default function Home() {
+  return (
+    <div>
+      <h1>Welcome to Mandu!</h1>
+      <p>Edit this file and see changes instantly.</p>
+    </div>
+  );
+}
+```
+
+### 4. Add an API Route
+
+Create `app/api/hello/route.ts`:
+
+```typescript
+export function GET() {
+  return Response.json({ message: "Hello from Mandu!" });
+}
+```
+
+Now visit `http://localhost:3000/api/hello`
+
+### 5. Build for Production
+
+```bash
+bun run build
+```
+
+That's it! You're ready to build with Mandu.
+
+---
+
+## Beginner's Guide
+
+If you're new to Mandu, this section will help you understand the basics.
+
+### Project Structure After Init
+
+```
+my-app/
+├── app/                    # Your code goes here (FS Routes)
+│   ├── page.tsx           # Home page (/)
+│   └── api/
+│       └── health/
+│           └── route.ts   # Health check API (/api/health)
+├── src/                    # Architecture layers
+│   ├── client/             # Client (FSD)
+│   ├── server/             # Server (Clean)
+│   └── shared/             # Universal shared
+│       ├── contracts/      # Client-safe contracts
+│       ├── types/
+│       ├── utils/
+│       │   ├── client/     # Client-safe utils
+│       │   └── server/     # Server-only utils
+│       ├── schema/         # Server-only schema
+│       └── env/            # Server-only env
+├── spec/
+│   └── routes.manifest.json  # Route definitions (auto-managed)
+├── .mandu/                 # Build output (auto-generated)
+├── package.json
+└── tsconfig.json
+```
+
+### File Naming Conventions
+
+| File Name | Purpose | URL |
+|-----------|---------|-----|
+| `app/page.tsx` | Home page | `/` |
+| `app/about/page.tsx` | About page | `/about` |
+| `app/users/[id]/page.tsx` | Dynamic user page | `/users/123` |
+| `app/api/users/route.ts` | Users API | `/api/users` |
+| `app/layout.tsx` | Shared layout | Wraps all pages |
+
+### Common Tasks
+
+#### Add a New Page
+
+Create `app/about/page.tsx`:
+
+```tsx
+export default function About() {
+  return (
+    <div>
+      <h1>About Us</h1>
+      <p>Welcome to our site!</p>
+    </div>
+  );
+}
+```
+
+Visit `http://localhost:3000/about`
+
+#### Add a Dynamic Route
+
+Create `app/users/[id]/page.tsx`:
+
+```tsx
+export default function UserProfile({ params }: { params: { id: string } }) {
+  return (
+    <div>
+      <h1>User Profile</h1>
+      <p>User ID: {params.id}</p>
+    </div>
+  );
+}
+```
+
+Visit `http://localhost:3000/users/123`
+
+#### Add an API with Multiple Methods
+
+Create `app/api/users/route.ts`:
+
+```typescript
+// GET /api/users
+export function GET() {
+  return Response.json({
+    users: [
+      { id: 1, name: "Alice" },
+      { id: 2, name: "Bob" }
+    ]
+  });
+}
+
+// POST /api/users
+export async function POST(request: Request) {
+  const body = await request.json();
+  return Response.json({
+    message: "User created",
+    user: body
+  }, { status: 201 });
+}
+```
+
+#### Add a Layout
+
+Create `app/layout.tsx`:
+
+```tsx
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <head>
+        <title>My Mandu App</title>
+      </head>
+      <body>
+        <nav>
+          <a href="/">Home</a>
+          <a href="/about">About</a>
+        </nav>
+        <main>{children}</main>
+        <footer>© 2025 My App</footer>
+      </body>
+    </html>
+  );
+}
+```
+
+### CLI Commands for Beginners
+
+| Command | What it does |
+|---------|--------------|
+| `bunx @mandujs/cli init my-app` | Create a new project called "my-app" |
+| `bun install` | Install all dependencies |
+| `bun run dev` | Start development server at http://localhost:3000 |
+| `bun run build` | Build for production |
+| `bun run test` | Run tests |
+
+#### More CLI Commands
+
+```bash
+# Check all available commands
+bunx mandu --help
+
+# Show all routes in your app
+bunx mandu routes list
+
+# Check architecture rules
+bunx mandu guard arch
+
+# Watch for architecture violations (real-time)
+bunx mandu guard arch --watch
+```
+
+### Tech Stack
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Bun** | 1.0+ | JavaScript runtime & package manager |
+| **React** | 19.x | UI library |
+| **TypeScript** | 5.x | Type safety |
+
+### Next Steps
+
+1. **Read the [FS Routes](#fs-routes) section** to understand routing patterns
+2. **Try [Mandu Guard](#mandu-guard)** to enforce architecture rules
+3. **Explore [MCP Server](#mcp-server-ai-integration)** for AI agent integration
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `command not found: bun` | Install Bun: `curl -fsSL https://bun.sh/install \| bash` |
+| Port 3000 already in use | Stop other servers or use `PORT=3001 bun run dev` |
+| Changes not reflecting | Restart dev server with `bun run dev` |
+| TypeScript errors | Run `bun install` to ensure types are installed |
 
 ---
 
 ## What is Mandu?
 
-**Mandu** is a **Bun + TypeScript + React fullstack framework** that automates the entire flow from:
+**Mandu** is a **Bun + TypeScript + React fullstack framework** designed for AI-assisted development.
 
-**Natural Language → Spec → Generate → Slot → Guard → Report**
+### The Problem We Solve
+
+> Not "how fast AI can code" but
+> **enforcing architecture that AI cannot break**
+
+Current AI coding has a fundamental problem: the more agents code, the more architecture deteriorates. Mandu solves this with:
+
+- **FS Routes**: File-system based routing (like Next.js) - structure IS the API
+- **Mandu Guard**: Real-time architecture enforcement - violations detected instantly
+- **Slot System**: Isolated spaces where agents safely write business logic
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        Mandu Flow                            │
+│                     Mandu Architecture                       │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│   📝 Spec (JSON)      Single Source of Truth (SSOT)          │
+│   📁 app/              File-System Routes (structure = API)  │
 │        ↓                                                     │
-│   ⚙️  Generate        Auto-generate skeleton code            │
+│   🛡️ Guard             Real-time architecture enforcement    │
 │        ↓                                                     │
-│   🎯 Slot             Agent's permitted workspace            │
+│   🎯 Slot              Agent's permitted workspace           │
 │        ↓                                                     │
-│   🛡️  Guard           Architecture preservation check        │
-│        ↓                                                     │
-│   📊 Report           Results + auto-fix guidance            │
+│   🏝️ Island            Selective client-side hydration       │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -75,473 +300,256 @@ Current AI-assisted development has a fundamental problem:
 
 ## Key Features
 
-### Core Architecture
-
 | Feature | Description |
 |---------|-------------|
-| **Spec-Driven Development** | JSON manifest is the single source of truth |
-| **Code Generation** | Routes, handlers, and components auto-generated from spec |
+| **FS Routes** | File-system based routing - `app/users/page.tsx` → `/users` |
+| **Mandu Guard** | Real-time architecture checker with 5 presets (FSD, Clean, Hexagonal, Atomic, Mandu) |
+| **Self-Healing Guard** | Detect violations AND provide actionable fix suggestions with auto-fix |
 | **Slot System** | Isolated areas where agents safely write business logic |
-| **Guard System** | Enforces architecture rules and prevents contamination |
-| **Transaction API** | Atomic changes with snapshot-based rollback |
-| **MCP Server** | AI agents can directly manipulate the framework |
-| **Real-Time Watch** | MCP push notifications on architecture violations |
+| **Semantic Slots** | Purpose & constraints for AI-generated code validation |
+| **Decision Memory** | ADR storage for AI to reference past architecture decisions |
+| **Architecture Negotiation** | AI-Framework dialog before implementation |
 | **Island Hydration** | Selective client-side JavaScript for performance |
+| **Contract API** | Type-safe API contracts with Zod schema validation |
+| **SEO Module** | Next.js Metadata API compatible, sitemap/robots generation, JSON-LD helpers |
+| **MCP Server** | 35+ tools for AI agents to directly manipulate the framework |
 | **HMR Support** | Hot Module Replacement for rapid development |
-| **Error Classification** | Intelligent error categorization with fix suggestions |
+| **Transaction API** | Atomic changes with snapshot-based rollback |
 
 ---
 
-## Quick Start
+## Workflow
 
-### 1. Create a New Project
+### Modern Workflow (Recommended)
 
 ```bash
-# Install Bun (if not installed)
-curl -fsSL https://bun.sh/install | bash
-
-# Create new project
+# 1. Create project
 bunx @mandujs/cli init my-app
-cd my-app
+
+# 2. Create pages in app/ folder
+#    app/page.tsx        → /
+#    app/users/page.tsx  → /users
+#    app/api/users/route.ts → /api/users
+
+# 3. Start development (Guard auto-enabled)
+bunx mandu dev
+
+# 4. Build for production
+bunx mandu build
 ```
 
-### 2. Install Dependencies & Run
-
-```bash
-bun install
-
-# Validate spec and update lock
-bun run spec
-
-# Generate code from spec
-bun run generate
-
-# Run development server
-bun run dev
-```
-
-### 3. Open in Browser
-
-```
-http://localhost:3000      → SSR Page
-http://localhost:3000/api/health → API Response
-```
-
----
-
-## Who Does What
-
-| Task | 👤 Human | 🤖 Agent | 🔌 MCP | 🔧 CLI |
-|------|:--------:|:--------:|:------:|:------:|
-| Requirements | Define | Receive | - | - |
-| Project Init | Run | - | - | `init` |
-| Add Routes | Approve | Design | `add_route` | - |
-| Generate Code | - | Call | `generate` | `generate` |
-| Write Slots | Review | Write | `write_slot` | - |
-| Guard Check | Review | Call | `guard_check` | `guard` |
-| Build/Dev | Run | - | - | `build`/`dev` |
-
-```
-👤 Human ──→ 🤖 Agent ──→ 🔌 MCP ──→ 📦 Core ──→ 📁 Files
-                                       ↑
-👤 Human ─────────────→ 🔧 CLI ────────┘
-```
-
-> **MCP** = Agent's interface to Core
-> **CLI** = Human's interface to Core
-> Both call the same `@mandujs/core` functions
-
----
-
-## Core Principles
-
-| # | Principle | Description |
-|---|-----------|-------------|
-| 1 | **Spec = SSOT** | The spec (JSON) is the single source of truth. Code is derived from spec. |
-| 2 | **Generated = Disposable** | Generated code can be deleted and regenerated anytime. |
-| 3 | **Slot = Safe Zone** | Agents only work within designated slots. |
-| 4 | **Guard > Lint** | Minimize linting; Guard is the architecture gatekeeper. |
-| 5 | **Self-Correction** | Built-in auto-retry loops for failure recovery. |
-
----
-
-## Project Structure
-
-### Framework (This Repository)
-
-```
-mandu/
-├── packages/
-│   ├── core/                 # @mandujs/core
-│   │   ├── spec/            # Schema, load, lock, validation
-│   │   ├── runtime/         # Server, router, SSR
-│   │   ├── generator/       # Code generation engine
-│   │   ├── guard/           # Architecture enforcement
-│   │   ├── bundler/         # Client-side bundling + HMR
-│   │   ├── filling/         # Business logic API (Mandu.filling())
-│   │   ├── error/           # Error classification system
-│   │   ├── change/          # Transaction & history management
-│   │   ├── slot/            # Slot validation & auto-correction
-│   │   └── client/          # Island hydration runtime
-│   │
-│   ├── cli/                  # @mandujs/cli
-│   │   └── commands/        # init, spec-upsert, generate, guard, build, dev
-│   │
-│   └── mcp/                  # @mandujs/mcp
-│       ├── tools/           # MCP tools (20+ tools)
-│       └── resources/       # MCP resources (5 resources)
-│
-└── tests/                    # Framework tests
-```
-
-### Generated Project Structure
-
-```
-my-app/
-├── spec/
-│   ├── routes.manifest.json     # Route definitions (SSOT)
-│   ├── spec.lock.json           # Hash verification
-│   ├── slots/                   # Business logic files
-│   │   ├── users.slot.ts       # Server-side logic
-│   │   └── users.client.ts     # Client-side interactive logic
-│   └── history/                 # Transaction snapshots
-│       ├── changes.json        # Change audit trail
-│       └── *.snapshot.json     # Rollback snapshots
-│
-├── apps/
-│   ├── server/
-│   │   ├── main.ts              # Server entry point
-│   │   └── generated/routes/    # Auto-generated API handlers
-│   │       └── *.route.ts
-│   │
-│   └── web/
-│       ├── entry.tsx            # Web entry point
-│       ├── generated/routes/    # Auto-generated page components
-│       │   └── *.route.tsx
-│       └── components/          # Shared components
-│
-├── .mandu/
-│   ├── client/                  # Built client bundles
-│   │   ├── _runtime.js         # Hydration runtime
-│   │   ├── _vendor.js          # Shared dependencies (React)
-│   │   └── *.island.js         # Per-route island bundles
-│   └── manifest.json            # Bundle manifest
-│
-└── package.json
-```
-
----
-
-## CLI Commands
-
-### Basic Commands
+### CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `mandu init <name>` | Create a new project |
-| `mandu spec-upsert` | Validate spec and update lock file |
-| `mandu generate` | Generate code from spec |
-| `mandu guard` | Run architecture checks |
-| `mandu build` | Build client bundles for production |
-| `mandu dev` | Run development server with HMR |
+| `mandu init` | Create new project |
+| `mandu dev` | Start dev server (FS Routes + Guard auto-enabled) |
+| `mandu dev --guard` | Dev with architecture monitoring |
+| `mandu build` | Build for production |
+| `mandu guard arch` | Run architecture check |
+| `mandu routes list` | Show all routes |
+| `mandu status` | Show project status |
 
-### Transaction Commands
+---
 
-| Command | Description |
-|---------|-------------|
-| `mandu change begin` | Start a transaction (creates snapshot) |
-| `mandu change commit` | Finalize changes |
-| `mandu change rollback` | Restore from snapshot |
-| `mandu change status` | Show current transaction state |
-| `mandu change list` | View change history |
-| `mandu change prune` | Clean old snapshots |
+## Configuration
 
-### Command Examples
+Mandu loads configuration from `mandu.config.ts`, `mandu.config.js`, or `mandu.config.json`.
+For guard-only overrides, `.mandu/guard.json` is also supported.
+
+- `mandu dev` and `mandu build` validate the config and print errors if invalid
+- CLI flags override config values
+
+```ts
+// mandu.config.ts
+export default {
+  server: {
+    port: 3000,
+    hostname: "localhost",
+    cors: false,
+    streaming: false,
+  },
+  dev: {
+    hmr: true,
+    watchDirs: ["src/shared", "shared"],
+  },
+  build: {
+    outDir: ".mandu",
+    minify: true,
+    sourcemap: false,
+  },
+  guard: {
+    preset: "mandu",
+    srcDir: "src",
+    exclude: ["**/*.test.ts"],
+    realtime: true,
+    // rules/contractRequired are used by legacy spec guard
+  },
+  seo: {
+    enabled: true,
+    defaultTitle: "My App",
+    titleTemplate: "%s | My App",
+  },
+};
+```
+
+---
+
+## FS Routes
+
+Create routes by simply adding files to the `app/` directory:
+
+```
+app/
+├── page.tsx              → /
+├── layout.tsx            → Layout for all pages
+├── users/
+│   ├── page.tsx          → /users
+│   ├── [id]/
+│   │   └── page.tsx      → /users/:id
+│   └── [...slug]/
+│       └── page.tsx      → /users/* (catch-all)
+├── api/
+│   └── users/
+│       └── route.ts      → /api/users (API endpoint)
+└── (auth)/               → Route group (no URL segment)
+    ├── login/
+    │   └── page.tsx      → /login
+    └── register/
+        └── page.tsx      → /register
+```
+
+### Special Files
+
+| File | Purpose |
+|------|---------|
+| `page.tsx` | Page component |
+| `layout.tsx` | Shared layout wrapper |
+| `route.ts` | API endpoint handler |
+| `loading.tsx` | Loading state |
+| `error.tsx` | Error boundary |
+| `slot.ts` | Server-side business logic |
+| `client.tsx` | Client-side interactive component (Island) |
+
+---
+
+## Mandu Guard
+
+Real-time architecture enforcement with preset support.
+
+### Architecture Presets
+
+| Preset | Description | Use Case |
+|--------|-------------|----------|
+| `mandu` | FSD + Clean Architecture hybrid (default) | Fullstack projects |
+| `fsd` | Feature-Sliced Design | Frontend-focused |
+| `clean` | Clean Architecture | Backend-focused |
+| `hexagonal` | Hexagonal/Ports & Adapters | Domain-driven |
+| `atomic` | Atomic Design | UI component libraries |
+
+### Usage
 
 ```bash
-# Initialize project
-bunx @mandujs/cli init my-app
+# One-time check
+bunx mandu guard arch
 
-# Development workflow
-bunx mandu spec-upsert          # Validate spec
-bunx mandu generate             # Generate code
-bunx mandu guard                # Check architecture
-bunx mandu dev                  # Run dev server
+# Watch mode
+bunx mandu guard arch --watch
 
-# Production build
-bunx mandu build --minify       # Build optimized bundles
+# CI mode (exit 1 on errors)
+bunx mandu guard arch --ci
 
-# Safe changes with transaction
-bunx mandu change begin --message "Add users API"
-# ... make changes ...
-bunx mandu change commit        # Success: finalize
-bunx mandu change rollback      # Failure: restore snapshot
+# With specific preset
+bunx mandu guard arch --preset fsd
+
+# Generate report
+bunx mandu guard arch --output report.md --report-format markdown
 ```
+
+### Layer Hierarchy (Mandu Preset)
+
+```
+Client (FSD)               Shared (strict)              Server (Clean)
+──────────────────         ───────────────              ─────────────────
+client/app                 shared/contracts             server/api
+  ↓                        shared/types                 ↓
+client/pages               shared/utils/client          server/application
+  ↓                        shared/schema (server-only)  ↓
+client/widgets             shared/utils/server          server/domain
+  ↓                        shared/env (server-only)     ↓
+client/features                                          server/infra
+  ↓                                                     ↓
+client/entities                                         server/core
+  ↓
+client/shared
+```
+
+Upper layers can only import from lower layers. Guard detects violations in real-time.
 
 ---
 
-## Spec System
+## Slot System
 
-### routes.manifest.json
-
-```json
-{
-  "version": 1,
-  "routes": [
-    {
-      "id": "home",
-      "pattern": "/",
-      "kind": "page",
-      "module": "apps/server/generated/routes/home.route.ts",
-      "componentModule": "apps/web/generated/routes/home.route.tsx"
-    },
-    {
-      "id": "users-api",
-      "pattern": "/api/users",
-      "kind": "api",
-      "methods": ["GET", "POST"],
-      "module": "apps/server/generated/routes/users-api.route.ts",
-      "slotModule": "spec/slots/users.slot.ts"
-    },
-    {
-      "id": "dashboard",
-      "pattern": "/dashboard",
-      "kind": "page",
-      "module": "apps/server/generated/routes/dashboard.route.ts",
-      "componentModule": "apps/web/generated/routes/dashboard.route.tsx",
-      "slotModule": "spec/slots/dashboard.slot.ts",
-      "clientModule": "spec/slots/dashboard.client.ts",
-      "hydration": {
-        "strategy": "island",
-        "priority": "visible",
-        "preload": true
-      }
-    }
-  ]
-}
-```
-
-### Route Properties
-
-| Property | Required | Description |
-|----------|----------|-------------|
-| `id` | Yes | Unique route identifier |
-| `pattern` | Yes | URL pattern (e.g., `/api/users/:id`) |
-| `kind` | Yes | `"api"` or `"page"` |
-| `methods` | No | HTTP methods for API routes |
-| `module` | Yes | Server handler module path |
-| `componentModule` | Page only | React component module path |
-| `slotModule` | No | Business logic module path |
-| `clientModule` | No | Client-side interactive logic |
-| `hydration` | No | Hydration configuration |
-| `loader` | No | SSR data loading configuration |
-
----
-
-## Slot System (Business Logic)
-
-### Writing Slot Logic
-
-Slots are where you write your business logic using the `Mandu.filling()` API:
+Write business logic in isolated slot files:
 
 ```typescript
 // spec/slots/users.slot.ts
 import { Mandu } from "@mandujs/core";
 
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-
-export default Mandu.filling<{ users: User[] }>()
-  // Authentication guard
+export default Mandu.filling()
   .guard((ctx) => {
-    const user = ctx.get<User>("user");
-    if (!user) return ctx.unauthorized("Login required");
-    // Return void to continue
+    if (!ctx.get("user")) return ctx.unauthorized("Login required");
   })
-
-  // GET /api/users
   .get(async (ctx) => {
-    const users = await fetchUsers();
+    const users = await db.users.findMany();
     return ctx.ok({ data: users });
   })
-
-  // POST /api/users
   .post(async (ctx) => {
     const body = await ctx.body<{ name: string; email: string }>();
-
-    if (!body.name || !body.email) {
-      return ctx.error("Name and email required");
-    }
-
-    const newUser = await createUser(body);
-    return ctx.created({ data: newUser });
+    const user = await db.users.create({ data: body });
+    return ctx.created({ data: user });
   });
 ```
-
-> Note: Path parameters come from `routes.manifest.json` patterns.  
-> For `/api/users/:id`, define a separate route and slot file.
-
-### API Reference
-
-See the full API reference: `docs/api/api-reference.md`
 
 ### Context API
 
 | Method | Description |
 |--------|-------------|
-| `ctx.ok(data)` | 200 OK response |
-| `ctx.created(data)` | 201 Created response |
-| `ctx.noContent()` | 204 No Content response |
-| `ctx.error(message, details?)` | 400 Bad Request |
+| `ctx.ok(data)` | 200 OK |
+| `ctx.created(data)` | 201 Created |
+| `ctx.error(message)` | 400 Bad Request |
 | `ctx.unauthorized(message)` | 401 Unauthorized |
-| `ctx.forbidden(message)` | 403 Forbidden |
 | `ctx.notFound(message)` | 404 Not Found |
-| `ctx.fail(message)` | 500 Internal Server Error |
 | `ctx.body<T>()` | Parse request body |
 | `ctx.params` | Route parameters |
-| `ctx.query` | Query string parameters |
-| `ctx.headers` | Request headers |
-| `ctx.set(key, value)` | Store data in context |
-| `ctx.get<T>(key)` | Retrieve stored data |
+| `ctx.query` | Query parameters |
 
 ---
 
-## Lifecycle Hooks & Middleware
-
-### Lifecycle Hooks
-
-Use lifecycle hooks to run logic before/after the handler:
-
-```typescript
-import { Mandu } from "@mandujs/core";
-
-export default Mandu.filling()
-  .onRequest((ctx) => {
-    // Runs at request start
-    ctx.set("requestId", crypto.randomUUID());
-  })
-  .onParse(async (ctx) => {
-    // Runs before handler for body methods
-    // Use req.clone() if you need to read body here
-    const raw = await ctx.req.clone().text();
-    ctx.set("rawBody", raw);
-  })
-  .beforeHandle((ctx) => {
-    // Guard: return Response to block
-    if (!ctx.get("user")) return ctx.unauthorized("Login required");
-  })
-  .afterHandle((ctx, res) => {
-    res.headers.set("X-Request-Id", ctx.get("requestId") as string);
-    return res;
-  })
-  .mapResponse((_ctx, res) => {
-    // Final response mapping
-    return res;
-  })
-  .afterResponse((ctx) => {
-    // Runs after response (async)
-    console.log("done", ctx.get("requestId"));
-  })
-  .get((ctx) => ctx.ok({ ok: true }));
-```
-
-### Compose-style Middleware
-
-Compose middleware runs around the handler (Koa/Hono style):
-
-```typescript
-export default Mandu.filling()
-  .middleware(async (_ctx, next) => {
-    console.log("before");
-    await next();
-    console.log("after");
-  })
-  .get((ctx) => ctx.ok({ ok: true }));
-```
-
-### Trace (Optional)
-
-Enable trace and inspect lifecycle events inside hooks:
-
-```typescript
-import { Mandu, enableTrace, TRACE_KEY } from "@mandujs/core";
-
-export default Mandu.filling()
-  .onRequest((ctx) => enableTrace(ctx))
-  .afterResponse((ctx) => {
-    const trace = ctx.get(TRACE_KEY);
-    console.log(trace?.records);
-  })
-  .get((ctx) => ctx.ok({ ok: true }));
-```
-
-#### Trace Report
-
-```typescript
-import { buildTraceReport, formatTraceReport } from "@mandujs/core";
-
-const report = buildTraceReport(trace);
-console.log(report.entries);
-console.log(formatTraceReport(report));
-```
-
-### Lifecycle/Middleware API Reference
-
-| Method | Purpose |
-|--------|---------|
-| `onRequest(fn)` | Runs at request start |
-| `onParse(fn)` | Runs before handler for body methods |
-| `beforeHandle(fn)` | Guard hook (return Response to block) |
-| `afterHandle(fn)` | Post-handler hook |
-| `mapResponse(fn)` | Final response mapping |
-| `afterResponse(fn)` | Runs after response (async) |
-| `guard(fn)` | Alias of `beforeHandle` |
-| `use(fn)` | Alias of `guard` |
-| `middleware(fn)` | Compose-style middleware |
-
 ## Island Hydration
 
-### What are Islands?
+Selective client-side JavaScript for optimal performance:
 
-Islands are interactive components that get hydrated on the client while the rest of the page remains static HTML. This approach delivers:
+```tsx
+// spec/slots/counter.client.tsx
+import { useState } from "react";
 
-- **Faster Initial Load**: Most of the page is static HTML
-- **Better Performance**: Only interactive parts load JavaScript
-- **SEO Friendly**: Full HTML content for search engines
+export default function Counter({ initial = 0 }) {
+  const [count, setCount] = useState(initial);
 
-### Hydration Strategies
+  return (
+    <div>
+      <p>{count}</p>
+      <button onClick={() => setCount(c => c + 1)}>+</button>
+    </div>
+  );
+}
+```
 
-| Strategy | Description | Use Case |
-|----------|-------------|----------|
-| `none` | Pure static HTML, no JavaScript | SEO-critical, read-only pages |
-| `island` | Partial hydration (default) | Mixed static + interactive |
-| `full` | Entire page hydrated | SPA-like interactive pages |
-| `progressive` | Lazy sequential hydration | Large pages, performance |
-
-### Hydration Priorities
-
-| Priority | When JavaScript Loads | Use Case |
-|----------|----------------------|----------|
-| `immediate` | On page load | Critical interactions |
-| `visible` | When in viewport (default) | Below-the-fold content |
-| `idle` | During browser idle time | Non-critical features |
-| `interaction` | On user interaction | Lazy activation |
-
-### Creating an Island
-
-1. **Add client module to route:**
-
+Configure in route:
 ```json
 {
   "id": "counter",
-  "pattern": "/counter",
-  "kind": "page",
-  "module": "apps/server/generated/routes/counter.route.ts",
-  "componentModule": "apps/web/generated/routes/counter.route.tsx",
-  "clientModule": "spec/slots/counter.client.ts",
   "hydration": {
     "strategy": "island",
     "priority": "visible"
@@ -549,394 +557,263 @@ Islands are interactive components that get hydrated on the client while the res
 }
 ```
 
-2. **Write the client component:**
+| Strategy | Description |
+|----------|-------------|
+| `none` | Pure static HTML |
+| `island` | Partial hydration (default) |
+| `full` | Full page hydration |
+
+| Priority | When JS Loads |
+|----------|---------------|
+| `immediate` | On page load |
+| `visible` | When in viewport |
+| `idle` | During browser idle |
+| `interaction` | On user interaction |
+
+---
+
+## Contract API
+
+Type-safe API contracts with full inference:
 
 ```typescript
-// spec/slots/counter.client.ts
-import React, { useState } from "react";
+import { Mandu } from "@mandujs/core";
+import { z } from "zod";
 
-export default function Counter({ initialCount = 0 }) {
-  const [count, setCount] = useState(initialCount);
+// Define contract
+const userContract = Mandu.contract({
+  request: {
+    GET: { query: z.object({ id: z.string() }) },
+    POST: { body: z.object({ name: z.string(), email: z.string().email() }) }
+  },
+  response: {
+    200: z.object({ data: z.any() }),
+    400: z.object({ error: z.string() })
+  }
+});
 
-  return (
-    <div className="counter-island">
-      <h2>Interactive Counter</h2>
-      <p className="count">{count}</p>
-      <button onClick={() => setCount(count - 1)}>-</button>
-      <button onClick={() => setCount(count + 1)}>+</button>
-    </div>
-  );
-}
-```
+// Create handlers (fully typed)
+const handlers = Mandu.handler(userContract, {
+  GET: (ctx) => ({ data: fetchUser(ctx.query.id) }),
+  POST: (ctx) => ({ data: createUser(ctx.body) })
+});
 
-3. **Build and run:**
-
-```bash
-bunx mandu build       # Build client bundles
-bunx mandu dev         # Or run dev server with HMR
-```
-
----
-
-## Hot Module Replacement (HMR)
-
-### How HMR Works
-
-During development, Mandu watches for changes to `.client.ts` files and automatically:
-
-1. Rebuilds the affected island bundle
-2. Notifies connected browsers via WebSocket
-3. Triggers a page reload (or targeted island update)
-
-### HMR Features
-
-- **WebSocket Server**: Runs on port + 1 (e.g., 3001 for dev server on 3000)
-- **Auto-Reconnection**: Reconnects automatically if connection lost
-- **Error Overlay**: Shows build errors directly in browser
-- **File Watching**: Watches `spec/slots/*.client.ts` files
-
-### Development Server Output
-
-```
-🥟 Mandu Dev Server
-📄 Spec file: /path/to/spec/routes.manifest.json
-
-✅ Spec loaded: 5 routes
-  📄 Page: / -> home
-  📡 API: /api/health -> health
-  📄 Page: /counter -> counter 🏝️    ← Island indicator
-
-🔥 HMR server running on ws://localhost:3001
-🔨 Initial client bundle build...
-✅ Built 1 island
-👀 Watching for client slot changes...
-🥟 Mandu Dev Server running at http://localhost:3000
-🔥 HMR enabled on port 3001
+// Type-safe client
+const client = Mandu.client(userContract, { baseUrl: "/api/users" });
+const result = await client.GET({ query: { id: "123" } });
 ```
 
 ---
 
-## Guard System
+## MCP Server (AI Integration)
 
-Guard enforces architecture preservation by checking:
-
-| Rule | What it Checks | Fix Command |
-|------|---------------|-------------|
-| `SPEC_HASH_MISMATCH` | spec.lock.json hash matches spec | `mandu spec-upsert` |
-| `GENERATED_MANUAL_EDIT` | "DO NOT EDIT" marker intact | `mandu generate` |
-| `INVALID_GENERATED_IMPORT` | No imports from /generated/ | Use runtime registry |
-| `FORBIDDEN_IMPORT_IN_GENERATED` | No fs, child_process, etc. | Move logic to slot |
-| `SLOT_NOT_FOUND` | Slot file exists if specified | `mandu generate` |
-
-### Running Guard
-
-```bash
-# Check all rules
-bunx mandu guard
-
-# Check with auto-correction
-bunx mandu guard --auto-correct
-```
-
----
-
-## MCP Server (AI Agent Integration)
-
-Mandu includes a full MCP (Model Context Protocol) server that allows AI agents to directly interact with the framework.
+Mandu includes a full MCP server for AI agent integration.
 
 ### Setup
 
-Create `.mcp.json` in your project root:
-
 ```json
+// .mcp.json
 {
   "mcpServers": {
     "mandu": {
       "command": "bunx",
       "args": ["@mandujs/mcp"],
-      "cwd": "/path/to/your/project"
+      "cwd": "/path/to/project"
     }
   }
 }
 ```
 
-### Available MCP Tools
+### Tools (35+)
 
-#### Spec Management
+| Category | Tools |
+|----------|-------|
+| **Spec** | `mandu_list_routes`, `mandu_add_route`, `mandu_update_route`, `mandu_delete_route` |
+| **Guard** | `mandu_guard_check`, `mandu_guard_heal`, `mandu_explain_rule` |
+| **Decision Memory** | `mandu_search_decisions`, `mandu_save_decision`, `mandu_check_consistency`, `mandu_get_architecture` |
+| **Semantic Slots** | `mandu_validate_slot`, `mandu_validate_slots` |
+| **Negotiation** | `mandu_negotiate`, `mandu_generate_scaffold`, `mandu_analyze_structure` |
+| **Generate** | `mandu_generate` |
+| **Transaction** | `mandu_begin`, `mandu_commit`, `mandu_rollback` |
+| **Slot** | `mandu_read_slot`, `mandu_write_slot` |
+| **Hydration** | `mandu_build`, `mandu_list_islands`, `mandu_set_hydration` |
+| **SEO** | `mandu_preview_seo`, `mandu_generate_sitemap_preview`, `mandu_generate_robots_preview`, `mandu_create_jsonld`, `mandu_write_seo_file`, `mandu_seo_analyze` |
+| **Brain** | `mandu_doctor`, `mandu_watch_start` |
 
-| Tool | Description |
-|------|-------------|
-| `mandu_list_routes` | List all routes |
-| `mandu_get_route` | Get specific route details |
-| `mandu_add_route` | Add a new route |
-| `mandu_update_route` | Modify existing route |
-| `mandu_delete_route` | Remove a route |
-| `mandu_validate_spec` | Validate manifest |
-
-#### Code Generation
-
-| Tool | Description |
-|------|-------------|
-| `mandu_generate` | Run code generation |
-
-#### Transaction Management
-
-| Tool | Description |
-|------|-------------|
-| `mandu_begin` | Start transaction with snapshot |
-| `mandu_commit` | Finalize changes |
-| `mandu_rollback` | Restore from snapshot |
-| `mandu_tx_status` | Get transaction state |
-
-#### Slot Management
-
-| Tool | Description |
-|------|-------------|
-| `mandu_read_slot` | Read slot file content |
-| `mandu_write_slot` | Write slot file (with auto-correction) |
-| `mandu_validate_slot` | Validate slot syntax |
-
-#### Guard & Validation
-
-| Tool | Description |
-|------|-------------|
-| `mandu_guard_check` | Run all guard checks |
-| `mandu_analyze_error` | Analyze error and get fix suggestions |
-
-#### Hydration & Build
-
-| Tool | Description |
-|------|-------------|
-| `mandu_build` | Build client bundles |
-| `mandu_build_status` | Get bundle statistics |
-| `mandu_list_islands` | List routes with hydration |
-| `mandu_set_hydration` | Configure hydration strategy |
-| `mandu_add_client_slot` | Create client slot for route |
-
-#### Real-Time Watch (Brain v0.1)
-
-| Tool | Description |
-|------|-------------|
-| `mandu_watch_start` | Start file watcher with MCP push notifications |
-| `mandu_watch_status` | Get watcher status and recent warnings |
-| `mandu_watch_stop` | Stop watcher and clean up subscriptions |
-| `mandu_doctor` | Analyze Guard failures and suggest patches |
-| `mandu_check_location` | Check if a file follows architecture rules |
-| `mandu_check_import` | Validate imports against architecture rules |
-| `mandu_get_architecture` | Get project architecture rules and folder structure |
-
-#### History
-
-| Tool | Description |
-|------|-------------|
-| `mandu_list_changes` | View change history |
-| `mandu_prune_history` | Clean old snapshots |
-
-### MCP Resources
+### Resources
 
 | URI | Description |
 |-----|-------------|
-| `mandu://spec/manifest` | Current routes.manifest.json |
-| `mandu://spec/lock` | Current spec.lock.json |
-| `mandu://generated/map` | Generated files mapping |
+| `mandu://spec/manifest` | Current routes manifest |
+| `mandu://watch/warnings` | Architecture violation warnings |
 | `mandu://transaction/active` | Active transaction state |
-| `mandu://slots/{routeId}` | Slot file content |
-| `mandu://watch/warnings` | Recent architecture violation warnings |
-| `mandu://watch/status` | Watcher status (active, uptime, file count) |
-
-### Agent Workflow Example
-
-```
-User: "Create a users list API with pagination"
-
-Agent:
-1. mandu_begin({ message: "Add users API with pagination" })
-   → Creates snapshot, returns changeId
-
-2. mandu_add_route({
-     id: "users-list",
-     pattern: "/api/users",
-     kind: "api",
-     methods: ["GET", "POST"],
-     slotModule: "spec/slots/users.slot.ts"
-   })
-   → Updates routes.manifest.json
-
-3. mandu_generate()
-   → Creates route handlers
-
-4. mandu_write_slot({
-     routeId: "users-list",
-     content: `
-       import { Mandu } from "@mandujs/core";
-
-       export default Mandu.filling()
-         .get(async (ctx) => {
-           const page = parseInt(ctx.query.page) || 1;
-           const limit = parseInt(ctx.query.limit) || 10;
-           const users = await getUsers({ page, limit });
-           return ctx.ok({ data: users, page, limit });
-         })
-         .post(async (ctx) => {
-           const body = await ctx.body();
-           const user = await createUser(body);
-           return ctx.created({ data: user });
-         });
-     `,
-     autoCorrect: true
-   })
-   → Writes business logic, auto-fixes issues
-
-5. mandu_guard_check()
-   → Validates architecture
-
-6. mandu_commit()
-   → Finalizes transaction
-
-Result: New API ready with full rollback capability
-```
-
-### Real-Time Architecture Monitoring
-
-Mandu's MCP server pushes real-time notifications to AI agents when architecture violations are detected. Unlike traditional lint-on-save approaches, the agent is **proactively notified** without polling.
-
-```
-File change (fs.watch)
-  → FileWatcher detects change
-    → validateFile() checks architecture rules
-      → MCP push notification:
-          1. sendLoggingMessage()      → Agent receives warning in real-time
-          2. sendResourceUpdated()     → Agent knows to re-read warnings resource
-```
-
-#### How It Works
-
-1. **Start the watcher** — call `mandu_watch_start`
-2. **Develop normally** — the watcher monitors all file changes
-3. **Violation detected** — e.g., a generated file is manually edited
-4. **Agent receives push** — MCP `notifications/message` delivered instantly
-5. **Agent can respond** — read `mandu://watch/warnings` for details and take action
-
-#### Architecture Rules (Watched)
-
-| Rule | Detects |
-|------|---------|
-| `GENERATED_DIRECT_EDIT` | Manual edits to generated files (should use `mandu generate`) |
-| `WRONG_SLOT_LOCATION` | Slot files outside `spec/slots/` directory |
-| `SLOT_NAMING` | Slot files not ending with `.slot.ts` |
-| `CONTRACT_NAMING` | Contract files not ending with `.contract.ts` |
-| `FORBIDDEN_IMPORT` | Dangerous imports (`fs`, `child_process`) in generated files |
-
-#### Notification Format (JSON-RPC)
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "notifications/message",
-  "params": {
-    "level": "warning",
-    "logger": "mandu-watch",
-    "data": {
-      "type": "watch_warning",
-      "ruleId": "GENERATED_DIRECT_EDIT",
-      "file": "apps/server/generated/routes/home.handler.ts",
-      "message": "Generated file was directly modified",
-      "event": "modify",
-      "timestamp": "2026-01-30T10:15:00.000Z"
-    }
-  }
-}
-```
-
-> **Why this matters**: No other web framework provides MCP-level real-time architecture monitoring for AI agents. The agent doesn't just write code — it watches the project and prevents architecture decay as it happens.
 
 ---
 
-## Error Handling System
+## Project Structure
 
-### Error Classification
+### Generated Project
 
-Mandu automatically classifies errors into three types:
+```
+my-app/
+├── app/                    # FS Routes (pages, layouts, API)
+│   ├── page.tsx
+│   └── api/
+├── spec/
+│   ├── routes.manifest.json  # Route definitions
+│   └── slots/                # Business logic
+├── .mandu/
+│   ├── client/               # Built bundles
+│   └── manifest.json         # Bundle manifest
+└── package.json
+```
 
-| Type | Description | Typical Cause |
-|------|-------------|---------------|
-| `SPEC_ERROR` | Manifest/validation issues | Invalid JSON, missing required fields |
-| `LOGIC_ERROR` | Slot runtime failures | Business logic bugs, database errors |
-| `FRAMEWORK_BUG` | Generated code errors | Should not occur; indicates framework issue |
+### Framework
 
-### Error Response Format
-
-```json
-{
-  "errorType": "LOGIC_ERROR",
-  "code": "SLOT_RUNTIME_ERROR",
-  "message": "Cannot read property 'id' of undefined",
-  "summary": "Null reference in users.slot.ts",
-  "fix": {
-    "file": "spec/slots/users.slot.ts",
-    "line": 15,
-    "suggestion": "Check that user object exists before accessing .id"
-  },
-  "route": {
-    "id": "users-api",
-    "pattern": "/api/users/:id"
-  },
-  "timestamp": "2025-01-28T12:00:00.000Z"
-}
+```
+mandu/
+├── packages/
+│   ├── core/       # @mandujs/core - Runtime, Guard, Router, Bundler
+│   ├── cli/        # @mandujs/cli - CLI commands
+│   └── mcp/        # @mandujs/mcp - MCP server for AI agents
+└── tests/
 ```
 
 ---
 
 ## Tech Stack
 
-| Area | Technology | Reason |
-|------|------------|--------|
-| **Runtime** | Bun | Fast, all-in-one toolkit, native TypeScript |
-| **Language** | TypeScript | Type safety, agent-friendly |
-| **Frontend** | React | SSR support, ecosystem |
-| **Rendering** | SSR (renderToString) | SEO, performance |
-| **Validation** | Zod | Schema validation, type inference |
-| **Protocol** | MCP | AI agent integration |
+| Area | Technology |
+|------|------------|
+| Runtime | Bun |
+| Language | TypeScript |
+| Frontend | React |
+| Rendering | Streaming SSR |
+| Validation | Zod |
+| AI Protocol | MCP |
 
 ---
 
 ## Roadmap
 
-### v0.9.x (Current)
-- [x] Island hydration system
-- [x] HMR (Hot Module Replacement)
-- [x] MCP server with 20+ tools
-- [x] Transaction API with snapshots
-- [x] Error classification system
-- [x] Slot auto-correction
-- [x] Contract-first API with type inference
-- [x] Real-time architecture watch via MCP push notifications
-- [x] Brain v0.1 (Doctor, Architecture analyzer, File watcher)
-- [x] Client-side router with NavLink
+### v0.10.x (Current) — 74 features done
 
-### v1.0.x (Next)
-- [ ] WebSocket platform
+**Core Runtime**
+- [x] Middleware compose & lifecycle hooks
+- [x] Streaming SSR
+- [x] Filling API (guard, hooks, middleware)
+- [x] Runtime logger & trace system
+
+**Routing**
+- [x] FS Routes (scanner, patterns, generator, watcher)
+- [x] Layout system (layoutChain, loading, error)
+- [x] Advanced routes (catch-all, optional params)
+- [x] Client-side router (Link, NavLink, hooks)
+
+**Architecture**
+- [x] Mandu Guard with 5 presets (mandu, fsd, clean, hexagonal, atomic)
+- [x] AST-based import analysis
+- [x] Statistics & trend tracking
+- [x] Real-time violation detection
+
+**API & Types**
+- [x] Contract API with Zod
+- [x] Type-safe handlers & clients
+- [x] OpenAPI 3.0 generator
+- [x] Schema normalization
+
+**Hydration**
+- [x] Island hydration (visible, idle, interaction)
+- [x] Partials & slots
+- [x] Error boundary & loading states
+- [x] HMR support
+
+**SEO (Search Engine Optimization)**
+- [x] Next.js Metadata API compatible types
+- [x] Layout chain metadata merging
+- [x] Open Graph & Twitter Cards
+- [x] JSON-LD structured data (12 helpers)
+- [x] Sitemap.xml & robots.txt generation
+- [x] Google SEO optimization (viewport, theme-color, resource hints)
+- [x] SSR integration
+
+**AI Integration (RFC-001: From Guard to Guide)** 🆕
+- [x] MCP server (35+ tools, 7 resources)
+- [x] Brain (Doctor, Watcher, Architecture analyzer)
+- [x] Transaction API with snapshots
+- [x] Real-time push notifications
+- [x] **Decision Memory** - ADR storage & consistency checking
+- [x] **Semantic Slots** - Purpose & constraint validation for AI code
+- [x] **Architecture Negotiation** - AI-Framework pre-implementation dialog
+- [x] **Self-Healing Guard** - Auto-fix suggestions with explanations
+
+**Security**
+- [x] Path traversal prevention
+- [x] Port validation
+- [x] LFI vulnerability protection
+- [x] ReDoS defense in custom rules
+
+### v0.11.x (Next)
+
+**Data Layer** *(Astro-inspired)*
+- [ ] Loader API with LoaderContext (store, meta, logger, watcher)
+- [ ] File Loader & API Loader implementations
+- [ ] DataStore & MetaStore with digest tracking
+- [ ] Cache Store adapter (Redis, in-memory)
 - [ ] ISR (Incremental Static Regeneration)
-- [ ] CacheStore adapter
-- [ ] Production deployment guides
+
+**Realtime** *(Phoenix-inspired)*
+- [ ] WebSocket Channels (join/handle_in/handle_out pattern)
+- [ ] Channel/Socket separation model
+- [ ] Serializer-based message protocol
+- [ ] Server-sent events (SSE)
+
+**Build & Integration** *(Astro/Fresh-inspired)*
+- [ ] Build Hooks (start/setup/done lifecycle)
+- [ ] Plugin API for build extensions
+- [ ] Integration hooks with timeout warnings & dedicated logger
+- [ ] Bundle analyzer with size reporting
+
+**Observability**
+- [ ] Performance benchmarks (routing, SSR, hydration)
+- [ ] TTFB & TTI measurement
+- [ ] Automated perf test suite
+
+### v0.13.x (Future)
+
+**AOT Optimization** *(Elysia-inspired)*
+- [ ] AOT Handler Generation (runtime precompile)
+- [ ] Sucrose-style context inference for minimal runtime
+- [ ] JIT/AOT mode selection (`mandu build --aot`)
+
+**Advanced Hydration** *(Qwik/Fresh-inspired)*
+- [ ] Client Reviver (DOM marker-based restoration)
+- [ ] Resumable POC / QRL-lite (lazy event handler loading)
+- [ ] Serializer Registry (pluggable type serializers)
+- [ ] Progressive Hydration improvements
+
+**Developer Experience**
+- [ ] Error overlay in development
+- [ ] Enhanced TypeScript inference
+- [ ] Project templates & scaffolding
+
+---
+
+## Documentation
+
+- `docs/README.md` — Documentation index
+- `docs/api/api-reference.md` — API reference
+- `docs/status.md` — Implementation status
+- `docs/specs/` — Technical specifications
 
 ---
 
 ## Contributing
 
 ```bash
-# Clone repository
 git clone https://github.com/konamgil/mandu.git
-cd mandu
-
-# Install dependencies
-bun install
-
-# Run tests
+cd mandu && bun install
 bun test
-
-# Test CLI locally
-bun run packages/cli/src/main.ts --help
 ```
 
 ---

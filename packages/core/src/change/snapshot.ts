@@ -1,7 +1,15 @@
 import path from "path";
-import type { Snapshot, RestoreResult } from "./types";
+import type { Snapshot, RestoreResult, ConfigSnapshot } from "./types";
 import type { RoutesManifest } from "../spec/schema";
 import type { SpecLock } from "../spec/lock";
+import {
+  readLockfile,
+  writeLockfile,
+  generateLockfile,
+  LOCKFILE_PATH,
+  readMcpConfig,
+} from "../lockfile";
+import { validateAndReport } from "../config";
 
 const SPEC_DIR = "spec";
 const MANIFEST_FILE = "routes.manifest.json";
@@ -84,6 +92,29 @@ export async function createSnapshot(rootDir: string): Promise<Snapshot> {
   // Slot 내용 수집
   const slotContents = await collectSlotContents(rootDir);
 
+  // Config 스냅샷 생성 (lockfile 포함)
+  let configSnapshot: ConfigSnapshot | undefined;
+  try {
+    const config = await validateAndReport(rootDir);
+    if (config) {
+      const existingLockfile = await readLockfile(rootDir);
+      let mcpConfig: Record<string, unknown> | null = null;
+      try {
+        mcpConfig = await readMcpConfig(rootDir);
+      } catch {
+        // ignore MCP config errors in snapshot
+      }
+      const lockfile =
+        existingLockfile ?? generateLockfile(config, { includeSnapshot: true }, mcpConfig);
+      configSnapshot = {
+        lockfile,
+        configHash: lockfile.configHash,
+      };
+    }
+  } catch {
+    // Config 로드 실패 시 스킵
+  }
+
   const id = generateSnapshotId();
 
   return {
@@ -92,6 +123,7 @@ export async function createSnapshot(rootDir: string): Promise<Snapshot> {
     manifest,
     lock,
     slotContents,
+    configSnapshot,
   };
 }
 
@@ -179,6 +211,19 @@ export async function restoreSnapshot(rootDir: string, snapshot: Snapshot): Prom
       failedFiles.push(`${SLOTS_DIR}/${relativePath}`);
       errors.push(
         `Failed to restore slot ${relativePath}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  // 4. Config Lockfile 복원 (있는 경우)
+  if (snapshot.configSnapshot) {
+    try {
+      await writeLockfile(rootDir, snapshot.configSnapshot.lockfile);
+      restoredFiles.push(LOCKFILE_PATH);
+    } catch (error) {
+      failedFiles.push(LOCKFILE_PATH);
+      errors.push(
+        `Failed to restore config lockfile: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
