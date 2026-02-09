@@ -183,6 +183,11 @@ export class StackTraceAnalyzer {
   isSpecFile(file: string): boolean {
     const normalized = this.normalizePath(file);
 
+    // .mandu/ 디렉토리 내 생성된 매니페스트/락 파일
+    if (normalized.startsWith(".mandu/") && normalized.endsWith(".json")) {
+      return true;
+    }
+
     // spec/ 디렉토리 내 JSON 파일
     if (normalized.startsWith("spec/") && normalized.endsWith(".json")) {
       return true;

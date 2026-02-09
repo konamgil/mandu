@@ -1,5 +1,11 @@
 # @mandujs/mcp
 
+## 0.12.3
+
+### Patch Changes
+
+- docs: mention `.claude.json` as a valid MCP configuration location
+
 ## 0.12.2
 
 ### Patch Changes

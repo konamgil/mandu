@@ -140,7 +140,7 @@ export function generateTemplatePatches(
     switch (violation.ruleId) {
       case GUARD_RULES.SPEC_HASH_MISMATCH?.id:
         patches.push({
-          file: "spec/spec.lock.json",
+          file: ".mandu/spec.lock.json",
           description: "Spec lock 파일 갱신",
           type: "command",
           command: "bunx mandu spec-upsert",

@@ -1,22 +1,25 @@
-import { loadManifest, generateRoutes, buildGenerateReport, printReportSummary, writeReport } from "@mandujs/core";
+import { loadManifest, generateManifest, generateRoutes, buildGenerateReport, printReportSummary, writeReport } from "@mandujs/core";
 import { resolveFromCwd, getRootDir } from "../util/fs";
 
 export async function generateApply(): Promise<boolean> {
-  const specPath = resolveFromCwd("spec/routes.manifest.json");
   const rootDir = getRootDir();
+  const manifestPath = resolveFromCwd(".mandu/routes.manifest.json");
 
   console.log(`🥟 Mandu Generate`);
-  console.log(`📄 Spec 파일: ${specPath}\n`);
+  console.log(`📄 FS Routes 기반 코드 생성\n`);
 
-  const result = await loadManifest(specPath);
+  // Regenerate manifest from FS Routes
+  const fsResult = await generateManifest(rootDir);
+  console.log(`✅ 매니페스트 생성 완료 (${fsResult.fsRoutesCount}개 라우트)`);
+
+  const result = await loadManifest(manifestPath);
 
   if (!result.success || !result.data) {
-    console.error("❌ Spec 로드 실패:");
+    console.error("❌ 매니페스트 로드 실패:");
     result.errors?.forEach((e) => console.error(`  - ${e}`));
     return false;
   }
 
-  console.log(`✅ Spec 로드 완료 (${result.data.routes.length}개 라우트)`);
   console.log(`🔄 코드 생성 중...\n`);
 
   const generateResult = await generateRoutes(result.data, rootDir);

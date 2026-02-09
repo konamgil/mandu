@@ -98,8 +98,6 @@ const FsRoutesConfigSchema = z
     extensions: z.array(z.string()).default([".tsx", ".ts", ".jsx", ".js"]),
     exclude: z.array(z.string()).default([]),
     islandSuffix: z.string().default(".island"),
-    legacyManifestPath: z.string().optional(),
-    mergeWithLegacy: z.boolean().default(true),
   })
   .strict();
 

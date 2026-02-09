@@ -172,7 +172,7 @@ async function correctSpecHashMismatch(
   rootDir: string
 ): Promise<AutoCorrectStep> {
   try {
-    const lockPath = path.join(rootDir, "spec/spec.lock.json");
+    const lockPath = path.join(rootDir, ".mandu/spec.lock.json");
     await writeLock(lockPath, manifest);
 
     return {

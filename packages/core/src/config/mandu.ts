@@ -39,8 +39,6 @@ export interface ManduConfig {
     extensions?: string[];
     exclude?: string[];
     islandSuffix?: string;
-    legacyManifestPath?: string;
-    mergeWithLegacy?: boolean;
   };
   seo?: {
     enabled?: boolean;

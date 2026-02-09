@@ -171,7 +171,7 @@ describe("FSScanner", () => {
 
   describe("generateManifest", () => {
     it("should generate valid manifest", async () => {
-      const result = await generateManifest(TEST_DIR, { skipLegacy: true });
+      const result = await generateManifest(TEST_DIR, {});
 
       expect(result.manifest.version).toBe(1);
       expect(result.manifest.routes.length).toBeGreaterThan(0);
@@ -179,7 +179,7 @@ describe("FSScanner", () => {
     });
 
     it("should have unique route IDs", async () => {
-      const result = await generateManifest(TEST_DIR, { skipLegacy: true });
+      const result = await generateManifest(TEST_DIR, {});
 
       const ids = result.manifest.routes.map((r) => r.id);
       const uniqueIds = new Set(ids);
@@ -187,7 +187,7 @@ describe("FSScanner", () => {
     });
 
     it("should have unique patterns", async () => {
-      const result = await generateManifest(TEST_DIR, { skipLegacy: true });
+      const result = await generateManifest(TEST_DIR, {});
 
       const patterns = result.manifest.routes.map((r) => r.pattern);
       const uniquePatterns = new Set(patterns);

@@ -3,7 +3,7 @@
     "mandu": {
       "command": "bun",
       "args": ["run", "packages/mcp/src/index.ts"],
-      "cwd": "C:\\Users\\LamySolution\\workspace\\mandu"
+      "cwd": "."
     }
   }
 }

@@ -344,7 +344,6 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   // FS Routes 실시간 감시
   const routesWatcher = await watchFSRoutes(rootDir, {
-    skipLegacy: true,
     onChange: async (result) => {
       const timestamp = new Date().toLocaleTimeString();
       console.log(`\n🔄 [${timestamp}] 라우트 변경 감지`);

@@ -16,7 +16,7 @@ export interface GuardCheckOptions {
 export async function guardCheck(options: GuardCheckOptions = {}): Promise<boolean> {
   const { autoCorrect = true } = options;
 
-  const specPath = resolveFromCwd("spec/routes.manifest.json");
+  const specPath = resolveFromCwd(".mandu/routes.manifest.json");
   const rootDir = getRootDir();
 
   console.log(`🥟 Mandu Guard (Legacy Spec)`);

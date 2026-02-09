@@ -2,7 +2,7 @@
   "version": 1,
   "generatedAt": "2026-01-29T20:23:20.592Z",
   "specSource": {
-    "path": "spec/routes.manifest.json",
+    "path": ".mandu/routes.manifest.json",
     "hash": "09d377164caf372d6352fdc1ee670a755e1f9be28280885d5eb20800fe145c53"
   },
   "files": {
@@ -10,7 +10,7 @@
       "routeId": "counter-page",
       "kind": "page",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 0,
         "jsonPath": "routes[0]"
       },
@@ -22,7 +22,7 @@
       "routeId": "counter-page",
       "kind": "page",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 0,
         "jsonPath": "routes[0]"
       },
@@ -34,7 +34,7 @@
       "routeId": "about-page",
       "kind": "page",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 1,
         "jsonPath": "routes[1]"
       },
@@ -46,7 +46,7 @@
       "routeId": "about-page",
       "kind": "page",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 1,
         "jsonPath": "routes[1]"
       },
@@ -58,7 +58,7 @@
       "routeId": "counter-api",
       "kind": "api",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 2,
         "jsonPath": "routes[2]"
       },
@@ -70,7 +70,7 @@
       "routeId": "todos-api",
       "kind": "api",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 3,
         "jsonPath": "routes[3]"
       },
@@ -86,7 +86,7 @@
       "routeId": "todos-page",
       "kind": "page",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 4,
         "jsonPath": "routes[4]"
       },
@@ -98,7 +98,7 @@
       "routeId": "todos-page",
       "kind": "page",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 4,
         "jsonPath": "routes[4]"
       },
@@ -110,7 +110,7 @@
       "routeId": "blacklist-api",
       "kind": "api",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 5,
         "jsonPath": "routes[5]"
       },
@@ -126,7 +126,7 @@
       "routeId": "blacklist-page",
       "kind": "page",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 6,
         "jsonPath": "routes[6]"
       },
@@ -138,7 +138,7 @@
       "routeId": "blacklist-page",
       "kind": "page",
       "specLocation": {
-        "file": "spec/routes.manifest.json",
+        "file": ".mandu/routes.manifest.json",
         "routeIndex": 6,
         "jsonPath": "routes[6]"
       },

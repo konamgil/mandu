@@ -32,7 +32,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<boolean> {
   const inferredFormat = format ?? (output ? (path.extname(output).toLowerCase() === ".json" ? "json" : "markdown") : undefined);
   const resolvedFormat = inferredFormat ?? "console";
 
-  const specPath = resolveFromCwd("spec/routes.manifest.json");
+  const specPath = resolveFromCwd(".mandu/routes.manifest.json");
   const rootDir = getRootDir();
 
   console.log(`🩺 Mandu Doctor`);

@@ -7,7 +7,7 @@ import {
 } from "@mandujs/core";
 import path from "path";
 
-const SPEC_PATH = path.resolve(import.meta.dir, "../../spec/routes.manifest.json");
+const SPEC_PATH = path.resolve(import.meta.dir, "../../.mandu/routes.manifest.json");
 
 async function main() {
   console.log("🥟 Mandu Server Starting...\n");
