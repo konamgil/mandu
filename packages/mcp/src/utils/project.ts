@@ -3,19 +3,27 @@ import fs from "fs/promises";
 import { pathToFileURL } from "url";
 
 /**
- * Find the Mandu project root by looking for routes.manifest.json
+ * Find the Mandu project root by looking for app/ directory or mandu.config.*
  */
 export async function findProjectRoot(startDir: string = process.cwd()): Promise<string | null> {
   let currentDir = path.resolve(startDir);
 
   while (currentDir !== path.dirname(currentDir)) {
-    const manifestPath = path.join(currentDir, "spec", "routes.manifest.json");
+    // Check for app/ directory (FS Routes source)
     try {
-      await fs.access(manifestPath);
-      return currentDir;
-    } catch {
-      currentDir = path.dirname(currentDir);
+      const appStat = await fs.stat(path.join(currentDir, "app"));
+      if (appStat.isDirectory()) return currentDir;
+    } catch {}
+
+    // Check for mandu.config.* files
+    for (const configFile of ["mandu.config.ts", "mandu.config.js", "mandu.config.json"]) {
+      try {
+        await fs.access(path.join(currentDir, configFile));
+        return currentDir;
+      } catch {}
     }
+
+    currentDir = path.dirname(currentDir);
   }
 
   return null;
@@ -27,11 +35,13 @@ export async function findProjectRoot(startDir: string = process.cwd()): Promise
 export function getProjectPaths(rootDir: string) {
   return {
     root: rootDir,
+    appDir: path.join(rootDir, "app"),
     specDir: path.join(rootDir, "spec"),
-    manifestPath: path.join(rootDir, "spec", "routes.manifest.json"),
-    lockPath: path.join(rootDir, "spec", "spec.lock.json"),
+    manifestPath: path.join(rootDir, ".mandu", "routes.manifest.json"),
+    lockPath: path.join(rootDir, ".mandu", "spec.lock.json"),
     slotsDir: path.join(rootDir, "spec", "slots"),
-    historyDir: path.join(rootDir, "spec", "history"),
+    contractsDir: path.join(rootDir, "spec", "contracts"),
+    historyDir: path.join(rootDir, ".mandu", "history"),
     generatedMapPath: path.join(rootDir, ".mandu", "generated", "generated.map.json"),
     serverRoutesDir: path.join(rootDir, ".mandu", "generated", "server", "routes"),
     webRoutesDir: path.join(rootDir, ".mandu", "generated", "web", "routes"),

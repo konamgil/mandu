@@ -157,7 +157,7 @@ export async function generateRoutes(
     version: manifest.version,
     generatedAt: new Date().toISOString(),
     specSource: {
-      path: "spec/routes.manifest.json",
+      path: ".mandu/routes.manifest.json",
       hash: computeHash(manifest),
     },
     files: {},
@@ -179,7 +179,7 @@ export async function generateRoutes(
     try {
       // Spec 위치 정보
       const specLocation: SpecLocation = {
-        file: "spec/routes.manifest.json",
+        file: ".mandu/routes.manifest.json",
         routeIndex,
         jsonPath: `routes[${routeIndex}]`,
       };

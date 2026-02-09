@@ -27,7 +27,7 @@ MCP (Model Context Protocol) enables AI agents to directly interact with the Man
 
 ### Claude Code / Claude Desktop
 
-Add to your MCP configuration (`.mcp.json` or Claude settings):
+Add to your MCP configuration (`.mcp.json` or `.claude.json`):
 
 ```json
 {

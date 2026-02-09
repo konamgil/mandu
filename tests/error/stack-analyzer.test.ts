@@ -76,7 +76,7 @@ describe("StackTraceAnalyzer", () => {
 
       expect(analyzer.isSpecFile("spec/load.ts")).toBe(true);
       expect(analyzer.isSpecFile("packages/core/src/spec/schema.ts")).toBe(true);
-      expect(analyzer.isSpecFile("spec/routes.manifest.json")).toBe(true);
+      expect(analyzer.isSpecFile(".mandu/routes.manifest.json")).toBe(true);
     });
 
     test("should not identify slot files as spec files", () => {

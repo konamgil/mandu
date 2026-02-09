@@ -11,6 +11,7 @@ import {
 } from "../lockfile";
 import { validateAndReport } from "../config";
 
+const MANDU_DIR = ".mandu";
 const SPEC_DIR = "spec";
 const MANIFEST_FILE = "routes.manifest.json";
 const LOCK_FILE = "spec.lock.json";
@@ -33,7 +34,7 @@ function generateSnapshotId(): string {
  * 스냅샷 저장 경로 반환
  */
 function getSnapshotPath(rootDir: string, snapshotId: string): string {
-  return path.join(rootDir, SPEC_DIR, HISTORY_DIR, SNAPSHOTS_DIR, `${snapshotId}.snapshot.json`);
+  return path.join(rootDir, MANDU_DIR, HISTORY_DIR, SNAPSHOTS_DIR, `${snapshotId}.snapshot.json`);
 }
 
 /**
@@ -71,9 +72,9 @@ async function collectSlotContents(rootDir: string): Promise<Record<string, stri
  * 현재 spec 상태의 스냅샷 생성
  */
 export async function createSnapshot(rootDir: string): Promise<Snapshot> {
-  const specDir = path.join(rootDir, SPEC_DIR);
-  const manifestPath = path.join(specDir, MANIFEST_FILE);
-  const lockPath = path.join(specDir, LOCK_FILE);
+  const manduDir = path.join(rootDir, MANDU_DIR);
+  const manifestPath = path.join(manduDir, MANIFEST_FILE);
+  const lockPath = path.join(manduDir, LOCK_FILE);
 
   // Manifest 읽기 (필수)
   const manifestFile = Bun.file(manifestPath);
@@ -168,10 +169,10 @@ export async function readSnapshotById(rootDir: string, snapshotId: string): Pro
  * 스냅샷으로부터 상태 복원
  */
 export async function restoreSnapshot(rootDir: string, snapshot: Snapshot): Promise<RestoreResult> {
-  const specDir = path.join(rootDir, SPEC_DIR);
-  const manifestPath = path.join(specDir, MANIFEST_FILE);
-  const lockPath = path.join(specDir, LOCK_FILE);
-  const slotsDir = path.join(specDir, SLOTS_DIR);
+  const manduDir = path.join(rootDir, MANDU_DIR);
+  const manifestPath = path.join(manduDir, MANIFEST_FILE);
+  const lockPath = path.join(manduDir, LOCK_FILE);
+  const slotsDir = path.join(rootDir, SPEC_DIR, SLOTS_DIR);
 
   const restoredFiles: string[] = [];
   const failedFiles: string[] = [];
@@ -258,7 +259,7 @@ export async function deleteSnapshot(rootDir: string, snapshotId: string): Promi
  * 모든 스냅샷 ID 목록 조회
  */
 export async function listSnapshotIds(rootDir: string): Promise<string[]> {
-  const snapshotsDir = path.join(rootDir, SPEC_DIR, HISTORY_DIR, SNAPSHOTS_DIR);
+  const snapshotsDir = path.join(rootDir, MANDU_DIR, HISTORY_DIR, SNAPSHOTS_DIR);
 
   try {
     const entries = await Array.fromAsync(

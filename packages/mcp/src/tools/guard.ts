@@ -447,7 +447,7 @@ export function guardTools(projectRoot: string) {
       switch (error.errorType) {
         case "SPEC_ERROR":
           analysis.category = "Specification Error";
-          analysis.fixLocation = error.fix?.file || "spec/routes.manifest.json";
+          analysis.fixLocation = error.fix?.file || ".mandu/routes.manifest.json";
           analysis.actions = [
             "Check the spec file for JSON syntax errors",
             "Validate route IDs are unique",

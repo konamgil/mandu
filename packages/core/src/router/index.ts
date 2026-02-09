@@ -74,7 +74,7 @@ export type { GenerateResult, GenerateOptions, RouteChangeCallback, FSRoutesWatc
 export {
   fsRouteToRouteSpec,
   scanResultToManifest,
-  mergeManifests,
+  resolveAutoLinks,
   generateManifest,
   watchFSRoutes,
   formatRoutesForCLI,

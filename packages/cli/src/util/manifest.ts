@@ -7,7 +7,7 @@ import {
 } from "@mandujs/core";
 import { isDirectory } from "./fs";
 
-export type ManifestSource = "fs" | "spec";
+export type ManifestSource = "fs";
 
 export interface ResolvedManifest {
   manifest: RoutesManifest;
@@ -22,31 +22,17 @@ export async function resolveManifest(
   const appDir = path.resolve(rootDir, "app");
   const hasApp = await isDirectory(appDir);
 
-  if (hasApp) {
-    const result = await generateManifest(rootDir, {
-      scanner: options.fsRoutes,
-      outputPath: options.outputPath,
-      skipLegacy: true,
-    });
-    return {
-      manifest: result.manifest,
-      source: "fs",
-      warnings: result.warnings,
-    };
+  if (!hasApp) {
+    throw new Error("No app/ directory found. Create app/ routes to get started.");
   }
 
-  const specPath = path.join(rootDir, "spec", "routes.manifest.json");
-  if (await Bun.file(specPath).exists()) {
-    const result = await loadManifest(specPath);
-    if (!result.success) {
-      throw new Error(result.errors?.join(", ") || "Failed to load routes manifest");
-    }
-    return {
-      manifest: result.data!,
-      source: "spec",
-      warnings: [],
-    };
-  }
-
-  throw new Error("No routes found. Create app/ routes or spec/routes.manifest.json");
+  const result = await generateManifest(rootDir, {
+    scanner: options.fsRoutes,
+    outputPath: options.outputPath,
+  });
+  return {
+    manifest: result.manifest,
+    source: "fs",
+    warnings: result.warnings,
+  };
 }

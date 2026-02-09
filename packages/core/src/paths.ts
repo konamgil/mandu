@@ -13,6 +13,10 @@ export interface GeneratedPaths {
   typesDir: string;
   /** 생성 맵 디렉토리 */
   mapDir: string;
+  /** 생성된 매니페스트 경로 */
+  manifestPath: string;
+  /** 생성된 lock 경로 */
+  lockPath: string;
 }
 
 /**
@@ -24,6 +28,8 @@ export function resolveGeneratedPaths(rootDir: string): GeneratedPaths {
     webRoutesDir: path.join(rootDir, ".mandu/generated/web/routes"),
     typesDir: path.join(rootDir, ".mandu/generated/server/types"),
     mapDir: path.join(rootDir, ".mandu/generated"),
+    manifestPath: path.join(rootDir, ".mandu/routes.manifest.json"),
+    lockPath: path.join(rootDir, ".mandu/spec.lock.json"),
   };
 }
 
@@ -35,4 +41,7 @@ export const GENERATED_RELATIVE_PATHS = {
   webRoutes: ".mandu/generated/web/routes",
   types: ".mandu/generated/server/types",
   map: ".mandu/generated",
+  manifest: ".mandu/routes.manifest.json",
+  lock: ".mandu/spec.lock.json",
+  history: ".mandu/history",
 } as const;

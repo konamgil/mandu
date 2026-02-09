@@ -1,6 +1,5 @@
 node_modules/
 dist/
-apps/*/generated/
-spec/spec.lock.json
+.mandu/
 mandu-report.json
 *.log

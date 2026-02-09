@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import { createSnapshot, writeSnapshot, readSnapshotById, restoreSnapshot } from "./snapshot";
 
-const SPEC_DIR = "spec";
+const MANDU_DIR = ".mandu";
 const HISTORY_DIR = "history";
 const CHANGES_FILE = "changes.json";
 const ACTIVE_FILE = "active.json";
@@ -28,7 +28,7 @@ function generateChangeId(): string {
  * History 디렉토리 경로
  */
 function getHistoryDir(rootDir: string): string {
-  return path.join(rootDir, SPEC_DIR, HISTORY_DIR);
+  return path.join(rootDir, MANDU_DIR, HISTORY_DIR);
 }
 
 /**

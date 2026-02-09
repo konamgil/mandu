@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { loadManifest, generateRoutes, GENERATED_RELATIVE_PATHS, type GeneratedMap } from "@mandujs/core";
+import { loadManifest, generateRoutes, generateManifest, GENERATED_RELATIVE_PATHS, type GeneratedMap } from "@mandujs/core";
 import { getProjectPaths, readJsonFile } from "../utils/project.js";
 
 export const generateToolDefinitions: Tool[] = [
@@ -36,7 +36,10 @@ export function generateTools(projectRoot: string) {
     mandu_generate: async (args: Record<string, unknown>) => {
       const { dryRun } = args as { dryRun?: boolean };
 
-      // Load manifest
+      // Regenerate manifest from FS Routes first
+      const fsResult = await generateManifest(projectRoot);
+
+      // Load the freshly generated manifest
       const manifestResult = await loadManifest(paths.manifestPath);
       if (!manifestResult.success || !manifestResult.data) {
         return { error: manifestResult.errors };

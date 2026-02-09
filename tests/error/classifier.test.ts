@@ -117,13 +117,13 @@ describe("Helper Functions", () => {
       const error = createSpecError(
         ErrorCode.SPEC_NOT_FOUND,
         "Spec file not found",
-        "spec/routes.manifest.json",
+        ".mandu/routes.manifest.json",
         "spec 파일을 생성하세요"
       );
 
       expect(error.errorType).toBe("SPEC_ERROR");
       expect(error.code).toBe(ErrorCode.SPEC_NOT_FOUND);
-      expect(error.fix.file).toBe("spec/routes.manifest.json");
+      expect(error.fix.file).toBe(".mandu/routes.manifest.json");
     });
   });
 

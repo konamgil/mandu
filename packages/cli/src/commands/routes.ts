@@ -55,8 +55,7 @@ export async function routesGenerate(options: RoutesGenerateOptions = {}): Promi
   try {
     const generateOptions: GenerateOptions = {
       scanner: config.fsRoutes,
-      outputPath: options.output ?? ".mandu/routes.manifest.json",
-      skipLegacy: true, // 레거시 병합 비활성화
+      outputPath: options.output,
     };
 
     const result = await generateManifest(rootDir, generateOptions);

@@ -36,7 +36,7 @@ export async function check(): Promise<boolean> {
   const quiet = false;
   const strictWarnings = process.env.CI === "true";
   const enableFsRoutes = await isDirectory(path.resolve(rootDir, "app"));
-  const specPath = resolveFromCwd("spec/routes.manifest.json");
+  const specPath = resolveFromCwd(".mandu/routes.manifest.json");
   const hasSpec = await pathExists(specPath);
 
   let success = true;
@@ -71,8 +71,6 @@ export async function check(): Promise<boolean> {
       if (format === "console") {
         const result = await generateManifest(rootDir, {
           scanner: config.fsRoutes,
-          outputPath: ".mandu/routes.manifest.json",
-          skipLegacy: true,
         });
         routesSummary.count = result.manifest.routes.length;
         routesSummary.warnings = result.warnings;
@@ -217,9 +215,9 @@ export async function check(): Promise<boolean> {
     }
   } else {
     if (quiet) {
-      print("ℹ️  spec/routes.manifest.json 없음 - 레거시 Guard 스킵");
+      print("ℹ️  .mandu/routes.manifest.json 없음 - Guard 스킵");
     } else {
-      log("ℹ️  spec/routes.manifest.json 없음 - 레거시 Guard 스킵");
+      log("ℹ️  .mandu/routes.manifest.json 없음 - Guard 스킵");
     }
   }
 

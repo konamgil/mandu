@@ -938,7 +938,7 @@ async function handleRequestInternal(
     message: `Unknown route kind: ${route.kind}`,
     summary: "알 수 없는 라우트 종류 - 프레임워크 버그",
     fix: {
-      file: "spec/routes.manifest.json",
+      file: ".mandu/routes.manifest.json",
       suggestion: "라우트의 kind는 'api' 또는 'page'여야 합니다",
     },
     route: { id: route.id, pattern: route.pattern },

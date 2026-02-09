@@ -6,13 +6,12 @@
  * @module router/fs-routes
  */
 
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
 import type { RoutesManifest, RouteSpec } from "../spec/schema";
 import type { FSRouteConfig, FSScannerConfig, ScanResult } from "./fs-types";
 import { DEFAULT_SCANNER_CONFIG } from "./fs-types";
 import { scanRoutes } from "./fs-scanner";
-import { patternsConflict } from "./fs-patterns";
 import { loadManduConfig } from "../config";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -29,9 +28,6 @@ export interface GenerateResult {
   /** FS Routes에서 생성된 라우트 수 */
   fsRoutesCount: number;
 
-  /** 레거시에서 병합된 라우트 수 */
-  legacyRoutesCount: number;
-
   /** 경고 메시지 */
   warnings: string[];
 }
@@ -45,12 +41,6 @@ export interface GenerateOptions {
 
   /** 출력 파일 경로 (지정 시 파일로 저장) */
   outputPath?: string;
-
-  /** 레거시 매니페스트 경로 오버라이드 */
-  legacyManifestPath?: string;
-
-  /** 레거시 병합 비활성화 */
-  skipLegacy?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -119,84 +109,36 @@ export function scanResultToManifest(scanResult: ScanResult): RoutesManifest {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Legacy Manifest
+// Auto-Linking (spec/slots + spec/contracts → manifest routes)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * 레거시 매니페스트 로드
- */
-async function loadLegacyManifest(
-  rootDir: string,
-  legacyPath: string
-): Promise<RoutesManifest | null> {
-  const fullPath = join(rootDir, legacyPath);
-
-  try {
-    const content = await readFile(fullPath, "utf-8");
-    const manifest = JSON.parse(content) as RoutesManifest;
-    return manifest;
-  } catch {
-    // 파일이 없거나 파싱 실패 시 null
-    return null;
-  }
-}
-
-/**
- * 매니페스트 병합
+ * 매니페스트 라우트에 slot/contract 모듈을 자동 연결
  *
- * 레거시 매니페스트가 우선권을 가짐 (동일 패턴일 경우)
+ * ID 컨벤션 기반: route.id → spec/slots/{id}.slot.ts, spec/contracts/{id}.contract.ts
  */
-export function mergeManifests(
-  fsManifest: RoutesManifest,
-  legacyManifest: RoutesManifest
-): { merged: RoutesManifest; warnings: string[] } {
-  const warnings: string[] = [];
-  const mergedRoutes: RouteSpec[] = [];
+export async function resolveAutoLinks(
+  manifest: RoutesManifest,
+  rootDir: string
+): Promise<void> {
+  await Promise.all(
+    manifest.routes.map(async (route) => {
+      const slotPath = join(rootDir, "spec", "slots", `${route.id}.slot.ts`);
+      const contractPath = join(rootDir, "spec", "contracts", `${route.id}.contract.ts`);
 
-  // 레거시 라우트 먼저 추가 (우선권)
-  const legacyPatterns = new Set<string>();
-  const legacyIds = new Set<string>();
+      const [slotExists, contractExists] = await Promise.all([
+        Bun.file(slotPath).exists(),
+        Bun.file(contractPath).exists(),
+      ]);
 
-  for (const route of legacyManifest.routes) {
-    mergedRoutes.push(route);
-    legacyPatterns.add(route.pattern);
-    legacyIds.add(route.id);
-  }
-
-  // FS Routes 추가 (충돌 체크)
-  for (const route of fsManifest.routes) {
-    // ID 충돌 체크
-    if (legacyIds.has(route.id)) {
-      warnings.push(
-        `Route ID "${route.id}" already exists in legacy manifest. FS Routes version skipped.`
-      );
-      continue;
-    }
-
-    // 패턴 충돌 체크
-    let hasConflict = false;
-    for (const legacyPattern of legacyPatterns) {
-      if (patternsConflict(route.pattern, legacyPattern)) {
-        warnings.push(
-          `Route pattern "${route.pattern}" conflicts with legacy pattern "${legacyPattern}". FS Routes version skipped.`
-        );
-        hasConflict = true;
-        break;
+      if (slotExists) {
+        route.slotModule = `spec/slots/${route.id}.slot.ts`;
       }
-    }
-
-    if (!hasConflict) {
-      mergedRoutes.push(route);
-    }
-  }
-
-  return {
-    merged: {
-      version: Math.max(fsManifest.version, legacyManifest.version),
-      routes: mergedRoutes,
-    },
-    warnings,
-  };
+      if (contractExists) {
+        route.contractModule = `spec/contracts/${route.id}.contract.ts`;
+      }
+    })
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -223,6 +165,10 @@ async function resolveScannerConfig(
 /**
  * FS Routes 기반 매니페스트 생성
  *
+ * app/ 디렉토리를 스캔하여 매니페스트를 생성하고
+ * spec/slots/, spec/contracts/와 자동 연결한 후
+ * .mandu/routes.manifest.json에 저장
+ *
  * @example
  * const result = await generateManifest("/path/to/project");
  * console.log(result.manifest.routes);
@@ -232,10 +178,6 @@ export async function generateManifest(
   options: GenerateOptions = {}
 ): Promise<GenerateResult> {
   const scannerConfig = await resolveScannerConfig(rootDir, options.scanner);
-
-  // 레거시 매니페스트 경로
-  const legacyPath =
-    options.legacyManifestPath ?? scannerConfig.legacyManifestPath ?? "spec/routes.manifest.json";
 
   // FS Routes 스캔
   const scanResult = await scanRoutes(rootDir, scannerConfig);
@@ -247,35 +189,21 @@ export async function generateManifest(
   }
 
   // FS Routes 매니페스트 생성
-  const fsManifest = scanResultToManifest(scanResult);
-
-  let finalManifest = fsManifest;
-  let legacyRoutesCount = 0;
+  const manifest = scanResultToManifest(scanResult);
   const warnings: string[] = [];
 
-  // 레거시 매니페스트 병합
-  if (!options.skipLegacy && scannerConfig.mergeWithLegacy) {
-    const legacyManifest = await loadLegacyManifest(rootDir, legacyPath);
+  // Auto-linking: spec/slots/, spec/contracts/ 자동 연결
+  await resolveAutoLinks(manifest, rootDir);
 
-    if (legacyManifest) {
-      const mergeResult = mergeManifests(fsManifest, legacyManifest);
-      finalManifest = mergeResult.merged;
-      legacyRoutesCount = legacyManifest.routes.length;
-      warnings.push(...mergeResult.warnings);
-    }
-  }
-
-  // 파일로 저장 (옵션)
-  if (options.outputPath) {
-    const outputFullPath = join(rootDir, options.outputPath);
-    await mkdir(dirname(outputFullPath), { recursive: true });
-    await writeFile(outputFullPath, JSON.stringify(finalManifest, null, 2), "utf-8");
-  }
+  // .mandu/ 디렉토리에 매니페스트 저장
+  const outputPath = options.outputPath ?? ".mandu/routes.manifest.json";
+  const outputFullPath = join(rootDir, outputPath);
+  await mkdir(dirname(outputFullPath), { recursive: true });
+  await writeFile(outputFullPath, JSON.stringify(manifest, null, 2), "utf-8");
 
   return {
-    manifest: finalManifest,
+    manifest,
     fsRoutesCount: scanResult.routes.length,
-    legacyRoutesCount,
     warnings,
   };
 }
@@ -323,11 +251,14 @@ export async function watchFSRoutes(
   const scannerConfig = await resolveScannerConfig(rootDir, options.scanner);
 
   const routesDir = join(rootDir, scannerConfig.routesDir);
+  const slotsDir = join(rootDir, "spec", "slots");
+  const contractsDir = join(rootDir, "spec", "contracts");
 
   // chokidar 동적 import
   const chokidar = await import("chokidar");
 
-  const watcher = chokidar.watch(routesDir, {
+  // Watch app/ routes directory
+  const routesWatcher = chokidar.watch(routesDir, {
     ignored: Array.from(
       new Set([
         ...scannerConfig.exclude,
@@ -337,6 +268,13 @@ export async function watchFSRoutes(
         "**/*.spec.*",
       ])
     ),
+    persistent: true,
+    ignoreInitial: true,
+  });
+
+  // Watch spec/slots/ and spec/contracts/ for auto-link refresh
+  const specWatcher = chokidar.watch([slotsDir, contractsDir], {
+    ignored: ["**/node_modules/**"],
     persistent: true,
     ignoreInitial: true,
   });
@@ -360,17 +298,22 @@ export async function watchFSRoutes(
     }, 100);
   };
 
-  // 파일 변경 이벤트 핸들러
-  watcher.on("add", debouncedRescan);
-  watcher.on("unlink", debouncedRescan);
-  watcher.on("change", debouncedRescan);
+  // 파일 변경 이벤트 핸들러 (app/ routes)
+  routesWatcher.on("add", debouncedRescan);
+  routesWatcher.on("unlink", debouncedRescan);
+  routesWatcher.on("change", debouncedRescan);
+
+  // spec/slots/ and spec/contracts/ 변경 시 auto-link refresh
+  specWatcher.on("add", debouncedRescan);
+  specWatcher.on("unlink", debouncedRescan);
 
   return {
     close() {
       if (debounceTimer) {
         clearTimeout(debounceTimer);
       }
-      watcher.close();
+      routesWatcher.close();
+      specWatcher.close();
     },
     async rescan() {
       return triggerRescan();

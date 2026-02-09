@@ -77,7 +77,7 @@ describe("formatErrorForConsole", () => {
     message: "Spec file not found",
     summary: "스펙 파일 없음",
     fix: {
-      file: "spec/routes.manifest.json",
+      file: ".mandu/routes.manifest.json",
       suggestion: "스펙 파일을 생성하세요",
     },
     timestamp: new Date().toISOString(),
@@ -95,7 +95,7 @@ describe("formatErrorForConsole", () => {
     const output = formatErrorForConsole(sampleError);
 
     expect(output).toContain("Fix:");
-    expect(output).toContain("spec/routes.manifest.json");
+    expect(output).toContain(".mandu/routes.manifest.json");
     expect(output).toContain("스펙 파일을 생성하세요");
   });
 
@@ -114,7 +114,7 @@ describe("createNotFoundResponse", () => {
     expect(error.errorType).toBe("SPEC_ERROR");
     expect(error.code).toBe(ErrorCode.SPEC_ROUTE_NOT_FOUND);
     expect(error.message).toContain("/api/unknown");
-    expect(error.fix.file).toBe("spec/routes.manifest.json");
+    expect(error.fix.file).toBe(".mandu/routes.manifest.json");
   });
 
   test("should include route context when provided", () => {

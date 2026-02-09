@@ -3,7 +3,7 @@ import type { ChangeRecord, HistoryConfig } from "./types";
 import { deleteSnapshot, listSnapshotIds } from "./snapshot";
 import { DEFAULT_HISTORY_CONFIG } from "./types";
 
-const SPEC_DIR = "spec";
+const MANDU_DIR = ".mandu";
 const HISTORY_DIR = "history";
 const CHANGES_FILE = "changes.json";
 
@@ -11,7 +11,7 @@ const CHANGES_FILE = "changes.json";
  * Changes 파일 경로
  */
 function getChangesPath(rootDir: string): string {
-  return path.join(rootDir, SPEC_DIR, HISTORY_DIR, CHANGES_FILE);
+  return path.join(rootDir, MANDU_DIR, HISTORY_DIR, CHANGES_FILE);
 }
 
 /**
@@ -43,7 +43,7 @@ export async function getChange(rootDir: string, id: string): Promise<ChangeReco
  */
 async function writeChanges(rootDir: string, changes: ChangeRecord[]): Promise<void> {
   const changesPath = getChangesPath(rootDir);
-  const historyDir = path.join(rootDir, SPEC_DIR, HISTORY_DIR);
+  const historyDir = path.join(rootDir, MANDU_DIR, HISTORY_DIR);
 
   // 디렉토리 확보
   await Bun.write(path.join(historyDir, ".gitkeep"), "");

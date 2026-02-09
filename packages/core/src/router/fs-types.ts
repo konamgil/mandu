@@ -139,12 +139,6 @@ export interface FSScannerConfig {
 
   /** Island 파일 접미사 (기본: ".island") */
   islandSuffix: string;
-
-  /** 레거시 매니페스트 경로 (병합용) */
-  legacyManifestPath?: string;
-
-  /** 레거시 매니페스트와 병합 여부 */
-  mergeWithLegacy: boolean;
 }
 
 /**
@@ -162,8 +156,6 @@ export const DEFAULT_SCANNER_CONFIG: FSScannerConfig = {
     "**/node_modules/**",
   ],
   islandSuffix: ".island",
-  legacyManifestPath: "spec/routes.manifest.json",
-  mergeWithLegacy: true,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

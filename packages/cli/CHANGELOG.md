@@ -1,5 +1,11 @@
 # @mandujs/cli
 
+## 0.13.2
+
+### Patch Changes
+
+- fix: create `.claude.json` alongside `.mcp.json` and use relative `cwd` for MCP setup
+
 ## 0.13.1
 
 ### Patch Changes

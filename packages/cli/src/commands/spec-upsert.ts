@@ -7,9 +7,13 @@ export interface SpecUpsertOptions {
 }
 
 export async function specUpsert(options: SpecUpsertOptions): Promise<boolean> {
+  console.warn("⚠️  DEPRECATED: spec-upsert는 더 이상 필요하지 않습니다.");
+  console.warn("   FS Routes(app/)가 유일한 라우트 소스입니다.");
+  console.warn("   대신 'bunx mandu routes generate'를 사용하세요.\n");
+
   const specPath = options.file
     ? resolveFromCwd(options.file)
-    : resolveFromCwd("spec/routes.manifest.json");
+    : resolveFromCwd(".mandu/routes.manifest.json");
 
   console.log(`🥟 Mandu Spec Upsert`);
   console.log(`📄 Spec 파일: ${specPath}\n`);
@@ -31,7 +35,7 @@ export async function specUpsert(options: SpecUpsertOptions): Promise<boolean> {
     console.log(`   ${kindIcon} ${route.id}: ${route.pattern} (${route.kind})`);
   }
 
-  const lockPath = resolveFromCwd("spec/spec.lock.json");
+  const lockPath = resolveFromCwd(".mandu/spec.lock.json");
   const previousLock = await readLock(lockPath);
   const newLock = await writeLock(lockPath, result.data);
 

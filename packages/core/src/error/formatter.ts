@@ -112,7 +112,7 @@ export function createNotFoundResponse(
     message: `Route not found: ${pathname}`,
     summary: "라우트 없음 - spec 파일에 추가 필요",
     fix: {
-      file: "spec/routes.manifest.json",
+      file: ".mandu/routes.manifest.json",
       suggestion: `'${pathname}' 패턴의 라우트를 추가하세요`,
     },
     route: routeContext,

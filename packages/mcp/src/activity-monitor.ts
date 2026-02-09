@@ -16,7 +16,7 @@ const TOOL_ICONS: Record<string, string> = {
   mandu_add_route: "SPEC+",
   mandu_update_route: "SPEC~",
   mandu_delete_route: "SPEC-",
-  mandu_validate_spec: "SPEC?",
+  mandu_validate_manifest: "SPEC?",
   // Generate
   mandu_generate: "GEN",
   mandu_generate_status: "GEN?",

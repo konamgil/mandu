@@ -95,7 +95,7 @@ export class ErrorClassifier {
       case "spec":
         errorType = "SPEC_ERROR";
         code = ErrorCode.SPEC_VALIDATION_ERROR;
-        fixFile = blameFrame?.file || "spec/routes.manifest.json";
+        fixFile = blameFrame?.file || ".mandu/routes.manifest.json";
         suggestion = "Spec 파일의 JSON 구문 또는 스키마를 확인하세요";
         break;
 
@@ -258,7 +258,7 @@ export class ErrorClassifier {
 export function createSpecError(
   code: ErrorCode,
   message: string,
-  file: string = "spec/routes.manifest.json",
+  file: string = ".mandu/routes.manifest.json",
   suggestion?: string
 ): ManduError {
   return {

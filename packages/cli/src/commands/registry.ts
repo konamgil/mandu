@@ -347,10 +347,10 @@ registerCommand({
   },
 });
 
-// 레거시 명령어
+// 레거시 명령어 (DEPRECATED)
 registerCommand({
   id: "spec-upsert",
-  description: "Spec 파일 검증 및 lock 갱신 (레거시)",
+  description: "[DEPRECATED] Spec 파일 검증 및 lock 갱신 → routes generate 사용",
   async run(ctx) {
     const { specUpsert } = await import("./spec-upsert");
     return specUpsert({ file: ctx.options.file });
@@ -359,7 +359,7 @@ registerCommand({
 
 registerCommand({
   id: "generate",
-  description: "Spec에서 코드 생성 (레거시)",
+  description: "FS Routes 기반 코드 생성",
   async run() {
     const { generateApply } = await import("./generate-apply");
     return generateApply();

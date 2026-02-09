@@ -32,7 +32,7 @@ export function buildGuardReport(checkResult: GuardCheckResult): ManuduReport {
     );
 
     if (hasHashMismatch) {
-      nextActions.push("bunx mandu spec-upsert --file spec/routes.manifest.json");
+      nextActions.push("bunx mandu routes generate");
     }
     if (hasManualEdit) {
       nextActions.push("bunx mandu generate");

@@ -3,17 +3,19 @@ import {
   loadManifest,
   validateManifest,
   writeLock,
+  generateManifest,
   GENERATED_RELATIVE_PATHS,
   type RouteSpec,
   type RoutesManifest,
 } from "@mandujs/core";
 import { getProjectPaths, readJsonFile, writeJsonFile } from "../utils/project.js";
 import path from "path";
+import fs from "fs/promises";
 
 export const specToolDefinitions: Tool[] = [
   {
     name: "mandu_list_routes",
-    description: "List all routes in the current Mandu project",
+    description: "List all routes in the current Mandu project (reads from .mandu/routes.manifest.json)",
     inputSchema: {
       type: "object",
       properties: {},
@@ -36,62 +38,34 @@ export const specToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_add_route",
-    description: "Add a new route to the manifest",
+    description: "Add a new route by scaffolding files in app/ and optionally in spec/slots/ and spec/contracts/",
     inputSchema: {
       type: "object",
       properties: {
-        id: {
+        path: {
           type: "string",
-          description: "Unique route identifier",
-        },
-        pattern: {
-          type: "string",
-          description: "URL pattern (e.g., /api/users/:id)",
+          description: "Route path relative to app/ (e.g., 'api/users' or 'blog/[slug]')",
         },
         kind: {
           type: "string",
           enum: ["api", "page"],
-          description: "Route type: api or page",
+          description: "Route type: api (route.ts) or page (page.tsx)",
         },
-        slotModule: {
-          type: "string",
-          description: "Path to slot file (optional)",
+        withSlot: {
+          type: "boolean",
+          description: "Scaffold a slot file in spec/slots/ (default: true)",
         },
-        componentModule: {
-          type: "string",
-          description: "Path to component module (required for page kind)",
-        },
-      },
-      required: ["id", "pattern", "kind"],
-    },
-  },
-  {
-    name: "mandu_update_route",
-    description: "Update an existing route",
-    inputSchema: {
-      type: "object",
-      properties: {
-        routeId: {
-          type: "string",
-          description: "The route ID to update",
-        },
-        updates: {
-          type: "object",
-          description: "Partial route updates",
-          properties: {
-            pattern: { type: "string" },
-            kind: { type: "string", enum: ["api", "page"] },
-            slotModule: { type: "string" },
-            componentModule: { type: "string" },
-          },
+        withContract: {
+          type: "boolean",
+          description: "Scaffold a contract file in spec/contracts/",
         },
       },
-      required: ["routeId", "updates"],
+      required: ["path", "kind"],
     },
   },
   {
     name: "mandu_delete_route",
-    description: "Delete a route from the manifest",
+    description: "Delete a route's app/ files and rescan (preserves slot/contract files)",
     inputSchema: {
       type: "object",
       properties: {
@@ -104,8 +78,8 @@ export const specToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_validate_spec",
-    description: "Validate the current spec manifest",
+    name: "mandu_validate_manifest",
+    description: "Validate the current routes manifest (.mandu/routes.manifest.json)",
     inputSchema: {
       type: "object",
       properties: {},
@@ -131,6 +105,7 @@ export function specTools(projectRoot: string) {
           pattern: r.pattern,
           kind: r.kind,
           slotModule: r.slotModule,
+          contractModule: r.contractModule,
           componentModule: r.componentModule,
         })),
         count: result.data.routes.length,
@@ -154,157 +129,102 @@ export function specTools(projectRoot: string) {
     },
 
     mandu_add_route: async (args: Record<string, unknown>) => {
-      const { id, pattern, kind, slotModule, componentModule } = args as {
-        id: string;
-        pattern: string;
+      const { path: routePath, kind, withSlot = true, withContract = false } = args as {
+        path: string;
         kind: "api" | "page";
-        slotModule?: string;
-        componentModule?: string;
+        withSlot?: boolean;
+        withContract?: boolean;
       };
 
-      // Load current manifest
-      const result = await loadManifest(paths.manifestPath);
-      if (!result.success || !result.data) {
-        return { error: result.errors };
+      const createdFiles: string[] = [];
+
+      // Scaffold app/ file
+      const fileName = kind === "api" ? "route.ts" : "page.tsx";
+      const appFilePath = path.join(paths.appDir, routePath, fileName);
+      const appFileDir = path.dirname(appFilePath);
+
+      await fs.mkdir(appFileDir, { recursive: true });
+
+      if (kind === "api") {
+        await Bun.write(appFilePath, `export function GET(req: Request) {\n  return Response.json({ message: "Hello" });\n}\n`);
+      } else {
+        await Bun.write(appFilePath, `export default function Page() {\n  return <div>Page</div>;\n}\n`);
+      }
+      createdFiles.push(`app/${routePath}/${fileName}`);
+
+      // Derive route ID from path
+      const routeId = routePath.replace(/\//g, "-").replace(/[\[\]\.]/g, "");
+
+      // Scaffold slot if requested
+      if (withSlot) {
+        const slotPath = path.join(paths.slotsDir, `${routeId}.slot.ts`);
+        await fs.mkdir(paths.slotsDir, { recursive: true });
+        if (!(await Bun.file(slotPath).exists())) {
+          await Bun.write(slotPath, `export default function slot(req: Request) {\n  return {};\n}\n`);
+          createdFiles.push(`spec/slots/${routeId}.slot.ts`);
+        }
       }
 
-      // Check for duplicate
-      if (result.data.routes.some((r) => r.id === id)) {
-        return { error: `Route with id '${id}' already exists` };
+      // Scaffold contract if requested
+      if (withContract) {
+        const contractPath = path.join(paths.contractsDir, `${routeId}.contract.ts`);
+        await fs.mkdir(paths.contractsDir, { recursive: true });
+        if (!(await Bun.file(contractPath).exists())) {
+          await Bun.write(contractPath, `import { z } from "zod";\n\nexport const contract = {\n  request: z.object({}),\n  response: z.object({}),\n};\n`);
+          createdFiles.push(`spec/contracts/${routeId}.contract.ts`);
+        }
       }
 
-      if (result.data.routes.some((r) => r.pattern === pattern)) {
-        return { error: `Route with pattern '${pattern}' already exists` };
-      }
-
-      // Build new route
-      const newRoute: RouteSpec = {
-        id,
-        pattern,
-        kind,
-        module: `${GENERATED_RELATIVE_PATHS.serverRoutes}/${id}.route.ts`,
-        slotModule: slotModule || `spec/slots/${id}.slot.ts`,
-      };
-
-      if (kind === "page") {
-        newRoute.componentModule = componentModule || `${GENERATED_RELATIVE_PATHS.webRoutes}/${id}.route.tsx`;
-      }
-
-      // Validate new route
-      const newManifest: RoutesManifest = {
-        version: result.data.version,
-        routes: [...result.data.routes, newRoute],
-      };
-
-      const validation = validateManifest(newManifest);
-      if (!validation.success) {
-        return { error: validation.errors };
-      }
-
-      // Write updated manifest
-      await writeJsonFile(paths.manifestPath, newManifest);
-
-      // Update lock file
-      await writeLock(paths.lockPath, newManifest);
+      // Rescan to regenerate manifest with auto-linking
+      const genResult = await generateManifest(projectRoot);
 
       return {
         success: true,
-        route: newRoute,
-        message: `Route '${id}' added successfully`,
-      };
-    },
-
-    mandu_update_route: async (args: Record<string, unknown>) => {
-      const { routeId, updates } = args as {
-        routeId: string;
-        updates: Partial<RouteSpec>;
-      };
-
-      // Load current manifest
-      const result = await loadManifest(paths.manifestPath);
-      if (!result.success || !result.data) {
-        return { error: result.errors };
-      }
-
-      // Find route
-      const routeIndex = result.data.routes.findIndex((r) => r.id === routeId);
-      if (routeIndex === -1) {
-        return { error: `Route not found: ${routeId}` };
-      }
-
-      // Apply updates
-      const updatedRoute = {
-        ...result.data.routes[routeIndex],
-        ...updates,
-        id: routeId, // ID cannot be changed
-      };
-
-      const newRoutes = [...result.data.routes];
-      newRoutes[routeIndex] = updatedRoute as RouteSpec;
-
-      // Validate
-      const newManifest: RoutesManifest = {
-        version: result.data.version,
-        routes: newRoutes,
-      };
-
-      const validation = validateManifest(newManifest);
-      if (!validation.success) {
-        return { error: validation.errors };
-      }
-
-      // Write updated manifest
-      await writeJsonFile(paths.manifestPath, newManifest);
-
-      // Update lock file
-      await writeLock(paths.lockPath, newManifest);
-
-      return {
-        success: true,
-        route: updatedRoute,
-        message: `Route '${routeId}' updated successfully`,
+        routeId,
+        createdFiles,
+        totalRoutes: genResult.manifest.routes.length,
+        message: `Route '${routeId}' scaffolded successfully`,
       };
     },
 
     mandu_delete_route: async (args: Record<string, unknown>) => {
       const { routeId } = args as { routeId: string };
 
-      // Load current manifest
+      // Load current manifest to find the route
       const result = await loadManifest(paths.manifestPath);
       if (!result.success || !result.data) {
         return { error: result.errors };
       }
 
-      // Find route
-      const routeIndex = result.data.routes.findIndex((r) => r.id === routeId);
-      if (routeIndex === -1) {
+      const route = result.data.routes.find((r) => r.id === routeId);
+      if (!route) {
         return { error: `Route not found: ${routeId}` };
       }
 
-      const deletedRoute = result.data.routes[routeIndex];
+      // Delete app/ source file (module path points to generated; need to find source)
+      const deletedFiles: string[] = [];
+      if (route.module && route.module.startsWith("app/")) {
+        const fullPath = path.join(projectRoot, route.module);
+        try {
+          await fs.unlink(fullPath);
+          deletedFiles.push(route.module);
+        } catch {}
+      }
 
-      // Remove route
-      const newRoutes = result.data.routes.filter((r) => r.id !== routeId);
-
-      const newManifest: RoutesManifest = {
-        version: result.data.version,
-        routes: newRoutes,
-      };
-
-      // Write updated manifest
-      await writeJsonFile(paths.manifestPath, newManifest);
-
-      // Update lock file
-      await writeLock(paths.lockPath, newManifest);
+      // Rescan manifest (slot/contract files preserved)
+      const genResult = await generateManifest(projectRoot);
 
       return {
         success: true,
-        deletedRoute,
-        message: `Route '${routeId}' deleted successfully`,
+        deletedRoute: route,
+        deletedFiles,
+        preservedFiles: [route.slotModule, route.contractModule].filter(Boolean),
+        totalRoutes: genResult.manifest.routes.length,
+        message: `Route '${routeId}' deleted from app/. Slot/contract files preserved.`,
       };
     },
 
-    mandu_validate_spec: async () => {
+    mandu_validate_manifest: async () => {
       const result = await loadManifest(paths.manifestPath);
       if (!result.success) {
         return {
