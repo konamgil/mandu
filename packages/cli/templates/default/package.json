@@ -15,7 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@mandujs/core": "^0.13.0",
+    "@mandujs/core": "{{CORE_VERSION}}",
     "@radix-ui/react-slot": "^1.1.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
@@ -24,7 +24,7 @@
     "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {
-    "@mandujs/cli": "^0.14.0",
+    "@mandujs/cli": "{{CLI_VERSION}}",
     "@tailwindcss/cli": "^4.1.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

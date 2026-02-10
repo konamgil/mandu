@@ -39,6 +39,8 @@ interface CopyOptions {
   css: CSSFramework;
   ui: UILibrary;
   theme: boolean;
+  coreVersion: string;
+  cliVersion: string;
 }
 
 function shouldSkipFile(relativePath: string, options: CopyOptions): boolean {
@@ -96,6 +98,8 @@ async function copyDir(
       let content = await fs.readFile(srcPath, "utf-8");
       // Replace template variables
       content = content.replace(/\{\{PROJECT_NAME\}\}/g, options.projectName);
+      content = content.replace(/\{\{CORE_VERSION\}\}/g, options.coreVersion);
+      content = content.replace(/\{\{CLI_VERSION\}\}/g, options.cliVersion);
 
       // Add dark mode CSS variables if theme is enabled
       if (options.theme && currentRelativePath === "app/globals.css") {
@@ -145,6 +149,38 @@ function getTemplatesDir(): string {
   return path.resolve(commandsDir, "../../templates");
 }
 
+/**
+ * CLI/Core 패키지 버전을 런타임에 읽어서 ^major.minor.0 형태로 반환
+ * 템플릿 package.json의 {{CORE_VERSION}}, {{CLI_VERSION}} 치환에 사용
+ */
+async function resolvePackageVersions(): Promise<{ coreVersion: string; cliVersion: string }> {
+  const cliPkgPath = path.resolve(import.meta.dir, "../../package.json");
+  const cliPkg = JSON.parse(await fs.readFile(cliPkgPath, "utf-8"));
+  const cliVersion = cliPkg.version ?? "0.0.0";
+
+  // core는 CLI의 node_modules 또는 workspace에서 읽기
+  let coreVersion = cliVersion; // fallback: CLI 버전과 동일
+  try {
+    const corePkgPath = require.resolve("@mandujs/core/package.json", { paths: [path.resolve(import.meta.dir, "../..")] });
+    const corePkg = JSON.parse(await fs.readFile(corePkgPath, "utf-8"));
+    coreVersion = corePkg.version ?? coreVersion;
+  } catch {
+    // workspace 환경: 직접 경로로 시도
+    try {
+      const workspacePath = path.resolve(import.meta.dir, "../../../core/package.json");
+      const corePkg = JSON.parse(await fs.readFile(workspacePath, "utf-8"));
+      coreVersion = corePkg.version ?? coreVersion;
+    } catch {
+      // fallback 유지
+    }
+  }
+
+  return {
+    coreVersion: `^${coreVersion}`,
+    cliVersion: `^${cliVersion}`,
+  };
+}
+
 export async function init(options: InitOptions = {}): Promise<boolean> {
   const projectName = options.name || "my-mandu-app";
   const template = options.template || "default";
@@ -188,11 +224,15 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
 
   console.log(`📋 템플릿 복사 중...`);
 
+  const { coreVersion, cliVersion } = await resolvePackageVersions();
+
   const copyOptions: CopyOptions = {
     projectName,
     css,
     ui,
     theme,
+    coreVersion,
+    cliVersion,
   };
 
   try {

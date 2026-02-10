@@ -11,12 +11,12 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@mandujs/core": "^0.13.0",
+    "@mandujs/core": "{{CORE_VERSION}}",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@mandujs/cli": "^0.14.0",
+    "@mandujs/cli": "{{CLI_VERSION}}",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "typescript": "^5.0.0"
