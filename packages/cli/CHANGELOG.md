@@ -1,5 +1,11 @@
 # @mandujs/cli
 
+## 0.14.1
+
+### Patch Changes
+
+- fix: update template dependency versions to latest (core ^0.13.0, cli ^0.14.0) and remove legacy spec/ directory
+
 ## 0.14.0
 
 ### Minor Changes
