@@ -1,5 +1,11 @@
 # @mandujs/cli
 
+## 0.15.1
+
+### Patch Changes
+
+- fix: resolve workspace:\* to correct core version (0.12.2 → 0.13.0)
+
 ## 0.15.0
 
 ### Minor Changes
