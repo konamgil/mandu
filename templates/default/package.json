@@ -4,20 +4,21 @@
   "type": "module",
   "scripts": {
     "dev": "mandu dev",
+    "build": "mandu build",
+    "start": "mandu start",
     "check": "mandu check",
-    "generate": "mandu generate",
     "guard": "mandu guard",
-    "spec": "mandu spec-upsert"
+    "test": "bun test"
   },
   "dependencies": {
-    "@mandu/core": "^0.1.0",
-    "@mandu/cli": "^0.1.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "@mandujs/core": "^0.13.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
+    "@mandujs/cli": "^0.14.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "typescript": "^5.0.0"
   }
 }
