@@ -72,28 +72,13 @@ app/api/users/route.ts          →   /api/users (API)
 
 ### 2.1 현재 Mandu의 라우팅 방식
 
-현재 Mandu는 **수동 매니페스트 방식**을 사용합니다:
+v0.14.0부터 Mandu는 **FS Routes 기반**을 사용합니다:
 
-```json
-// spec/routes.manifest.json (현재 방식)
-{
-  "routes": [
-    {
-      "id": "home",
-      "pattern": "/",
-      "kind": "page",
-      "componentModule": "src/pages/Home.tsx"
-    },
-    {
-      "id": "blog-detail",
-      "pattern": "/blog/:slug",
-      "kind": "page",
-      "componentModule": "src/pages/BlogDetail.tsx",
-      "clientModule": "spec/slots/blog-detail.client.tsx"
-    }
-  ]
-}
-```
+- `app/` 디렉토리의 파일 구조가 곧 라우트 구조
+- `.mandu/routes.manifest.json`이 `app/` 스캔으로 자동 생성됨
+- `spec/slots/`, `spec/contracts/`는 ID 컨벤션으로 자동 연결 (auto-linking)
+
+> 이전에는 `spec/routes.manifest.json`을 수동으로 편집하는 방식이었으나, v0.14.0에서 제거됨.
 
 ### 2.2 현재 방식의 문제점
 
@@ -278,11 +263,13 @@ my-app/
 │   └── _components/              # 비공개 폴더 (라우트 아님)
 │       └── Button.tsx
 │
-├── spec/                          # 기존 시스템 (레거시 호환)
-│   └── routes.manifest.json
+├── spec/                          # 비즈니스 레이어
+│   ├── slots/                   # 비즈니스 로직 파일
+│   └── contracts/               # 타입 안전 계약
 │
-└── .mandu/
-    └── manifest.json              # 통합 매니페스트 (자동 생성)
+└── .mandu/                        # 생성된 산출물 (자동 관리)
+    ├── routes.manifest.json       # 라우트 매니페스트 (app/ 스캔 결과)
+    └── spec.lock.json             # 해시 검증
 ```
 
 ### 4.3 핵심 결정 사항
@@ -321,17 +308,12 @@ export default {
 
     // Island 접미사 (기본: ".island")
     islandSuffix: ".island",
-
-    // 레거시 manifest와 병합 여부
-    mergeWithLegacy: true,
-
-    // 레거시 manifest 경로
-    legacyManifestPath: "spec/routes.manifest.json",
   },
 };
 ```
 
-> 현재 지원되는 키: `routesDir`, `extensions`, `exclude`, `islandSuffix`, `mergeWithLegacy`, `legacyManifestPath`
+> 현재 지원되는 키: `routesDir`, `extensions`, `exclude`, `islandSuffix`
+> 참고: `mergeWithLegacy`, `legacyManifestPath`는 v0.14.0에서 제거됨 (Option D: app/이 유일한 라우트 소스)
 
 **설정 가능한 아키텍처 패턴:**
 
@@ -656,11 +638,11 @@ Phase 1: 기본 스캐너 (MVP)
 ├── RoutesManifest 생성
 └── 예상: 1-2일
 
-Phase 2: 기존 시스템 통합
-├── spec/routes.manifest.json 병합
-├── mandu routes:generate CLI
-├── loadManifest() 확장
-└── 예상: 1일
+Phase 2: 매니페스트 생성 ✅
+├── .mandu/routes.manifest.json 자동 생성
+├── auto-linking (spec/slots/, spec/contracts/)
+├── mandu routes generate CLI
+└── 완료
 
 Phase 3: 레이아웃 시스템
 ├── layout.tsx 인식
@@ -715,8 +697,8 @@ packages/core/src/router/
     - matchPattern() - URL 매칭
 
 [ ] fs-routes.ts
-    - generateManifest() - RoutesManifest 생성
-    - mergeWithLegacy() - 기존 manifest 병합
+    - generateManifest() - RoutesManifest 생성 (.mandu/routes.manifest.json)
+    - resolveAutoLinks() - spec/slots/, spec/contracts/ 자동 연결
 
 [ ] 테스트
     - tests/router/fs-scanner.test.ts
@@ -727,31 +709,28 @@ packages/core/src/router/
 
 ## 8. 마이그레이션 가이드
 
-### 8.1 점진적 마이그레이션
+### 8.1 현재 아키텍처 (v0.14.0+)
 
-FS Routes는 기존 시스템과 **공존**합니다:
+v0.14.0부터 **`app/` (FS Routes)이 유일한 라우트 소스**입니다:
 
-```
-단계 1: app/ 폴더 생성
-        └── 새 페이지만 FS Routes로 작성
+- 매니페스트(`.mandu/routes.manifest.json`)는 `app/` 스캔으로 **자동 생성**
+- `spec/` 디렉토리는 `slots/`와 `contracts/`만 포함 (비즈니스 레이어)
+- 라우트 ID 컨벤션으로 `spec/slots/{id}.slot.ts`, `spec/contracts/{id}.contract.ts` 자동 연결 (auto-linking)
 
-단계 2: 기존 페이지 점진적 이동
-        └── src/pages/Foo.tsx → app/foo/page.tsx
+### 8.2 기존 프로젝트 마이그레이션
 
-단계 3: (선택) spec/routes.manifest.json 제거
-        └── 모든 라우트가 app/으로 이동 후
-```
-
-### 8.2 라우트 우선순위
-
-동일한 패턴이 두 곳에 정의된 경우:
+기존 `spec/routes.manifest.json` 기반 프로젝트를 마이그레이션하려면:
 
 ```
-1. spec/routes.manifest.json (수동 정의) - 우선
-2. app/ (FS Routes) - 후순위
-```
+단계 1: app/ 폴더에 라우트 파일 재생성
+        └── spec의 라우트를 app/ 파일로 변환
 
-수동 정의가 FS Routes를 오버라이드합니다.
+단계 2: spec/routes.manifest.json 삭제
+        └── .mandu/routes.manifest.json이 자동 생성됨
+
+단계 3: spec/slots/ 및 spec/contracts/ 유지
+        └── auto-linking이 ID 컨벤션으로 자동 연결
+```
 
 ### 8.3 Island 마이그레이션
 

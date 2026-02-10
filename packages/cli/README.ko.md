@@ -72,7 +72,11 @@ my-app/
 │   ├── server/main.ts    # 서버 진입점
 │   └── web/entry.tsx     # 클라이언트 진입점
 ├── spec/
-│   └── routes.manifest.json  # SSOT - 라우트 정의
+│   ├── slots/              # 비즈니스 로직 파일
+│   └── contracts/          # 타입 안전 계약
+├── .mandu/                  # 생성된 산출물 (자동 관리)
+│   ├── routes.manifest.json # 라우트 매니페스트 (자동 생성)
+│   └── spec.lock.json       # 해시 검증
 ├── package.json
 └── tsconfig.json
 ```
@@ -87,12 +91,12 @@ bun run dev
 bunx mandu dev
 ```
 
-### `mandu spec`
+### `mandu routes generate`
 
-spec 파일을 검증하고 lock 파일을 갱신합니다.
+FS Routes(app/)를 스캔하여 매니페스트를 생성합니다.
 
 ```bash
-bun run spec
+bun run generate
 ```
 
 ### `mandu generate`
@@ -149,30 +153,28 @@ bunx mandu contract build
 bunx mandu contract diff
 ```
 
-## Spec 파일 작성
+## FS Routes (라우트 정의)
 
-`spec/routes.manifest.json`이 모든 라우트의 단일 진실 공급원(SSOT)입니다.
+`app/` 디렉토리가 모든 라우트의 단일 진실 공급원(SSOT)입니다. 파일을 생성하면 라우트가 자동으로 정의됩니다.
 
-```json
-{
-  "version": "1.0.0",
-  "routes": [
-    {
-      "id": "getUsers",
-      "pattern": "/api/users",
-      "kind": "api",
-      "module": "apps/server/api/users.ts"
-    },
-    {
-      "id": "homePage",
-      "pattern": "/",
-      "kind": "page",
-      "module": "apps/server/pages/home.ts",
-      "componentModule": "apps/web/pages/Home.tsx"
-    }
-  ]
-}
 ```
+app/
+├── page.tsx              # / (홈 페이지)
+├── about/
+│   └── page.tsx          # /about
+├── api/
+│   └── users/
+│       └── route.ts      # /api/users
+└── blog/
+    └── [slug]/
+        └── page.tsx      # /blog/:slug (동적 라우트)
+```
+
+`bun run generate` 실행 시 `app/` 디렉토리를 스캔하여 `.mandu/routes.manifest.json`을 자동 생성합니다.
+직접 매니페스트를 편집할 필요가 없습니다.
+
+- `spec/slots/` - 개발자가 작성하는 비즈니스 로직
+- `spec/contracts/` - 타입 안전 계약 정의
 
 ### Slot 시스템 (v0.2.0+)
 
@@ -194,20 +196,18 @@ bunx mandu contract diff
 ## 개발 워크플로우
 
 ```bash
-# 1. spec 수정
-# 2. spec 검증 및 lock 갱신
-bun run spec
+# 1. app/ 디렉토리에 라우트 파일 생성/수정
 
-# 3. 코드 생성
+# 2. 코드 생성 (매니페스트 자동 갱신)
 bun run generate
 
-# 4. 아키텍처 검사
+# 3. 아키텍처 검사
 bun run guard
 
-# 5. 테스트
+# 4. 테스트
 bun test
 
-# 6. 개발 서버
+# 5. 개발 서버
 bun run dev
 ```
 
@@ -231,4 +231,4 @@ bun test --watch   # 감시 모드
 
 ## 라이선스
 
-MIT
+MPL-2.0

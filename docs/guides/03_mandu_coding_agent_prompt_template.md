@@ -1,5 +1,10 @@
 # 코딩 에이전트용 프롬프트/지시문 템플릿 (MVP‑0.1)
 
+> **주의**: 이 템플릿은 MVP-0.1 시대의 역사적 문서입니다.
+> v0.14.0부터 `spec/routes.manifest.json`은 `.mandu/routes.manifest.json`으로 이동되었고,
+> `app/` (FS Routes)이 유일한 라우트 소스가 되었습니다.
+> 최신 워크플로우는 `README.ko.md`를 참조하세요.
+
 > 그대로 복붙해서 코딩 에이전트(Claude/Codex/GPT 등)에 던지면 됩니다.
 
 ---

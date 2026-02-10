@@ -47,8 +47,6 @@ Mandu는 프로젝트 설정을 단일 config 파일에서 읽어 CLI와 런타�
 - `extensions`: string[]
 - `exclude`: string[] (glob)
 - `islandSuffix`: string (기본 `".island"`)
-- `mergeWithLegacy`: boolean
-- `legacyManifestPath`: string
 
 ### `seo`
 - `enabled`: boolean
@@ -86,8 +84,6 @@ export default {
     extensions: [".tsx", ".ts"],
     exclude: ["**/*.spec.ts"],
     islandSuffix: ".island",
-    mergeWithLegacy: true,
-    legacyManifestPath: "spec/routes.manifest.json",
   },
   seo: {
     enabled: true,

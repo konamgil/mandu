@@ -72,10 +72,9 @@ bunx @mandujs/mcp --root /path/to/project
 |------|-------------|
 | `mandu_list_routes` | List all routes with details |
 | `mandu_get_route` | Get specific route by ID |
-| `mandu_add_route` | Add new route to manifest |
-| `mandu_update_route` | Modify existing route |
+| `mandu_add_route` | Add new route (scaffolds app/ files) |
 | `mandu_delete_route` | Remove route from manifest |
-| `mandu_validate_spec` | Validate manifest schema |
+| `mandu_validate_manifest` | Validate manifest schema |
 
 ### Code Generation
 
@@ -267,7 +266,7 @@ Agent:
      methods: ["GET", "POST"],
      slotModule: "spec/slots/users.slot.ts"
    })
-   → Adds route to manifest
+   → Adds route to manifest and scaffolds app/ files
 
 4. mandu_generate()
    → Creates route handlers
@@ -355,7 +354,7 @@ The MCP server integrates with Mandu Guard to enforce architecture rules:
 ## Requirements
 
 - Bun >= 1.0.0
-- @mandujs/core >= 0.9.25
+- @mandujs/core >= 0.13.0
 
 ## Related Packages
 
@@ -364,4 +363,4 @@ The MCP server integrates with Mandu Guard to enforce architecture rules:
 
 ## License
 
-MIT
+MPL-2.0

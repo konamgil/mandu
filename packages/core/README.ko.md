@@ -45,7 +45,7 @@ bun add @mandujs/core
 import { loadManifest, RoutesManifest, RouteSpec } from "@mandujs/core";
 
 // manifest 로드 및 검증
-const result = await loadManifest("spec/routes.manifest.json");
+const result = await loadManifest(".mandu/routes.manifest.json");
 
 if (result.success && result.data) {
   const manifest: RoutesManifest = result.data;
@@ -61,11 +61,11 @@ if (result.success && result.data) {
 import { writeLock, readLock } from "@mandujs/core";
 
 // lock 파일 쓰기
-const lock = await writeLock("spec/spec.lock.json", manifest);
+const lock = await writeLock(".mandu/spec.lock.json", manifest);
 console.log(lock.routesHash);
 
 // lock 파일 읽기
-const existing = await readLock("spec/spec.lock.json");
+const existing = await readLock(".mandu/spec.lock.json");
 ```
 
 ## Generator 모듈
@@ -301,4 +301,4 @@ import type {
 
 ## 라이선스
 
-MIT
+MPL-2.0

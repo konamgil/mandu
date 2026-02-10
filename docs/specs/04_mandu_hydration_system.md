@@ -40,7 +40,7 @@ useEffect 실행 안됨 → API 호출 안됨 → 영원히 로딩
 
 ### 1.3 설계 원칙
 
-1. **Spec = SSOT 유지**: Hydration 전략도 JSON에서 선언
+1. **FS Routes = 라우트 소스**: Hydration 전략도 라우트 파일에서 선언
 2. **Slot = Island**: 기존 개념의 자연스러운 확장
 3. **Guard 확장**: 클라이언트 코드도 보호
 4. **Agent-Native**: MCP로 모든 것을 조작 가능
@@ -1579,7 +1579,7 @@ import { resolveFromCwd } from "../util/fs";
 import path from "path";
 
 export async function dev(options: DevOptions = {}): Promise<void> {
-  const specPath = resolveFromCwd("spec/routes.manifest.json");
+  const specPath = resolveFromCwd(".mandu/routes.manifest.json");
   const rootDir = resolveFromCwd(".");
 
   const envResult = await loadEnv({ rootDir, env: "development" });
@@ -1766,7 +1766,7 @@ bun run dev
 
 Mandu Hydration System은 다음을 달성한다:
 
-1. **Spec = SSOT 유지**: Hydration 전략도 JSON에서 선언
+1. **FS Routes = 라우트 소스**: Hydration 전략도 라우트 파일에서 선언
 2. **Slot = Island**: 자연스러운 개념 확장
 3. **Agent-Native**: MCP로 모든 것을 조작 가능
 4. **Guard 확장**: 클라이언트 코드도 보호

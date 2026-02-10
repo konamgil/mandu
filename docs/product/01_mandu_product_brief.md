@@ -60,15 +60,15 @@
 ## 5. SSOT 스펙 체계(버전/락/롤백 포함)
 
 ### 5.1 SSOT 파일(모두 JSON)
-- `spec/routes.manifest.json`
+- `.mandu/routes.manifest.json` (auto-generated from `app/` scanning)
 - `spec/channels.manifest.json` (후속)
 - `spec/contracts/*.contract.ts` (후속)
 - `spec/isr.policy.json` (후속)
 - `spec/plan.json` (후속)
 
 ### 5.2 버전/락/롤백(필수)
-- `spec/spec.lock.json`: 적용된 스펙의 해시/메타
-- `spec/history/snapshots/<id>.snapshot.json`: 커밋 스냅샷(옵션→필수로 확장)
+- `.mandu/spec.lock.json`: 적용된 스펙의 해시/메타
+- `.mandu/history/snapshots/<id>.snapshot.json`: 커밋 스냅샷(옵션→필수로 확장)
 
 ### 5.3 변경 트랜잭션 ✅ (구현 완료)
 - `beginChange()` → (spec 변경/생성) → `runGuardCheck()` + `tests.run()` → `commitChange()`
@@ -203,7 +203,7 @@ await rollbackChange(projectRoot); // 스냅샷으로 완전 복원
 AI 에이전트가 Mandu 프레임워크를 직접 조작하는 MCP 서버:
 
 **도구 (Tools)**:
-- Spec 관리: `mandu_list_routes`, `mandu_add_route`, `mandu_update_route`, `mandu_delete_route`, `mandu_validate_spec`
+- Spec 관리: `mandu_list_routes`, `mandu_add_route`, `mandu_delete_route`, `mandu_validate_manifest`
 - 코드 생성: `mandu_generate`, `mandu_generate_status`
 - 트랜잭션: `mandu_begin`, `mandu_commit`, `mandu_rollback`, `mandu_tx_status`
 - 히스토리: `mandu_list_history`, `mandu_get_snapshot`, `mandu_prune_history`

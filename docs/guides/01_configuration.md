@@ -71,8 +71,6 @@ They can be diffed/hashed independently and (optionally) included in lockfile va
 - `extensions`: string[]
 - `exclude`: string[] (glob patterns)
 - `islandSuffix`: string (default `".island"`)
-- `mergeWithLegacy`: boolean
-- `legacyManifestPath`: string
 
 ### `seo`
 - `enabled`: boolean
@@ -110,8 +108,6 @@ export default {
     extensions: [".tsx", ".ts"],
     exclude: ["**/*.spec.ts"],
     islandSuffix: ".island",
-    mergeWithLegacy: true,
-    legacyManifestPath: "spec/routes.manifest.json",
   },
   seo: {
     enabled: true,

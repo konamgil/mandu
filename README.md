@@ -628,7 +628,7 @@ Mandu includes a full MCP server for AI agent integration.
 
 | Category | Tools |
 |----------|-------|
-| **Spec** | `mandu_list_routes`, `mandu_add_route`, `mandu_update_route`, `mandu_delete_route` |
+| **Routes** | `mandu_list_routes`, `mandu_get_route`, `mandu_add_route`, `mandu_delete_route`, `mandu_validate_manifest` |
 | **Guard** | `mandu_guard_check`, `mandu_guard_heal`, `mandu_explain_rule` |
 | **Decision Memory** | `mandu_search_decisions`, `mandu_save_decision`, `mandu_check_consistency`, `mandu_get_architecture` |
 | **Semantic Slots** | `mandu_validate_slot`, `mandu_validate_slots` |
@@ -826,7 +826,7 @@ Like a dumpling (mandu), the **wrapper (generated code) stays consistent** while
 
 ## License
 
-MIT
+MPL-2.0
 
 ---
 

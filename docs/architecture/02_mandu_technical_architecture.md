@@ -17,6 +17,8 @@
 - Guard가 spec/generated 오염을 차단한다
 - Bun.serve SSR 라우팅이 동작한다
 
+> **Option D 마이그레이션 노트**: `routes.manifest.json`은 이제 `app/` 디렉토리의 FS Routes로부터 자동 생성되는 아티팩트이다. 생성된 매니페스트는 `.mandu/routes.manifest.json`에 저장된다. Spec은 여전히 SSOT 역할을 하지만, 그 원천(source)은 파일시스템 라우트(`app/`)이다.
+
 ### 1.2 컴포넌트
 - **Core** (`@mandujs/core`): runtime(서버/라우터/SSR), spec 스키마/로드/락/트랜잭션, guard, report, map
 - **CLI** (`@mandujs/cli`): init / spec‑upsert / generate / guard / build / dev  
@@ -32,11 +34,14 @@
 
 ```
 repo/
-  spec/
+  app/                             # FS Routes (라우트 원천)
+  .mandu/                          # 생성된 아티팩트 (자동 생성)
     routes.manifest.json
     spec.lock.json
-    slots/                         # 슬롯 파일
     history/                       # 스냅샷 히스토리
+  spec/
+    slots/                         # 슬롯 파일 (비즈니스 레이어)
+    contracts/                     # Contract 정의
   apps/
     server/
       main.ts
@@ -95,7 +100,7 @@ repo/
 ## 3. SSOT 스펙: routes.manifest.json
 
 ### 3.1 최소 스키마
-- manifest: `{ version: number, routes: RouteSpec[] }`
+- manifest (`.mandu/routes.manifest.json`): `{ version: number, routes: RouteSpec[] }`
 - RouteSpec:
   - `id: string` (unique)
   - `pattern: string` (startsWith `/`)
@@ -103,9 +108,9 @@ repo/
   - `module: string` (server handler path)
   - `componentModule?: string` (page일 때 필수)
 
-### 3.2 lock 파일(spec.lock.json)
+### 3.2 lock 파일(`.mandu/spec.lock.json`)
 - `routesHash`(sha256), `updatedAt`(ISO)
-- spec 변경은 `mandu spec-upsert`로만 반영되도록 사용
+- 매니페스트 변경은 `app/` FS Routes 변경 후 자동 반영
 
 ---
 
@@ -177,7 +182,7 @@ CLI는 report를 파일로 출력하고, 콘솔에 요약을 출력한다.
 
 ## 8. CLI 커맨드(사용자 경험)
 
-- `bunx mandu spec-upsert --file spec/routes.manifest.json`
+- `bunx mandu spec-upsert --file .mandu/routes.manifest.json`
 - `bunx mandu generate`
 - `bunx mandu guard`
 - `bunx mandu build`
@@ -241,9 +246,8 @@ packages/mcp/
 | **Spec** | `mandu_list_routes` | 라우트 목록 조회 |
 | | `mandu_get_route` | 특정 라우트 조회 |
 | | `mandu_add_route` | 라우트 추가 |
-| | `mandu_update_route` | 라우트 수정 |
 | | `mandu_delete_route` | 라우트 삭제 |
-| | `mandu_validate_spec` | Spec 유효성 검사 |
+| | `mandu_validate_manifest` | Manifest 유효성 검사 |
 | **Generate** | `mandu_generate` | 코드 생성 |
 | | `mandu_generate_status` | 생성 상태 조회 |
 | **Transaction** | `mandu_begin` | 트랜잭션 시작 (스냅샷 생성) |
@@ -323,7 +327,7 @@ packages/mcp/
 
 | 에러 타입 | 설명 | 수정 위치 |
 |-----------|------|-----------|
-| `SPEC_ERROR` | Spec 정의 문제 | `spec/routes.manifest.json` |
+| `SPEC_ERROR` | Spec 정의 문제 | `.mandu/routes.manifest.json` |
 | `LOGIC_ERROR` | 슬롯 로직 문제 | `spec/slots/{routeId}.slot.ts` |
 | `FRAMEWORK_BUG` | 프레임워크 버그 | 이슈 리포트 |
 

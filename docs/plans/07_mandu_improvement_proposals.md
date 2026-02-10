@@ -772,7 +772,7 @@ export async function runGuardCheck(
   rootDir: string
 ): Promise<GuardCheckResult> {
   const config = await loadManduConfig(rootDir);
-  const lockPath = path.join(rootDir, "spec/spec.lock.json");
+  const lockPath = path.join(rootDir, ".mandu/spec.lock.json");
   const mapPath = path.join(rootDir, "packages/core/map/generated.map.json");
 
   // ============================================
