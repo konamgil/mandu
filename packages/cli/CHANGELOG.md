@@ -1,5 +1,29 @@
 # @mandujs/cli
 
+## 0.15.2
+
+### Patch Changes
+
+- Security and stability improvements
+
+  ## @mandujs/core
+
+  - **Security**: Fix rate limiting DoS vulnerability - prevent single user from blocking all users
+  - **Fix**: Prevent SSE event ordering race condition in subscribeWithSnapshot
+  - **Test**: Add comprehensive SSE stream integration tests
+
+  ## @mandujs/cli
+
+  - **Refactor**: Deduplicate lockfile validation flow in dev/start commands
+  - **Fix**: Remove magic numbers in backup suffix retry logic
+  - **Template**: Add SSE reconnect strategy with exponential backoff
+  - **Template**: Add ARIA labels for accessibility (WCAG 2.1 AA)
+  - **Template**: Improve error feedback in realtime-chat and ai-chat
+  - **Template**: Optimize Date object creation in message rendering
+
+- Updated dependencies []:
+  - @mandujs/core@0.13.1
+
 ## 0.15.1
 
 ### Patch Changes
