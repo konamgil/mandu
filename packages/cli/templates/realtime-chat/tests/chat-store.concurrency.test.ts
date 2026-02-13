@@ -4,7 +4,7 @@ import {
   __setSubscribeCommitHookForTests,
   appendMessage,
   subscribeWithSnapshot,
-} from "../src/server/application/chat-store.ts";
+} from "@/server/application/chat-store";
 
 describe("chat-store concurrency", () => {
   beforeEach(() => {

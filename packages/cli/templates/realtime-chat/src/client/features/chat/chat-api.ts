@@ -66,7 +66,13 @@ export function openChatStream(
   onEvent: (event: ChatStreamEvent) => void,
   streamOptions: ChatStreamOptions = {},
 ): () => void {
-  const options = { ...DEFAULT_STREAM_OPTIONS, ...streamOptions };
+  const options: Required<Omit<ChatStreamOptions, "eventSourceFactory" | "onConnectionStateChange">> = {
+    maxRetries: streamOptions.maxRetries ?? DEFAULT_STREAM_OPTIONS.maxRetries,
+    baseDelayMs: streamOptions.baseDelayMs ?? DEFAULT_STREAM_OPTIONS.baseDelayMs,
+    maxDelayMs: streamOptions.maxDelayMs ?? DEFAULT_STREAM_OPTIONS.maxDelayMs,
+    jitterRatio: streamOptions.jitterRatio ?? DEFAULT_STREAM_OPTIONS.jitterRatio,
+    random: streamOptions.random ?? DEFAULT_STREAM_OPTIONS.random,
+  };
   const createSource = streamOptions.eventSourceFactory ?? ((url: string) => new EventSource(url));
 
   let source: EventSource | null = null;

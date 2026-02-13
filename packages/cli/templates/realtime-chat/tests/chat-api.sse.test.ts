@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { openChatStream } from "../src/client/features/chat/chat-api";
+import { openChatStream } from "@/client/features/chat/chat-api";
+import type { ChatStreamEvent } from "@/shared/contracts/chat";
 
 type MessageEventLike = { data: string };
 
@@ -66,7 +67,7 @@ describe("openChatStream", () => {
   });
 
   it("notifies connection state changes and terminal failure", async () => {
-    const states: string[] = [];
+    const states: Array<"connecting" | "connected" | "reconnecting" | "failed" | "closed"> = [];
     const sources: FakeEventSource[] = [];
 
     const stop = openChatStream(() => {}, {
@@ -127,11 +128,11 @@ describe("openChatStream", () => {
   });
 
   it("forwards valid payload and ignores malformed payload", () => {
-    const events: Array<{ type: string }> = [];
+    const events: ChatStreamEvent[] = [];
     const sources: FakeEventSource[] = [];
 
     const stop = openChatStream((event) => {
-      events.push(event as { type: string });
+      events.push(event);
     }, {
       eventSourceFactory: (url) => {
         const source = new FakeEventSource(url);
