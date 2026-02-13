@@ -8,6 +8,7 @@ Quick links to project docs:
 - `docs/architecture/02_mandu_technical_architecture.md` — Technical architecture (MVP-0.1)
 - `docs/guides/01_configuration.md` — Configuration guide
 - `docs/guides/03_mandu_coding_agent_prompt_template.md` — Coding agent prompt template
+- `docs/guides/05_realtime_chat_starter.md` — Official realtime chat starter template guide
 - `docs/specs/04_mandu_hydration_system.md` — Hydration system spec
 - `docs/specs/05_fs_routes_system.md` — FS Routes system spec
 - `docs/specs/06_mandu_guard.md` — Mandu Guard architecture spec
