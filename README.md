@@ -374,6 +374,10 @@ export default {
     hostname: "localhost",
     cors: false,
     streaming: false,
+    rateLimit: {
+      windowMs: 60_000,
+      max: 100,
+    },
   },
   dev: {
     hmr: true,
@@ -398,6 +402,8 @@ export default {
   },
 };
 ```
+
+`server.rateLimit` applies to API routes only (`client IP + route` key). Exceeded requests return `429` with `X-RateLimit-*` headers.
 
 ---
 

@@ -15,6 +15,15 @@ export interface ManduConfig {
           credentials?: boolean;
         };
     streaming?: boolean;
+    rateLimit?:
+      | boolean
+      | {
+          windowMs?: number;
+          max?: number;
+          message?: string;
+          statusCode?: number;
+          headers?: boolean;
+        };
   };
   guard?: {
     preset?: "mandu" | "fsd" | "clean" | "hexagonal" | "atomic";

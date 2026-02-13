@@ -51,6 +51,18 @@ const ServerConfigSchema = z
       ])
       .default(false),
     streaming: z.boolean().default(false),
+    rateLimit: z
+      .union([
+        z.boolean(),
+        z.object({
+          windowMs: z.number().int().positive().optional(),
+          max: z.number().int().positive().optional(),
+          message: z.string().min(1).optional(),
+          statusCode: z.number().int().min(400).max(599).optional(),
+          headers: z.boolean().optional(),
+        }).strict(),
+      ])
+      .default(false),
   })
   .strict();
 
