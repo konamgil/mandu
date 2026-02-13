@@ -171,6 +171,7 @@ export async function start(options: StartOptions = {}): Promise<void> {
     bundleManifest,
     cors: serverConfig.cors,
     streaming: serverConfig.streaming,
+    rateLimit: serverConfig.rateLimit,
   });
 
   const actualPort = server.server.port ?? port;
