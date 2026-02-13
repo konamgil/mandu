@@ -65,6 +65,32 @@ type Middleware = (ctx: ManduContext, next: () => Promise<void>) =>
 
 ---
 
+## Mandu.sse()
+
+Create a first-class SSE connection helper for realtime routes.
+
+```ts
+const sse = Mandu.sse(request.signal);
+sse.event("ready", { ok: true });
+const stop = sse.heartbeat(15000);
+sse.onClose(() => stop());
+return sse.response;
+```
+
+### SSEConnection
+
+| Method | Description |
+|--------|-------------|
+| `sse.response` | Streaming `Response` with SSE-safe headers |
+| `sse.send(data, options?)` | Send `data:` event payload |
+| `sse.event(name, data, options?)` | Send named event (`event:`) |
+| `sse.comment(text)` | Send SSE comment line (`: text`) |
+| `sse.heartbeat(intervalMs?, comment?)` | Auto-send comment pings |
+| `sse.onClose(handler)` | Register teardown callback |
+| `sse.close()` | Close stream + run cleanup hooks |
+
+---
+
 ## ManduContext
 
 ### Request
@@ -103,6 +129,7 @@ type Middleware = (ctx: ManduContext, next: () => Promise<void>) =>
 | `ctx.text(data, status?)` | Text response |
 | `ctx.html(data, status?)` | HTML response |
 | `ctx.redirect(url, status?)` | Redirect |
+| `ctx.sse(setup?, options?)` | Create SSE response with setup hook |
 
 ### Store
 
