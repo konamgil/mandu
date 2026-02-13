@@ -43,6 +43,14 @@ cd my-app
 bun install
 ```
 
+또는 공식 실시간 채팅 스타터 템플릿으로 시작할 수 있습니다:
+
+```bash
+bunx @mandujs/cli init my-chat --template realtime-chat
+cd my-chat
+bun install
+```
+
 ### 2. 개발 서버 시작
 
 ```bash

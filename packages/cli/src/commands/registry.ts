@@ -70,6 +70,7 @@ registerCommand({
     const { init } = await import("./init");
     return init({
       name: ctx.options.name || ctx.options._positional,
+      template: ctx.options.template,
       css: ctx.options.css as any,
       ui: ctx.options.ui as any,
       theme: ctx.options.theme === "true",

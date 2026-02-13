@@ -10,7 +10,7 @@ export default function HomePage() {
       <header className="space-y-2 text-center">
         <h1 className="text-4xl font-bold">🥟 Mandu Realtime Chat Starter</h1>
         <p className="text-muted-foreground">
-          Minimal full-stack starter with optimistic UI + typing indicator + API route.
+          Minimal full-stack starter with optimistic UI, typing indicator, and SSE streaming API.
         </p>
       </header>
 
