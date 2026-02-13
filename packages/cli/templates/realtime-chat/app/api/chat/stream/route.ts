@@ -29,13 +29,16 @@ export function GET(request: Request): Response {
         };
         controller.enqueue(formatEvent(event));
       });
-      unsubscribe = subscription.unsubscribe;
 
+      // snapshot을 먼저 전송
       const snapshot: ChatStreamEvent = {
         type: "snapshot",
         data: subscription.snapshot,
       };
       controller.enqueue(formatEvent(snapshot));
+
+      // 그 다음 listener 활성화 (이벤트 순서 보장)
+      unsubscribe = subscription.commit();
 
       interval = setInterval(() => {
         const heartbeat: ChatStreamEvent = {

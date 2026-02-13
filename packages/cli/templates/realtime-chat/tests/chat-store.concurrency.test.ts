@@ -28,9 +28,12 @@ describe("chat-store concurrency", () => {
 
     expect(subscription.snapshot.some((message) => message.text === "racing-message")).toBe(true);
 
+    // listener 활성화
+    const unsubscribe = subscription.commit();
+
     appendMessage("assistant", "after-subscribe");
     expect(seen).toContain("after-subscribe");
 
-    subscription.unsubscribe();
+    unsubscribe();
   });
 });
