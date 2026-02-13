@@ -65,6 +65,32 @@ type Middleware = (ctx: ManduContext, next: () => Promise<void>) =>
 
 ---
 
+## Mandu.sse()
+
+실시간 라우트를 위한 1급 SSE 헬퍼를 생성합니다.
+
+```ts
+const sse = Mandu.sse(request.signal);
+sse.event("ready", { ok: true });
+const stop = sse.heartbeat(15000);
+sse.onClose(() => stop());
+return sse.response;
+```
+
+### SSEConnection
+
+| 메서드 | 설명 |
+|--------|------|
+| `sse.response` | SSE 안전 헤더가 적용된 스트리밍 `Response` |
+| `sse.send(data, options?)` | `data:` 이벤트 페이로드 전송 |
+| `sse.event(name, data, options?)` | 이름 있는 이벤트(`event:`) 전송 |
+| `sse.comment(text)` | SSE 코멘트 라인(`: text`) 전송 |
+| `sse.heartbeat(intervalMs?, comment?)` | 코멘트 핑 자동 전송 |
+| `sse.onClose(handler)` | 종료 시 정리 콜백 등록 |
+| `sse.close()` | 스트림 종료 + 정리 훅 실행 |
+
+---
+
 ## ManduContext
 
 ### 요청 정보
@@ -103,6 +129,7 @@ type Middleware = (ctx: ManduContext, next: () => Promise<void>) =>
 | `ctx.text(data, status?)` | 텍스트 응답 |
 | `ctx.html(data, status?)` | HTML 응답 |
 | `ctx.redirect(url, status?)` | 리다이렉트 |
+| `ctx.sse(setup?, options?)` | setup 훅과 함께 SSE 응답 생성 |
 
 ### Store
 

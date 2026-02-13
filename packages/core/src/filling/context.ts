@@ -9,7 +9,8 @@ import type { ZodSchema } from "zod";
 import type { ContractSchema, ContractMethod } from "../contract/schema";
 import type { InferBody, InferHeaders, InferParams, InferQuery, InferResponse } from "../contract/types";
 import { ContractValidator, type ContractValidatorOptions } from "../contract/validator";
-import { type FillingDeps, createDefaultDeps, globalDeps } from "./deps";
+import { type FillingDeps, globalDeps } from "./deps";
+import { createSSEConnection, type SSEOptions, type SSEConnection } from "./sse";
 
 type ContractInput<
   TContract extends ContractSchema,
@@ -529,6 +530,28 @@ export class ManduContext {
   redirect(url: string, status: 301 | 302 | 307 | 308 = 302): Response {
     const response = Response.redirect(url, status);
     return this.withCookies(response);
+  }
+
+  /**
+   * Create a Server-Sent Events (SSE) response.
+   *
+   * @example
+   * return ctx.sse((sse) => {
+   *   sse.event("ready", { ok: true });
+   *   const stop = sse.heartbeat(15000);
+   *   sse.onClose(() => stop());
+   * });
+   */
+  sse(setup?: (connection: SSEConnection) => void | Promise<void>, options: SSEOptions = {}): Response {
+    const connection = createSSEConnection(this.request.signal, options);
+
+    if (setup) {
+      Promise.resolve(setup(connection)).catch(() => {
+        void connection.close();
+      });
+    }
+
+    return this.withCookies(connection.response);
   }
 
   // ============================================

@@ -24,7 +24,7 @@ export * from "./devtools";
 export * from "./paths";
 
 // Consolidated Mandu namespace
-import { ManduFilling, ManduContext, ManduFillingFactory } from "./filling";
+import { ManduFilling, ManduContext, ManduFillingFactory, createSSEConnection } from "./filling";
 import { createContract, defineHandler, defineRoute, createClient, contractFetch, createClientContract } from "./contract";
 import { defineContract, generateAllFromContract, generateOpenAPISpec } from "./contract/define";
 import { island, isIsland, type IslandComponent, type HydrationStrategy } from "./island";
@@ -74,6 +74,11 @@ export const Mandu = {
    * Create a ManduContext from a Request
    */
   context: ManduFillingFactory.context,
+
+  /**
+   * Create a Server-Sent Events (SSE) connection helper
+   */
+  sse: createSSEConnection,
 
   // === Contract API ===
   /**

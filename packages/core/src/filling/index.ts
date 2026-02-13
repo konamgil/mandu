@@ -8,6 +8,8 @@ export { ManduContext, ValidationError, CookieManager } from "./context";
 export type { CookieOptions } from "./context";
 export { ManduFilling, ManduFillingFactory, LoaderTimeoutError } from "./filling";
 export type { Handler, Guard, HttpMethod, Loader, LoaderOptions } from "./filling";
+export { SSEConnection, createSSEConnection } from "./sse";
+export type { SSEOptions, SSESendOptions, SSECleanup } from "./sse";
 
 // Auth Guards
 export {
