@@ -87,10 +87,7 @@ mandu lock --json
 # 기본 검증
 mandu lock --verify
 
-# 특정 모드로 검증
-mandu lock --verify --mode=ci
-
-# CI/CD에서 사용
+# 특정 모드로 검증 (예: CI)
 mandu lock --verify --mode=ci
 ```
 
