@@ -20,39 +20,7 @@ import { serializeProps } from "../client/serialize";
 import type { Metadata, MetadataItem } from "../seo/types";
 import { injectSEOIntoOptions, resolveSEO, type SEOOptions } from "../seo/integration/ssr";
 import { PORTS, TIMEOUTS } from "../constants";
-
-function escapeHtmlAttr(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function escapeJsonForInlineScript(value: string): string {
-  return value
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026")
-    .replace(/'/g, "\\u0027")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-}
-
-function escapeJsString(value: string): string {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r")
-    .replace(/"/g, "\\u0022")
-    .replace(/'/g, "\\u0027")
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-}
+import { escapeHtmlAttr, escapeJsonForInlineScript, escapeJsString } from "./escape";
 
 // ========== Types ==========
 
