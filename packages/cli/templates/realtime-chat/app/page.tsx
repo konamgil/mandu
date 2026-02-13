@@ -2,7 +2,7 @@
  * Realtime Chat Starter Home
  */
 
-import { RealtimeChatStarter } from "@/client/widgets/realtime-chat-starter";
+import { RealtimeChatStarter } from "@/client/widgets/realtime-chat-starter.island";
 
 export default function HomePage() {
   return (

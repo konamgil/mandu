@@ -21,7 +21,7 @@ npm install / yarn install / pnpm install
 
 ## 프로젝트 구조
 
-```
+```text
 ├── app/                  # FS 기반 라우팅 (페이지, API)
 │   ├── page.tsx         # / 라우트
 │   ├── layout.tsx       # 루트 레이아웃
