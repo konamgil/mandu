@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Button, Input } from "@/client/shared/ui";
 import { useRealtimeChat } from "./use-realtime-chat";
 
 export function RealtimeChatStarter() {
@@ -37,20 +38,16 @@ export function RealtimeChatStarter() {
       </div>
 
       <form onSubmit={onSubmit} className="flex gap-2 border-t p-3">
-        <input
+        <Input
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Type your message..."
-          className="flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+          className="flex-1"
           maxLength={500}
         />
-        <button
-          type="submit"
-          disabled={!canSend || text.trim().length === 0}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <Button type="submit" disabled={!canSend || text.trim().length === 0}>
           {sending ? "Sending..." : "Send"}
-        </button>
+        </Button>
       </form>
     </section>
   );
