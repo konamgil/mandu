@@ -1,0 +1,41 @@
+import { afterEach, describe, expect, it } from "bun:test";
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
+import { init, isAllowedTemplate } from "../../src/commands/init";
+
+describe("init command template validation", () => {
+  const cwd = process.cwd();
+  const tempDirs: string[] = [];
+
+  afterEach(async () => {
+    process.chdir(cwd);
+    for (const dir of tempDirs.splice(0)) {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts known template names", () => {
+    expect(isAllowedTemplate("default")).toBe(true);
+    expect(isAllowedTemplate("realtime-chat")).toBe(true);
+  });
+
+  it("rejects unknown template names", () => {
+    expect(isAllowedTemplate("../../etc/passwd")).toBe(false);
+    expect(isAllowedTemplate("custom-template")).toBe(false);
+  });
+
+  it("rejects path traversal template input in init", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mandu-init-test-"));
+    tempDirs.push(dir);
+    process.chdir(dir);
+
+    const ok = await init({
+      name: "sample-app",
+      template: "../default",
+    });
+
+    expect(ok).toBe(false);
+    await expect(fs.access(path.join(dir, "sample-app"))).rejects.toBeDefined();
+  });
+});

@@ -62,6 +62,7 @@ Commands:
 
 Options:
   --name <name>       init 시 프로젝트 이름 (기본: my-mandu-app)
+  --template <name>   init 템플릿: default, realtime-chat (기본: default)
   --css <framework>   init 시 CSS 프레임워크: tailwind, panda, none (기본: tailwind)
   --ui <library>      init 시 UI 라이브러리: shadcn, ark, none (기본: shadcn)
   --theme             init 시 다크모드 테마 시스템 추가
@@ -102,8 +103,9 @@ Notes:
   - 포트 충돌 시 다음 사용 가능한 포트로 자동 변경됩니다.
 
 Examples:
-  bunx mandu init --name my-app          # Tailwind + shadcn/ui 기본
-  bunx mandu init my-app --minimal       # CSS/UI 없이 최소 템플릿
+  bunx mandu init --name my-app                        # Tailwind + shadcn/ui 기본
+  bunx mandu init --name chat-app --template realtime-chat  # 실시간 채팅 스타터 템플릿
+  bunx mandu init my-app --minimal                     # CSS/UI 없이 최소 템플릿
   bunx mandu dev
   bunx mandu build --watch
   bunx mandu guard
