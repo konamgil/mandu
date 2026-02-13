@@ -1,5 +1,6 @@
 import type {
   ChatHistoryResponse,
+  ChatMessage,
   ChatMessagePayload,
   ChatMessageResponse,
   ChatStreamEvent,
@@ -55,11 +56,29 @@ export async function fetchChatHistory(): Promise<ChatHistoryResponse> {
   return response.json() as Promise<ChatHistoryResponse>;
 }
 
+export function mergeChatMessages(base: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const merged = new Map<string, ChatMessage>();
+
+  for (const message of base) {
+    merged.set(message.id, message);
+  }
+
+  for (const message of incoming) {
+    merged.set(message.id, message);
+  }
+
+  return [...merged.values()].sort((a, b) => {
+    const byTime = a.createdAt.localeCompare(b.createdAt);
+    if (byTime !== 0) return byTime;
+    return a.id.localeCompare(b.id);
+  });
+}
+
 function toReconnectDelayMs(attempt: number, options: Required<Omit<ChatStreamOptions, "eventSourceFactory" | "onConnectionStateChange">>): number {
   const exponentialDelay = Math.min(options.maxDelayMs, options.baseDelayMs * 2 ** attempt);
   const jitterRange = exponentialDelay * options.jitterRatio;
   const jitter = (options.random() * 2 - 1) * jitterRange;
-  return Math.max(0, Math.round(exponentialDelay + jitter));
+  return Math.max(0, Math.min(options.maxDelayMs, Math.round(exponentialDelay + jitter)));
 }
 
 export function openChatStream(
@@ -79,6 +98,7 @@ export function openChatStream(
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempts = 0;
   let isDisposed = false;
+  let lastEventId: string | null = null;
 
   const setConnectionState = (state: ChatStreamConnectionState) => {
     streamOptions.onConnectionStateChange?.(state);
@@ -124,6 +144,11 @@ export function openChatStream(
     }, delayMs);
   };
 
+  const toStreamUrl = () => {
+    if (!lastEventId) return `${API_BASE}/stream`;
+    return `${API_BASE}/stream?lastEventId=${encodeURIComponent(lastEventId)}`;
+  };
+
   const connect = () => {
     if (isDisposed) {
       return;
@@ -131,7 +156,7 @@ export function openChatStream(
 
     setConnectionState("connecting");
     closeSource();
-    const currentSource = createSource(`${API_BASE}/stream`);
+    const currentSource = createSource(toStreamUrl());
     source = currentSource;
 
     currentSource.onopen = () => {
@@ -146,6 +171,11 @@ export function openChatStream(
     currentSource.onmessage = (event) => {
       if (source !== currentSource || isDisposed) {
         return;
+      }
+
+      const maybeLastEventId = (event as MessageEvent).lastEventId;
+      if (typeof maybeLastEventId === "string" && maybeLastEventId.trim().length > 0) {
+        lastEventId = maybeLastEventId.trim();
       }
 
       try {

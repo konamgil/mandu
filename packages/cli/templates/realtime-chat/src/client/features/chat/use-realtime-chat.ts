@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessage } from "@/shared/contracts/chat";
 import {
   fetchChatHistory,
+  mergeChatMessages,
   openChatStream,
   sendChatMessage,
   type ChatStreamConnectionState,
@@ -19,7 +20,9 @@ export function useRealtimeChat() {
 
     fetchChatHistory()
       .then((res) => {
-        if (mounted) setMessages(res.messages);
+        if (mounted) {
+          setMessages((prev) => mergeChatMessages(prev, res.messages));
+        }
       })
       .catch(() => {
         // starter template keeps errors simple
@@ -29,11 +32,11 @@ export function useRealtimeChat() {
       if (!mounted) return;
 
       if (event.type === "snapshot" && Array.isArray(event.data)) {
-        setMessages(event.data);
+        setMessages((prev) => mergeChatMessages(prev, event.data));
       }
 
       if (event.type === "message" && !Array.isArray(event.data)) {
-        setMessages((prev) => [...prev, event.data]);
+        setMessages((prev) => mergeChatMessages(prev, [event.data]));
       }
     }, {
       onConnectionStateChange: (state) => {

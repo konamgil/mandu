@@ -23,6 +23,14 @@ describe("sse catch-up primitives", () => {
     expect(result.items.map((m) => m.id)).toEqual(["m2", "m3"]);
   });
 
+  it("falls back to snapshot when cursor is missing", () => {
+    const result = catchupFromCursor({ snapshot });
+
+    expect(result.mode).toBe("snapshot");
+    expect(result.reason).toBe("missing-cursor");
+    expect(result.items.map((m) => m.id)).toEqual(["m1", "m2", "m3"]);
+  });
+
   it("falls back to snapshot when cursor is unknown", () => {
     const result = catchupFromCursor({ cursorId: "missing", snapshot });
 

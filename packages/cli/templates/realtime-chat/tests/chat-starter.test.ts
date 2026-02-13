@@ -133,6 +133,47 @@ describe("realtime chat starter template", () => {
     }
   });
 
+  it("supports catch-up resume from lastEventId without snapshot", async () => {
+    appendMessage("user", "m1");
+    appendMessage("assistant", "m2");
+
+    const request = createTestRequest("http://localhost:3000/api/chat/stream?lastEventId=msg-1");
+    const response = getStream(request);
+
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+
+    const chunk = await reader!.read();
+    expect(chunk.done).toBe(false);
+
+    const text = new TextDecoder().decode(chunk.value);
+    expect(text).toContain("id: msg-2");
+    expect(text).toContain('"type":"message"');
+    expect(text).toContain('"text":"m2"');
+    expect(text).not.toContain('"type":"snapshot"');
+
+    await reader!.cancel();
+  });
+
+  it("falls back to snapshot when lastEventId is out of catch-up range", async () => {
+    appendMessage("user", "hello");
+
+    const request = createTestRequest("http://localhost:3000/api/chat/stream?lastEventId=msg-9999");
+    const response = getStream(request);
+
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+
+    const chunk = await reader!.read();
+    expect(chunk.done).toBe(false);
+
+    const text = new TextDecoder().decode(chunk.value);
+    expect(text).toContain('"type":"snapshot"');
+    expect(text).toContain('"text":"hello"');
+
+    await reader!.cancel();
+  });
+
   it("includes essential ARIA attributes in chat UI", async () => {
     const source = await Bun.file(
       new URL("../src/client/features/chat/realtime-chat-starter.client.tsx", import.meta.url),
