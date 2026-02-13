@@ -272,6 +272,9 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   console.log(`   cd ${projectName}`);
   console.log(`   bun install`);
   console.log(`   bun run dev`);
+  console.log(`\n💡 CLI 실행 참고 (환경별):`);
+  console.log(`   bun run dev        # 권장 (로컬 스크립트)`);
+  console.log(`   bunx mandu dev     # PATH에 mandu가 없을 때 대안`);
   console.log(`\n📂 파일 구조:`);
   console.log(`   app/layout.tsx    → 루트 레이아웃`);
   console.log(`   app/page.tsx      → http://localhost:3000/`);
