@@ -25,7 +25,9 @@ interface ChatStreamOptions {
   onConnectionStateChange?: (state: ChatStreamConnectionState) => void;
 }
 
-const DEFAULT_STREAM_OPTIONS: Required<Omit<ChatStreamOptions, "eventSourceFactory" | "onConnectionStateChange">> = {
+type ReconnectOptions = Required<Omit<ChatStreamOptions, "eventSourceFactory" | "onConnectionStateChange">>;
+
+const DEFAULT_STREAM_OPTIONS: ReconnectOptions = {
   maxRetries: 8,
   baseDelayMs: 500,
   maxDelayMs: 10_000,
@@ -74,7 +76,7 @@ export function mergeChatMessages(base: ChatMessage[], incoming: ChatMessage[]):
   });
 }
 
-function toReconnectDelayMs(attempt: number, options: Required<Omit<ChatStreamOptions, "eventSourceFactory" | "onConnectionStateChange">>): number {
+function toReconnectDelayMs(attempt: number, options: ReconnectOptions): number {
   const exponentialDelay = Math.min(options.maxDelayMs, options.baseDelayMs * 2 ** attempt);
   const jitterRange = exponentialDelay * options.jitterRatio;
   const jitter = (options.random() * 2 - 1) * jitterRange;
@@ -85,7 +87,7 @@ export function openChatStream(
   onEvent: (event: ChatStreamEvent) => void,
   streamOptions: ChatStreamOptions = {},
 ): () => void {
-  const options: Required<Omit<ChatStreamOptions, "eventSourceFactory" | "onConnectionStateChange">> = {
+  const options: ReconnectOptions = {
     maxRetries: streamOptions.maxRetries ?? DEFAULT_STREAM_OPTIONS.maxRetries,
     baseDelayMs: streamOptions.baseDelayMs ?? DEFAULT_STREAM_OPTIONS.baseDelayMs,
     maxDelayMs: streamOptions.maxDelayMs ?? DEFAULT_STREAM_OPTIONS.maxDelayMs,

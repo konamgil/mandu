@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessage } from "@/shared/contracts/chat";
 import {
-  fetchChatHistory,
   mergeChatMessages,
   openChatStream,
   sendChatMessage,
@@ -18,21 +17,11 @@ export function useRealtimeChat() {
   useEffect(() => {
     let mounted = true;
 
-    fetchChatHistory()
-      .then((res) => {
-        if (mounted) {
-          setMessages((prev) => mergeChatMessages(prev, res.messages));
-        }
-      })
-      .catch(() => {
-        // starter template keeps errors simple
-      });
-
     const close = openChatStream((event) => {
       if (!mounted) return;
 
       if (event.type === "snapshot" && Array.isArray(event.data)) {
-        setMessages((prev) => mergeChatMessages(prev, event.data));
+        setMessages(event.data);
       }
 
       if (event.type === "message" && !Array.isArray(event.data)) {
