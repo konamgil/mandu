@@ -19,6 +19,21 @@ export interface InitOptions {
   minimal?: boolean;
 }
 
+const ALLOWED_TEMPLATES = ["default", "realtime-chat"] as const;
+type AllowedTemplate = (typeof ALLOWED_TEMPLATES)[number];
+
+export function isAllowedTemplate(template: string): template is AllowedTemplate {
+  return (ALLOWED_TEMPLATES as readonly string[]).includes(template);
+}
+
+function resolveTemplateName(template: string): AllowedTemplate | null {
+  const normalized = path.posix.normalize(template.replace(/\\/g, "/")).trim();
+  if (!normalized || normalized.includes("..") || normalized.startsWith("/")) {
+    return null;
+  }
+  return isAllowedTemplate(normalized) ? normalized : null;
+}
+
 // Files to skip based on CSS/UI options
 const CSS_FILES = [
   "tailwind.config.ts",
@@ -183,8 +198,15 @@ async function resolvePackageVersions(): Promise<{ coreVersion: string; cliVersi
 
 export async function init(options: InitOptions = {}): Promise<boolean> {
   const projectName = options.name || "my-mandu-app";
-  const template = options.template || "default";
+  const requestedTemplate = options.template || "default";
+  const template = resolveTemplateName(requestedTemplate);
   const targetDir = path.resolve(process.cwd(), projectName);
+
+  if (!template) {
+    printCLIError(CLI_ERROR_CODES.INIT_TEMPLATE_NOT_FOUND, { template: requestedTemplate });
+    console.error(`   사용 가능한 템플릿: ${ALLOWED_TEMPLATES.join(", ")}`);
+    return false;
+  }
 
   // Handle minimal flag (shortcut for --css none --ui none)
   const css: CSSFramework = options.minimal ? "none" : (options.css || "tailwind");
@@ -218,7 +240,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     await fs.access(templateDir);
   } catch {
     printCLIError(CLI_ERROR_CODES.INIT_TEMPLATE_NOT_FOUND, { template });
-    console.error(`   사용 가능한 템플릿: default, realtime-chat`);
+    console.error(`   사용 가능한 템플릿: ${ALLOWED_TEMPLATES.join(", ")}`);
     return false;
   }
 
