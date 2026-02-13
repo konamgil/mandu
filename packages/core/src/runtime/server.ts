@@ -1314,3 +1314,58 @@ export const apiHandlers = defaultRegistry.apiHandlers;
 export const pageLoaders = defaultRegistry.pageLoaders;
 export const pageHandlers = defaultRegistry.pageHandlers;
 export const routeComponents = defaultRegistry.routeComponents;
+
+// ========== Rate Limiting Public API ==========
+
+/**
+ * Rate limiter 인스턴스 생성
+ * API 핸들러에서 직접 사용 가능
+ *
+ * @example
+ * ```typescript
+ * import { createRateLimiter } from '@mandujs/core/runtime/server';
+ *
+ * const limiter = createRateLimiter({ max: 5, windowMs: 60000 });
+ *
+ * export async function POST(req: Request) {
+ *   const decision = limiter.check(req, 'my-api-route');
+ *   if (!decision.allowed) {
+ *     return limiter.createResponse(decision);
+ *   }
+ *   // ... 정상 로직
+ * }
+ * ```
+ */
+export function createRateLimiter(options?: RateLimitOptions) {
+  const normalized = normalizeRateLimitOptions(options || true);
+  if (!normalized) {
+    throw new Error('Rate limiter options cannot be false');
+  }
+
+  const limiter = new MemoryRateLimiter();
+
+  return {
+    /**
+     * Rate limit 체크
+     * @param req Request 객체 (IP 추출용)
+     * @param routeId 라우트 식별자 (동일 IP라도 라우트별로 독립적인 limit)
+     */
+    check(req: Request, routeId: string): RateLimitDecision {
+      return limiter.consume(req, routeId, normalized);
+    },
+
+    /**
+     * Rate limit 초과 시 429 응답 생성
+     */
+    createResponse(decision: RateLimitDecision): Response {
+      return createRateLimitResponse(decision, normalized);
+    },
+
+    /**
+     * 정상 응답에 Rate limit 헤더 추가
+     */
+    addHeaders(response: Response, decision: RateLimitDecision): Response {
+      return appendRateLimitHeaders(response, decision, normalized);
+    },
+  };
+}

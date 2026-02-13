@@ -15,12 +15,6 @@ import {
   validateAndReport,
   isTailwindProject,
   startCSSWatch,
-  readLockfile,
-  readMcpConfig,
-  validateWithPolicy,
-  detectMode,
-  formatPolicyAction,
-  formatValidationResult,
   type RoutesManifest,
   type GuardConfig,
   type Violation,
@@ -32,6 +26,11 @@ import { CLI_ERROR_CODES, printCLIError } from "../errors";
 import { importFresh } from "../util/bun";
 import { resolveManifest } from "../util/manifest";
 import { resolveAvailablePort } from "../util/port";
+import {
+  validateRuntimeLockfile,
+  handleBlockedLockfile,
+  printRuntimeLockfileStatus,
+} from "../util/lockfile";
 import { registerManifestHandlers } from "../util/handlers";
 import path from "path";
 
@@ -49,37 +48,8 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   }
 
   // Lockfile 검증 (설정 무결성)
-  const lockfile = await readLockfile(rootDir);
-  let mcpConfig: Record<string, unknown> | null = null;
-  try {
-    mcpConfig = await readMcpConfig(rootDir);
-  } catch (error) {
-    console.warn(
-      `⚠️  MCP 설정 로드 실패: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-  const { result: lockResult, action, bypassed } = validateWithPolicy(
-    config,
-    lockfile,
-    detectMode(),
-    mcpConfig
-  );
-
-  if (action === "block") {
-    console.error("🛑 서버 시작 차단: Lockfile 불일치");
-    console.error("   설정이 변경되었습니다. 의도한 변경이라면 아래 중 하나를 실행하세요:");
-    console.error("   $ mandu lock");
-    console.error("   $ bunx mandu lock");
-    console.error("");
-    console.error("   변경 사항 확인:");
-    console.error("   $ mandu lock --diff");
-    console.error("   $ bunx mandu lock --diff");
-    if (lockResult) {
-      console.error("");
-      console.error(formatValidationResult(lockResult));
-    }
-    process.exit(1);
-  }
+  const { lockfile, lockResult, action, bypassed } = await validateRuntimeLockfile(config, rootDir);
+  handleBlockedLockfile(action, lockResult);
 
   const serverConfig = config.server ?? {};
   const devConfig = config.dev ?? {};
@@ -89,15 +59,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   console.log(`🥟 Mandu Dev Server`);
 
   // Lockfile 상태 출력
-  if (action === "warn") {
-    console.log(`⚠️  ${formatPolicyAction(action, bypassed)}`);
-    console.log(`   ↳ lock 갱신: mandu lock  (or bunx mandu lock)`);
-    console.log(`   ↳ 변경 확인: mandu lock --diff  (or bunx mandu lock --diff)`);
-  } else if (lockfile && lockResult?.valid) {
-    console.log(`🔒 설정 무결성 확인됨 (${lockResult.currentHash?.slice(0, 8)})`);
-  } else if (!lockfile) {
-    console.log(`💡 Lockfile 없음 - 'mandu lock' 또는 'bunx mandu lock'으로 생성 권장`);
-  }
+  printRuntimeLockfileStatus(action, bypassed, lockfile, lockResult);
 
   // .env 파일 로드
   const envResult = await loadEnv({

@@ -1,13 +1,22 @@
 import { getMessages, subscribe } from "@/server/application/chat-store";
 import type { ChatMessage, ChatStreamEvent } from "@/shared/contracts/chat";
+import { createRateLimiter } from "@mandujs/core/runtime/server";
 
 const encoder = new TextEncoder();
+
+// Rate limiter: 1분당 5개 연결로 제한 (SSE는 장시간 유지되므로 보수적으로 설정)
+const limiter = createRateLimiter({ max: 5, windowMs: 60000 });
 
 function formatEvent(event: ChatStreamEvent): Uint8Array {
   return encoder.encode(`data: ${JSON.stringify(event)}\n\n`);
 }
 
-export function GET(): Response {
+export function GET(request: Request): Response {
+  // Rate limiting 체크
+  const decision = limiter.check(request, "chat-stream");
+  if (!decision.allowed) {
+    return limiter.createResponse(decision);
+  }
   let interval: ReturnType<typeof setInterval> | undefined;
   let unsubscribe: (() => void) | undefined;
 

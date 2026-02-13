@@ -5,13 +5,30 @@ import {
   type ChatHistoryResponse,
   type ChatMessageResponse,
 } from "@/shared/contracts/chat";
+import { createRateLimiter } from "@mandujs/core/runtime/server";
 
-export function GET(): Response {
+// Rate limiter: 1분당 10개 메시지로 제한
+const limiter = createRateLimiter({ max: 10, windowMs: 60000 });
+
+export function GET(request: Request): Response {
+  // GET 요청은 제한을 느슨하게 (1분당 30회)
+  const getDecision = createRateLimiter({ max: 30, windowMs: 60000 }).check(request, "chat-messages-get");
+  if (!getDecision.allowed) {
+    return limiter.createResponse(getDecision);
+  }
+
   const body: ChatHistoryResponse = { messages: getMessages() };
-  return Response.json(body);
+  const response = Response.json(body);
+  return limiter.addHeaders(response, getDecision);
 }
 
 export async function POST(request: Request): Promise<Response> {
+  // Rate limiting 체크
+  const decision = limiter.check(request, "chat-messages-post");
+  if (!decision.allowed) {
+    return limiter.createResponse(decision);
+  }
+
   let payload: unknown;
 
   try {
@@ -41,5 +58,6 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const body: ChatMessageResponse = { message: user };
-  return Response.json(body, { status: 201 });
+  const response = Response.json(body, { status: 201 });
+  return limiter.addHeaders(response, decision);
 }
