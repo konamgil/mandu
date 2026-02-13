@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import {
   startServer,
   createServerRegistry,
+  createRateLimiter,
   type ManduServer,
   type ServerRegistry,
 } from "../../src/runtime/server";
@@ -74,5 +75,74 @@ describe("Server Rate Limit", () => {
     expect(limited1.status).toBe(200);
     expect(limited2.status).toBe(429);
     expect(other1.status).toBe(200);
+  });
+});
+
+describe("createRateLimiter API", () => {
+  it("수동 rate limiter를 생성하고 사용할 수 있다", () => {
+    const limiter = createRateLimiter({ max: 3, windowMs: 5000 });
+
+    const req = new Request("http://localhost/test");
+    const decision1 = limiter.check(req, "test-route");
+    const decision2 = limiter.check(req, "test-route");
+    const decision3 = limiter.check(req, "test-route");
+    const decision4 = limiter.check(req, "test-route");
+
+    expect(decision1.allowed).toBe(true);
+    expect(decision1.remaining).toBe(2);
+
+    expect(decision2.allowed).toBe(true);
+    expect(decision2.remaining).toBe(1);
+
+    expect(decision3.allowed).toBe(true);
+    expect(decision3.remaining).toBe(0);
+
+    expect(decision4.allowed).toBe(false);
+    expect(decision4.remaining).toBe(0);
+  });
+
+  it("429 응답을 생성할 수 있다", () => {
+    const limiter = createRateLimiter({ max: 1, windowMs: 5000, message: "Custom message" });
+
+    const req = new Request("http://localhost/test");
+    limiter.check(req, "test-route"); // 첫 번째 허용
+    const decision = limiter.check(req, "test-route"); // 두 번째 거부
+
+    const response = limiter.createResponse(decision);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("X-RateLimit-Limit")).toBe("1");
+    expect(response.headers.get("Retry-After")).toBeDefined();
+  });
+
+  it("정상 응답에 rate limit 헤더를 추가할 수 있다", () => {
+    const limiter = createRateLimiter({ max: 10, windowMs: 60000 });
+
+    const req = new Request("http://localhost/test");
+    const decision = limiter.check(req, "test-route");
+
+    const originalResponse = Response.json({ data: "ok" });
+    const responseWithHeaders = limiter.addHeaders(originalResponse, decision);
+
+    expect(responseWithHeaders.headers.get("X-RateLimit-Limit")).toBe("10");
+    expect(responseWithHeaders.headers.get("X-RateLimit-Remaining")).toBe("9");
+    expect(responseWithHeaders.headers.get("X-RateLimit-Reset")).toBeDefined();
+  });
+
+  it("라우트별로 독립적인 카운터를 유지한다", () => {
+    const limiter = createRateLimiter({ max: 2, windowMs: 5000 });
+
+    const req = new Request("http://localhost/test");
+
+    // route-a에 2번 요청
+    limiter.check(req, "route-a");
+    limiter.check(req, "route-a");
+    const decisionA3 = limiter.check(req, "route-a");
+
+    // route-b에 1번 요청
+    const decisionB1 = limiter.check(req, "route-b");
+
+    expect(decisionA3.allowed).toBe(false); // route-a는 초과
+    expect(decisionB1.allowed).toBe(true);  // route-b는 여유 있음
   });
 });
