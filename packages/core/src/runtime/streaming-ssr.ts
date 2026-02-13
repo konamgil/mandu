@@ -21,6 +21,39 @@ import type { Metadata, MetadataItem } from "../seo/types";
 import { injectSEOIntoOptions, resolveSEO, type SEOOptions } from "../seo/integration/ssr";
 import { PORTS, TIMEOUTS } from "../constants";
 
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeJsonForInlineScript(value: string): string {
+  return value
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/'/g, "\\u0027")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+function escapeJsString(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/"/g, "\\u0022")
+    .replace(/'/g, "\\u0027")
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 // ========== Types ==========
 
 /**
@@ -257,18 +290,13 @@ function warnStreamingCaveats(isDev: boolean): void {
  * Shell 이후 에러는 이 방식으로 클라이언트에 전달
  */
 function generateErrorScript(error: Error, routeId: string): string {
-  const safeMessage = error.message
-    .replace(/\\/g, "\\\\")      // 백슬래시 먼저 (다른 이스케이프에 영향)
-    .replace(/\n/g, "\\n")       // 줄바꿈
-    .replace(/\r/g, "\\r")       // 캐리지 리턴
-    .replace(/</g, "\\u003c")    // XSS 방지
-    .replace(/>/g, "\\u003e")
-    .replace(/"/g, "\\u0022");
+  const safeMessage = escapeJsString(error.message);
+  const safeRouteId = escapeJsString(routeId);
 
   return `<script>
 (function() {
   window.__MANDU_STREAMING_ERROR__ = {
-    routeId: "${routeId}",
+    routeId: "${safeRouteId}",
     message: "${safeMessage}",
     timestamp: ${Date.now()}
   };
@@ -377,13 +405,13 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   // - cssPath가 string이면 해당 경로 사용
   // - cssPath가 false 또는 undefined이면 링크 미삽입 (404 방지)
   const cssLinkTag = cssPath && cssPath !== false
-    ? `<link rel="stylesheet" href="${cssPath}${isDev ? `?t=${Date.now()}` : ""}">`
+    ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
 
   // Import map (module scripts 전에 위치해야 함)
   let importMapScript = "";
   if (bundleManifest?.importMap && Object.keys(bundleManifest.importMap.imports).length > 0) {
-    const importMapJson = JSON.stringify(bundleManifest.importMap, null, 2);
+    const importMapJson = escapeJsonForInlineScript(JSON.stringify(bundleManifest.importMap, null, 2));
     importMapScript = `<script type="importmap">${importMapJson}</script>`;
   }
 
@@ -415,16 +443,16 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     const bundle = bundleManifest.bundles[routeId];
     const bundleSrc = bundle?.js || "";
     const priority = hydration.priority || "visible";
-    islandOpenTag = `<div data-mandu-island="${routeId}" data-mandu-src="${bundleSrc}" data-mandu-priority="${priority}">`;
+    islandOpenTag = `<div data-mandu-island="${escapeHtmlAttr(routeId)}" data-mandu-src="${escapeHtmlAttr(bundleSrc)}" data-mandu-priority="${escapeHtmlAttr(priority)}">`;
   }
 
   // Import map은 module 스크립트보다 먼저 정의되어야 bare specifier 해석 가능
   return `<!DOCTYPE html>
-<html lang="${lang}">
+<html lang="${escapeHtmlAttr(lang)}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
+  <title>${escapeHtmlAttr(title)}</title>
   ${cssLinkTag}
   ${loadingStyles}
   ${importMapScript}
@@ -461,10 +489,7 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
         streaming: true,
       },
     };
-    const json = serializeProps(wrappedData)
-      .replace(/</g, "\\u003c")
-      .replace(/>/g, "\\u003e")
-      .replace(/&/g, "\\u0026");
+    const json = escapeJsonForInlineScript(serializeProps(wrappedData));
     scripts.push(`<script id="__MANDU_DATA__" type="application/json">${json}</script>`);
     scripts.push(`<script>window.__MANDU_DATA_RAW__ = document.getElementById('__MANDU_DATA__').textContent;</script>`);
   }
@@ -477,9 +502,7 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
       params: {},
       streaming: true,
     };
-    const json = JSON.stringify(routeInfo)
-      .replace(/</g, "\\u003c")
-      .replace(/>/g, "\\u003e");
+    const json = escapeJsonForInlineScript(JSON.stringify(routeInfo));
     scripts.push(`<script>window.__MANDU_ROUTE__ = ${json};</script>`);
   }
 
@@ -488,39 +511,39 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
 
   // 4. Vendor modulepreload (React, ReactDOM 등 - 캐시 효율 극대화)
   if (bundleManifest?.shared.vendor) {
-    scripts.push(`<link rel="modulepreload" href="${bundleManifest.shared.vendor}">`);
+    scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(bundleManifest.shared.vendor)}">`);
   }
   if (bundleManifest?.importMap?.imports) {
     const imports = bundleManifest.importMap.imports;
     if (imports["react-dom"] && imports["react-dom"] !== bundleManifest.shared.vendor) {
-      scripts.push(`<link rel="modulepreload" href="${imports["react-dom"]}">`);
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(imports["react-dom"])}">`);
     }
     if (imports["react-dom/client"]) {
-      scripts.push(`<link rel="modulepreload" href="${imports["react-dom/client"]}">`);
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(imports["react-dom/client"])}">`);
     }
   }
 
   // 5. Runtime modulepreload (hydration 실행 전 미리 로드)
   if (bundleManifest?.shared.runtime) {
-    scripts.push(`<link rel="modulepreload" href="${bundleManifest.shared.runtime}">`);
+    scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(bundleManifest.shared.runtime)}">`);
   }
 
   // 6. Island modulepreload
   if (bundleManifest && routeId) {
     const bundle = bundleManifest.bundles[routeId];
     if (bundle) {
-      scripts.push(`<link rel="modulepreload" href="${bundle.js}">`);
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(bundle.js)}">`);
     }
   }
 
   // 7. Runtime 로드
   if (bundleManifest?.shared.runtime) {
-    scripts.push(`<script type="module" src="${bundleManifest.shared.runtime}"></script>`);
+    scripts.push(`<script type="module" src="${escapeHtmlAttr(bundleManifest.shared.runtime)}"></script>`);
   }
 
   // 8. Router 스크립트
   if (enableClientRouter && bundleManifest?.shared?.router) {
-    scripts.push(`<script type="module" src="${bundleManifest.shared.router}"></script>`);
+    scripts.push(`<script type="module" src="${escapeHtmlAttr(bundleManifest.shared.router)}"></script>`);
   }
 
   // 9. HMR 스크립트 (개발 모드)
@@ -559,16 +582,16 @@ function generateHTMLTail(options: StreamingSSROptions): string {
  * Streaming 중에 데이터 도착 시 DOM에 주입
  */
 function generateDeferredDataScript(routeId: string, key: string, data: unknown): string {
-  const json = serializeProps({ [key]: data })
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e");
+  const json = escapeJsonForInlineScript(serializeProps({ [key]: data }));
+  const safeRouteId = escapeJsString(routeId);
+  const safeKey = escapeJsString(key);
 
   return `<script>
 (function() {
   window.__MANDU_DEFERRED__ = window.__MANDU_DEFERRED__ || {};
-  window.__MANDU_DEFERRED__["${routeId}"] = window.__MANDU_DEFERRED__["${routeId}"] || {};
-  Object.assign(window.__MANDU_DEFERRED__["${routeId}"], ${json});
-  window.dispatchEvent(new CustomEvent('mandu:deferred-data', { detail: { routeId: "${routeId}", key: "${key}" } }));
+  window.__MANDU_DEFERRED__["${safeRouteId}"] = window.__MANDU_DEFERRED__["${safeRouteId}"] || {};
+  Object.assign(window.__MANDU_DEFERRED__["${safeRouteId}"], ${json});
+  window.dispatchEvent(new CustomEvent('mandu:deferred-data', { detail: { routeId: "${safeRouteId}", key: "${safeKey}" } }));
 })();
 </script>`;
 }
