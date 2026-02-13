@@ -76,6 +76,30 @@ describe("Server Rate Limit", () => {
     expect(limited2.status).toBe(429);
     expect(other1.status).toBe(200);
   });
+
+  it("동시 요청에서도 제한 개수를 초과하지 않는다", async () => {
+    registry.registerApiHandler("api/limited", async () => {
+      await new Promise((resolve) => setTimeout(resolve, Math.floor(Math.random() * 20)));
+      return Response.json({ ok: true });
+    });
+
+    server = startServer(testManifest, {
+      port: 0,
+      registry,
+      rateLimit: { windowMs: 5000, max: 3 },
+    });
+
+    const port = server.server.port;
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, () => fetch(`http://localhost:${port}/api/limited`))
+    );
+
+    const successCount = responses.filter((response) => response.status === 200).length;
+    const limitedCount = responses.filter((response) => response.status === 429).length;
+
+    expect(successCount).toBe(3);
+    expect(limitedCount).toBe(7);
+  });
 });
 
 describe("createRateLimiter API", () => {
