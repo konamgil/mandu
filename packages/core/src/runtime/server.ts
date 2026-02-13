@@ -35,6 +35,17 @@ export interface RateLimitOptions {
   message?: string;
   statusCode?: number;
   headers?: boolean;
+  /**
+   * Reverse proxy를 신뢰할지 여부
+   * - false(기본): X-Forwarded-For/X-Real-IP를 무시하고 글로벌 키 사용
+   * - true: 전달된 클라이언트 IP를 key로 사용
+   */
+  trustProxy?: boolean;
+  /**
+   * 메모리 보호를 위한 최대 key 수
+   * - 초과 시 오래된 key부터 제거
+   */
+  maxKeys?: number;
 }
 
 interface NormalizedRateLimitOptions {
@@ -43,6 +54,8 @@ interface NormalizedRateLimitOptions {
   message: string;
   statusCode: number;
   headers: boolean;
+  trustProxy: boolean;
+  maxKeys: number;
 }
 
 interface RateLimitDecision {
@@ -54,15 +67,19 @@ interface RateLimitDecision {
 
 class MemoryRateLimiter {
   private readonly store = new Map<string, { count: number; resetAt: number }>();
+  private lastCleanupAt = 0;
 
   consume(req: Request, routeId: string, options: NormalizedRateLimitOptions): RateLimitDecision {
     const now = Date.now();
-    const key = `${this.getClientIp(req)}:${routeId}`;
+    this.maybeCleanup(now, options);
+
+    const key = `${this.getClientKey(req, options)}:${routeId}`;
     const current = this.store.get(key);
 
     if (!current || current.resetAt <= now) {
       const resetAt = now + options.windowMs;
       this.store.set(key, { count: 1, resetAt });
+      this.enforceMaxKeys(options.maxKeys);
       return { allowed: true, limit: options.max, remaining: Math.max(0, options.max - 1), resetAt };
     }
 
@@ -77,32 +94,81 @@ class MemoryRateLimiter {
     };
   }
 
-  private getClientIp(req: Request): string {
-    const xff = req.headers.get("x-forwarded-for");
-    if (xff) {
-      const ip = xff.split(",")[0]?.trim();
-      if (ip) return ip;
+  private maybeCleanup(now: number, options: NormalizedRateLimitOptions): void {
+    if (now - this.lastCleanupAt < Math.max(1_000, options.windowMs)) {
+      return;
     }
 
-    const realIp = req.headers.get("x-real-ip");
-    if (realIp) return realIp;
+    this.lastCleanupAt = now;
+    for (const [key, entry] of this.store.entries()) {
+      if (entry.resetAt <= now) {
+        this.store.delete(key);
+      }
+    }
+  }
 
-    return "unknown";
+  private enforceMaxKeys(maxKeys: number): void {
+    while (this.store.size > maxKeys) {
+      const oldestKey = this.store.keys().next().value;
+      if (!oldestKey) break;
+      this.store.delete(oldestKey);
+    }
+  }
+
+  private getClientKey(req: Request, options: NormalizedRateLimitOptions): string {
+    if (!options.trustProxy) {
+      return "global";
+    }
+
+    const candidates = [
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
+      req.headers.get("x-real-ip")?.trim(),
+      req.headers.get("cf-connecting-ip")?.trim(),
+      req.headers.get("true-client-ip")?.trim(),
+      req.headers.get("fly-client-ip")?.trim(),
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate) {
+        return candidate.slice(0, 64);
+      }
+    }
+
+    return "global";
   }
 }
 
 function normalizeRateLimitOptions(options: boolean | RateLimitOptions | undefined): NormalizedRateLimitOptions | false {
   if (!options) return false;
   if (options === true) {
-    return { windowMs: 60_000, max: 100, message: "Too Many Requests", statusCode: 429, headers: true };
+    return {
+      windowMs: 60_000,
+      max: 100,
+      message: "Too Many Requests",
+      statusCode: 429,
+      headers: true,
+      trustProxy: false,
+      maxKeys: 10_000,
+    };
   }
 
+  const windowMs = Number.isFinite(options.windowMs) ? Math.max(1_000, options.windowMs!) : 60_000;
+  const max = Number.isFinite(options.max) ? Math.max(1, Math.floor(options.max!)) : 100;
+  const statusCode = Number.isFinite(options.statusCode)
+    ? Math.min(599, Math.max(400, Math.floor(options.statusCode!)))
+    : 429;
+  const maxKeys = Number.isFinite(options.maxKeys)
+    ? Math.max(100, Math.floor(options.maxKeys!))
+    : 10_000;
+
   return {
-    windowMs: options.windowMs ?? 60_000,
-    max: options.max ?? 100,
+    windowMs,
+    max,
     message: options.message ?? "Too Many Requests",
-    statusCode: options.statusCode ?? 429,
+    statusCode,
     headers: options.headers ?? true,
+    trustProxy: options.trustProxy ?? false,
+    maxKeys,
   };
 }
 

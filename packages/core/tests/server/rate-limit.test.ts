@@ -75,4 +75,50 @@ describe("Server Rate Limit", () => {
     expect(limited2.status).toBe(429);
     expect(other1.status).toBe(200);
   });
+
+  it("기본값에서는 spoofed X-Forwarded-For 헤더로 우회할 수 없다", async () => {
+    registry.registerApiHandler("api/limited", async () => Response.json({ ok: true }));
+
+    server = startServer(testManifest, {
+      port: 0,
+      registry,
+      rateLimit: { windowMs: 5000, max: 1 },
+    });
+
+    const port = server.server.port;
+    const first = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "1.1.1.1" },
+    });
+    const second = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "9.9.9.9" },
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(429);
+  });
+
+  it("trustProxy 활성화 시 전달된 IP 기준으로 분리 카운트한다", async () => {
+    registry.registerApiHandler("api/limited", async () => Response.json({ ok: true }));
+
+    server = startServer(testManifest, {
+      port: 0,
+      registry,
+      rateLimit: { windowMs: 5000, max: 1, trustProxy: true },
+    });
+
+    const port = server.server.port;
+    const firstIp = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "1.1.1.1" },
+    });
+    const secondIp = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "9.9.9.9" },
+    });
+    const firstIpAgain = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "1.1.1.1" },
+    });
+
+    expect(firstIp.status).toBe(200);
+    expect(secondIp.status).toBe(200);
+    expect(firstIpAgain.status).toBe(429);
+  });
 });
