@@ -1,5 +1,12 @@
 # mandu-demo-island-first
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.13.2
+
 ## 0.1.4
 
 ### Patch Changes

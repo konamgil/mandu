@@ -1,5 +1,28 @@
 # @mandujs/cli
 
+## 0.15.3
+
+### Patch Changes
+
+- SSE reconnect improvements and critical bug fixes
+
+  ## @mandujs/core
+
+  - **Feature**: SSE reconnect with exponential backoff and jitter
+  - **Feature**: Connection state tracking (connecting, connected, reconnecting, failed, closed)
+  - **Fix**: Critical race condition in SSE snapshot/fetchChatHistory
+
+  ## @mandujs/cli
+
+  - **Template**: Add SSE reconnect logic to realtime-chat template
+  - **Template**: Fix race condition in chat initialization
+  - **Template**: Improve type clarity with ReconnectOptions alias
+  - **Docs**: Add demo-first validation loop guide
+  - **Docs**: Update CLI command examples
+
+- Updated dependencies []:
+  - @mandujs/core@0.13.2
+
 ## 0.15.2
 
 ### Patch Changes
