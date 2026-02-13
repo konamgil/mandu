@@ -5,7 +5,7 @@ import { Button, Input } from "@/client/shared/ui";
 import { useRealtimeChat } from "./use-realtime-chat";
 
 export function RealtimeChatStarter() {
-  const { messages, send, canSend, sending } = useRealtimeChat();
+  const { messages, send, canSend, sending, connectionState } = useRealtimeChat();
   const [text, setText] = useState("");
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -15,8 +15,18 @@ export function RealtimeChatStarter() {
     await send(current);
   };
 
+  const showConnectionWarning = connectionState === "reconnecting" || connectionState === "failed";
+
   return (
     <section className="flex h-[70vh] flex-col rounded-xl border bg-card">
+      {showConnectionWarning ? (
+        <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+          {connectionState === "failed"
+            ? "Live updates disconnected. Please refresh to reconnect."
+            : "Live updates are reconnecting..."}
+        </div>
+      ) : null}
+
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {messages.length === 0 ? (
           <p className="text-sm text-muted-foreground">No messages yet. Start chatting.</p>

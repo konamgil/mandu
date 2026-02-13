@@ -7,6 +7,13 @@ import type {
 
 const API_BASE = "/api/chat";
 
+export type ChatStreamConnectionState =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "failed"
+  | "closed";
+
 interface ChatStreamOptions {
   maxRetries?: number;
   baseDelayMs?: number;
@@ -14,9 +21,10 @@ interface ChatStreamOptions {
   jitterRatio?: number;
   random?: () => number;
   eventSourceFactory?: (url: string) => EventSource;
+  onConnectionStateChange?: (state: ChatStreamConnectionState) => void;
 }
 
-const DEFAULT_STREAM_OPTIONS: Required<Omit<ChatStreamOptions, "eventSourceFactory">> = {
+const DEFAULT_STREAM_OPTIONS: Required<Omit<ChatStreamOptions, "eventSourceFactory" | "onConnectionStateChange">> = {
   maxRetries: 8,
   baseDelayMs: 500,
   maxDelayMs: 10_000,
@@ -47,7 +55,7 @@ export async function fetchChatHistory(): Promise<ChatHistoryResponse> {
   return response.json() as Promise<ChatHistoryResponse>;
 }
 
-function toReconnectDelayMs(attempt: number, options: Required<Omit<ChatStreamOptions, "eventSourceFactory">>): number {
+function toReconnectDelayMs(attempt: number, options: Required<Omit<ChatStreamOptions, "eventSourceFactory" | "onConnectionStateChange">>): number {
   const exponentialDelay = Math.min(options.maxDelayMs, options.baseDelayMs * 2 ** attempt);
   const jitterRange = exponentialDelay * options.jitterRatio;
   const jitter = (options.random() * 2 - 1) * jitterRange;
@@ -65,6 +73,10 @@ export function openChatStream(
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempts = 0;
   let isDisposed = false;
+
+  const setConnectionState = (state: ChatStreamConnectionState) => {
+    streamOptions.onConnectionStateChange?.(state);
+  };
 
   const clearReconnectTimer = () => {
     if (reconnectTimer) {
@@ -92,9 +104,11 @@ export function openChatStream(
 
     if (reconnectAttempts >= options.maxRetries) {
       closeSource();
+      setConnectionState("failed");
       return;
     }
 
+    setConnectionState("reconnecting");
     const delayMs = toReconnectDelayMs(reconnectAttempts, options);
     reconnectAttempts += 1;
 
@@ -109,6 +123,7 @@ export function openChatStream(
       return;
     }
 
+    setConnectionState("connecting");
     closeSource();
     const currentSource = createSource(`${API_BASE}/stream`);
     source = currentSource;
@@ -119,6 +134,7 @@ export function openChatStream(
       }
 
       reconnectAttempts = 0;
+      setConnectionState("connected");
     };
 
     currentSource.onmessage = (event) => {
@@ -150,5 +166,6 @@ export function openChatStream(
     isDisposed = true;
     clearReconnectTimer();
     closeSource();
+    setConnectionState("closed");
   };
 }
