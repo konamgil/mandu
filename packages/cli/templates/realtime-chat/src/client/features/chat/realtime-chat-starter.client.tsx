@@ -11,8 +11,14 @@ export function RealtimeChatStarter() {
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const current = text;
-    setText("");
-    await send(current);
+    if (current.trim().length === 0) return;
+
+    try {
+      await send(current);
+      setText("");
+    } catch {
+      // Keep input text so user can retry if sending fails.
+    }
   };
 
   return (
