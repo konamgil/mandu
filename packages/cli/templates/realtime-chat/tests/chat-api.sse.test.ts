@@ -65,6 +65,43 @@ describe("openChatStream", () => {
     stop();
   });
 
+  it("notifies connection state changes and terminal failure", async () => {
+    const states: string[] = [];
+    const sources: FakeEventSource[] = [];
+
+    const stop = openChatStream(() => {}, {
+      baseDelayMs: 5,
+      maxDelayMs: 5,
+      jitterRatio: 0,
+      maxRetries: 1,
+      onConnectionStateChange: (state) => {
+        states.push(state);
+      },
+      eventSourceFactory: (url) => {
+        const source = new FakeEventSource(url);
+        sources.push(source);
+        return source as unknown as EventSource;
+      },
+    });
+
+    expect(states).toEqual(["connecting"]);
+
+    sources[0]?.emitOpen();
+    expect(states).toEqual(["connecting", "connected"]);
+
+    sources[0]?.emitError();
+    expect(states).toEqual(["connecting", "connected", "reconnecting"]);
+
+    await sleep(8);
+    expect(states).toEqual(["connecting", "connected", "reconnecting", "connecting"]);
+
+    sources[1]?.emitError();
+    expect(states).toEqual(["connecting", "connected", "reconnecting", "connecting", "failed"]);
+
+    stop();
+    expect(states).toEqual(["connecting", "connected", "reconnecting", "connecting", "failed", "closed"]);
+  });
+
   it("cleans up source and pending reconnect timer on stop", async () => {
     const sources: FakeEventSource[] = [];
     const stop = openChatStream(() => {}, {
