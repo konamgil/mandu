@@ -15,6 +15,8 @@ import {
   runGuardCheck,
   buildGuardReport,
   printReportSummary,
+  runAutoCorrect,
+  isAutoCorrectableViolation,
   guardConfig,
   formatConfigGuardResult,
   calculateHealthScore,
@@ -24,6 +26,51 @@ import {
 import path from "path";
 import { resolveFromCwd, isDirectory, pathExists } from "../util/fs";
 import { resolveOutputFormat } from "../util/output";
+
+interface LegacyCheckDeps {
+  runGuardCheck: typeof runGuardCheck;
+  runAutoCorrect: typeof runAutoCorrect;
+  isAutoCorrectableViolation: typeof isAutoCorrectableViolation;
+}
+
+export async function runLegacyGuardWithAutoHeal(
+  manifest: Parameters<typeof runGuardCheck>[0],
+  rootDir: string,
+  deps: LegacyCheckDeps = { runGuardCheck, runAutoCorrect, isAutoCorrectableViolation }
+): Promise<{
+  passed: boolean;
+  violations: number;
+  autoHealed: boolean;
+  nextAction?: string;
+  checkResult: Awaited<ReturnType<typeof runGuardCheck>>;
+}> {
+  let checkResult = await deps.runGuardCheck(manifest, rootDir);
+  let autoHealed = false;
+
+  if (!checkResult.passed) {
+    const hasAutoCorrectableViolation = checkResult.violations.some(
+      deps.isAutoCorrectableViolation
+    );
+
+    if (hasAutoCorrectableViolation) {
+      const autoCorrectResult = await deps.runAutoCorrect(
+        checkResult.violations,
+        manifest,
+        rootDir
+      );
+      autoHealed = autoCorrectResult.fixed;
+      checkResult = await deps.runGuardCheck(manifest, rootDir);
+    }
+  }
+
+  return {
+    passed: checkResult.passed,
+    violations: checkResult.violations.length,
+    autoHealed,
+    nextAction: checkResult.passed ? undefined : "mandu guard legacy",
+    checkResult,
+  };
+}
 
 export async function check(): Promise<boolean> {
   const rootDir = resolveFromCwd(".");
@@ -175,7 +222,14 @@ export async function check(): Promise<boolean> {
   }
 
   // 3) Legacy Guard 검사 (spec 파일이 있을 때만)
-  let legacySummary: { enabled: boolean; passed: boolean; violations: number; errors?: string[] } = {
+  let legacySummary: {
+    enabled: boolean;
+    passed: boolean;
+    violations: number;
+    errors?: string[];
+    autoHealed?: boolean;
+    nextAction?: string;
+  } = {
     enabled: false,
     passed: true,
     violations: 0,
@@ -195,17 +249,27 @@ export async function check(): Promise<boolean> {
         manifestResult.errors?.forEach((e) => console.error(`  - ${e}`));
       }
     } else {
-      const checkResult = await runGuardCheck(manifestResult.data, rootDir);
-      legacySummary.passed = checkResult.passed;
-      legacySummary.violations = checkResult.violations.length;
-      if (strictWarnings && checkResult.violations.length > 0) {
+      const legacyResult = await runLegacyGuardWithAutoHeal(manifestResult.data, rootDir);
+      legacySummary.passed = legacyResult.passed;
+      legacySummary.violations = legacyResult.violations;
+      legacySummary.autoHealed = legacyResult.autoHealed;
+      legacySummary.nextAction = legacyResult.nextAction;
+
+      if (format === "console" && legacyResult.autoHealed) {
+        log("✅ Legacy spec drift 자동 복구 완료");
+      }
+      if (format === "console" && legacyResult.nextAction) {
+        log("💡 Legacy guard 위반이 남아 있습니다. `mandu guard legacy`로 상세 점검/복구를 진행하세요.");
+      }
+
+      if (strictWarnings && legacyResult.violations > 0) {
         success = false;
       } else {
-        success = success && checkResult.passed;
+        success = success && legacyResult.passed;
       }
 
       if (format === "console") {
-        const legacyReport = buildGuardReport(checkResult);
+        const legacyReport = buildGuardReport(legacyResult.checkResult);
         if (quiet) {
           print(`📊 Legacy Guard: ${legacySummary.violations}개 위반`);
         } else {
