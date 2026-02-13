@@ -84,13 +84,10 @@ mandu lock --json
 현재 설정과 lockfile의 일치 여부를 검증합니다.
 
 ```bash
-# 기본 검증
+# 기본 검증 (development 모드)
 mandu lock --verify
 
-# 특정 모드로 검증
-mandu lock --verify --mode=ci
-
-# CI/CD에서 사용
+# CI/CD 환경에서 사용 (strict 검증)
 mandu lock --verify --mode=ci
 ```
 
