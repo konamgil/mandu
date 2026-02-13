@@ -218,7 +218,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     await fs.access(templateDir);
   } catch {
     printCLIError(CLI_ERROR_CODES.INIT_TEMPLATE_NOT_FOUND, { template });
-    console.error(`   사용 가능한 템플릿: default`);
+    console.error(`   사용 가능한 템플릿: default, realtime-chat`);
     return false;
   }
 

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.mandu/
+mandu-report.json
+.claude.json
+*.log
