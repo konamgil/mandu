@@ -19,8 +19,7 @@ describe("realtime chat starter template", () => {
   });
 
   it("returns empty history by default", async () => {
-    const request = createTestRequest("http://localhost:3000/api/chat/messages");
-    const response = getMessages(request);
+    const response = getMessages();
     expect(response.status).toBe(200);
 
     const json = await parseJsonResponse<{ messages: unknown[] }>(response);
@@ -58,8 +57,7 @@ describe("realtime chat starter template", () => {
     const response = await postMessage(request);
     expect(response.status).toBe(201);
 
-    const historyRequest = createTestRequest("http://localhost:3000/api/chat/messages");
-    const history = getMessages(historyRequest);
+    const history = getMessages();
     const json = await parseJsonResponse<{ messages: Array<{ role: string }> }>(history);
 
     expect(json.messages.length).toBe(2);
@@ -97,8 +95,7 @@ describe("realtime chat starter template", () => {
   });
 
   it("exposes SSE stream endpoint", () => {
-    const request = createTestRequest("http://localhost:3000/api/chat/stream");
-    const response = getStream(request);
+    const response = getStream();
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toContain("text/event-stream");
   });
@@ -129,5 +126,19 @@ describe("realtime chat starter template", () => {
     expect(secondText).toContain('"text":"live-event"');
 
     abortController.abort();
+  });
+
+  it("includes essential ARIA attributes in chat UI", async () => {
+    const source = await Bun.file(
+      new URL("../src/client/features/chat/realtime-chat-starter.client.tsx", import.meta.url),
+    ).text();
+
+    expect(source).toContain('role="log"');
+    expect(source).toContain('aria-live="polite"');
+    expect(source).toContain('aria-label="Chat messages"');
+    expect(source).toContain('aria-label="Chat message input"');
+    expect(source).toContain('aria-describedby="chat-input-description"');
+    expect(source).toContain('id="chat-input-description"');
+    expect(source).toContain('aria-label="Send message"');
   });
 });

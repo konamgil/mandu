@@ -3,6 +3,7 @@
  * 하이드레이션 시각화 포함
  */
 import { useState, useRef, useEffect } from 'react';
+import { toUserFeedback, type ChatErrorFeedback } from './chatError';
 
 interface Message {
   id: string;
@@ -24,6 +25,7 @@ function ChatBoxComponent() {
   const [isLoading, setIsLoading] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [hydrationTime, setHydrationTime] = useState<number | null>(null);
+  const [errorFeedback, setErrorFeedback] = useState<ChatErrorFeedback | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -64,6 +66,7 @@ function ChatBoxComponent() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    setErrorFeedback(null);
 
     console.log('%c[Mandu] 📤 메시지 전송:', 'color: #3b82f6; font-weight: bold;', userMessage.content);
 
@@ -87,7 +90,16 @@ function ChatBoxComponent() {
         }),
       });
 
-      if (!response.ok) throw new Error('API 요청 실패');
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const errorBody = await response.json();
+          detail = errorBody?.error || errorBody?.message || '';
+        } catch {
+          // ignore parse failure
+        }
+        throw new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -96,6 +108,7 @@ function ChatBoxComponent() {
 
       let fullContent = '';
       let chunkCount = 0;
+      let gotDoneSignal = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -109,6 +122,7 @@ function ChatBoxComponent() {
             try {
               const data = JSON.parse(line.slice(6));
               if (data.done) {
+                gotDoneSignal = true;
                 const endTime = performance.now();
                 console.log(`%c[Mandu] ✅ 스트리밍 완료! ${chunkCount}개 청크, ${(endTime - startTime).toFixed(0)}ms`, 'color: #10b981; font-weight: bold;');
 
@@ -136,12 +150,18 @@ function ChatBoxComponent() {
           }
         }
       }
+
+      if (!gotDoneSignal || fullContent.trim().length === 0) {
+        throw new Error('스트림 응답이 비정상적으로 종료되었습니다');
+      }
     } catch (error) {
       console.error('%c[Mandu] ❌ 에러:', 'color: #ef4444;', error);
+      const feedback = toUserFeedback(error);
+      setErrorFeedback(feedback);
       setMessages(prev =>
         prev.map(m =>
           m.id === assistantMessageId
-            ? { ...m, content: '죄송합니다, 오류가 발생했습니다. 다시 시도해주세요.', isStreaming: false }
+            ? { ...m, content: `⚠️ ${feedback.message}`, isStreaming: false }
             : m
         )
       );
@@ -209,6 +229,22 @@ function ChatBoxComponent() {
 
       {/* 입력 영역 */}
       <div className="border-t border-gray-700 p-4 bg-gray-850">
+        {errorFeedback && (
+          <div className="mb-3 rounded-lg border border-red-500/40 bg-red-900/30 p-3 text-sm text-red-200">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <strong className="block text-red-100">⚠️ {errorFeedback.title}</strong>
+                <span>{errorFeedback.message}</span>
+              </div>
+              <button
+                onClick={() => setErrorFeedback(null)}
+                className="rounded bg-red-500/20 px-2 py-1 text-xs text-red-100 hover:bg-red-500/30"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex gap-2">
           <input
             ref={inputRef}

@@ -76,6 +76,82 @@ describe("Server Rate Limit", () => {
     expect(limited2.status).toBe(429);
     expect(other1.status).toBe(200);
   });
+
+  it("동시 요청에서도 제한 개수를 초과하지 않는다", async () => {
+    registry.registerApiHandler("api/limited", async () => {
+      await new Promise((resolve) => setTimeout(resolve, Math.floor(Math.random() * 20)));
+      return Response.json({ ok: true });
+    });
+
+    server = startServer(testManifest, {
+      port: 0,
+      registry,
+      rateLimit: { windowMs: 5000, max: 3 },
+    });
+
+    const port = server.server.port;
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, () => fetch(`http://localhost:${port}/api/limited`))
+    );
+
+    const successCount = responses.filter((response) => response.status === 200).length;
+    const limitedCount = responses.filter((response) => response.status === 429).length;
+
+    expect(successCount).toBe(3);
+    expect(limitedCount).toBe(7);
+  });
+
+  it("기본값에서도 IP별로 구분하여 DoS 방지 (spoofing 가능)", async () => {
+    registry.registerApiHandler("api/limited", async () => Response.json({ ok: true }));
+
+    server = startServer(testManifest, {
+      port: 0,
+      registry,
+      rateLimit: { windowMs: 5000, max: 1 },
+    });
+
+    const port = server.server.port;
+    const first = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "1.1.1.1" },
+    });
+    const second = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "9.9.9.9" },
+    });
+    const firstAgain = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "1.1.1.1" },
+    });
+
+    // 서로 다른 IP는 독립적인 limit을 가짐 (DoS 방지)
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    // 같은 IP 재요청은 차단
+    expect(firstAgain.status).toBe(429);
+  });
+
+  it("trustProxy 활성화 시 전달된 IP 기준으로 분리 카운트한다", async () => {
+    registry.registerApiHandler("api/limited", async () => Response.json({ ok: true }));
+
+    server = startServer(testManifest, {
+      port: 0,
+      registry,
+      rateLimit: { windowMs: 5000, max: 1, trustProxy: true },
+    });
+
+    const port = server.server.port;
+    const firstIp = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "1.1.1.1" },
+    });
+    const secondIp = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "9.9.9.9" },
+    });
+    const firstIpAgain = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "1.1.1.1" },
+    });
+
+    expect(firstIp.status).toBe(200);
+    expect(secondIp.status).toBe(200);
+    expect(firstIpAgain.status).toBe(429);
+  });
 });
 
 describe("createRateLimiter API", () => {
