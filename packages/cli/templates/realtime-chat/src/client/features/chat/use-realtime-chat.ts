@@ -2,11 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessage } from "@/shared/contracts/chat";
-import { fetchChatHistory, openChatStream, sendChatMessage } from "./chat-api";
+import {
+  fetchChatHistory,
+  openChatStream,
+  sendChatMessage,
+  type ChatStreamConnectionState,
+} from "./chat-api";
 
 export function useRealtimeChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
+  const [connectionState, setConnectionState] = useState<ChatStreamConnectionState>("connecting");
 
   useEffect(() => {
     let mounted = true;
@@ -29,6 +35,12 @@ export function useRealtimeChat() {
       if (event.type === "message" && !Array.isArray(event.data)) {
         setMessages((prev) => [...prev, event.data]);
       }
+    }, {
+      onConnectionStateChange: (state) => {
+        if (mounted) {
+          setConnectionState(state);
+        }
+      },
     });
 
     return () => {
@@ -56,5 +68,6 @@ export function useRealtimeChat() {
     send,
     sending,
     canSend,
+    connectionState,
   };
 }

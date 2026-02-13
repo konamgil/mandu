@@ -23,14 +23,12 @@ export function GET(request: Request): Response {
     sse.send(event);
   });
 
-  // snapshot을 먼저 전송
   const snapshot: ChatStreamEvent = {
     type: "snapshot",
     data: subscription.snapshot,
   };
   sse.send(snapshot);
 
-  // 그 다음 listener 활성화 (이벤트 순서 보장)
   const unsubscribe = subscription.commit();
 
   const interval = setInterval(() => {

@@ -19,7 +19,8 @@ describe("realtime chat starter template", () => {
   });
 
   it("returns empty history by default", async () => {
-    const response = getMessages();
+    const request = createTestRequest("http://localhost:3000/api/chat/messages");
+    const response = getMessages(request);
     expect(response.status).toBe(200);
 
     const json = await parseJsonResponse<{ messages: unknown[] }>(response);
@@ -57,7 +58,8 @@ describe("realtime chat starter template", () => {
     const response = await postMessage(request);
     expect(response.status).toBe(201);
 
-    const history = getMessages();
+    const historyRequest = createTestRequest("http://localhost:3000/api/chat/messages");
+    const history = getMessages(historyRequest);
     const json = await parseJsonResponse<{ messages: Array<{ role: string }> }>(history);
 
     expect(json.messages.length).toBe(2);
@@ -95,7 +97,8 @@ describe("realtime chat starter template", () => {
   });
 
   it("exposes SSE stream endpoint", () => {
-    const response = getStream();
+    const request = createTestRequest("http://localhost:3000/api/chat/stream");
+    const response = getStream(request);
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toContain("text/event-stream");
   });
@@ -112,20 +115,22 @@ describe("realtime chat starter template", () => {
 
     const decoder = new TextDecoder();
 
-    const firstChunk = await reader!.read();
-    expect(firstChunk.done).toBe(false);
-    const firstText = decoder.decode(firstChunk.value);
-    expect(firstText).toContain('"type":"snapshot"');
+    try {
+      const firstChunk = await reader!.read();
+      expect(firstChunk.done).toBe(false);
+      const firstText = decoder.decode(firstChunk.value);
+      expect(firstText).toContain('"type":"snapshot"');
 
-    appendMessage("user", "live-event");
+      appendMessage("user", "live-event");
 
-    const secondChunk = await reader!.read();
-    expect(secondChunk.done).toBe(false);
-    const secondText = decoder.decode(secondChunk.value);
-    expect(secondText).toContain('"type":"message"');
-    expect(secondText).toContain('"text":"live-event"');
-
-    abortController.abort();
+      const secondChunk = await reader!.read();
+      expect(secondChunk.done).toBe(false);
+      const secondText = decoder.decode(secondChunk.value);
+      expect(secondText).toContain('"type":"message"');
+      expect(secondText).toContain('"text":"live-event"');
+    } finally {
+      abortController.abort();
+    }
   });
 
   it("includes essential ARIA attributes in chat UI", async () => {
