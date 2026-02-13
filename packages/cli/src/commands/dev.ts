@@ -332,6 +332,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     bundleManifest: devBundler?.initialBuild.manifest,
     cors: serverConfig.cors,
     streaming: serverConfig.streaming,
+    rateLimit: serverConfig.rateLimit,
     // Tailwind 감지 시에만 CSS 링크 주입
     cssPath: hasTailwind ? cssWatcher?.serverPath : false,
   });

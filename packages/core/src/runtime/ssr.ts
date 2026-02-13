@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import type { BundleManifest } from "../bundler/types";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 import { PORTS, TIMEOUTS } from "../constants";
+import { escapeHtmlAttr, escapeJsonForInlineScript } from "./escape";
 
 // Re-export streaming SSR utilities
 export {
@@ -53,11 +54,7 @@ export interface SSROptions {
  */
 function serializeServerData(data: Record<string, unknown>): string {
   // serializeProps로 고급 직렬화 (Date, Map, Set 등 지원)
-  const json = serializeProps(data)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026")
-    .replace(/'/g, "\\u0027");
+  const json = escapeJsonForInlineScript(serializeProps(data));
 
   return `<script id="__MANDU_DATA__" type="application/json">${json}</script>
 <script>window.__MANDU_DATA_RAW__ = document.getElementById('__MANDU_DATA__').textContent;</script>`;
@@ -71,7 +68,7 @@ function generateImportMap(manifest: BundleManifest): string {
     return "";
   }
 
-  const importMapJson = JSON.stringify(manifest.importMap, null, 2);
+  const importMapJson = escapeJsonForInlineScript(JSON.stringify(manifest.importMap, null, 2));
   return `<script type="importmap">${importMapJson}</script>`;
 }
 
@@ -93,33 +90,33 @@ function generateHydrationScripts(
 
   // Vendor modulepreload (React, ReactDOM 등 - 캐시 효율 극대화)
   if (manifest.shared.vendor) {
-    scripts.push(`<link rel="modulepreload" href="${manifest.shared.vendor}">`);
+    scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(manifest.shared.vendor)}">`);
   }
   if (manifest.importMap?.imports) {
     const imports = manifest.importMap.imports;
     // react-dom, react-dom/client 등 추가 preload
     if (imports["react-dom"] && imports["react-dom"] !== manifest.shared.vendor) {
-      scripts.push(`<link rel="modulepreload" href="${imports["react-dom"]}">`);
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(imports["react-dom"])}">`);
     }
     if (imports["react-dom/client"]) {
-      scripts.push(`<link rel="modulepreload" href="${imports["react-dom/client"]}">`);
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(imports["react-dom/client"])}">`);
     }
   }
 
   // Runtime modulepreload (hydration 실행 전 미리 로드)
   if (manifest.shared.runtime) {
-    scripts.push(`<link rel="modulepreload" href="${manifest.shared.runtime}">`);
+    scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(manifest.shared.runtime)}">`);
   }
 
   // Island 번들 modulepreload (성능 최적화 - prefetch only)
   const bundle = manifest.bundles[routeId];
   if (bundle) {
-    scripts.push(`<link rel="modulepreload" href="${bundle.js}">`);
+    scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(bundle.js)}">`);
   }
 
   // Runtime 로드 (hydrateIslands 실행 - dynamic import 사용)
   if (manifest.shared.runtime) {
-    scripts.push(`<script type="module" src="${manifest.shared.runtime}"></script>`);
+    scripts.push(`<script type="module" src="${escapeHtmlAttr(manifest.shared.runtime)}"></script>`);
   }
 
   return scripts.join("\n");
@@ -135,8 +132,8 @@ export function wrapWithIsland(
   priority: HydrationPriority = "visible",
   bundleSrc?: string
 ): string {
-  const srcAttr = bundleSrc ? ` data-mandu-src="${bundleSrc}"` : "";
-  return `<div data-mandu-island="${routeId}"${srcAttr} data-mandu-priority="${priority}">${content}</div>`;
+  const srcAttr = bundleSrc ? ` data-mandu-src="${escapeHtmlAttr(bundleSrc)}"` : "";
+  return `<div data-mandu-island="${escapeHtmlAttr(routeId)}"${srcAttr} data-mandu-priority="${escapeHtmlAttr(priority)}">${content}</div>`;
 }
 
 export function renderToHTML(element: ReactElement, options: SSROptions = {}): string {
@@ -160,7 +157,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   // - cssPath가 string이면 해당 경로 사용
   // - cssPath가 false 또는 undefined이면 링크 미삽입 (404 방지)
   const cssLinkTag = cssPath && cssPath !== false
-    ? `<link rel="stylesheet" href="${cssPath}${isDev ? `?t=${Date.now()}` : ""}">`
+    ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
 
   let content = renderToString(element);
@@ -213,11 +210,11 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   }
 
   return `<!doctype html>
-<html lang="${lang}">
+<html lang="${escapeHtmlAttr(lang)}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
+  <title>${escapeHtmlAttr(title)}</title>
   ${cssLinkTag}
   ${headTags}
 </head>
@@ -247,9 +244,7 @@ function generateRouteScript(
     params: extractParamsFromUrl(pattern),
   };
 
-  const json = JSON.stringify(routeInfo)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e");
+  const json = escapeJsonForInlineScript(JSON.stringify(routeInfo));
 
   return `<script>window.__MANDU_ROUTE__ = ${json};</script>`;
 }
@@ -272,7 +267,7 @@ function generateClientRouterScript(manifest: BundleManifest): string {
 
   // 라우터 번들이 있으면 로드
   if (manifest.shared?.router) {
-    scripts.push(`<script type="module" src="${manifest.shared.router}"></script>`);
+    scripts.push(`<script type="module" src="${escapeHtmlAttr(manifest.shared.router)}"></script>`);
   }
 
   return scripts.join("\n");

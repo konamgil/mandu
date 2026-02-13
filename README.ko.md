@@ -923,6 +923,10 @@ export default {
     hostname: "localhost",
     cors: false,
     streaming: false,
+    rateLimit: {
+      windowMs: 60_000,
+      max: 100,
+    },
   },
   dev: {
     hmr: true,
@@ -947,6 +951,8 @@ export default {
   },
 };
 ```
+
+`server.rateLimit`은 API 라우트에만 적용되며, 키는 `클라이언트 IP + 라우트`입니다. 제한 초과 시 `429`와 `X-RateLimit-*` 헤더를 반환합니다.
 
 ---
 

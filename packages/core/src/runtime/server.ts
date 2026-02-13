@@ -29,6 +29,116 @@ import {
 } from "./cors";
 import { validateImportPath } from "./security";
 
+export interface RateLimitOptions {
+  windowMs?: number;
+  max?: number;
+  message?: string;
+  statusCode?: number;
+  headers?: boolean;
+}
+
+interface NormalizedRateLimitOptions {
+  windowMs: number;
+  max: number;
+  message: string;
+  statusCode: number;
+  headers: boolean;
+}
+
+interface RateLimitDecision {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  resetAt: number;
+}
+
+class MemoryRateLimiter {
+  private readonly store = new Map<string, { count: number; resetAt: number }>();
+
+  consume(req: Request, routeId: string, options: NormalizedRateLimitOptions): RateLimitDecision {
+    const now = Date.now();
+    const key = `${this.getClientIp(req)}:${routeId}`;
+    const current = this.store.get(key);
+
+    if (!current || current.resetAt <= now) {
+      const resetAt = now + options.windowMs;
+      this.store.set(key, { count: 1, resetAt });
+      return { allowed: true, limit: options.max, remaining: Math.max(0, options.max - 1), resetAt };
+    }
+
+    current.count += 1;
+    this.store.set(key, current);
+
+    return {
+      allowed: current.count <= options.max,
+      limit: options.max,
+      remaining: Math.max(0, options.max - current.count),
+      resetAt: current.resetAt,
+    };
+  }
+
+  private getClientIp(req: Request): string {
+    const xff = req.headers.get("x-forwarded-for");
+    if (xff) {
+      const ip = xff.split(",")[0]?.trim();
+      if (ip) return ip;
+    }
+
+    const realIp = req.headers.get("x-real-ip");
+    if (realIp) return realIp;
+
+    return "unknown";
+  }
+}
+
+function normalizeRateLimitOptions(options: boolean | RateLimitOptions | undefined): NormalizedRateLimitOptions | false {
+  if (!options) return false;
+  if (options === true) {
+    return { windowMs: 60_000, max: 100, message: "Too Many Requests", statusCode: 429, headers: true };
+  }
+
+  return {
+    windowMs: options.windowMs ?? 60_000,
+    max: options.max ?? 100,
+    message: options.message ?? "Too Many Requests",
+    statusCode: options.statusCode ?? 429,
+    headers: options.headers ?? true,
+  };
+}
+
+function appendRateLimitHeaders(response: Response, decision: RateLimitDecision, options: NormalizedRateLimitOptions): Response {
+  if (!options.headers) return response;
+
+  const headers = new Headers(response.headers);
+  const retryAfterSec = Math.max(1, Math.ceil((decision.resetAt - Date.now()) / 1000));
+
+  headers.set("X-RateLimit-Limit", String(decision.limit));
+  headers.set("X-RateLimit-Remaining", String(decision.remaining));
+  headers.set("X-RateLimit-Reset", String(Math.floor(decision.resetAt / 1000)));
+  headers.set("Retry-After", String(retryAfterSec));
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function createRateLimitResponse(decision: RateLimitDecision, options: NormalizedRateLimitOptions): Response {
+  const response = Response.json(
+    {
+      error: "rate_limit_exceeded",
+      message: options.message,
+      limit: decision.limit,
+      remaining: decision.remaining,
+      retryAfter: Math.max(1, Math.ceil((decision.resetAt - Date.now()) / 1000)),
+    },
+    { status: options.statusCode }
+  );
+
+  return appendRateLimitHeaders(response, decision, options);
+}
+
 // ========== MIME Types ==========
 const MIME_TYPES: Record<string, string> = {
   // JavaScript
@@ -107,6 +217,10 @@ export interface ServerOptions {
    * - false: 기존 renderToString 사용 (기본값)
    */
   streaming?: boolean;
+  /**
+   * API 라우트 Rate Limit 설정
+   */
+  rateLimit?: boolean | RateLimitOptions;
   /**
    * CSS 파일 경로 (SSR 링크 주입용)
    * - string: 해당 경로로 <link> 주입 (예: "/.mandu/client/globals.css")
@@ -203,6 +317,7 @@ export interface ServerRegistrySettings {
   publicDir: string;
   cors?: CorsOptions | false;
   streaming: boolean;
+  rateLimit?: NormalizedRateLimitOptions | false;
   /**
    * CSS 파일 경로 (SSR 링크 주입용)
    * - string: 해당 경로로 <link> 주입
@@ -230,12 +345,14 @@ export class ServerRegistry {
   /** Error 로더 (모듈 경로 → 로더 함수) */
   readonly errorLoaders: Map<string, ErrorLoader> = new Map();
   createAppFn: CreateAppFn | null = null;
+  rateLimiter: MemoryRateLimiter | null = null;
   settings: ServerRegistrySettings = {
     isDev: false,
     rootDir: process.cwd(),
     publicDir: "public",
     cors: false,
     streaming: false,
+    rateLimit: false,
   };
 
   registerApiHandler(routeId: string, handler: ApiHandler): void {
@@ -375,6 +492,7 @@ export class ServerRegistry {
     this.errorComponents.clear();
     this.errorLoaders.clear();
     this.createAppFn = null;
+    this.rateLimiter = null;
   }
 }
 
@@ -923,6 +1041,18 @@ async function handleRequestInternal(
 
   // 3. 라우트 종류별 처리
   if (route.kind === "api") {
+    const rateLimitOptions = settings.rateLimit;
+    if (rateLimitOptions && registry.rateLimiter) {
+      const decision = registry.rateLimiter.consume(req, route.id, rateLimitOptions);
+      if (!decision.allowed) {
+        return ok(createRateLimitResponse(decision, rateLimitOptions));
+      }
+
+      const apiResult = await handleApiRoute(req, route, params, registry);
+      if (!apiResult.ok) return apiResult;
+      return ok(appendRateLimitHeaders(apiResult.value, decision, rateLimitOptions));
+    }
+
     return handleApiRoute(req, route, params, registry);
   }
 
@@ -1011,6 +1141,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     publicDir = "public",
     cors = false,
     streaming = false,
+    rateLimit = false,
     cssPath: cssPathOption,
     registry = defaultRegistry,
   } = options;
@@ -1027,6 +1158,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
 
   // CORS 옵션 파싱
   const corsOptions: CorsOptions | false = cors === true ? {} : cors;
+  const rateLimitOptions = normalizeRateLimitOptions(rateLimit);
 
   if (!isDev && cors === true) {
     console.warn("⚠️  [Security Warning] CORS is set to allow all origins.");
@@ -1044,8 +1176,11 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     publicDir,
     cors: corsOptions,
     streaming,
+    rateLimit: rateLimitOptions,
     cssPath,
   };
+
+  registry.rateLimiter = rateLimitOptions ? new MemoryRateLimiter() : null;
 
   const router = new Router(manifest.routes);
 
