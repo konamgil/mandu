@@ -30,6 +30,18 @@ export function GET(request: Request): Response {
   const sse = createSSEConnection(request.signal);
   const lastEventId = getLastEventId(request);
 
+  const subscribeToLiveMessages = () => {
+    const subscription = subscribeWithSnapshot((event) => {
+      const streamEvent: ChatStreamEvent = {
+        type: "message",
+        data: event.message,
+      };
+      sse.send(streamEvent, { id: event.eventId });
+    });
+
+    return subscription;
+  };
+
   const resume = planResumeFrom(lastEventId);
 
   if (resume.mode === "catch-up") {
@@ -40,14 +52,12 @@ export function GET(request: Request): Response {
       };
       sse.send(streamEvent, { id: event.eventId });
     }
+
+    const liveSubscription = subscribeToLiveMessages();
+    const unsubscribe = liveSubscription.commit();
+    sse.onClose(() => unsubscribe());
   } else {
-    const snapshotSubscription = subscribeWithSnapshot((event) => {
-      const streamEvent: ChatStreamEvent = {
-        type: "message",
-        data: event.message,
-      };
-      sse.send(streamEvent, { id: event.eventId });
-    });
+    const snapshotSubscription = subscribeToLiveMessages();
 
     const snapshot: ChatStreamEvent = {
       type: "snapshot",

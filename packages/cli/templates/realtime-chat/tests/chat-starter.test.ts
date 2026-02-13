@@ -143,14 +143,24 @@ describe("realtime chat starter template", () => {
     const reader = response.body?.getReader();
     expect(reader).toBeDefined();
 
-    const chunk = await reader!.read();
-    expect(chunk.done).toBe(false);
+    const firstChunk = await reader!.read();
+    expect(firstChunk.done).toBe(false);
 
-    const text = new TextDecoder().decode(chunk.value);
-    expect(text).toContain("id: msg-2");
-    expect(text).toContain('"type":"message"');
-    expect(text).toContain('"text":"m2"');
-    expect(text).not.toContain('"type":"snapshot"');
+    const firstText = new TextDecoder().decode(firstChunk.value);
+    expect(firstText).toContain("id: msg-2");
+    expect(firstText).toContain('"type":"message"');
+    expect(firstText).toContain('"text":"m2"');
+    expect(firstText).not.toContain('"type":"snapshot"');
+
+    appendMessage("user", "m3-live");
+
+    const secondChunk = await reader!.read();
+    expect(secondChunk.done).toBe(false);
+
+    const secondText = new TextDecoder().decode(secondChunk.value);
+    expect(secondText).toContain("id: msg-3");
+    expect(secondText).toContain('"type":"message"');
+    expect(secondText).toContain('"text":"m3-live"');
 
     await reader!.cancel();
   });
