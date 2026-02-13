@@ -48,9 +48,11 @@ export async function runLegacyGuardWithAutoHeal(
   let autoHealed = false;
 
   if (!checkResult.passed) {
-    const autoCorrectableCount = checkResult.violations.filter(deps.isAutoCorrectableViolation).length;
+    const hasAutoCorrectableViolation = checkResult.violations.some(
+      deps.isAutoCorrectableViolation
+    );
 
-    if (autoCorrectableCount > 0) {
+    if (hasAutoCorrectableViolation) {
       const autoCorrectResult = await deps.runAutoCorrect(
         checkResult.violations,
         manifest,
