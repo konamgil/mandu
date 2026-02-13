@@ -14,14 +14,18 @@ const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"
 
 type HttpMethod = (typeof HTTP_METHODS)[number];
 
+function isHttpMethod(method: string): method is HttpMethod {
+  return (HTTP_METHODS as readonly string[]).includes(method);
+}
+
 function hasHttpMethodHandlers(module: RouteModule): boolean {
   return HTTP_METHODS.some((method) => typeof module[method] === "function");
 }
 
 function createMethodDispatcher(module: RouteModule, routeId: string) {
   return async (req: Request, params: Record<string, string> = {}) => {
-    const method = req.method.toUpperCase() as HttpMethod;
-    const handler = module[method] as
+    const method = req.method.toUpperCase();
+    const handler = (isHttpMethod(method) ? module[method] : undefined) as
       | ((request: Request, context?: { params: Record<string, string> }) => Response | Promise<Response>)
       | undefined;
 
