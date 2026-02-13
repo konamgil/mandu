@@ -5,7 +5,7 @@ import {
   type ChatHistoryResponse,
   type ChatMessageResponse,
 } from "@/shared/contracts/chat";
-import { createRateLimiter } from "@mandujs/core/runtime/server";
+import { createRateLimiter } from "@mandujs/core/runtime/server.ts";
 
 // Rate limiter: 1분당 10개 메시지로 제한
 const limiter = createRateLimiter({ max: 10, windowMs: 60000 });
