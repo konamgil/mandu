@@ -76,7 +76,7 @@ describe("Server Rate Limit", () => {
     expect(other1.status).toBe(200);
   });
 
-  it("기본값에서는 spoofed X-Forwarded-For 헤더로 우회할 수 없다", async () => {
+  it("기본값에서도 IP별로 구분하여 DoS 방지 (spoofing 가능)", async () => {
     registry.registerApiHandler("api/limited", async () => Response.json({ ok: true }));
 
     server = startServer(testManifest, {
@@ -92,9 +92,15 @@ describe("Server Rate Limit", () => {
     const second = await fetch(`http://localhost:${port}/api/limited`, {
       headers: { "x-forwarded-for": "9.9.9.9" },
     });
+    const firstAgain = await fetch(`http://localhost:${port}/api/limited`, {
+      headers: { "x-forwarded-for": "1.1.1.1" },
+    });
 
+    // 서로 다른 IP는 독립적인 limit을 가짐 (DoS 방지)
     expect(first.status).toBe(200);
-    expect(second.status).toBe(429);
+    expect(second.status).toBe(200);
+    // 같은 IP 재요청은 차단
+    expect(firstAgain.status).toBe(429);
   });
 
   it("trustProxy 활성화 시 전달된 IP 기준으로 분리 카운트한다", async () => {

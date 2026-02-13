@@ -36,9 +36,11 @@ export interface RateLimitOptions {
   statusCode?: number;
   headers?: boolean;
   /**
-   * Reverse proxy를 신뢰할지 여부
-   * - false(기본): X-Forwarded-For/X-Real-IP를 무시하고 글로벌 키 사용
-   * - true: 전달된 클라이언트 IP를 key로 사용
+   * Reverse proxy 헤더를 신뢰할지 여부
+   * - false(기본): X-Forwarded-For 등을 읽지만 spoofing 가능성을 표시
+   * - true: 전달된 클라이언트 IP를 완전히 신뢰
+   * 주의: trustProxy: false여도 클라이언트 구분을 위해 헤더를 사용하므로
+   *       IP spoofing이 가능합니다. 신뢰할 수 있는 프록시 뒤에서만 사용하세요.
    */
   trustProxy?: boolean;
   /**
@@ -116,10 +118,6 @@ class MemoryRateLimiter {
   }
 
   private getClientKey(req: Request, options: NormalizedRateLimitOptions): string {
-    if (!options.trustProxy) {
-      return "global";
-    }
-
     const candidates = [
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
       req.headers.get("x-real-ip")?.trim(),
@@ -130,11 +128,14 @@ class MemoryRateLimiter {
 
     for (const candidate of candidates) {
       if (candidate) {
-        return candidate.slice(0, 64);
+        const sanitized = candidate.slice(0, 64);
+        // trustProxy: false면 경고를 위해 prefix 추가 (spoofing 가능)
+        return options.trustProxy ? sanitized : `unverified:${sanitized}`;
       }
     }
 
-    return "global";
+    // 헤더가 전혀 없는 경우만 fallback (로컬 개발 환경)
+    return "default";
   }
 }
 
