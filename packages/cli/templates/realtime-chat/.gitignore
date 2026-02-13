@@ -2,5 +2,19 @@ node_modules/
 dist/
 .mandu/
 mandu-report.json
-.claude.json
 *.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo

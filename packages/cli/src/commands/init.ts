@@ -217,8 +217,13 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   try {
     await fs.access(templateDir);
   } catch {
+    const availableTemplates = (await fs.readdir(templatesDir, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .join(", ");
+
     printCLIError(CLI_ERROR_CODES.INIT_TEMPLATE_NOT_FOUND, { template });
-    console.error(`   사용 가능한 템플릿: default, realtime-chat`);
+    console.error(`   사용 가능한 템플릿: ${availableTemplates}`);
     return false;
   }
 

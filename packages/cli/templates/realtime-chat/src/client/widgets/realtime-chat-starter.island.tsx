@@ -45,7 +45,7 @@ export function RealtimeChatStarter() {
         body: JSON.stringify({ message: text }),
       });
 
-      if (!res.ok || !res.body) throw new Error("Failed to stream response");
+      if (!res.ok || !res.body) throw new Error(`Chat API failed: ${res.status}`);
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
