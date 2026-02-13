@@ -77,7 +77,10 @@ describe("Server Rate Limit", () => {
   });
 
   it("동시 요청에서도 제한 개수를 초과하지 않는다", async () => {
-    registry.registerApiHandler("api/limited", async () => Response.json({ ok: true }));
+    registry.registerApiHandler("api/limited", async () => {
+      await new Promise((resolve) => setTimeout(resolve, Math.floor(Math.random() * 20)));
+      return Response.json({ ok: true });
+    });
 
     server = startServer(testManifest, {
       port: 0,
