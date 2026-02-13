@@ -141,7 +141,7 @@ Brain (sLLM) Workflow:
 /**
  * 인자 파싱
  */
-function parseArgs(args: string[]): { command: string; options: Record<string, string> } {
+export function parseArgs(args: string[]): { command: string; options: Record<string, string> } {
   const options: Record<string, string> = {};
   let command = "";
   const shortFlags: Record<string, string> = {
@@ -184,8 +184,8 @@ function parseArgs(args: string[]): { command: string; options: Record<string, s
 /**
  * 메인 함수
  */
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
+export async function main(argv = process.argv.slice(2)): Promise<void> {
+  const args = argv;
   const { command, options } = parseArgs(args);
 
   // 도움말 처리
@@ -234,7 +234,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  process.exit(0);
 }
 
-main().catch((error) => handleCLIError(error));
+if (import.meta.main) {
+  main().catch((error) => handleCLIError(error));
+}
