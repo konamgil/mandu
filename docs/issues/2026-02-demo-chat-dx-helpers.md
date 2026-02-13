@@ -1,42 +1,41 @@
-# [Draft Issue] feat(core): add typed request parsing + SSE helper for API routes
+# [Issue #81 Support] Demo-first route contract helper proposal
 
-## 제목 제안
-`feat(core): typed query/body parser and SSE responder utilities for app/api routes`
+연결 이슈: https://github.com/konamgil/mandu/issues/81
 
 ## 배경 (Demo-First 근거)
-`mandu-chat-demo` 고도화 중 아래 반복 패턴이 확인됨.
+`mandu-chat-demo` 사용자 시나리오를 먼저 재현/검증한 뒤, 반복 보일러플레이트를 프레임워크 요구사항으로 승격했다.
 
-1. 쿼리 파라미터 수동 파싱/정규화 반복
-   - 예: `sinceId`, `limit`를 route마다 수동 처리
-2. SSE 스트림 구성 보일러플레이트 반복
-   - `event/data` 직렬화, ping, abort/cleanup 처리 재구현
-3. 에러 응답 계약 수동 합의
-   - `{ error, code }` 형태를 route마다 직접 정의
+재현 로그:
+- `bun test tests/chat-catchup.test.ts` → 3 pass
+- `bun test tests/chat-send-validation.test.ts` → 2 pass
 
-## 제안
+반복 패턴:
+1. 쿼리 파라미터 수동 파싱/정규화 반복 (`sinceId`, `limit`)
+2. body 파싱/검증 수동 처리 (`text` trim/empty/max length)
+3. API 에러 응답 shape/status 수동 합의 (`{ error, code }`)
+4. (별도 이슈 #77 연계) SSE route 직렬화/cleanup/ping 보일러플레이트
 
-### 1) typed request parser helper
-- `parseQuery(request, schema)`
-- `parseJsonBody(request, schema)`
-- zod(or lightweight schema) 기반 파싱 + 기본 에러 응답 통합
+## 제안 (작고 명확한 범위)
+### 1) Typed query/body contract helper
+- `querySchema()` : parse/coerce/validate/default/clamp
+- `bodySchema()` : JSON parse + typed validate + 표준 에러 변환
 
-### 2) SSE responder helper
-- `createSseResponse({ onConnect, pingIntervalMs })`
-- `send(event, payload)`
-- 자동 abort cleanup + 안전 enqueue
-
-### 3) error response helper
+### 2) Standard API error helper
 - `apiError(code, message, status)`
-- 일관된 JSON shape 보장
+- 모든 route에서 동일 shape 보장
 
-## 기대 효과
-- 데모/실서비스 route 코드량 감소
-- 파라미터/에러 계약 일관성 향상
-- SSE 기능 구현 난이도 하락
+## Mandu 철학 정합성 점검
+- **무결성(Integrity)**: 입력 검증과 오류 응답이 결정론적으로 고정됨
+- **아키텍처 일관성**: route 계약 작성 방식이 앱 간 동일해짐
+- **재사용 우선**: 반복 parse/validate/error 코드 제거
+- **중복 금지**: helper 1곳 유지보수로 route N곳 반영
 
-## 재현 기준 (demo)
+## 비목표 (무조건 수정 지향 금지)
+- 범용 거대 추상화 금지
+- 데모에서 재현되지 않은 요구사항 선반영 금지
+- 구현 전, 데모 시나리오/검증 로그 없는 변경 금지
+
+## 재현 기준 파일
 - `mandu-chat-demo/app/api/chat/messages/route.ts`
 - `mandu-chat-demo/app/api/chat/send/route.ts`
 - `mandu-chat-demo/app/api/chat/stream/route.ts`
-
-위 3개 파일에서 현재 반복되는 보일러플레이트를 helper로 치환 가능한지 PoC 검증 가능.
