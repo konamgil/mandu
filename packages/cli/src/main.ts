@@ -184,8 +184,7 @@ export function parseArgs(args: string[]): { command: string; options: Record<st
 /**
  * 메인 함수
  */
-export async function main(argv = process.argv.slice(2)): Promise<void> {
-  const args = argv;
+export async function main(args = process.argv.slice(2)): Promise<void> {
   const { command, options } = parseArgs(args);
 
   // 도움말 처리
