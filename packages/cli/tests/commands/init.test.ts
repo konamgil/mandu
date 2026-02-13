@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
-import { init, isAllowedTemplate } from "../../src/commands/init";
+import { __test__, init, isAllowedTemplate } from "../../src/commands/init";
 
 describe("init command template validation", () => {
   const cwd = process.cwd();
@@ -37,5 +37,39 @@ describe("init command template validation", () => {
 
     expect(ok).toBe(false);
     await expect(fs.access(path.join(dir, "sample-app"))).rejects.toBeDefined();
+  });
+});
+
+describe("init command mcp backup naming", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(async () => {
+    for (const dir of tempDirs.splice(0)) {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to timestamp backup when suffix attempts are exhausted", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mandu-mcp-test-"));
+    tempDirs.push(dir);
+
+    const mcpPath = path.join(dir, ".mcp.json");
+    await fs.writeFile(mcpPath, "{ invalid json");
+    await fs.writeFile(`${mcpPath}.bak`, "existing");
+    await fs.writeFile(`${mcpPath}.bak.1`, "existing");
+    await fs.writeFile(`${mcpPath}.bak.2`, "existing");
+
+    const result = await __test__.setupMcpConfig(dir, {
+      maxBackupSuffixAttempts: 2,
+    });
+
+    expect(result.mcpJson.status).toBe("backed-up");
+    expect(result.mcpJson.backupPath).toBeDefined();
+    expect(result.mcpJson.backupPath?.startsWith(`${mcpPath}.bak.`)).toBe(true);
+    expect(result.mcpJson.backupPath).not.toBe(`${mcpPath}.bak.1`);
+    expect(result.mcpJson.backupPath).not.toBe(`${mcpPath}.bak.2`);
+
+    const recreated = JSON.parse(await fs.readFile(mcpPath, "utf-8"));
+    expect(recreated?.mcpServers?.mandu?.command).toBe("bunx");
   });
 });

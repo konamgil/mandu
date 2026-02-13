@@ -20,7 +20,8 @@ export interface InitOptions {
 }
 
 const ALLOWED_TEMPLATES = ["default", "realtime-chat"] as const;
-const MAX_BACKUP_SUFFIX_ATTEMPTS = 50;
+const DEFAULT_MAX_BACKUP_SUFFIX_ATTEMPTS = 50;
+const BACKUP_SUFFIX_START_INDEX = 1;
 type AllowedTemplate = (typeof ALLOWED_TEMPLATES)[number];
 
 export function isAllowedTemplate(template: string): template is AllowedTemplate {
@@ -487,7 +488,18 @@ function logMcpConfigStatus(
  * - 파일 없으면 새로 생성
  * - 파일 있으면 mandu 서버만 추가/업데이트 (다른 설정 유지)
  */
-async function setupMcpConfig(targetDir: string): Promise<McpConfigResult> {
+interface SetupMcpConfigOptions {
+  maxBackupSuffixAttempts?: number;
+}
+
+export const __test__ = {
+  setupMcpConfig,
+};
+
+async function setupMcpConfig(
+  targetDir: string,
+  options: SetupMcpConfigOptions = {}
+): Promise<McpConfigResult> {
   const mcpPath = path.join(targetDir, ".mcp.json");
   const claudePath = path.join(targetDir, ".claude.json");
 
@@ -516,8 +528,15 @@ async function setupMcpConfig(targetDir: string): Promise<McpConfigResult> {
       if (!(await fileExists(base))) {
         return base;
       }
-      for (let i = 1; i <= MAX_BACKUP_SUFFIX_ATTEMPTS; i++) {
-        const candidate = `${basePath}.bak.${i}`;
+      const maxBackupSuffixAttempts =
+        options.maxBackupSuffixAttempts ?? DEFAULT_MAX_BACKUP_SUFFIX_ATTEMPTS;
+
+      for (
+        let suffixIndex = BACKUP_SUFFIX_START_INDEX;
+        suffixIndex <= maxBackupSuffixAttempts;
+        suffixIndex++
+      ) {
+        const candidate = `${basePath}.bak.${suffixIndex}`;
         if (!(await fileExists(candidate))) {
           return candidate;
         }
