@@ -43,6 +43,14 @@ cd my-app
 bun install
 ```
 
+Or scaffold the official realtime chat starter:
+
+```bash
+bunx @mandujs/cli init my-chat --template realtime-chat
+cd my-chat
+bun install
+```
+
 ### 2. Start Development Server
 
 ```bash
