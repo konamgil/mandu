@@ -8,6 +8,41 @@ import {
 } from "@mandujs/core";
 import path from "path";
 
+type RouteModule = Record<string, unknown>;
+
+const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
+
+type HttpMethod = (typeof HTTP_METHODS)[number];
+
+function hasHttpMethodHandlers(module: RouteModule): boolean {
+  return HTTP_METHODS.some((method) => typeof module[method] === "function");
+}
+
+function createMethodDispatcher(module: RouteModule, routeId: string) {
+  return async (req: Request, params: Record<string, string> = {}) => {
+    const method = req.method.toUpperCase() as HttpMethod;
+    const handler = module[method] as
+      | ((request: Request, context?: { params: Record<string, string> }) => Response | Promise<Response>)
+      | undefined;
+
+    if (!handler) {
+      return Response.json(
+        {
+          error: `Method ${method} not allowed for route ${routeId}`,
+        },
+        {
+          status: 405,
+          headers: {
+            Allow: HTTP_METHODS.filter((m) => typeof module[m] === "function").join(", "),
+          },
+        }
+      );
+    }
+
+    return handler(req, { params });
+  };
+}
+
 export interface RegisterHandlersOptions {
   /** 모듈 import 함수 (dev: importFresh, start: 표준 import) */
   importFn: (modulePath: string) => Promise<any>;
@@ -39,17 +74,22 @@ export async function registerManifestHandlers(
         const module = await importFn(modulePath);
         let handler = module.default || module.handler || module;
 
-        // ManduFilling 인스턴스를 핸들러 함수로 래핑
+        // 1) ManduFilling 인스턴스
         if (handler && typeof handler.handle === "function") {
           console.log(`  🔄 ManduFilling 래핑: ${route.id}`);
           const filling = handler;
           handler = async (req: Request, params?: Record<string, string>) => {
             return filling.handle(req, params);
           };
-        } else {
-          console.log(
-            `  ⚠️ 핸들러 타입: ${typeof handler}, handle: ${typeof handler?.handle}`
-          );
+        }
+        // 2) Route module with HTTP method exports (GET/POST/...)
+        else if (handler && typeof handler === "object" && hasHttpMethodHandlers(handler as RouteModule)) {
+          handler = createMethodDispatcher(handler as RouteModule, route.id);
+        }
+
+        if (typeof handler !== "function") {
+          console.warn(`  ⚠️ API 핸들러 변환 실패: ${route.id} (type: ${typeof handler})`);
+          continue;
         }
 
         registerApiHandler(route.id, handler);
