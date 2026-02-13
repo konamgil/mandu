@@ -217,10 +217,16 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   try {
     await fs.access(templateDir);
   } catch {
-    const availableTemplates = (await fs.readdir(templatesDir, { withFileTypes: true }))
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .join(", ");
+    let availableTemplates = "(정보 없음)";
+
+    try {
+      availableTemplates = (await fs.readdir(templatesDir, { withFileTypes: true }))
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .join(", ");
+    } catch {
+      // Fallback keeps INIT_TEMPLATE_NOT_FOUND as the primary error.
+    }
 
     printCLIError(CLI_ERROR_CODES.INIT_TEMPLATE_NOT_FOUND, { template });
     console.error(`   사용 가능한 템플릿: ${availableTemplates}`);
