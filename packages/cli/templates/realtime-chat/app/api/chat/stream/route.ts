@@ -29,6 +29,8 @@ export function GET(request: Request): Response {
   };
   sse.send(snapshot);
 
+  const unsubscribe = subscription.commit();
+
   const interval = setInterval(() => {
     const heartbeat: ChatStreamEvent = {
       type: "heartbeat",
@@ -39,7 +41,7 @@ export function GET(request: Request): Response {
 
   sse.onClose(() => {
     clearInterval(interval);
-    subscription.unsubscribe();
+    unsubscribe();
   });
 
   return sse.response;

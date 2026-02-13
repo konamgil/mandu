@@ -4,7 +4,7 @@ type ChatListener = (message: ChatMessage) => void;
 
 type SubscriptionSnapshot = {
   snapshot: ChatMessage[];
-  unsubscribe: () => void;
+  commit: () => () => void;
 };
 
 const listeners = new Set<ChatListener>();
@@ -55,22 +55,22 @@ export function subscribe(listener: ChatListener): () => void {
 export function subscribeWithSnapshot(listener: ChatListener): SubscriptionSnapshot {
   // Optimistic lock-free retry: snapshot과 subscribe 사이에 write가 끼면 재시도
   // => snapshot-subscription 경계에서 메시지 유실 방지
+  // commit()은 snapshot 전송 후 호출하여 listener 활성화 (이벤트 순서 보장)
   for (;;) {
     const beforeVersion = storeVersion;
     const snapshot = [...messages];
 
     testHookBeforeSubscribeCommit?.();
 
-    listeners.add(listener);
-
     if (beforeVersion === storeVersion) {
       return {
         snapshot,
-        unsubscribe: () => listeners.delete(listener),
+        commit: () => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
       };
     }
-
-    listeners.delete(listener);
   }
 }
 
