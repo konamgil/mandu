@@ -1,12 +1,20 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { Button, Input } from "@/client/shared/ui";
 import { useRealtimeChat } from "./use-realtime-chat";
 
 export function RealtimeChatStarter() {
   const { messages, send, canSend, sending } = useRealtimeChat();
   const [text, setText] = useState("");
+  const messagesWithTime = useMemo(
+    () =>
+      messages.map((message) => ({
+        ...message,
+        displayTime: new Date(message.createdAt).toLocaleTimeString(),
+      })),
+    [messages],
+  );
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -29,7 +37,7 @@ export function RealtimeChatStarter() {
             No messages yet. Start chatting.
           </p>
         ) : (
-          messages.map((message) => (
+          messagesWithTime.map((message) => (
             <div
               key={message.id}
               className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
@@ -39,7 +47,7 @@ export function RealtimeChatStarter() {
               }`}
             >
               <div>{message.text}</div>
-              <div className="mt-1 text-[10px] opacity-70">{new Date(message.createdAt).toLocaleTimeString()}</div>
+              <div className="mt-1 text-[10px] opacity-70">{message.displayTime}</div>
             </div>
           ))
         )}
