@@ -20,6 +20,7 @@ export interface InitOptions {
 }
 
 const ALLOWED_TEMPLATES = ["default", "realtime-chat"] as const;
+const MAX_BACKUP_SUFFIX_ATTEMPTS = 50;
 type AllowedTemplate = (typeof ALLOWED_TEMPLATES)[number];
 
 export function isAllowedTemplate(template: string): template is AllowedTemplate {
@@ -515,7 +516,7 @@ async function setupMcpConfig(targetDir: string): Promise<McpConfigResult> {
       if (!(await fileExists(base))) {
         return base;
       }
-      for (let i = 1; i <= 50; i++) {
+      for (let i = 1; i <= MAX_BACKUP_SUFFIX_ATTEMPTS; i++) {
         const candidate = `${basePath}.bak.${i}`;
         if (!(await fileExists(candidate))) {
           return candidate;
