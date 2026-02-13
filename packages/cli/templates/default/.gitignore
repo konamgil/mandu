@@ -4,3 +4,6 @@ dist/
 mandu-report.json
 .claude.json
 *.log
+.env
+.env.local
+.env.*.local

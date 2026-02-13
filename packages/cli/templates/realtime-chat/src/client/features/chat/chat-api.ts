@@ -34,8 +34,12 @@ export function openChatStream(onEvent: (event: ChatStreamEvent) => void): () =>
   const source = new EventSource(`${API_BASE}/stream`);
 
   source.onmessage = (event) => {
-    const parsed = JSON.parse(event.data) as ChatStreamEvent;
-    onEvent(parsed);
+    try {
+      const parsed = JSON.parse(event.data) as ChatStreamEvent;
+      onEvent(parsed);
+    } catch {
+      // Ignore malformed SSE payloads.
+    }
   };
 
   source.onerror = () => {
