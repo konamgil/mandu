@@ -1,10 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import { runLegacyGuardWithAutoHeal } from "../../src/commands/check";
 
 describe("runLegacyGuardWithAutoHeal", () => {
   it("auto-heals when violations are auto-correctable", async () => {
-    const runGuardCheck = vi
-      .fn()
+    const runGuardCheck = mock()
       .mockResolvedValueOnce({
         passed: false,
         violations: [{ ruleId: "spec-hash-mismatch" }],
@@ -16,8 +15,8 @@ describe("runLegacyGuardWithAutoHeal", () => {
 
     const result = await runLegacyGuardWithAutoHeal({ routes: [] } as any, "/tmp", {
       runGuardCheck,
-      runAutoCorrect: vi.fn().mockResolvedValue({ fixed: true }),
-      isAutoCorrectableViolation: vi.fn().mockReturnValue(true),
+      runAutoCorrect: mock().mockResolvedValue({ fixed: true }),
+      isAutoCorrectableViolation: mock().mockReturnValue(true),
     });
 
     expect(result.passed).toBe(true);
@@ -28,12 +27,12 @@ describe("runLegacyGuardWithAutoHeal", () => {
 
   it("keeps nextAction when violations remain", async () => {
     const result = await runLegacyGuardWithAutoHeal({ routes: [] } as any, "/tmp", {
-      runGuardCheck: vi.fn().mockResolvedValue({
+      runGuardCheck: mock().mockResolvedValue({
         passed: false,
         violations: [{ ruleId: "manual-fix" }],
       }),
-      runAutoCorrect: vi.fn(),
-      isAutoCorrectableViolation: vi.fn().mockReturnValue(false),
+      runAutoCorrect: mock(),
+      isAutoCorrectableViolation: mock().mockReturnValue(false),
     });
 
     expect(result.passed).toBe(false);
