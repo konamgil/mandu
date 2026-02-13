@@ -32,6 +32,12 @@ function hydrateIslands() {
       console.log(`[Mandu] Island hydrated: ${islandName}`);
     } catch (error) {
       console.error(`[Mandu] Failed to hydrate island: ${islandName}`, error);
+      element.innerHTML = `
+        <div style="padding:12px; border:1px solid rgba(239,68,68,0.4); background: rgba(127,29,29,0.25); color:#fecaca; border-radius:12px; font-size:14px; line-height:1.5;">
+          <strong style="display:block; margin-bottom:4px; color:#fee2e2;">⚠️ UI 로드 실패</strong>
+          <span>채팅 인터페이스를 불러오지 못했습니다. 페이지를 새로고침 후 다시 시도해주세요.</span>
+        </div>
+      `;
     }
   });
 }

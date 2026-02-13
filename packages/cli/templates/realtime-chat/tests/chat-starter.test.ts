@@ -115,19 +115,35 @@ describe("realtime chat starter template", () => {
 
     const decoder = new TextDecoder();
 
-    const firstChunk = await reader!.read();
-    expect(firstChunk.done).toBe(false);
-    const firstText = decoder.decode(firstChunk.value);
-    expect(firstText).toContain('"type":"snapshot"');
+    try {
+      const firstChunk = await reader!.read();
+      expect(firstChunk.done).toBe(false);
+      const firstText = decoder.decode(firstChunk.value);
+      expect(firstText).toContain('"type":"snapshot"');
 
-    appendMessage("user", "live-event");
+      appendMessage("user", "live-event");
 
-    const secondChunk = await reader!.read();
-    expect(secondChunk.done).toBe(false);
-    const secondText = decoder.decode(secondChunk.value);
-    expect(secondText).toContain('"type":"message"');
-    expect(secondText).toContain('"text":"live-event"');
+      const secondChunk = await reader!.read();
+      expect(secondChunk.done).toBe(false);
+      const secondText = decoder.decode(secondChunk.value);
+      expect(secondText).toContain('"type":"message"');
+      expect(secondText).toContain('"text":"live-event"');
+    } finally {
+      abortController.abort();
+    }
+  });
 
-    abortController.abort();
+  it("includes essential ARIA attributes in chat UI", async () => {
+    const source = await Bun.file(
+      new URL("../src/client/features/chat/realtime-chat-starter.client.tsx", import.meta.url),
+    ).text();
+
+    expect(source).toContain('role="log"');
+    expect(source).toContain('aria-live="polite"');
+    expect(source).toContain('aria-label="Chat messages"');
+    expect(source).toContain('aria-label="Chat message input"');
+    expect(source).toContain('aria-describedby="chat-input-description"');
+    expect(source).toContain('id="chat-input-description"');
+    expect(source).toContain('aria-label="Send message"');
   });
 });
