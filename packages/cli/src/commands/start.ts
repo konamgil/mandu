@@ -73,11 +73,13 @@ export async function start(options: StartOptions = {}): Promise<void> {
 
   if (action === "block") {
     console.error("🛑 서버 시작 차단: Lockfile 불일치");
-    console.error("   설정이 변경되었습니다. 의도한 변경이라면:");
+    console.error("   설정이 변경되었습니다. 의도한 변경이라면 아래 중 하나를 실행하세요:");
     console.error("   $ mandu lock");
+    console.error("   $ bunx mandu lock");
     console.error("");
     console.error("   변경 사항 확인:");
     console.error("   $ mandu lock --diff");
+    console.error("   $ bunx mandu lock --diff");
     if (lockResult) {
       console.error("");
       console.error(formatValidationResult(lockResult));
@@ -92,10 +94,12 @@ export async function start(options: StartOptions = {}): Promise<void> {
   // Lockfile 상태 출력
   if (action === "warn") {
     console.log(`⚠️  ${formatPolicyAction(action, bypassed)}`);
+    console.log(`   ↳ lock 갱신: mandu lock  (or bunx mandu lock)`);
+    console.log(`   ↳ 변경 확인: mandu lock --diff  (or bunx mandu lock --diff)`);
   } else if (lockfile && lockResult?.valid) {
     console.log(`🔒 설정 무결성 확인됨 (${lockResult.currentHash?.slice(0, 8)})`);
   } else if (!lockfile) {
-    console.log(`💡 Lockfile 없음 - 'mandu lock'으로 생성 권장`);
+    console.log(`💡 Lockfile 없음 - 'mandu lock' 또는 'bunx mandu lock'으로 생성 권장`);
   }
 
   // .env 파일 로드 (production 모드)
