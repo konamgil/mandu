@@ -13,6 +13,14 @@ export interface SSESendOptions {
 
 export type SSECleanup = () => void | Promise<void>;
 
+function sanitizeSingleLineField(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").trim();
+}
+
+function splitSSELines(value: string): string[] {
+  return value.split(/\r\n|[\r\n]/);
+}
+
 const DEFAULT_SSE_HEADERS: HeadersInit = {
   "Content-Type": "text/event-stream; charset=utf-8",
   "Cache-Control": "no-cache, no-transform",
@@ -62,12 +70,18 @@ export class SSEConnection {
 
     const lines: string[] = [];
 
-    if (options.event) lines.push(`event: ${options.event}`);
-    if (options.id) lines.push(`id: ${options.id}`);
+    if (options.event) {
+      const safeEvent = sanitizeSingleLineField(options.event);
+      if (safeEvent) lines.push(`event: ${safeEvent}`);
+    }
+    if (options.id) {
+      const safeId = sanitizeSingleLineField(options.id);
+      if (safeId) lines.push(`id: ${safeId}`);
+    }
     if (typeof options.retry === "number") lines.push(`retry: ${Math.max(0, Math.floor(options.retry))}`);
 
     const payload = typeof data === "string" ? data : JSON.stringify(data);
-    const payloadLines = payload.split(/\r?\n/);
+    const payloadLines = splitSSELines(payload);
     for (const line of payloadLines) {
       lines.push(`data: ${line}`);
     }
@@ -81,8 +95,7 @@ export class SSEConnection {
 
   comment(text: string): void {
     if (this.closed) return;
-    const normalized = text.replace(/\r?\n/g, "\n");
-    const lines = normalized.split("\n").map((line) => `: ${line}`);
+    const lines = splitSSELines(text).map((line) => `: ${line}`);
     this.enqueue(`${lines.join("\n")}\n\n`);
   }
 
@@ -99,7 +112,9 @@ export class SSEConnection {
 
   onClose(handler: SSECleanup): void {
     if (this.closed) {
-      void handler();
+      void Promise.resolve(handler()).catch(() => {
+        // ignore cleanup errors after close
+      });
       return;
     }
     this.cleanupHandlers.push(handler);
@@ -118,13 +133,21 @@ export class SSEConnection {
     const handlers = [...this.cleanupHandlers];
     this.cleanupHandlers = [];
     for (const handler of handlers) {
-      await handler();
+      try {
+        await handler();
+      } catch {
+        // continue running remaining cleanup handlers
+      }
     }
   }
 
   private enqueue(chunk: string): void {
     if (this.controller) {
-      this.controller.enqueue(this.encoder.encode(chunk));
+      try {
+        this.controller.enqueue(this.encoder.encode(chunk));
+      } catch {
+        void this.close();
+      }
       return;
     }
     this.pending.push(chunk);

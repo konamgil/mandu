@@ -24,6 +24,32 @@ describe("SSEConnection", () => {
     expect(chunk).toContain('data: {"ok":true}');
   });
 
+  it("sanitizes event/id fields to prevent SSE injection", async () => {
+    const sse = createSSEConnection();
+
+    sse.send("payload", {
+      event: "update\nretry:0",
+      id: "abc\r\ndata: injected",
+    });
+
+    const chunk = await readChunk(sse.response);
+    expect(chunk).toContain("event: update retry:0");
+    expect(chunk).toContain("id: abc data: injected");
+    expect(chunk).not.toContain("\nevent: update\nretry:0\n");
+  });
+
+  it("normalizes payload lines across CR/LF variants", async () => {
+    const sse = createSSEConnection();
+
+    sse.send("a\rb\nc\r\nd");
+    const chunk = await readChunk(sse.response);
+
+    expect(chunk).toContain("data: a");
+    expect(chunk).toContain("data: b");
+    expect(chunk).toContain("data: c");
+    expect(chunk).toContain("data: d");
+  });
+
   it("registers heartbeat and cleanup on close", async () => {
     const sse = createSSEConnection();
     const cleanup = mock(() => {});
@@ -35,6 +61,29 @@ describe("SSEConnection", () => {
 
     expect(cleanup).toHaveBeenCalledTimes(1);
     expect(typeof stop).toBe("function");
+  });
+
+  it("continues closing when cleanup handlers throw", async () => {
+    const sse = createSSEConnection();
+    const badCleanup = mock(() => {
+      throw new Error("cleanup failed");
+    });
+    const goodCleanup = mock(() => {});
+
+    sse.onClose(badCleanup);
+    sse.onClose(goodCleanup);
+
+    await expect(sse.close()).resolves.toBeUndefined();
+    expect(badCleanup).toHaveBeenCalledTimes(1);
+    expect(goodCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throw when registering onClose after already closed", async () => {
+    const sse = createSSEConnection();
+    await sse.close();
+
+    const badCleanup = () => Promise.reject(new Error("late cleanup failed"));
+    expect(() => sse.onClose(badCleanup)).not.toThrow();
   });
 
   it("closes automatically when request signal aborts", async () => {
