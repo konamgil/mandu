@@ -16,10 +16,18 @@ export function RealtimeChatStarter() {
   };
 
   return (
-    <section className="flex h-[70vh] flex-col rounded-xl border bg-card">
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+    <section className="flex h-[70vh] flex-col rounded-xl border bg-card" aria-label="Realtime chat">
+      <div
+        className="flex-1 space-y-3 overflow-y-auto p-4"
+        role="log"
+        aria-live="polite"
+        aria-label="Chat messages"
+        aria-relevant="additions text"
+      >
         {messages.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No messages yet. Start chatting.</p>
+          <p className="text-sm text-muted-foreground" role="status">
+            No messages yet. Start chatting.
+          </p>
         ) : (
           messages.map((message) => (
             <div
@@ -37,15 +45,24 @@ export function RealtimeChatStarter() {
         )}
       </div>
 
-      <form onSubmit={onSubmit} className="flex gap-2 border-t p-3">
+      <form onSubmit={onSubmit} className="flex gap-2 border-t p-3" aria-label="Send chat message">
         <Input
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Type your message..."
           className="flex-1"
           maxLength={500}
+          aria-label="Chat message input"
+          aria-describedby="chat-input-description"
         />
-        <Button type="submit" disabled={!canSend || text.trim().length === 0}>
+        <span id="chat-input-description" className="sr-only">
+          Press Enter to send your message.
+        </span>
+        <Button
+          type="submit"
+          aria-label="Send message"
+          disabled={!canSend || text.trim().length === 0}
+        >
           {sending ? "Sending..." : "Send"}
         </Button>
       </form>
