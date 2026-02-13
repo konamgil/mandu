@@ -12,6 +12,60 @@ async function readChunk(response: Response): Promise<string> {
 }
 
 describe("SSEConnection", () => {
+  it("streams real-time chunks and finishes with done=true after close", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const ctx = new ManduContext(req);
+        return ctx.sse(async (sse) => {
+          sse.event("tick", { step: 1 }, { id: "1" });
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          sse.event("tick", { step: 2 }, { id: "2" });
+          await sse.close();
+        });
+      },
+    });
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.port}/stream`);
+      expect(response.headers.get("content-type")).toContain("text/event-stream");
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Missing response body");
+
+      const firstRead = await reader.read();
+      expect(firstRead.done).toBe(false);
+      const firstChunk = new TextDecoder().decode(firstRead.value);
+      expect(firstChunk).toContain("event: tick");
+      expect(firstChunk).toContain('data: {"step":1}');
+
+      const secondRead = await reader.read();
+      expect(secondRead.done).toBe(false);
+      const secondChunk = new TextDecoder().decode(secondRead.value);
+      expect(secondChunk).toContain('data: {"step":2}');
+
+      const finalRead = await reader.read();
+      expect(finalRead.done).toBe(true);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  it("closes stream when context-level SSE setup throws (error path)", async () => {
+    const ctx = new ManduContext(new Request("http://localhost/realtime-error"));
+
+    const response = ctx.sse(async () => {
+      throw new Error("setup failed");
+    });
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Missing response body");
+
+    // setup error is swallowed intentionally, but stream must close cleanly.
+    await Promise.resolve();
+    const read = await reader.read();
+    expect(read.done).toBe(true);
+  });
   it("sends SSE event payload with metadata", async () => {
     const sse = createSSEConnection();
 
