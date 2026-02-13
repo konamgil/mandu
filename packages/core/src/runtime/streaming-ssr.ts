@@ -9,9 +9,7 @@
  * - Island Architecture와 완벽 통합
  */
 
-// Bun에서는 react-dom/server.browser에서 renderToReadableStream을 가져옴
-// Node.js 환경에서는 renderToPipeableStream 사용 필요
-import { renderToReadableStream } from "react-dom/server.browser";
+import { getRenderToReadableStream } from "./react-renderer";
 import type { ReactElement, ReactNode } from "react";
 import React, { Suspense } from "react";
 import type { BundleManifest } from "../bundler/types";
@@ -665,6 +663,7 @@ export async function renderToStream(
 
   // React renderToReadableStream 호출
   // 실패 시 throw → renderStreamingResponse에서 500 처리
+  const renderToReadableStream = getRenderToReadableStream();
   const reactStream = await renderToReadableStream(element, {
     onError: (error: Error) => {
       if (timedOut) return;
