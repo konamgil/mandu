@@ -350,11 +350,12 @@ bunx mandu build
 |---------|-------------|
 | `mandu init` | Create new project |
 | `mandu dev` | Start dev server (FS Routes + Guard auto-enabled) |
-| `mandu dev --guard` | Dev with architecture monitoring |
 | `mandu build` | Build for production |
+| `mandu start` | Start production server |
+| `mandu check` | Run integrated routes + architecture + config checks |
 | `mandu guard arch` | Run architecture check |
 | `mandu routes list` | Show all routes |
-| `mandu status` | Show project status |
+| `mandu lock` | Generate/refresh lockfile for config integrity |
 
 ---
 
@@ -708,7 +709,7 @@ mandu/
 
 ## Roadmap
 
-### v0.10.x (Current) — 74 features done
+### v0.10.x (Current)
 
 **Core Runtime**
 - [x] Middleware compose & lifecycle hooks

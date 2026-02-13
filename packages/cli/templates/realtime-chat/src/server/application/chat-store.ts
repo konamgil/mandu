@@ -1,16 +1,29 @@
 import type { ChatMessage } from "@/shared/contracts/chat";
 
-type ChatListener = (message: ChatMessage) => void;
+type ChatListener = (event: ChatMessageEvent) => void;
+
+export interface ChatMessageEvent {
+  eventId: string;
+  message: ChatMessage;
+}
 
 type SubscriptionSnapshot = {
   snapshot: ChatMessage[];
   commit: () => () => void;
 };
 
+export interface ResumePlan {
+  mode: "catch-up" | "snapshot";
+  events: ChatMessageEvent[];
+}
+
 const listeners = new Set<ChatListener>();
 const messages: ChatMessage[] = [];
 const MAX_HISTORY_MESSAGES = 200;
+const MAX_CATCH_UP_EVENTS = 500;
 let storeVersion = 0;
+let streamEventSeq = 0;
+const catchUpEvents: ChatMessageEvent[] = [];
 let testHookBeforeSubscribeCommit: (() => void) | undefined;
 
 function createMessage(role: ChatMessage["role"], text: string): ChatMessage {
@@ -20,6 +33,25 @@ function createMessage(role: ChatMessage["role"], text: string): ChatMessage {
     text,
     createdAt: new Date().toISOString(),
   };
+}
+
+function createEventId(nextSeq: number): string {
+  return `msg-${nextSeq}`;
+}
+
+function parseEventSeq(eventId: string | null | undefined): number | null {
+  if (!eventId) return null;
+  const match = /^msg-(\d+)$/.exec(eventId);
+  if (!match) return null;
+  const parsed = Number.parseInt(match[1]!, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function pushCatchUpEvent(event: ChatMessageEvent): void {
+  catchUpEvents.push(event);
+  if (catchUpEvents.length > MAX_CATCH_UP_EVENTS) {
+    catchUpEvents.splice(0, catchUpEvents.length - MAX_CATCH_UP_EVENTS);
+  }
 }
 
 export function getMessages(): ChatMessage[] {
@@ -35,10 +67,18 @@ export function appendMessage(role: ChatMessage["role"], text: string): ChatMess
   }
 
   storeVersion += 1;
+  streamEventSeq += 1;
+
+  const event: ChatMessageEvent = {
+    eventId: createEventId(streamEventSeq),
+    message,
+  };
+
+  pushCatchUpEvent(event);
 
   for (const listener of listeners) {
     try {
-      listener(message);
+      listener(event);
     } catch {
       // Ignore listener errors so one broken subscriber does not stop fan-out.
     }
@@ -74,10 +114,40 @@ export function subscribeWithSnapshot(listener: ChatListener): SubscriptionSnaps
   }
 }
 
+export function planResumeFrom(lastEventId: string | null | undefined): ResumePlan {
+  const parsedSeq = parseEventSeq(lastEventId);
+  if (parsedSeq === null) {
+    return { mode: "snapshot", events: [] };
+  }
+
+  if (parsedSeq === streamEventSeq) {
+    return { mode: "catch-up", events: [] };
+  }
+
+  const firstAvailable = catchUpEvents[0];
+  if (!firstAvailable) {
+    return { mode: "snapshot", events: [] };
+  }
+
+  const firstSeq = parseEventSeq(firstAvailable.eventId);
+  if (firstSeq === null || parsedSeq < firstSeq - 1 || parsedSeq > streamEventSeq) {
+    return { mode: "snapshot", events: [] };
+  }
+
+  const events = catchUpEvents.filter((event) => {
+    const seq = parseEventSeq(event.eventId);
+    return seq !== null && seq > parsedSeq;
+  });
+
+  return { mode: "catch-up", events };
+}
+
 export function __resetChatStoreForTests(): void {
   messages.length = 0;
   listeners.clear();
   storeVersion = 0;
+  streamEventSeq = 0;
+  catchUpEvents.length = 0;
   testHookBeforeSubscribeCommit = undefined;
 }
 
@@ -85,4 +155,4 @@ export function __setSubscribeCommitHookForTests(hook?: () => void): void {
   testHookBeforeSubscribeCommit = hook;
 }
 
-export { MAX_HISTORY_MESSAGES };
+export { MAX_HISTORY_MESSAGES, MAX_CATCH_UP_EVENTS };

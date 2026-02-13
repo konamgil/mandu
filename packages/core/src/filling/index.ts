@@ -10,6 +10,8 @@ export { ManduFilling, ManduFillingFactory, LoaderTimeoutError } from "./filling
 export type { Handler, Guard, HttpMethod, Loader, LoaderOptions } from "./filling";
 export { SSEConnection, createSSEConnection } from "./sse";
 export type { SSEOptions, SSESendOptions, SSECleanup } from "./sse";
+export { resolveResumeCursor, catchupFromCursor, mergeUniqueById } from "./sse-catchup";
+export type { SSECursor, CatchupResult, CatchupOptions } from "./sse-catchup";
 
 // Auth Guards
 export {

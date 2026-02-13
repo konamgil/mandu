@@ -22,8 +22,8 @@ describe("chat-store concurrency", () => {
     });
 
     const seen: string[] = [];
-    const subscription = subscribeWithSnapshot((message) => {
-      seen.push(message.text);
+    const subscription = subscribeWithSnapshot((event) => {
+      seen.push(event.message.text);
     });
 
     expect(subscription.snapshot.some((message) => message.text === "racing-message")).toBe(true);

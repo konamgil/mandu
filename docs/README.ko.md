@@ -8,6 +8,9 @@
 - `docs/architecture/02_mandu_technical_architecture.md` — 기술 아키텍처 (MVP-0.1)
 - `docs/guides/01_configuration.ko.md` — 설정 가이드
 - `docs/guides/03_mandu_coding_agent_prompt_template.md` — 코딩 에이전트 프롬프트 템플릿
+- `docs/guides/05_realtime_chat_starter.md` — 공식 realtime chat starter 가이드
+- `docs/guides/06_realtime_chat_demo_validation_loop.md` — 데모 우선 검증/성장 루프
+- `docs/guides/lockfile.md` — lock/check 무결성 트러블슈팅
 - `docs/specs/04_mandu_hydration_system.md` — 하이드레이션 시스템
 - `docs/architecture/05_mandu_backend-architecture-guardrails.md` — 백엔드 가드레일
 - `docs/architecture/06_mandu_router_v5_hybrid_trie.md` — Router v5 하이브리드 트라이
@@ -58,7 +61,7 @@ export default {
 
 ---
 
-## 문서 상태 (업데이트: 2026-02-03)
+## 문서 상태 (업데이트: 2026-02-13)
 
 | 문서 | 상태 | 비고 |
 |------|------|------|
@@ -67,7 +70,10 @@ export default {
 | `docs/product/01_mandu_product_brief.md` | 수정 | MCP/CLI 목록 및 로드맵 노트 갱신 (2026-01-30) |
 | `docs/architecture/02_mandu_technical_architecture.md` | 수정 | 구현 현황/CLI/MCP 도구 반영 (2026-01-30) |
 | `docs/guides/01_configuration.ko.md` | 신규 | 설정 가이드 (2026-02-03) |
-| `docs/guides/03_mandu_coding_agent_prompt_template.md` | 수정 | CLI 명칭 정정 (2026-01-30) |
+| `docs/guides/03_mandu_coding_agent_prompt_template.md` | 수정 | CLI 명칭/예시 정합성 보강 (2026-02-13) |
+| `docs/guides/05_realtime_chat_starter.md` | 수정 | 스타터 + 데모 우선 검증 흐름 반영 (2026-02-13) |
+| `docs/guides/06_realtime_chat_demo_validation_loop.md` | 신규 | 데모 우선 프레임워크 성장 루프 (2026-02-13) |
+| `docs/guides/lockfile.md` | 수정 | lock/check 무결성 이슈 대응 절차 (2026-02-13) |
 | `docs/specs/04_mandu_hydration_system.md` | 수정 | 구현 현황/MCP 도구 반영 (2026-01-30) |
 | `docs/architecture/05_mandu_backend-architecture-guardrails.md` | 이동 | 2026-01-28 루트에서 이동 |
 | `docs/architecture/06_mandu_router_v5_hybrid_trie.md` | 수정 | 구현 상태 표시 추가 (2026-01-30) |

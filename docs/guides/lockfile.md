@@ -13,15 +13,17 @@ Mandu Lockfile은 `mandu.config`의 **결정론적 해시**를 저장하여 설�
 ## 빠른 시작
 
 ```bash
-# Lockfile 생성/갱신
-mandu lock
+# 프로젝트 로컬 CLI로 실행(권장)
+bunx @mandujs/cli lock
 
 # 설정 무결성 검증
-mandu lock --verify
+bunx @mandujs/cli lock --verify
 
 # 변경사항 확인
-mandu lock --diff
+bunx @mandujs/cli lock --diff
 ```
+
+> 로컬에 구버전 `mandu` 바이너리가 설치된 경우, `bunx @mandujs/cli ...`로 실행해 버전 불일치를 피하세요.
 
 ## 작동 원리
 
@@ -39,7 +41,7 @@ const hash = computeConfigHash(config);
 ```json
 {
   "schemaVersion": 1,
-  "manduVersion": "0.9.46",
+  "manduVersion": "0.10.x",
   "configHash": "a1b2c3d4e5f67890",
   "generatedAt": "2024-01-15T10:30:00.000Z",
   "mcpServers": {
@@ -85,11 +87,8 @@ mandu lock --json
 # 기본 검증
 mandu lock --verify
 
-# 특정 모드로 검증
+# 특정 모드로 검증 (예: CI)
 mandu lock --verify --mode=ci
-
-# CI/CD에서 사용
-mandu lock --verify --json
 ```
 
 출력 예시:
@@ -136,8 +135,6 @@ mandu lock --diff --show-secrets
 | `--show-secrets` | 민감정보 출력 허용 |
 | `--include-snapshot` | 설정 스냅샷 포함 |
 | `--mode=<mode>` | 검증 모드 지정 |
-| `--quiet, -q` | 조용한 출력 |
-| `--json` | JSON 형식 출력 |
 
 ## 워크플로우
 

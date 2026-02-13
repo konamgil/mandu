@@ -506,10 +506,13 @@ my-app/
 | 명령어 | 설명 |
 |--------|------|
 | `mandu init <name>` | 새 프로젝트 생성 |
-| `mandu generate` | app/에서 매니페스트 생성 및 코드 생성 |
-| `mandu guard` | 아키텍처 검사 실행 |
-| `mandu build` | 프로덕션용 클라이언트 번들 빌드 |
-| `mandu dev` | HMR 포함 개발 서버 실행 |
+| `mandu dev` | 개발 서버 실행 (FS Routes + Guard 기본 활성화) |
+| `mandu build` | 프로덕션 빌드 |
+| `mandu start` | 프로덕션 서버 실행 |
+| `mandu check` | 통합 점검(routes + architecture + config) |
+| `mandu guard arch` | 아키텍처 검사 실행 |
+| `mandu routes list` | 현재 라우트 목록 출력 |
+| `mandu lock` | 설정 무결성용 lockfile 생성/갱신 |
 
 ### 트랜잭션 명령어
 
@@ -529,18 +532,21 @@ my-app/
 bunx @mandujs/cli init my-app
 
 # 개발 워크플로우
-bunx mandu generate             # 매니페스트 + 코드 생성
-bunx mandu guard                # 아키텍처 검사
-bunx mandu dev                  # 개발 서버 실행
+bunx mandu dev
+bunx mandu check
 
-# 프로덕션 빌드
-bunx mandu build --minify       # 최적화된 번들 빌드
+# 프로덕션
+bunx mandu build
+bunx mandu start
+
+# 설정 무결성
+bunx mandu lock
+bunx mandu lock --verify
 
 # 트랜잭션으로 안전한 변경
 bunx mandu change begin --message "사용자 API 추가"
 # ... 변경 작업 ...
-bunx mandu change commit        # 성공: 확정
-bunx mandu change rollback      # 실패: 스냅샷 복원
+bunx mandu change commit
 ```
 
 ---
@@ -1254,7 +1260,7 @@ Mandu는 자동으로 에러를 세 가지 유형으로 분류합니다:
 
 ## 로드맵
 
-### v0.10.x (현재) — 74개 기능 완료
+### v0.10.x (현재)
 
 **Core Runtime**
 - [x] 미들웨어 compose & 라이프사이클 훅

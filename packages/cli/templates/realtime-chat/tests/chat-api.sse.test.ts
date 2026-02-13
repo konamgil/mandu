@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { openChatStream } from "@/client/features/chat/chat-api";
+import { mergeChatMessages, openChatStream } from "@/client/features/chat/chat-api";
 import type { ChatStreamEvent } from "@/shared/contracts/chat";
 
-type MessageEventLike = { data: string };
+type MessageEventLike = { data: string; lastEventId?: string };
 
 class FakeEventSource {
   onopen: ((event: Event) => void) | null = null;
@@ -16,8 +16,8 @@ class FakeEventSource {
     this.onopen?.(new Event("open"));
   }
 
-  emitMessage(data: string) {
-    this.onmessage?.({ data });
+  emitMessage(data: string, lastEventId?: string) {
+    this.onmessage?.({ data, lastEventId });
   }
 
   emitError() {
@@ -62,6 +62,32 @@ describe("openChatStream", () => {
     sources[2]?.emitError();
     await sleep(25);
     expect(sources.length).toBe(3);
+
+    stop();
+  });
+
+  it("adds lastEventId cursor on reconnect for resumable SSE", async () => {
+    const sources: FakeEventSource[] = [];
+
+    const stop = openChatStream(() => {}, {
+      baseDelayMs: 5,
+      maxDelayMs: 5,
+      jitterRatio: 0,
+      maxRetries: 1,
+      eventSourceFactory: (url) => {
+        const source = new FakeEventSource(url);
+        sources.push(source);
+        return source as unknown as EventSource;
+      },
+    });
+
+    expect(sources[0]?.url).toBe("/api/chat/stream");
+
+    sources[0]?.emitMessage(JSON.stringify({ type: "message" }), "msg-42");
+    sources[0]?.emitError();
+
+    await sleep(8);
+    expect(sources[1]?.url).toBe("/api/chat/stream?lastEventId=msg-42");
 
     stop();
   });
@@ -147,5 +173,16 @@ describe("openChatStream", () => {
     expect(events).toEqual([{ type: "message" }]);
 
     stop();
+  });
+});
+
+describe("mergeChatMessages", () => {
+  it("idempotently merges duplicate messages by id", () => {
+    const a = { id: "1", role: "user", text: "hello", createdAt: "2026-02-13T00:00:00.000Z" } as const;
+    const b = { id: "2", role: "assistant", text: "world", createdAt: "2026-02-13T00:00:01.000Z" } as const;
+
+    const merged = mergeChatMessages([a, b], [b]);
+    expect(merged).toHaveLength(2);
+    expect(merged.map((m) => m.id)).toEqual(["1", "2"]);
   });
 });
