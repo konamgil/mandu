@@ -1,4 +1,4 @@
-import { getMessages, subscribe } from "@/server/application/chat-store";
+import { subscribeWithSnapshot } from "@/server/application/chat-store";
 import type { ChatMessage, ChatStreamEvent } from "@/shared/contracts/chat";
 import { createRateLimiter } from "@mandujs/core/runtime/server";
 
@@ -22,19 +22,23 @@ export function GET(request: Request): Response {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const snapshot: ChatStreamEvent = {
-        type: "snapshot",
-        data: getMessages(),
-      };
-      controller.enqueue(formatEvent(snapshot));
-
-      unsubscribe = subscribe((message: ChatMessage) => {
+      const subscription = subscribeWithSnapshot((message: ChatMessage) => {
         const event: ChatStreamEvent = {
           type: "message",
           data: message,
         };
         controller.enqueue(formatEvent(event));
       });
+
+      // snapshot을 먼저 전송
+      const snapshot: ChatStreamEvent = {
+        type: "snapshot",
+        data: subscription.snapshot,
+      };
+      controller.enqueue(formatEvent(snapshot));
+
+      // 그 다음 listener 활성화 (이벤트 순서 보장)
+      unsubscribe = subscription.commit();
 
       interval = setInterval(() => {
         const heartbeat: ChatStreamEvent = {

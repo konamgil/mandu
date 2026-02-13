@@ -100,6 +100,34 @@ describe("realtime chat starter template", () => {
     expect(response.headers.get("Content-Type")).toContain("text/event-stream");
   });
 
+  it("SSE stream emits snapshot and live message events", async () => {
+    const abortController = new AbortController();
+    const request = new Request("http://localhost:3000/api/chat/stream", {
+      signal: abortController.signal,
+    });
+
+    const response = getStream(request);
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+
+    const decoder = new TextDecoder();
+
+    const firstChunk = await reader!.read();
+    expect(firstChunk.done).toBe(false);
+    const firstText = decoder.decode(firstChunk.value);
+    expect(firstText).toContain('"type":"snapshot"');
+
+    appendMessage("user", "live-event");
+
+    const secondChunk = await reader!.read();
+    expect(secondChunk.done).toBe(false);
+    const secondText = decoder.decode(secondChunk.value);
+    expect(secondText).toContain('"type":"message"');
+    expect(secondText).toContain('"text":"live-event"');
+
+    abortController.abort();
+  });
+
   it("includes essential ARIA attributes in chat UI", async () => {
     const source = await Bun.file(
       new URL("../src/client/features/chat/realtime-chat-starter.client.tsx", import.meta.url),
