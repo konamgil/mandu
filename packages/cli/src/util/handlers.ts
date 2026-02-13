@@ -20,8 +20,8 @@ function hasHttpMethodHandlers(module: RouteModule): boolean {
 
 function createMethodDispatcher(module: RouteModule, routeId: string) {
   return async (req: Request, params: Record<string, string> = {}) => {
-    const method = req.method.toUpperCase() as HttpMethod;
-    const handler = module[method] as
+    const method = req.method.toUpperCase();
+    const handler = (HTTP_METHODS.includes(method as HttpMethod) ? module[method] : undefined) as
       | ((request: Request, context?: { params: Record<string, string> }) => Response | Promise<Response>)
       | undefined;
 
