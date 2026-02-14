@@ -1,4 +1,4 @@
-import { renderToString as defaultRenderToString } from "react-dom/server";
+import { getRenderToString } from "./react-renderer";
 import { serializeProps } from "../client/serialize";
 import { createRequire } from "module";
 import type { ReactElement } from "react";
@@ -187,7 +187,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
 
-  const renderToString = loadProjectRenderToString() ?? defaultRenderToString;
+  const renderToString = getRenderToString();
   let content = renderToString(element);
 
   // Island 래퍼 적용 (hydration 필요 시)
