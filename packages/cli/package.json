@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@mandujs/core": "workspace:*",
+    "@mandujs/ate": "workspace:*",
     "cfonts": "^3.3.0"
   },
   "engines": {
