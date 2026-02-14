@@ -1,6 +1,8 @@
 export * from "./types";
 export * as ATEFS from "./fs";
 
+import { existsSync } from "node:fs";
+
 export { extract } from "./extractor";
 export { generateAndWriteScenarios } from "./scenario";
 export { generatePlaywrightSpecs } from "./codegen";
@@ -10,7 +12,7 @@ export { heal } from "./heal";
 export { computeImpact } from "./impact";
 
 import type { ExtractInput, GenerateInput, RunInput, ImpactInput, HealInput, OracleLevel } from "./types";
-import { getAtePaths } from "./fs";
+import { getAtePaths, writeJson } from "./fs";
 import { extract } from "./extractor";
 import { generateAndWriteScenarios } from "./scenario";
 import { generatePlaywrightSpecs } from "./codegen";
@@ -30,6 +32,21 @@ export function ateGenerate(input: GenerateInput) {
   // generate scenarios then specs
   generateAndWriteScenarios(input.repoRoot, oracleLevel);
   const res = generatePlaywrightSpecs(input.repoRoot, { onlyRoutes: input.onlyRoutes });
+
+  // Ensure selector-map.json exists (may be updated later during run)
+  try {
+    if (!existsSync(paths.selectorMapPath)) {
+      writeJson(paths.selectorMapPath, {
+        version: 1,
+        buildSalt: process.env.MANDU_BUILD_SALT ?? "dev",
+        generatedAt: new Date().toISOString(),
+        entries: [],
+      });
+    }
+  } catch {
+    // ignore
+  }
+
   return {
     ok: true,
     scenariosPath: paths.scenariosPath,

@@ -78,6 +78,10 @@ Options:
   --watch             build/guard arch 파일 감시 모드
   --output <path>     routes/openapi/doctor/contract/guard 출력 경로
   --verbose           routes list/watch, contract validate, brain status 상세 출력
+  --quiet, -q         출력 최소화 (guard arch/lock)
+  --ci                test:auto CI 모드(headless/아티팩트 강화)
+  --impact            test:auto 변경 파일 기반 subset 실행
+  --base-url <url>    test:auto 대상 서버 baseURL (기본: http://localhost:3333)
   --from <path>       contract diff 기준 레지스트리 경로
   --to <path>         contract diff 대상 레지스트리 경로
   --json              contract diff 결과 JSON 출력

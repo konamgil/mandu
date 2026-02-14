@@ -1,5 +1,13 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ateExtract, ateGenerate, ateRun, ateReport, ateHeal, ateImpact } from "@mandujs/ate";
+import type { ExtractInput, GenerateInput, RunInput, ImpactInput, HealInput, OracleLevel } from "@mandujs/ate";
+
+type WithOptionalRepoRoot<T extends { repoRoot: string }> = Omit<T, "repoRoot"> & { repoRoot?: string };
+
+function withRepoRoot<T extends { repoRoot: string }>(projectRoot: string, input: WithOptionalRepoRoot<T>): T {
+  const repoRoot = input.repoRoot ?? projectRoot;
+  return { ...(input as any), repoRoot } as T;
+}
 
 export const ateToolDefinitions: Tool[] = [
   {
@@ -8,12 +16,12 @@ export const ateToolDefinitions: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        repoRoot: { type: "string" },
+        repoRoot: { type: "string", description: "(optional) defaults to MCP projectRoot" },
         tsconfigPath: { type: "string" },
         routeGlobs: { type: "array", items: { type: "string" } },
         buildSalt: { type: "string" },
       },
-      required: ["repoRoot"],
+      required: [],
     },
   },
   {
@@ -22,11 +30,11 @@ export const ateToolDefinitions: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        repoRoot: { type: "string" },
+        repoRoot: { type: "string", description: "(optional) defaults to MCP projectRoot" },
         oracleLevel: { type: "string", enum: ["L0", "L1", "L2", "L3"] },
         onlyRoutes: { type: "array", items: { type: "string" } },
       },
-      required: ["repoRoot"],
+      required: [],
     },
   },
   {
@@ -35,13 +43,13 @@ export const ateToolDefinitions: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        repoRoot: { type: "string" },
+        repoRoot: { type: "string", description: "(optional) defaults to MCP projectRoot" },
         baseURL: { type: "string" },
         ci: { type: "boolean" },
         headless: { type: "boolean" },
         browsers: { type: "array", items: { type: "string", enum: ["chromium", "firefox", "webkit"] } },
       },
-      required: ["repoRoot"],
+      required: [],
     },
   },
   {
@@ -50,7 +58,7 @@ export const ateToolDefinitions: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        repoRoot: { type: "string" },
+        repoRoot: { type: "string", description: "(optional) defaults to MCP projectRoot" },
         runId: { type: "string" },
         startedAt: { type: "string" },
         finishedAt: { type: "string" },
@@ -66,7 +74,7 @@ export const ateToolDefinitions: Tool[] = [
           required: ["mode", "changedFiles", "selectedRoutes"],
         },
       },
-      required: ["repoRoot", "runId", "startedAt", "finishedAt", "exitCode"],
+      required: ["runId", "startedAt", "finishedAt", "exitCode"],
     },
   },
   {
@@ -75,10 +83,10 @@ export const ateToolDefinitions: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        repoRoot: { type: "string" },
+        repoRoot: { type: "string", description: "(optional) defaults to MCP projectRoot" },
         runId: { type: "string" },
       },
-      required: ["repoRoot", "runId"],
+      required: ["runId"],
     },
   },
   {
@@ -87,28 +95,38 @@ export const ateToolDefinitions: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        repoRoot: { type: "string" },
+        repoRoot: { type: "string", description: "(optional) defaults to MCP projectRoot" },
         base: { type: "string" },
         head: { type: "string" },
       },
-      required: ["repoRoot"],
+      required: [],
     },
   },
 ];
 
 export function ateTools(projectRoot: string) {
   return {
-    "mandu.ate.extract": async (args: Record<string, unknown>) => {
-      return await ateExtract(args as any);
+    "mandu.ate.extract": async (args: WithOptionalRepoRoot<ExtractInput>) => {
+      return await ateExtract(withRepoRoot<ExtractInput>(projectRoot, args));
     },
-    "mandu.ate.generate": async (args: Record<string, unknown>) => {
-      return ateGenerate(args as any);
+    "mandu.ate.generate": async (args: WithOptionalRepoRoot<GenerateInput>) => {
+      return ateGenerate(withRepoRoot<GenerateInput>(projectRoot, args));
     },
-    "mandu.ate.run": async (args: Record<string, unknown>) => {
-      return await ateRun(args as any);
+    "mandu.ate.run": async (args: WithOptionalRepoRoot<RunInput>) => {
+      return await ateRun(withRepoRoot<RunInput>(projectRoot, args));
     },
-    "mandu.ate.report": async (args: Record<string, unknown>) => {
-      const input = args as any;
+    "mandu.ate.report": async (
+      args: WithOptionalRepoRoot<{
+        repoRoot: string;
+        runId: string;
+        startedAt: string;
+        finishedAt: string;
+        exitCode: number;
+        oracleLevel?: OracleLevel;
+        impact?: { mode: "full" | "subset"; changedFiles: string[]; selectedRoutes: string[] };
+      }>
+    ) => {
+      const input = withRepoRoot(projectRoot, args);
       return await ateReport({
         repoRoot: input.repoRoot,
         runId: input.runId,
@@ -119,11 +137,11 @@ export function ateTools(projectRoot: string) {
         impact: input.impact,
       });
     },
-    "mandu.ate.heal": async (args: Record<string, unknown>) => {
-      return ateHeal(args as any);
+    "mandu.ate.heal": async (args: WithOptionalRepoRoot<HealInput>) => {
+      return ateHeal(withRepoRoot<HealInput>(projectRoot, args));
     },
-    "mandu.ate.impact": async (args: Record<string, unknown>) => {
-      return ateImpact(args as any);
+    "mandu.ate.impact": async (args: WithOptionalRepoRoot<ImpactInput>) => {
+      return ateImpact(withRepoRoot<ImpactInput>(projectRoot, args));
     },
   };
 }

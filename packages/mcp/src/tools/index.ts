@@ -69,7 +69,7 @@ const TOOL_MODULES: ToolModule[] = [
   { category: "runtime", definitions: runtimeToolDefinitions, handlers: runtimeTools },
   { category: "seo", definitions: seoToolDefinitions, handlers: seoTools },
   { category: "project", definitions: projectToolDefinitions, handlers: projectTools as ToolModule["handlers"], requiresServer: true },
-  { category: "ate", definitions: ateToolDefinitions as any, handlers: ateTools as any },
+  { category: "ate", definitions: ateToolDefinitions, handlers: ateTools },
 ];
 
 /**
