@@ -20,10 +20,20 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
   const paths = getAtePaths(repoRoot);
   const runId = nowRunId();
 
+  // Validate input
+  if (!repoRoot) {
+    throw new Error("repoRoot는 필수입니다");
+  }
+
   const runDir = join(paths.reportsDir, runId);
   const latestDir = join(paths.reportsDir, "latest");
-  ensureDir(runDir);
-  ensureDir(latestDir);
+
+  try {
+    ensureDir(runDir);
+    ensureDir(latestDir);
+  } catch (err: any) {
+    throw new Error(`Report 디렉토리 생성 실패: ${err.message}`);
+  }
 
   const baseURL = input.baseURL ?? process.env.BASE_URL ?? "http://localhost:3333";
 
@@ -40,14 +50,34 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
     BASE_URL: baseURL,
   };
 
-  const child = spawn("bunx", args, {
-    cwd: repoRoot,
-    stdio: "inherit",
-    env,
-  });
+  let child;
+  try {
+    child = spawn("bunx", args, {
+      cwd: repoRoot,
+      stdio: "inherit",
+      env,
+    });
+  } catch (err: any) {
+    throw new Error(`Playwright 프로세스 시작 실패: ${err.message}`);
+  }
 
-  const exitCode: number = await new Promise((resolve) => {
-    child.on("exit", (code) => resolve(code ?? 1));
+  const exitCode: number = await new Promise((resolve, reject) => {
+    // Timeout protection (10 minutes)
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error("Playwright 실행 타임아웃 (10분 초과)"));
+    }, 10 * 60 * 1000);
+
+    child.on("exit", (code) => {
+      clearTimeout(timeout);
+      resolve(code ?? 1);
+    });
+
+    child.on("error", (err) => {
+      clearTimeout(timeout);
+      console.error(`[ATE] Playwright 실행 에러: ${err.message}`);
+      resolve(1); // Fail gracefully
+    });
   });
 
   const result: RunResult = {
@@ -59,7 +89,12 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
   };
 
   // record minimal run metadata
-  writeJson(join(runDir, "run.json"), { ...result, baseURL, at: new Date().toISOString() });
+  try {
+    writeJson(join(runDir, "run.json"), { ...result, baseURL, at: new Date().toISOString() });
+  } catch (err: any) {
+    console.warn(`[ATE] Run metadata 저장 실패: ${err.message}`);
+    // Non-fatal: continue
+  }
 
   return result;
 }

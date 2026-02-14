@@ -1,5 +1,12 @@
 # todo-list-mandu
 
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.14.0
+
 ## 0.1.5
 
 ### Patch Changes

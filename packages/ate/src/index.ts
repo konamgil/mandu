@@ -1,5 +1,6 @@
 export * from "./types";
 export * as ATEFS from "./fs";
+export { ATEFileError, ensureDir, readJson, writeJson, fileExists, getAtePaths } from "./fs";
 
 export { extract } from "./extractor";
 export { generateAndWriteScenarios } from "./scenario";
@@ -8,26 +9,34 @@ export { runPlaywright } from "./runner";
 export { composeSummary, writeSummary } from "./report";
 export { heal } from "./heal";
 export { computeImpact } from "./impact";
+export * from "./selector-map";
+export { parseTrace, generateAlternativeSelectors } from "./trace-parser";
+export type { TraceAction, FailedLocator, TraceParseResult } from "./trace-parser";
+
+// Oracle and domain detection
+export { detectDomain, detectDomainFromRoute, detectDomainFromSource } from "./domain-detector";
+export type { AppDomain, DomainDetectionResult } from "./domain-detector";
+export { generateL1Assertions, upgradeL0ToL1, getAssertionCount, createDefaultOracle } from "./oracle";
+export type { OracleResult } from "./oracle";
 
 import type { ExtractInput, GenerateInput, RunInput, ImpactInput, HealInput, OracleLevel } from "./types";
 import { getAtePaths } from "./fs";
-import { extract } from "./extractor";
-import { generateAndWriteScenarios } from "./scenario";
-import { generatePlaywrightSpecs } from "./codegen";
-import { heal } from "./heal";
-import { computeImpact } from "./impact";
 
 /**
  * High-level ATE pipeline helpers (JSON in/out)
  */
 export async function ateExtract(input: ExtractInput) {
+  const { extract } = await import("./extractor");
   return extract(input);
 }
 
-export function ateGenerate(input: GenerateInput) {
+export async function ateGenerate(input: GenerateInput) {
   const paths = getAtePaths(input.repoRoot);
   const oracleLevel = input.oracleLevel ?? ("L1" as OracleLevel);
-  // generate scenarios then specs
+  // generate scenarios then specs - lazy load codegen and scenario
+  const { generateAndWriteScenarios } = await import("./scenario");
+  const { generatePlaywrightSpecs } = await import("./codegen");
+
   generateAndWriteScenarios(input.repoRoot, oracleLevel);
   const res = generatePlaywrightSpecs(input.repoRoot, { onlyRoutes: input.onlyRoutes });
   return {
@@ -60,10 +69,13 @@ export async function ateReport(params: { repoRoot: string; runId: string; start
   return { ok: true, summaryPath, summary };
 }
 
-export function ateImpact(input: ImpactInput) {
-  return { ok: true, ...computeImpact(input) };
+export async function ateImpact(input: ImpactInput) {
+  const { computeImpact } = await import("./impact");
+  const result = await computeImpact(input);
+  return { ok: true, ...result };
 }
 
-export function ateHeal(input: HealInput) {
+export async function ateHeal(input: HealInput) {
+  const { heal } = await import("./heal");
   return { ok: true, ...heal(input) };
 }

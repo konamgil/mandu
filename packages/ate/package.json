@@ -1,8 +1,9 @@
 {
   "name": "@mandujs/ate",
-  "version": "0.1.0",
+  "version": "0.16.0",
   "description": "Mandu ATE (Automation Test Engine) - extract/generate/run/report/heal/impact in one package",
   "type": "module",
+  "sideEffects": false,
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
@@ -14,6 +15,7 @@
     "./oracle": "./src/oracle.ts",
     "./report": "./src/report.ts",
     "./heal": "./src/heal.ts",
+    "./trace-parser": "./src/trace-parser.ts",
     "./impact": "./src/impact.ts",
     "./fs": "./src/fs.ts",
     "./types": "./src/types.ts"

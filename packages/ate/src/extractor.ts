@@ -1,4 +1,3 @@
-import { Project, SyntaxKind, type Node } from "ts-morph";
 import fg from "fast-glob";
 import { relative, join } from "node:path";
 import { createEmptyGraph, addEdge, addNode } from "./ir";
@@ -7,100 +6,154 @@ import type { ExtractInput, InteractionGraph } from "./types";
 
 const DEFAULT_ROUTE_GLOBS = ["app/**/page.tsx", "routes/**/page.tsx"]; // demo-first default
 
-function isStringLiteral(node: Node): node is import("ts-morph").StringLiteral {
+function isStringLiteral(node: any /* ts-morph Node */, SyntaxKind: any): boolean {
   return node.getKind() === SyntaxKind.StringLiteral;
 }
 
-function tryExtractLiteralArg(callExpr: import("ts-morph").CallExpression, argIndex = 0): string | null {
+function tryExtractLiteralArg(callExpr: any /* ts-morph CallExpression */, argIndex = 0, SyntaxKind: any): string | null {
   const args = callExpr.getArguments();
   const arg = args[argIndex];
   if (!arg) return null;
-  if (isStringLiteral(arg)) return arg.getLiteralValue();
+  if (isStringLiteral(arg, SyntaxKind)) return arg.getLiteralValue();
   return null;
 }
 
-export async function extract(input: ExtractInput): Promise<{ ok: true; graphPath: string; summary: { nodes: number; edges: number } }> {
+export async function extract(input: ExtractInput): Promise<{ ok: true; graphPath: string; summary: { nodes: number; edges: number }; warnings: string[] }> {
   const repoRoot = input.repoRoot;
   const buildSalt = input.buildSalt ?? process.env.MANDU_BUILD_SALT ?? "dev";
   const paths = getAtePaths(repoRoot);
+  const warnings: string[] = [];
 
   const graph: InteractionGraph = createEmptyGraph(buildSalt);
 
-  const routeGlobs = input.routeGlobs?.length ? input.routeGlobs : DEFAULT_ROUTE_GLOBS;
-  const routeFiles = await fg(routeGlobs, {
-    cwd: repoRoot,
-    absolute: true,
-    onlyFiles: true,
-    ignore: ["**/node_modules/**", "**/.mandu/**"],
-  });
+  // Validate input
+  if (!repoRoot) {
+    throw new Error("repoRoot는 필수입니다");
+  }
 
-  const project = new Project({
-    tsConfigFilePath: input.tsconfigPath ? join(repoRoot, input.tsconfigPath) : undefined,
-    skipAddingFilesFromTsConfig: true,
-  });
+  const routeGlobs = input.routeGlobs?.length ? input.routeGlobs : DEFAULT_ROUTE_GLOBS;
+
+  let routeFiles: string[];
+  try {
+    routeFiles = await fg(routeGlobs, {
+      cwd: repoRoot,
+      absolute: true,
+      onlyFiles: true,
+      ignore: ["**/node_modules/**", "**/.mandu/**"],
+    });
+  } catch (err: any) {
+    throw new Error(`파일 검색 실패: ${err.message}`);
+  }
+
+  if (routeFiles.length === 0) {
+    warnings.push(`경고: route 파일을 찾을 수 없습니다 (globs: ${routeGlobs.join(", ")})`);
+  }
+
+  // Lazy load ts-morph only when needed
+  const { Project, SyntaxKind } = await import("ts-morph");
+
+  let project: any; // ts-morph Project
+  try {
+    project = new Project({
+      tsConfigFilePath: input.tsconfigPath ? join(repoRoot, input.tsconfigPath) : undefined,
+      skipAddingFilesFromTsConfig: true,
+    });
+  } catch (err: any) {
+    throw new Error(`TypeScript 프로젝트 초기화 실패: ${err.message}`);
+  }
 
   for (const filePath of routeFiles) {
-    const sourceFile = project.addSourceFileAtPath(filePath);
-    const rel = relative(repoRoot, filePath);
-    const relNormalized = rel.replace(/\\/g, "/");
+    try {
+      const sourceFile = project.addSourceFileAtPath(filePath);
+      const rel = relative(repoRoot, filePath);
+      const relNormalized = rel.replace(/\\/g, "/");
 
-    // route node id: normalize to path without trailing /page.tsx
-    const routePath = relNormalized
-      .replace(/^app\//, "/")
-      .replace(/^routes\//, "/")
-      .replace(/\/page\.tsx$/, "")
-      .replace(/\/index\.tsx$/, "")
-      .replace(/\/page$/, "")
-      .replace(/\\/g, "/");
+      // route node id: normalize to path without trailing /page.tsx
+      const routePath = relNormalized
+        .replace(/^app\//, "/")
+        .replace(/^routes\//, "/")
+        .replace(/\/page\.tsx$/, "")
+        .replace(/\/index\.tsx$/, "")
+        .replace(/\/page$/, "")
+        .replace(/\\/g, "/");
 
-    addNode(graph, { kind: "route", id: routePath === "" ? "/" : routePath, file: relNormalized, path: routePath === "" ? "/" : routePath });
+      addNode(graph, { kind: "route", id: routePath === "" ? "/" : routePath, file: relNormalized, path: routePath === "" ? "/" : routePath });
 
-    // ManduLink / Link literal extraction: <Link href="/x"> or <ManduLink to="/x">
-    const jsxAttrs = sourceFile.getDescendantsOfKind(SyntaxKind.JsxAttribute);
-    for (const attr of jsxAttrs) {
-      const name = (attr as any).getNameNode?.().getText?.() ?? (attr as any).getName?.() ?? "";
-      if (name !== "to" && name !== "href") continue;
-      const init = (attr as any).getInitializer?.();
-      if (!init) continue;
-      if (init.getKind?.() === SyntaxKind.StringLiteral) {
-        const raw = (init as any).getLiteralValue?.() ?? init.getText?.();
-        const to = typeof raw === "string" ? raw.replace(/^"|"$/g, "") : null;
-        if (typeof to === "string" && to.startsWith("/")) {
-          addEdge(graph, { kind: "navigate", from: routePath || "/", to, file: relNormalized, source: `<jsx ${name}>` });
+      // ManduLink / Link literal extraction: <Link href="/x"> or <ManduLink to="/x">
+      try {
+        const jsxAttrs = sourceFile.getDescendantsOfKind(SyntaxKind.JsxAttribute);
+        for (const attr of jsxAttrs) {
+          try {
+            const name = (attr as any).getNameNode?.().getText?.() ?? (attr as any).getName?.() ?? "";
+            if (name !== "to" && name !== "href") continue;
+            const init = (attr as any).getInitializer?.();
+            if (!init) continue;
+            if (init.getKind?.() === SyntaxKind.StringLiteral) {
+              const raw = (init as any).getLiteralValue?.() ?? init.getText?.();
+              const to = typeof raw === "string" ? raw.replace(/^"|"$/g, "") : null;
+              if (typeof to === "string" && to.startsWith("/")) {
+                addEdge(graph, { kind: "navigate", from: routePath || "/", to, file: relNormalized, source: `<jsx ${name}>` });
+              }
+            }
+          } catch (err: any) {
+            // Skip invalid JSX attributes
+            warnings.push(`JSX 속성 파싱 실패 (${relNormalized}): ${err.message}`);
+          }
         }
+      } catch (err: any) {
+        warnings.push(`JSX 분석 실패 (${relNormalized}): ${err.message}`);
       }
-    }
 
-    // mandu.navigate("/x") literal
-    const calls = sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression);
-    for (const call of calls) {
-      const exprText = call.getExpression().getText();
-      if (exprText === "mandu.navigate" || exprText.endsWith(".navigate")) {
-        const to = tryExtractLiteralArg(call, 0);
-        if (to && to.startsWith("/")) {
-          addEdge(graph, { kind: "navigate", from: routePath || "/", to, file: relNormalized, source: "mandu.navigate" });
+      // mandu.navigate("/x") literal
+      try {
+        const calls = sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression);
+        for (const call of calls) {
+          try {
+            const exprText = call.getExpression().getText();
+            if (exprText === "mandu.navigate" || exprText.endsWith(".navigate")) {
+              const to = tryExtractLiteralArg(call, 0, SyntaxKind);
+              if (to && to.startsWith("/")) {
+                addEdge(graph, { kind: "navigate", from: routePath || "/", to, file: relNormalized, source: "mandu.navigate" });
+              }
+            }
+            if (exprText === "mandu.modal.open" || exprText.endsWith(".modal.open")) {
+              const modal = tryExtractLiteralArg(call, 0, SyntaxKind);
+              if (modal) {
+                addEdge(graph, { kind: "openModal", from: routePath || "/", modal, file: relNormalized, source: "mandu.modal.open" });
+              }
+            }
+            if (exprText === "mandu.action.run" || exprText.endsWith(".action.run")) {
+              const action = tryExtractLiteralArg(call, 0, SyntaxKind);
+              if (action) {
+                addEdge(graph, { kind: "runAction", from: routePath || "/", action, file: relNormalized, source: "mandu.action.run" });
+              }
+            }
+          } catch (err: any) {
+            // Skip invalid call expressions
+            warnings.push(`함수 호출 파싱 실패 (${relNormalized}): ${err.message}`);
+          }
         }
+      } catch (err: any) {
+        warnings.push(`함수 호출 분석 실패 (${relNormalized}): ${err.message}`);
       }
-      if (exprText === "mandu.modal.open" || exprText.endsWith(".modal.open")) {
-        const modal = tryExtractLiteralArg(call, 0);
-        if (modal) {
-          addEdge(graph, { kind: "openModal", from: routePath || "/", modal, file: relNormalized, source: "mandu.modal.open" });
-        }
-      }
-      if (exprText === "mandu.action.run" || exprText.endsWith(".action.run")) {
-        const action = tryExtractLiteralArg(call, 0);
-        if (action) {
-          addEdge(graph, { kind: "runAction", from: routePath || "/", action, file: relNormalized, source: "mandu.action.run" });
-        }
-      }
+    } catch (err: any) {
+      // Graceful degradation: skip this file and continue
+      warnings.push(`파일 파싱 실패 (${filePath}): ${err.message}`);
+      console.warn(`[ATE] 파일 스킵: ${filePath} - ${err.message}`);
+      continue;
     }
   }
 
-  writeJson(paths.interactionGraphPath, graph);
+  try {
+    writeJson(paths.interactionGraphPath, graph);
+  } catch (err: any) {
+    throw new Error(`Interaction graph 저장 실패: ${err.message}`);
+  }
 
   return {
     ok: true,
     graphPath: paths.interactionGraphPath,
     summary: { nodes: graph.nodes.length, edges: graph.edges.length },
+    warnings,
   };
 }

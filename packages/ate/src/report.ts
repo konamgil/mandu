@@ -13,8 +13,22 @@ export function composeSummary(params: {
   impact?: { changedFiles: string[]; selectedRoutes: string[]; mode: "full" | "subset" };
   heal?: { suggestions: Array<{ kind: string; title: string; diff: string }> };
 }): SummaryJson {
+  // Validate required params
+  if (!params.repoRoot) {
+    throw new Error("repoRoot는 필수입니다");
+  }
+  if (!params.runId) {
+    throw new Error("runId는 필수입니다");
+  }
+
   const paths = getAtePaths(params.repoRoot);
-  const oracle = createDefaultOracle(params.oracleLevel);
+
+  let oracle;
+  try {
+    oracle = createDefaultOracle(params.oracleLevel);
+  } catch (err: any) {
+    throw new Error(`Oracle 생성 실패: ${err.message}`);
+  }
 
   return {
     schemaVersion: 1,
@@ -47,10 +61,29 @@ export function composeSummary(params: {
 }
 
 export function writeSummary(repoRoot: string, runId: string, summary: SummaryJson): string {
+  if (!repoRoot) {
+    throw new Error("repoRoot는 필수입니다");
+  }
+  if (!runId) {
+    throw new Error("runId는 필수입니다");
+  }
+
   const paths = getAtePaths(repoRoot);
   const runDir = join(paths.reportsDir, runId);
-  ensureDir(runDir);
+
+  try {
+    ensureDir(runDir);
+  } catch (err: any) {
+    throw new Error(`Report 디렉토리 생성 실패: ${err.message}`);
+  }
+
   const outPath = join(runDir, "summary.json");
-  writeJson(outPath, summary);
+
+  try {
+    writeJson(outPath, summary);
+  } catch (err: any) {
+    throw new Error(`Summary 파일 저장 실패: ${err.message}`);
+  }
+
   return outPath;
 }
