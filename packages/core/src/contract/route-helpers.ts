@@ -63,6 +63,22 @@ function paramsToObject(params: URLSearchParams): Record<string, string | string
   return out;
 }
 
+/**
+ * Creates a parser for URL query parameters with Zod schema validation
+ *
+ * @param schema - Zod schema for validation
+ * @returns Parser function that accepts various query sources
+ *
+ * @example
+ * ```ts
+ * const parseQuery = querySchema(z.object({
+ *   page: z.coerce.number().default(1),
+ *   limit: z.coerce.number().max(100).default(20)
+ * }));
+ *
+ * const query = parseQuery(request);
+ * ```
+ */
 export function querySchema<TSchema extends ZodTypeAny>(schema: TSchema) {
   return (source: QuerySource): z.infer<TSchema> => {
     const params = toSearchParams(source);
@@ -70,6 +86,24 @@ export function querySchema<TSchema extends ZodTypeAny>(schema: TSchema) {
   };
 }
 
+/**
+ * Creates a parser for JSON request body with Zod schema validation
+ *
+ * Validates Content-Type (application/json or application/*+json) and parses JSON.
+ * Throws TypeError for invalid content-type or malformed JSON.
+ *
+ * @param schema - Zod schema for validation
+ * @returns Async parser function that accepts Request
+ *
+ * @example
+ * ```ts
+ * const parseBody = bodySchema(z.object({
+ *   text: z.string().min(1).max(500)
+ * }));
+ *
+ * const body = await parseBody(request);
+ * ```
+ */
 export function bodySchema<TSchema extends ZodTypeAny>(schema: TSchema) {
   return async (request: Request): Promise<z.infer<TSchema>> => {
     const contentType = request.headers.get("content-type") ?? "";
@@ -89,6 +123,24 @@ export function bodySchema<TSchema extends ZodTypeAny>(schema: TSchema) {
   };
 }
 
+/**
+ * Creates a standardized API error response
+ *
+ * Returns Response with JSON payload: { error, code, details? }
+ *
+ * @param error - Human-readable error message
+ * @param code - Machine-readable error code
+ * @param options - Optional status (default 400), details, and headers
+ * @returns Response with error payload
+ *
+ * @example
+ * ```ts
+ * return apiError("Invalid input", "VALIDATION_ERROR", {
+ *   status: 422,
+ *   details: { field: "email", issue: "Invalid format" }
+ * });
+ * ```
+ */
 export function apiError(error: string, code: ApiErrorCode, options: ApiErrorOptions = {}): Response {
   const { status = 400, details, headers } = options;
   const payload: ApiErrorBody & { details?: unknown } = { error, code };
