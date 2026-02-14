@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { relative } from "node:path";
+import path from "node:path";
 import { getAtePaths, readJson } from "./fs";
 import type { ImpactInput, InteractionGraph } from "./types";
 
@@ -17,6 +17,11 @@ function verifyGitRev(repoRoot: string, rev: string): void {
 
 function toPosixPath(p: string): string {
   return p.replace(/\\/g, "/");
+}
+
+function posixDirname(p: string): string {
+  // Normalize windows separators first, then use posix dirname.
+  return path.posix.dirname(toPosixPath(p));
 }
 
 export function computeImpact(input: ImpactInput): { changedFiles: string[]; selectedRoutes: string[] } {
@@ -44,9 +49,19 @@ export function computeImpact(input: ImpactInput): { changedFiles: string[]; sel
   for (const f of changedFiles) {
     for (const r of routes) {
       const routeFile = toPosixPath(r.file);
-      if (f === routeFile) selected.add(r.id);
-      // if a shared module under same folder changed, include route
-      if (f.startsWith(routeFile.replace(/page\.tsx$/, ""))) selected.add(r.id);
+      const routeDir = posixDirname(routeFile);
+
+      // 1) Direct hit: route spec file changed
+      if (f === routeFile) {
+        selected.add(r.id);
+        continue;
+      }
+
+      // 2) Any change under the same route directory likely impacts the route
+      //    (more accurate than a hard-coded page.tsx strip)
+      if (f.startsWith(routeDir + "/")) {
+        selected.add(r.id);
+      }
     }
   }
 

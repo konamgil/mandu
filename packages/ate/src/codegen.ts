@@ -5,7 +5,40 @@ import type { ScenarioBundle } from "./scenario";
 import type { OracleLevel } from "./types";
 
 function specHeader(): string {
-  return `import { test, expect } from "@playwright/test";\n\n`;
+  return [
+    `import { test, expect } from "@playwright/test";`,
+    `import { mkdirSync, writeFileSync } from "node:fs";`,
+    `import { dirname, join } from "node:path";`,
+    ``,
+    `function writeManduSelectorMapFragment(testInfo: any, manduIds: string[]) {`,
+    `  const dir = process.env.MANDU_SELECTOR_MAP_FRAG_DIR;`,
+    `  if (!dir) return;`,
+    `  const buildSalt = process.env.MANDU_BUILD_SALT ?? "dev";`,
+    `  const unique = Array.from(new Set(manduIds)).filter(Boolean).sort();`,
+    `  const fragment = {`,
+    `    version: 1,`,
+    `    buildSalt,`,
+    `    generatedAt: new Date().toISOString(),`,
+    `    entries: unique.map((id) => ({`,
+    `      manduId: id,`,
+    `      fallback: [{ kind: "css", selector: \`[data-mandu-id=\\"\${id}\\"]\` }],`,
+    `    })),`,
+    `  };`,
+    `  const outPath = join(dir, (testInfo?.testId ?? String(Date.now())) + ".json");`,
+    `  mkdirSync(dirname(outPath), { recursive: true });`,
+    `  writeFileSync(outPath, JSON.stringify(fragment, null, 2));`,
+    `}`,
+    ``,
+    `async function collectManduIds(page: any): Promise<string[]> {`,
+    `  return await page.evaluate(() => {`,
+    `    const ids = Array.from(document.querySelectorAll("[data-mandu-id]"))`,
+    `      .map((el) => (el as HTMLElement).getAttribute("data-mandu-id"))`,
+    `      .filter((v): v is string => typeof v === "string" && v.length > 0);`,
+    `    return Array.from(new Set(ids));`,
+    `  });`,
+    `}`,
+    ``,
+  ].join("\n");
 }
 
 function oracleTemplate(level: OracleLevel): { setup: string; assertions: string } {
@@ -52,10 +85,15 @@ export function generatePlaywrightSpecs(repoRoot: string, opts?: { onlyRoutes?: 
     const code = [
       specHeader(),
       `test.describe(${JSON.stringify(s.id)}, () => {`,
-      `  test(${JSON.stringify(`smoke ${s.route}`)}, async ({ page, baseURL }) => {`,
+      `  test(${JSON.stringify(`smoke ${s.route}`)}, async ({ page, baseURL }, testInfo) => {`,
       `    const url = (baseURL ?? "http://localhost:3333") + ${JSON.stringify(s.route === "/" ? "/" : s.route)};`,
       `    ${oracle.setup.split("\n").join("\n    ")}`,
       `    await page.goto(url);`,
+      `    // collect data-mandu-id signals and write selector-map fragment (best-effort)`,
+      `    try {`,
+      `      const manduIds = await collectManduIds(page);`,
+      `      writeManduSelectorMapFragment(testInfo, manduIds);`,
+      `    } catch {}`,
       `    ${oracle.assertions.split("\n").join("\n    ")}`,
       `  });`,
       `});`,
