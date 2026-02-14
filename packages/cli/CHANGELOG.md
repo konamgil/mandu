@@ -1,5 +1,11 @@
 # @mandujs/cli
 
+## 0.15.4
+
+### Patch Changes
+
+- Centralize lockfile guidance text for better maintainability and testability
+
 ## 0.15.3
 
 ### Patch Changes
