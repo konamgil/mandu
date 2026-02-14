@@ -36,3 +36,8 @@ bun.lock
 *.log
 *.tmp
 nul
+
+# ATE impact temp dirs
+.tmp-impact-*
+.tmp-impact-sec-*
+.tmp-impact-win-*
