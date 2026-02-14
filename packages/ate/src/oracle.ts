@@ -12,7 +12,7 @@ export function createDefaultOracle(level: OracleLevel): OracleResult {
   return {
     level,
     l0: { ok: true, errors: [] },
-    l1: { ok: level === "L0" ? true : true, signals: [] },
+    l1: { ok: level !== "L0", signals: [] },
     l2: { ok: true, signals: [] },
     l3: { ok: true, notes: [] },
   };

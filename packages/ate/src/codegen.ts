@@ -8,28 +8,31 @@ function specHeader(): string {
   return `import { test, expect } from "@playwright/test";\n\n`;
 }
 
-function oracleTemplate(level: OracleLevel): string {
-  const lines: string[] = [];
+function oracleTemplate(level: OracleLevel): { setup: string; assertions: string } {
+  const setup: string[] = [];
+  const assertions: string[] = [];
+
   // L0 baseline always
-  lines.push(`// L0: no console.error / uncaught exception / 5xx`);
-  lines.push(`const errors: string[] = [];`);
-  lines.push(`page.on("console", (msg) => { if (msg.type() === "error") errors.push(msg.text()); });`);
-  lines.push(`page.on("pageerror", (err) => errors.push(String(err)));`);
+  setup.push(`// L0: no console.error / uncaught exception / 5xx`);
+  setup.push(`const errors: string[] = [];`);
+  setup.push(`page.on("console", (msg) => { if (msg.type() === "error") errors.push(msg.text()); });`);
+  setup.push(`page.on("pageerror", (err) => errors.push(String(err)));`);
 
   if (level === "L1" || level === "L2" || level === "L3") {
-    lines.push(`// L1: structure signals`);
-    lines.push(`await expect(page.locator("main")).toHaveCount(1);`);
+    assertions.push(`// L1: structure signals`);
+    assertions.push(`await expect(page.locator("main")).toHaveCount(1);`);
   }
   if (level === "L2" || level === "L3") {
-    lines.push(`// L2: behavior signals (placeholder - extend per app)`);
-    lines.push(`await expect(page).toHaveURL(/.*/);`);
+    assertions.push(`// L2: behavior signals (placeholder - extend per app)`);
+    assertions.push(`await expect(page).toHaveURL(/.*/);`);
   }
   if (level === "L3") {
-    lines.push(`// L3: domain hints (placeholder)`);
+    assertions.push(`// L3: domain hints (placeholder)`);
   }
 
-  lines.push(`expect(errors, "console/page errors").toEqual([]);`);
-  return lines.join("\n");
+  assertions.push(`expect(errors, "console/page errors").toEqual([]);`);
+
+  return { setup: setup.join("\n"), assertions: assertions.join("\n") };
 }
 
 export function generatePlaywrightSpecs(repoRoot: string, opts?: { onlyRoutes?: string[] }): { files: string[] } {
@@ -45,13 +48,15 @@ export function generatePlaywrightSpecs(repoRoot: string, opts?: { onlyRoutes?: 
     const safeId = s.id.replace(/[^a-zA-Z0-9_-]/g, "_");
     const filePath = join(paths.autoE2eDir, `${safeId}.spec.ts`);
 
+    const oracle = oracleTemplate(s.oracleLevel);
     const code = [
       specHeader(),
       `test.describe(${JSON.stringify(s.id)}, () => {`,
       `  test(${JSON.stringify(`smoke ${s.route}`)}, async ({ page, baseURL }) => {`,
-      `    const url = (baseURL ?? "http://127.0.0.1:3333") + ${JSON.stringify(s.route === "/" ? "/" : s.route)};`,
+      `    const url = (baseURL ?? "http://localhost:3333") + ${JSON.stringify(s.route === "/" ? "/" : s.route)};`,
+      `    ${oracle.setup.split("\n").join("\n    ")}`,
       `    await page.goto(url);`,
-      `    ${oracleTemplate(s.oracleLevel).split("\n").join("\n    ")}`,
+      `    ${oracle.assertions.split("\n").join("\n    ")}`,
       `  });`,
       `});`,
       "",
@@ -64,7 +69,7 @@ export function generatePlaywrightSpecs(repoRoot: string, opts?: { onlyRoutes?: 
   // ensure playwright config exists (minimal)
   const configPath = join(repoRoot, "tests", "e2e", "playwright.config.ts");
   ensureDir(join(repoRoot, "tests", "e2e"));
-  const desiredConfig = `import { defineConfig } from "@playwright/test";\n\nexport default defineConfig({\n  // NOTE: resolved relative to this config file (tests/e2e).\n  testDir: ".",\n  timeout: 60_000,\n  use: {\n    baseURL: process.env.BASE_URL ?? "http://127.0.0.1:3333",\n    trace: process.env.CI ? "on-first-retry" : "retain-on-failure",\n    video: process.env.CI ? "retain-on-failure" : "off",\n    screenshot: "only-on-failure",\n  },\n  reporter: [\n    ["html", { outputFolder: "../../.mandu/reports/latest/playwright-html", open: "never" }],\n    ["json", { outputFile: "../../.mandu/reports/latest/playwright-report.json" }],\n    ["junit", { outputFile: "../../.mandu/reports/latest/junit.xml" }],\n  ],\n});\n`;
+  const desiredConfig = `import { defineConfig } from "@playwright/test";\n\nexport default defineConfig({\n  // NOTE: resolved relative to this config file (tests/e2e).\n  testDir: ".",\n  timeout: 60_000,\n  use: {\n    baseURL: process.env.BASE_URL ?? "http://localhost:3333",\n    trace: process.env.CI ? "on-first-retry" : "retain-on-failure",\n    video: process.env.CI ? "retain-on-failure" : "off",\n    screenshot: "only-on-failure",\n  },\n  reporter: [\n    ["html", { outputFolder: "../../.mandu/reports/latest/playwright-html", open: "never" }],\n    ["json", { outputFile: "../../.mandu/reports/latest/playwright-report.json" }],\n    ["junit", { outputFile: "../../.mandu/reports/latest/junit.xml" }],\n  ],\n});\n`;
 
   if (!existsSync(configPath)) {
     Bun.write(configPath, desiredConfig);

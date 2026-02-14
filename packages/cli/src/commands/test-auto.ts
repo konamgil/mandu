@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import { theme } from "../terminal";
 import { ateExtract, ateGenerate, ateRun, ateReport, ateImpact } from "@mandujs/ate";
 

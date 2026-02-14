@@ -16,7 +16,7 @@ export interface HealSuggestion {
  */
 export function heal(input: HealInput): { attempted: true; suggestions: HealSuggestion[] } {
   const paths = getAtePaths(input.repoRoot);
-  const jsonReportPath = join(paths.reportsDir, "latest", "playwright-report.json");
+  const jsonReportPath = join(paths.reportsDir, input.runId || "latest", "playwright-report.json");
 
   let text = "";
   try {
