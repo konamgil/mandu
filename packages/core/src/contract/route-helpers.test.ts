@@ -42,6 +42,17 @@ describe("route helpers", () => {
     await expect(parseBody(request)).resolves.toEqual({ text: "mandu" });
   });
 
+  it("bodySchema accepts +json content type", async () => {
+    const parseBody = bodySchema(z.object({ text: z.string() }));
+    const request = new Request("http://localhost/api/chat/send", {
+      method: "POST",
+      headers: { "content-type": "application/problem+json; charset=utf-8" },
+      body: JSON.stringify({ text: "mandu" }),
+    });
+
+    await expect(parseBody(request)).resolves.toEqual({ text: "mandu" });
+  });
+
   it("bodySchema rejects non-json content type", async () => {
     const parseBody = bodySchema(z.object({ text: z.string() }));
     const request = new Request("http://localhost/api/chat/send", {
@@ -51,6 +62,17 @@ describe("route helpers", () => {
     });
 
     await expect(parseBody(request)).rejects.toThrow("application/json");
+  });
+
+  it("bodySchema normalizes invalid JSON parse failure", async () => {
+    const parseBody = bodySchema(z.object({ text: z.string() }));
+    const request = new Request("http://localhost/api/chat/send", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{\"text\":" ,
+    });
+
+    await expect(parseBody(request)).rejects.toThrow("Request body contains invalid JSON");
   });
 
   it("apiError returns standardized payload", async () => {

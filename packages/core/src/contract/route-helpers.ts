@@ -74,11 +74,17 @@ export function bodySchema<TSchema extends ZodTypeAny>(schema: TSchema) {
   return async (request: Request): Promise<z.infer<TSchema>> => {
     const contentType = request.headers.get("content-type") ?? "";
 
-    if (!contentType.toLowerCase().includes("application/json")) {
+    if (!/^application\/(.+\+json|json)$/i.test(contentType.split(";")[0]?.trim() ?? "")) {
       throw new TypeError("Body must be application/json");
     }
 
-    const payload = await request.clone().json();
+    let payload: unknown;
+    try {
+      payload = await request.clone().json();
+    } catch {
+      throw new TypeError("Request body contains invalid JSON");
+    }
+
     return schema.parse(payload);
   };
 }
