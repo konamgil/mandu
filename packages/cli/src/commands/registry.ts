@@ -373,6 +373,13 @@ registerCommand({
       ci: ctx.options.ci === "true",
       impact: ctx.options.impact === "true",
       baseURL: ctx.options["base-url"] || ctx.options.baseURL || ctx.options.baseUrl,
+
+      dev: ctx.options.dev,
+      start: ctx.options.start,
+      stop: ctx.options.stop,
+      healthPath: ctx.options["health-path"] || ctx.options.healthPath,
+      readyTimeoutMs: ctx.options["ready-timeout"] ? Number(ctx.options["ready-timeout"]) : undefined,
+      reuseExisting: ctx.options["reuse-existing"] === "true",
     });
   },
 });

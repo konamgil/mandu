@@ -53,6 +53,8 @@ export interface GenerateInput {
 
 export interface RunInput {
   repoRoot: string;
+  /** Optional run id to correlate artifacts/logs across steps. */
+  runId?: string;
   baseURL?: string;
   ci?: boolean;
   headless?: boolean;
@@ -76,6 +78,11 @@ export interface SummaryJson {
   startedAt: string;
   finishedAt: string;
   ok: boolean;
+  metrics?: {
+    specsExecuted: number;
+    specsFailed: number;
+    selectedRoutes: number;
+  };
   oracle: {
     level: OracleLevel;
     l0: { ok: boolean; errors: string[] };

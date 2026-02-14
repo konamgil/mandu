@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { getAtePaths, ensureDir, writeJson } from "./fs";
+import { updateSelectorMapFromFragments } from "./selector-map";
 import type { RunInput } from "./types";
 
 export interface RunResult {
@@ -18,7 +19,7 @@ function nowRunId(): string {
 export async function runPlaywright(input: RunInput): Promise<RunResult> {
   const repoRoot = input.repoRoot;
   const paths = getAtePaths(repoRoot);
-  const runId = nowRunId();
+  const runId = input.runId ?? nowRunId();
 
   const runDir = join(paths.reportsDir, runId);
   const latestDir = join(paths.reportsDir, "latest");
@@ -26,6 +27,7 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
   ensureDir(latestDir);
 
   const baseURL = input.baseURL ?? process.env.BASE_URL ?? "http://localhost:3333";
+  const buildSalt = process.env.MANDU_BUILD_SALT ?? "dev";
 
   const args = [
     "playwright",
@@ -34,10 +36,15 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
     "tests/e2e/playwright.config.ts",
   ];
 
+  const selectorMapFragDir = join(latestDir, "selector-map-fragments");
+  ensureDir(selectorMapFragDir);
+
   const env = {
     ...process.env,
     CI: input.ci ? "true" : process.env.CI,
     BASE_URL: baseURL,
+    MANDU_BUILD_SALT: buildSalt,
+    MANDU_SELECTOR_MAP_FRAG_DIR: selectorMapFragDir,
   };
 
   const child = spawn("bunx", args, {
@@ -59,7 +66,14 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
   };
 
   // record minimal run metadata
-  writeJson(join(runDir, "run.json"), { ...result, baseURL, at: new Date().toISOString() });
+  writeJson(join(runDir, "run.json"), { ...result, baseURL, buildSalt, at: new Date().toISOString() });
+
+  // merge selector-map fragments into .mandu/selector-map.json (best-effort)
+  try {
+    await updateSelectorMapFromFragments({ repoRoot, fragmentsDir: selectorMapFragDir, buildSalt });
+  } catch {
+    // ignore (minimum skeleton)
+  }
 
   return result;
 }
