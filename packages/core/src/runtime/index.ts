@@ -9,3 +9,4 @@ export * from "./lifecycle";
 export * from "./trace";
 export * from "./logger";
 export * from "./boundary";
+export * from "./stable-selector";

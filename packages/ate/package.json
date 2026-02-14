@@ -1,0 +1,44 @@
+{
+  "name": "@mandujs/ate",
+  "version": "0.1.0",
+  "description": "Mandu ATE (Automation Test Engine) - extract/generate/run/report/heal/impact in one package",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./extractor": "./src/extractor.ts",
+    "./ir": "./src/ir.ts",
+    "./scenario": "./src/scenario.ts",
+    "./codegen": "./src/codegen.ts",
+    "./runner": "./src/runner.ts",
+    "./oracle": "./src/oracle.ts",
+    "./report": "./src/report.ts",
+    "./heal": "./src/heal.ts",
+    "./impact": "./src/impact.ts",
+    "./fs": "./src/fs.ts",
+    "./types": "./src/types.ts"
+  },
+  "files": [
+    "src/**/*"
+  ],
+  "keywords": [
+    "mandu",
+    "ate",
+    "automation",
+    "e2e",
+    "playwright",
+    "ts-morph"
+  ],
+  "license": "MPL-2.0",
+  "dependencies": {
+    "fast-glob": "^3.3.2",
+    "ts-morph": "^26.0.0"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0",
+    "playwright": ">=1.40.0"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}

@@ -165,7 +165,8 @@ describe("FSScanner", () => {
       expect(result.stats.apiCount).toBe(1);
       expect(result.stats.layoutCount).toBeGreaterThanOrEqual(1);
       expect(result.stats.islandCount).toBe(1);
-      expect(result.stats.scanTime).toBeGreaterThan(0);
+      // scanTime is best-effort and may be 0ms on fast environments
+      expect(result.stats.scanTime).toBeGreaterThanOrEqual(0);
     });
   });
 

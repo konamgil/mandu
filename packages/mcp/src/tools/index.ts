@@ -22,6 +22,7 @@ export { brainTools, brainToolDefinitions } from "./brain.js";
 export { runtimeTools, runtimeToolDefinitions } from "./runtime.js";
 export { seoTools, seoToolDefinitions } from "./seo.js";
 export { projectTools, projectToolDefinitions } from "./project.js";
+export { ateTools, ateToolDefinitions } from "./ate.js";
 
 // 도구 모듈 import (등록용)
 import { specTools, specToolDefinitions } from "./spec.js";
@@ -36,13 +37,14 @@ import { brainTools, brainToolDefinitions } from "./brain.js";
 import { runtimeTools, runtimeToolDefinitions } from "./runtime.js";
 import { seoTools, seoToolDefinitions } from "./seo.js";
 import { projectTools, projectToolDefinitions } from "./project.js";
+import { ateTools, ateToolDefinitions } from "./ate.js";
 
 /**
  * 도구 모듈 정보
  */
 interface ToolModule {
   category: string;
-  definitions: typeof specToolDefinitions;
+  definitions: any;
   handlers: (
     projectRoot: string,
     server?: Server,
@@ -67,6 +69,7 @@ const TOOL_MODULES: ToolModule[] = [
   { category: "runtime", definitions: runtimeToolDefinitions, handlers: runtimeTools },
   { category: "seo", definitions: seoToolDefinitions, handlers: seoTools },
   { category: "project", definitions: projectToolDefinitions, handlers: projectTools as ToolModule["handlers"], requiresServer: true },
+  { category: "ate", definitions: ateToolDefinitions as any, handlers: ateTools as any },
 ];
 
 /**
