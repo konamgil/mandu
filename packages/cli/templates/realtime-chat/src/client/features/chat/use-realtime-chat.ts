@@ -7,7 +7,7 @@ import {
   openChatStream,
   sendChatMessage,
   type ChatStreamConnectionState,
-} from "./chat-api";
+} from "@/client/features/chat/chat-api";
 
 export function useRealtimeChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
