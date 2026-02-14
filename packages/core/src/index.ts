@@ -25,7 +25,7 @@ export * from "./paths";
 
 // Consolidated Mandu namespace
 import { ManduFilling, ManduContext, ManduFillingFactory, createSSEConnection } from "./filling";
-import { createContract, defineHandler, defineRoute, createClient, contractFetch, createClientContract } from "./contract";
+import { createContract, defineHandler, defineRoute, createClient, contractFetch, createClientContract, querySchema, bodySchema, apiError } from "./contract";
 import { defineContract, generateAllFromContract, generateOpenAPISpec } from "./contract/define";
 import { island, isIsland, type IslandComponent, type HydrationStrategy } from "./island";
 import { intent, isIntent, getIntentDocs, generateOpenAPIFromIntent } from "./intent";
@@ -110,6 +110,21 @@ export const Mandu = {
    * Make a type-safe fetch call
    */
   fetch: contractFetch,
+
+  /**
+   * Build a typed query parser from zod schema
+   */
+  querySchema,
+
+  /**
+   * Build a typed JSON body parser from zod schema
+   */
+  bodySchema,
+
+  /**
+   * Build standard API error response ({ error, code })
+   */
+  apiError,
 
   // === AI-Native APIs ===
   /**

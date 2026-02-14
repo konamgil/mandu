@@ -17,6 +17,7 @@ export * from "./normalize";
 export * from "./registry";
 export * from "./client-safe";
 export * from "./protection";
+export * from "./route-helpers";
 
 import type { ContractDefinition, ContractInstance, ContractSchema } from "./schema";
 import type { ContractHandlers, RouteDefinition } from "./handler";
