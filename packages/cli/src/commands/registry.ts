@@ -348,6 +348,44 @@ registerCommand({
   },
 });
 
+// ============================================================================
+// ATE (Automation Test Engine)
+// ============================================================================
+
+registerCommand({
+  id: "add",
+  description: "프로젝트에 기능 추가",
+  subcommands: ["test"],
+  async run(ctx) {
+    const sub = ctx.args[1];
+    if (sub !== "test") return false;
+    const { addTest } = await import("./add");
+    return addTest({ cwd: process.cwd() });
+  },
+});
+
+registerCommand({
+  id: "test:auto",
+  description: "ATE 자동 E2E 생성/실행",
+  async run(ctx) {
+    const { testAuto } = await import("./test-auto");
+    return testAuto({
+      ci: ctx.options.ci === "true",
+      impact: ctx.options.impact === "true",
+    });
+  },
+});
+
+registerCommand({
+  id: "test:heal",
+  description: "ATE healing 제안 생성(자동 커밋 금지)",
+  async run() {
+    const { testHeal } = await import("./test-heal");
+    return testHeal();
+  },
+});
+
+
 // 레거시 명령어 (DEPRECATED)
 registerCommand({
   id: "spec-upsert",

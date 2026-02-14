@@ -12,11 +12,14 @@ import React, {
   useRef,
 } from "react";
 import { navigate, prefetch } from "./router";
+import { autoStableManduId } from "../runtime/stable-selector";
 
 export interface LinkProps
   extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> {
   /** 이동할 URL */
   href: string;
+  /** Stable selector id (optional). If omitted, core injects best-effort id. */
+  manduId?: string;
   /** history.replaceState 사용 여부 */
   replace?: boolean;
   /** 마우스 hover 시 prefetch 여부 */
@@ -46,6 +49,7 @@ export interface LinkProps
  */
 export function Link({
   href,
+  manduId,
   replace = false,
   prefetch: shouldPrefetch = false,
   scroll = true,
@@ -135,6 +139,8 @@ export function Link({
     return;
   }, [shouldPrefetch]);
 
+  const stableId = manduId ?? autoStableManduId("Link");
+
   return (
     <a
       href={href}
@@ -142,6 +148,7 @@ export function Link({
       onMouseEnter={handleMouseEnter}
       onFocus={handleFocus}
       data-mandu-link=""
+      data-mandu-id={stableId}
       {...rest}
     >
       {children}

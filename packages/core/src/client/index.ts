@@ -83,6 +83,9 @@ export {
 // Link Components
 export { Link, NavLink, type LinkProps, type NavLinkProps } from "./Link";
 
+// Stable interaction components
+export { ManduButton, ManduModalTrigger } from "./interaction";
+
 // Router Hooks
 export {
   useRouter,
