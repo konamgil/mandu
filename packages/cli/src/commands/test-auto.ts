@@ -6,7 +6,7 @@ function jsonOut(obj: unknown) {
   console.log(JSON.stringify(obj, null, 2));
 }
 
-export async function testAuto(opts: { ci?: boolean; impact?: boolean } = {}): Promise<boolean> {
+export async function testAuto(opts: { ci?: boolean; impact?: boolean; baseURL?: string } = {}): Promise<boolean> {
   const repoRoot = process.cwd();
   const oracleLevel = "L0" as const;
 
@@ -31,7 +31,7 @@ export async function testAuto(opts: { ci?: boolean; impact?: boolean } = {}): P
     const genRes = ateGenerate({ repoRoot, oracleLevel, onlyRoutes });
 
     // 4) run
-    const runRes = await ateRun({ repoRoot, ci: opts.ci, headless: opts.ci });
+    const runRes = await ateRun({ repoRoot, ci: opts.ci, headless: opts.ci, baseURL: opts.baseURL });
 
     // 5) report
     const repRes = await ateReport({

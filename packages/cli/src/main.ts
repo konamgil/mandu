@@ -64,6 +64,7 @@ Commands:
   test:auto         ATE extract→generate→run→report
   test:auto --ci    CI 모드(headless/아티팩트 강화)
   test:auto --impact  변경 파일 기반 subset 실행
+  test:auto --base-url <url>  대상 서버 baseURL 지정 (기본: http://localhost:3333)
   test:heal         최근 실패 기반 healing 제안 생성(자동 커밋 금지)
 
 Options:
