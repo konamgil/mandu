@@ -42,9 +42,10 @@ export async function extract(input: ExtractInput): Promise<{ ok: true; graphPat
   for (const filePath of routeFiles) {
     const sourceFile = project.addSourceFileAtPath(filePath);
     const rel = relative(repoRoot, filePath);
+    const relNormalized = rel.replace(/\\/g, "/");
 
     // route node id: normalize to path without trailing /page.tsx
-    const routePath = rel
+    const routePath = relNormalized
       .replace(/^app\//, "/")
       .replace(/^routes\//, "/")
       .replace(/\/page\.tsx$/, "")
@@ -52,7 +53,7 @@ export async function extract(input: ExtractInput): Promise<{ ok: true; graphPat
       .replace(/\/page$/, "")
       .replace(/\\/g, "/");
 
-    addNode(graph, { kind: "route", id: routePath === "" ? "/" : routePath, file: rel, path: routePath === "" ? "/" : routePath });
+    addNode(graph, { kind: "route", id: routePath === "" ? "/" : routePath, file: relNormalized, path: routePath === "" ? "/" : routePath });
 
     // ManduLink / Link literal extraction: <Link href="/x"> or <ManduLink to="/x">
     const jsxAttrs = sourceFile.getDescendantsOfKind(SyntaxKind.JsxAttribute);
@@ -65,7 +66,7 @@ export async function extract(input: ExtractInput): Promise<{ ok: true; graphPat
         const raw = (init as any).getLiteralValue?.() ?? init.getText?.();
         const to = typeof raw === "string" ? raw.replace(/^"|"$/g, "") : null;
         if (typeof to === "string" && to.startsWith("/")) {
-          addEdge(graph, { kind: "navigate", from: routePath || "/", to, file: rel, source: `<jsx ${name}>` });
+          addEdge(graph, { kind: "navigate", from: routePath || "/", to, file: relNormalized, source: `<jsx ${name}>` });
         }
       }
     }
@@ -77,19 +78,19 @@ export async function extract(input: ExtractInput): Promise<{ ok: true; graphPat
       if (exprText === "mandu.navigate" || exprText.endsWith(".navigate")) {
         const to = tryExtractLiteralArg(call, 0);
         if (to && to.startsWith("/")) {
-          addEdge(graph, { kind: "navigate", from: routePath || "/", to, file: rel, source: "mandu.navigate" });
+          addEdge(graph, { kind: "navigate", from: routePath || "/", to, file: relNormalized, source: "mandu.navigate" });
         }
       }
       if (exprText === "mandu.modal.open" || exprText.endsWith(".modal.open")) {
         const modal = tryExtractLiteralArg(call, 0);
         if (modal) {
-          addEdge(graph, { kind: "openModal", from: routePath || "/", modal, file: rel, source: "mandu.modal.open" });
+          addEdge(graph, { kind: "openModal", from: routePath || "/", modal, file: relNormalized, source: "mandu.modal.open" });
         }
       }
       if (exprText === "mandu.action.run" || exprText.endsWith(".action.run")) {
         const action = tryExtractLiteralArg(call, 0);
         if (action) {
-          addEdge(graph, { kind: "runAction", from: routePath || "/", action, file: rel, source: "mandu.action.run" });
+          addEdge(graph, { kind: "runAction", from: routePath || "/", action, file: relNormalized, source: "mandu.action.run" });
         }
       }
     }

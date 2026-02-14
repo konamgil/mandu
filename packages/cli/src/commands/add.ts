@@ -1,15 +1,17 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { theme } from "../terminal";
 
-function sh(cmd: string, cwd: string) {
-  execSync(cmd, { cwd, stdio: "inherit" });
+function run(cmd: string, args: string[], cwd: string): void {
+  const res = spawnSync(cmd, args, { cwd, stdio: "inherit" });
+  if (res.error) throw res.error;
+  if (res.status !== 0) throw new Error(`Command failed: ${cmd} ${args.join(" ")}`);
 }
 
-function shTry(cmd: string, cwd: string): boolean {
+function runTry(cmd: string, args: string[], cwd: string): boolean {
   try {
-    sh(cmd, cwd);
+    run(cmd, args, cwd);
     return true;
   } catch {
     return false;
@@ -27,13 +29,13 @@ export async function addTest({ cwd = process.cwd() }: { cwd?: string } = {}): P
 
   // Install in project (no external SaaS deps)
   // NOTE: @mandujs/ate might not be published yet. In that case, fallback to local file: install.
-  const installed = shTry("bun add -d @mandujs/ate @playwright/test playwright", cwd);
+  const installed = runTry("bun", ["add", "-d", "@mandujs/ate", "@playwright/test", "playwright"], cwd);
   if (!installed) {
     const localAtePath = join(cwd, "..", "mandu", "packages", "ate");
     const localPkg = join(localAtePath, "package.json");
     if (existsSync(localPkg)) {
-      console.log(theme.info(`@mandujs/ate not found on npm. Falling back to local install: file:${localAtePath}`));
-      sh(`bun add -d file:${localAtePath} @playwright/test playwright`, cwd);
+      console.warn(theme.warn(`@mandujs/ate not found on npm. Falling back to local install: file:${localAtePath}`));
+      run("bun", ["add", "-d", `file:${localAtePath}`, "@playwright/test", "playwright"], cwd);
     } else {
       console.error(theme.error("@mandujs/ate not found on npm, and local fallback path not found."));
       console.error(theme.muted(`Expected: ${localPkg}`));
@@ -42,10 +44,20 @@ export async function addTest({ cwd = process.cwd() }: { cwd?: string } = {}): P
     }
   }
 
-  sh("bunx playwright install chromium", cwd);
+  const browserInstalled = runTry("bunx", ["playwright", "install", "chromium"], cwd);
+  if (!browserInstalled) {
+    console.error(theme.error("Failed to install Playwright browsers. Try manually: bunx playwright install chromium"));
+    return false;
+  }
 
   // Create directories and baseline config
-  sh("mkdir -p tests/e2e/auto tests/e2e/manual .mandu/scenarios .mandu/reports", cwd);
+  const dirs = [
+    join(cwd, "tests", "e2e", "auto"),
+    join(cwd, "tests", "e2e", "manual"),
+    join(cwd, ".mandu", "scenarios"),
+    join(cwd, ".mandu", "reports"),
+  ];
+  for (const d of dirs) mkdirSync(d, { recursive: true });
 
   console.log(theme.success("✅ ATE installed. Next: bunx mandu test:auto"));
   return true;
