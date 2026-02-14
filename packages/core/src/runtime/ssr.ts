@@ -1,5 +1,6 @@
-import { renderToString } from "react-dom/server";
+import { renderToString as defaultRenderToString } from "react-dom/server";
 import { serializeProps } from "../client/serialize";
+import { createRequire } from "module";
 import type { ReactElement } from "react";
 import type { BundleManifest } from "../bundler/types";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
@@ -46,6 +47,32 @@ export interface SSROptions {
   routePattern?: string;
   /** CSS 파일 경로 (자동 주입, 기본: /.mandu/client/globals.css) */
   cssPath?: string | false;
+}
+
+let projectRenderToString: ((element: ReactElement) => string) | null | undefined;
+
+function loadProjectRenderToString(): ((element: ReactElement) => string) | null {
+  if (projectRenderToString !== undefined) {
+    return projectRenderToString;
+  }
+
+  try {
+    const projectRequire = createRequire(`${process.cwd()}/package.json`);
+    const module = projectRequire("react-dom/server") as {
+      renderToString?: (element: ReactElement) => string;
+      default?: { renderToString?: (element: ReactElement) => string };
+    };
+    const renderToString = module.renderToString ?? module.default?.renderToString;
+    if (typeof renderToString === "function") {
+      projectRenderToString = renderToString;
+      return projectRenderToString;
+    }
+  } catch {
+    // fallback below
+  }
+
+  projectRenderToString = null;
+  return null;
 }
 
 /**
@@ -160,6 +187,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
 
+  const renderToString = loadProjectRenderToString() ?? defaultRenderToString;
   let content = renderToString(element);
 
   // Island 래퍼 적용 (hydration 필요 시)
