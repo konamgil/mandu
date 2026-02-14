@@ -25,7 +25,7 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
   ensureDir(runDir);
   ensureDir(latestDir);
 
-  const baseURL = input.baseURL ?? process.env.BASE_URL ?? "http://127.0.0.1:3333";
+  const baseURL = input.baseURL ?? process.env.BASE_URL ?? "http://localhost:3333";
 
   const args = [
     "playwright",
