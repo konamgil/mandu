@@ -10,7 +10,10 @@ import { createRequire } from "node:module";
 
 type ReactDomServer = {
   renderToString?: (element: unknown) => string;
-  renderToReadableStream?: (element: unknown, options?: Record<string, unknown>) => Promise<ReadableStream>;
+  renderToReadableStream?: (
+    element: unknown,
+    options?: Record<string, unknown>
+  ) => Promise<ReadableStream & { allReady: Promise<void> }>;
 };
 
 const requireFromCore = createRequire(import.meta.url);
@@ -24,8 +27,11 @@ function loadFromProjectOrCore(specifier: "react-dom/server" | "react-dom/server
 
   try {
     return projectRequire(specifier) as ReactDomServer;
-  } catch {
+  } catch (error) {
     // 2) Fallback to framework-local resolution (tests/isolated runtime)
+    if (process.env.NODE_ENV === "development") {
+      console.debug(`[Mandu] Note: "${specifier}"를 프로젝트에서 로드하지 못했습니다. 프레임워크 의존성으로 대체합니다.`, error);
+    }
     return requireFromCore(specifier) as ReactDomServer;
   }
 }
@@ -45,7 +51,7 @@ export function getRenderToString(): (element: unknown) => string {
 export function getRenderToReadableStream(): (
   element: unknown,
   options?: Record<string, unknown>
-) => Promise<ReadableStream> {
+) => Promise<ReadableStream & { allReady: Promise<void> }> {
   if (!cachedServerBrowser) {
     cachedServerBrowser = loadFromProjectOrCore("react-dom/server.browser");
   }
@@ -54,5 +60,8 @@ export function getRenderToReadableStream(): (
     throw new Error("renderToReadableStream not found in react-dom/server.browser");
   }
 
-  return cachedServerBrowser.renderToReadableStream;
+  return cachedServerBrowser.renderToReadableStream as (
+    element: unknown,
+    options?: Record<string, unknown>
+  ) => Promise<ReadableStream & { allReady: Promise<void> }>;
 }
