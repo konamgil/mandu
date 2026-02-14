@@ -8,7 +8,10 @@
     "build": "mandu build",
     "check": "mandu check",
     "guard": "mandu guard",
-    "test": "bun test"
+    "test": "bun test",
+    "test:e2e": "mandu test:auto",
+    "test:e2e:ci": "mandu test:auto --ci",
+    "test:heal": "mandu test:heal"
   },
   "dependencies": {
     "@mandujs/core": "workspace:*",
@@ -21,6 +24,9 @@
   },
   "devDependencies": {
     "@mandujs/cli": "workspace:*",
+    "@mandujs/ate": "workspace:*",
+    "@playwright/test": "^1.49.0",
+    "playwright": "^1.49.0",
     "@tailwindcss/cli": "^4.1.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
