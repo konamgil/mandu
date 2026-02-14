@@ -187,11 +187,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
 
-<<<<<<< HEAD
   const renderToString = getRenderToString();
-=======
-  const renderToString = loadProjectRenderToString() ?? defaultRenderToString;
->>>>>>> 4f1ad18e98f7aed115d462ea1b3f787032568cf6
   let content = renderToString(element);
 
   // Island 래퍼 적용 (hydration 필요 시)
