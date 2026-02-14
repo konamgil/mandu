@@ -1,6 +1,5 @@
 import { renderToString as defaultRenderToString } from "react-dom/server";
 import { serializeProps } from "../client/serialize";
-import path from "path";
 import { createRequire } from "module";
 import type { ReactElement } from "react";
 import type { BundleManifest } from "../bundler/types";
@@ -50,7 +49,6 @@ export interface SSROptions {
   cssPath?: string | false;
 }
 
-const requireFromCore = createRequire(import.meta.url);
 let projectRenderToString: ((element: ReactElement) => string) | null | undefined;
 
 function loadProjectRenderToString(): ((element: ReactElement) => string) | null {
@@ -59,10 +57,14 @@ function loadProjectRenderToString(): ((element: ReactElement) => string) | null
   }
 
   try {
-    const projectServerPath = path.join(process.cwd(), "node_modules", "react-dom", "server.js");
-    const module = requireFromCore(projectServerPath) as { renderToString?: (element: ReactElement) => string };
-    if (typeof module.renderToString === "function") {
-      projectRenderToString = module.renderToString;
+    const projectRequire = createRequire(`${process.cwd()}/package.json`);
+    const module = projectRequire("react-dom/server") as {
+      renderToString?: (element: ReactElement) => string;
+      default?: { renderToString?: (element: ReactElement) => string };
+    };
+    const renderToString = module.renderToString ?? module.default?.renderToString;
+    if (typeof renderToString === "function") {
+      projectRenderToString = renderToString;
       return projectRenderToString;
     }
   } catch {
