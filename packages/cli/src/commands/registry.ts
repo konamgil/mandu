@@ -372,6 +372,7 @@ registerCommand({
     return testAuto({
       ci: ctx.options.ci === "true",
       impact: ctx.options.impact === "true",
+      baseURL: ctx.options["base-url"] || ctx.options.baseURL || ctx.options.baseUrl,
     });
   },
 });
