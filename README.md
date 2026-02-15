@@ -13,6 +13,7 @@
   <a href="https://www.npmjs.com/package/@mandujs/core"><img src="https://img.shields.io/npm/v/@mandujs/core?label=core" alt="npm core" /></a>
   <a href="https://www.npmjs.com/package/@mandujs/cli"><img src="https://img.shields.io/npm/v/@mandujs/cli?label=cli" alt="npm cli" /></a>
   <a href="https://www.npmjs.com/package/@mandujs/mcp"><img src="https://img.shields.io/npm/v/@mandujs/mcp?label=mcp" alt="npm mcp" /></a>
+  <a href="https://www.npmjs.com/package/@mandujs/ate"><img src="https://img.shields.io/npm/v/@mandujs/ate?label=ate" alt="npm ate" /></a>
   <img src="https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun" alt="Bun" />
   <img src="https://img.shields.io/badge/language-TypeScript-3178c6?logo=typescript" alt="TypeScript" />
   <img src="https://img.shields.io/badge/frontend-React-61dafb?logo=react" alt="React" />
@@ -244,6 +245,10 @@ bunx mandu guard arch
 
 # Watch for architecture violations (real-time)
 bunx mandu guard arch --watch
+
+# Setup and run automated E2E tests
+bunx mandu add test
+bunx mandu test:auto
 ```
 
 ### Tech Stack
@@ -318,7 +323,8 @@ Current AI coding has a fundamental problem: the more agents code, the more arch
 | **Island Hydration** | Selective client-side JavaScript for performance |
 | **Contract API** | Type-safe API contracts with Zod schema validation |
 | **SEO Module** | Next.js Metadata API compatible, sitemap/robots generation, JSON-LD helpers |
-| **MCP Server** | 35+ tools for AI agents to directly manipulate the framework |
+| **MCP Server** | 44+ tools for AI agents to directly manipulate the framework (incl. 9 ATE tools) |
+| **ATE (Automation Test Engine)** | AI-driven E2E testing: Extract routes → Generate tests → Auto-heal failures |
 | **HMR Support** | Hot Module Replacement for rapid development |
 | **Transaction API** | Atomic changes with snapshot-based rollback |
 
@@ -356,6 +362,9 @@ bunx mandu build
 | `mandu guard arch` | Run architecture check |
 | `mandu routes list` | Show all routes |
 | `mandu lock` | Generate/refresh lockfile for config integrity |
+| `mandu add test` | Setup ATE (Automation Test Engine) |
+| `mandu test:auto` | Run automated E2E tests |
+| `mandu test:heal` | Auto-heal failed tests |
 
 ---
 
@@ -617,6 +626,109 @@ const result = await client.GET({ query: { id: "123" } });
 ```
 
 ---
+## ATE (Automation Test Engine)
+
+AI-driven end-to-end testing automation with self-healing capabilities.
+
+### What is ATE?
+
+ATE automatically:
+1. **Extracts** your app's interaction graph from source code (AST-based)
+2. **Generates** Playwright test specs with domain-aware assertions
+3. **Runs** E2E tests with detailed reporting
+4. **Heals** failures by analyzing Playwright traces and suggesting fixes
+
+### Quick Start
+
+```bash
+# 1. Setup ATE
+bunx mandu add test
+
+# 2. Run automated E2E tests
+bunx mandu test:auto
+
+# 3. If tests fail, auto-heal them
+bunx mandu test:heal
+```
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **AST-based Extraction** | Analyzes TypeScript/React code to find routes and navigation |
+| **Domain Detection** | Auto-detects domain type (ecommerce, blog, dashboard, auth, generic) |
+| **Oracle Levels** | L0 (console errors), L1 (structure), L2 (behavior), L3 (domain hints) |
+| **Selector Fallback** | 4-tier fallback chain: mandu-id → text → class → role → xpath |
+| **Trace Parser** | Analyzes Playwright traces to identify failure causes |
+| **Impact Analysis** | Git diff-based subset testing (only test affected routes) |
+| **Auto-Healing** | Generates git-apply compatible diffs for test repairs |
+| **MCP Integration** | 9 MCP tools for AI agents to run/heal tests automatically |
+
+### MCP Tools (for AI Agents)
+
+```typescript
+// Full pipeline automation
+mandu.ate.auto_pipeline    // Extract → Generate → Run → Report → Heal
+
+// Individual steps
+mandu.ate.extract          // Extract interaction graph
+mandu.ate.generate         // Generate Playwright specs
+mandu.ate.run              // Run tests
+mandu.ate.report           // Generate reports (JSON/HTML)
+mandu.ate.heal             // Generate heal suggestions
+mandu.ate.impact           // Calculate affected routes
+
+// Feedback loop
+mandu.ate.feedback         // Analyze failures + prioritize fixes
+mandu.ate.apply_heal       // Apply heal diffs safely (with backup)
+```
+
+### Example: Auto-Pipeline
+
+```bash
+# AI agent can run the entire pipeline with one MCP call:
+{
+  "tool": "mandu.ate.auto_pipeline",
+  "arguments": {
+    "repoRoot": "/path/to/project",
+    "baseURL": "http://localhost:3000",
+    "oracleLevel": "L1",
+    "useImpactAnalysis": true,
+    "autoHeal": true
+  }
+}
+```
+
+### CI/CD Integration
+
+ATE includes GitHub Actions templates:
+
+```yaml
+# .github/workflows/ate-e2e.yml (auto-generated)
+name: ATE E2E Tests
+on: [pull_request, push]
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:e2e:ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: .mandu/reports/
+```
+
+### Documentation
+
+- [ATE MCP Integration Guide](./packages/ate/docs/mcp-integration.md)
+- [ATE Architecture](./packages/ate/docs/architecture.md)
+- [ATE API Reference](./packages/ate/README.md)
+
+---
 
 ## MCP Server (AI Integration)
 
@@ -637,7 +749,7 @@ Mandu includes a full MCP server for AI agent integration.
 }
 ```
 
-### Tools (35+)
+### Tools (44+)
 
 | Category | Tools |
 |----------|-------|
