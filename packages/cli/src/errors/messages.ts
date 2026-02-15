@@ -138,6 +138,10 @@ export function handleCLIError(error: unknown): never {
     process.exit(1);
   }
 
-  console.error("\n❌ Unknown error occurred\n");
+  console.error("\n❌ Unknown error occurred (non-Error thrown)\n");
+  if (process.env.DEBUG) {
+    // eslint-disable-next-line no-console
+    console.error("Thrown value:", error);
+  }
   process.exit(1);
 }
