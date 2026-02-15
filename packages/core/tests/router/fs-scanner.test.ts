@@ -223,4 +223,41 @@ describe("FSScanner", () => {
       await rm(conflictDir, { recursive: true, force: true });
     }
   });
+
+  it("should detect 'use client' directive in page files as clientModule", async () => {
+    const useClientDir = join(import.meta.dir, "__test_use_client__");
+
+    await mkdir(join(useClientDir, "app/chat"), { recursive: true });
+    await mkdir(join(useClientDir, "app/static"), { recursive: true });
+
+    // Page with "use client"
+    await writeFile(
+      join(useClientDir, "app/chat/page.tsx"),
+      '"use client";\nexport default function Chat() { return <div>Chat</div>; }'
+    );
+
+    // Page without "use client"
+    await writeFile(
+      join(useClientDir, "app/static/page.tsx"),
+      "export default function Static() { return <div>Static</div>; }"
+    );
+
+    try {
+      const result = await scanRoutes(useClientDir);
+
+      const chatRoute = result.routes.find((r) => r.pattern === "/chat");
+      const staticRoute = result.routes.find((r) => r.pattern === "/static");
+
+      // Chat page should have clientModule (itself)
+      expect(chatRoute).toBeDefined();
+      expect(chatRoute?.clientModule).toBeDefined();
+      expect(chatRoute?.clientModule?.replace(/\\/g, "/")).toContain("chat/page.tsx");
+
+      // Static page should NOT have clientModule
+      expect(staticRoute).toBeDefined();
+      expect(staticRoute?.clientModule).toBeUndefined();
+    } finally {
+      await rm(useClientDir, { recursive: true, force: true });
+    }
+  });
 });

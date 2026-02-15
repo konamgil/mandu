@@ -81,7 +81,7 @@ export class FSScanner {
     await this.scanWithGlob(rootDir, routesDir, files, errors);
 
     // 라우트 설정 생성
-    const { routes, routeErrors } = this.createRouteConfigs(files, rootDir);
+    const { routes, routeErrors } = await this.createRouteConfigs(files, rootDir);
     errors.push(...routeErrors);
 
     // 통계 계산
@@ -187,10 +187,10 @@ export class FSScanner {
   /**
    * 스캔된 파일에서 라우트 설정 생성
    */
-  private createRouteConfigs(
+  private async createRouteConfigs(
     files: ScannedFile[],
     rootDir: string
-  ): { routes: FSRouteConfig[]; routeErrors: ScanError[] } {
+  ): Promise<{ routes: FSRouteConfig[]; routeErrors: ScanError[] }> {
     const routes: FSRouteConfig[] = [];
     const routeErrors: ScanError[] = [];
 
@@ -273,9 +273,24 @@ export class FSScanner {
       // Island 파일 찾기 (같은 디렉토리)
       const dirPath = this.getDirPath(file.relativePath);
       const islands = islandMap.get(dirPath);
-      const clientModule = islands?.[0]
-        ? join(this.config.routesDir, islands[0].relativePath)
-        : undefined;
+
+      // clientModule 결정: island 파일 또는 "use client"가 있는 page 자체
+      let clientModule: string | undefined;
+      if (islands?.[0]) {
+        // 우선순위: 명시적 island 파일
+        clientModule = join(this.config.routesDir, islands[0].relativePath);
+      } else if (file.type === "page") {
+        // page 파일 자체에서 "use client" 확인
+        try {
+          const fileContent = await Bun.file(file.absolutePath).text();
+          const hasUseClient = /^\s*["']use client["']/m.test(fileContent);
+          if (hasUseClient) {
+            clientModule = modulePath;
+          }
+        } catch {
+          // 파일 읽기 실패 시 무시
+        }
+      }
 
       // 로딩/에러 모듈 찾기
       const loadingModule = this.findClosestSpecialFile(file.segments, loadingMap);
