@@ -400,9 +400,31 @@ registerCommand({
 
 registerCommand({
   id: "generate",
-  description: "FS Routes 기반 코드 생성",
-  async run() {
+  description: "코드 생성 (FS Routes + Resources)",
+  subcommands: ["resource"],
+  async run(ctx) {
+    const subCommand = ctx.args[1];
+
+    if (subCommand === "resource") {
+      // generate resource subcommand
+      const { generateResource } = await import("./generate-resource");
+      return generateResource({
+        name: ctx.args[2] || ctx.options._positional,
+        fields: ctx.options.fields,
+        timestamps: ctx.options.timestamps === "true",
+        methods: ctx.options.methods,
+        force: ctx.options.force === "true",
+      });
+    }
+
+    // Default: generate all (FS Routes + Resources)
+    if (subCommand && !subCommand.startsWith("--")) {
+      return false; // Unknown subcommand
+    }
+
     const { generateApply } = await import("./generate-apply");
-    return generateApply();
+    return generateApply({
+      force: ctx.options.force === "true",
+    });
   },
 });

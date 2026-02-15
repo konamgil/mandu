@@ -20,19 +20,20 @@ ${theme.heading("🥟 Mandu CLI")} ${theme.muted(`v${VERSION}`)} - Agent-Native 
 ${theme.heading("Usage:")} ${theme.command("bunx mandu")} ${theme.option("<command>")} [options]
 
 Commands:
-  init              새 프로젝트 생성 (Tailwind + shadcn/ui 기본 포함)
-  check             FS Routes + Guard 통합 검사
-  routes generate   FS Routes 스캔 및 매니페스트 생성
-  routes list       현재 라우트 목록 출력
-  routes watch      실시간 라우트 감시
-  dev               개발 서버 실행 (FS Routes + Guard 기본)
-  build             클라이언트 번들 빌드 (Hydration)
-  start             프로덕션 서버 실행 (build 후)
-  guard             아키텍처 위반 검사 (기본)
-  guard arch        아키텍처 위반 검사 (FSD/Clean/Hexagonal)
-  guard legacy      레거시 Spec Guard 검사
-  spec-upsert       Spec 파일 검증 및 lock 갱신 (레거시)
-  generate          Spec에서 코드 생성 (레거시)
+  init                    새 프로젝트 생성 (Tailwind + shadcn/ui 기본 포함)
+  check                   FS Routes + Guard 통합 검사
+  routes generate         FS Routes 스캔 및 매니페스트 생성
+  routes list             현재 라우트 목록 출력
+  routes watch            실시간 라우트 감시
+  dev                     개발 서버 실행 (FS Routes + Guard 기본)
+  build                   클라이언트 번들 빌드 (Hydration)
+  start                   프로덕션 서버 실행 (build 후)
+  guard                   아키텍처 위반 검사 (기본)
+  guard arch              아키텍처 위반 검사 (FSD/Clean/Hexagonal)
+  guard legacy            레거시 Spec Guard 검사
+  generate                FS Routes + Resources 코드 생성
+  generate resource       리소스 생성 (Interactive 또는 Flag 기반)
+  spec-upsert             Spec 파일 검증 및 lock 갱신 (레거시)
 
   doctor            Guard 실패 분석 + 패치 제안 (Brain)
   watch             실시간 파일 감시 - 경고만 (Brain)
@@ -101,6 +102,10 @@ Options:
   --model <name>      brain setup 시 모델 이름 (기본: llama3.2)
   --url <url>         brain setup 시 Ollama URL
   --skip-check        brain setup 시 모델/서버 체크 건너뜀
+  --fields <fields>   generate resource 시 필드 정의 (예: name:string,email:email)
+  --timestamps        generate resource 시 createdAt/updatedAt 자동 추가
+  --methods <methods> generate resource 시 HTTP 메서드 (예: GET,POST,PUT,DELETE)
+  --force             generate/generate resource 시 기존 슬롯 덮어쓰기
   --help, -h          도움말 표시
 
 Notes:
@@ -135,9 +140,17 @@ Examples:
   bunx mandu lock                          # Lockfile 생성/갱신
   bunx mandu lock --verify                 # 설정 무결성 검증
   bunx mandu lock --diff --show-secrets    # 변경사항 상세 비교
+  bunx mandu generate resource             # Interactive 리소스 생성
+  bunx mandu generate resource user --fields name:string,email:email --timestamps
+  bunx mandu generate resource product --fields name:string,price:number --methods GET,POST,PUT
+  bunx mandu generate                      # FS Routes + Resources 코드 생성
+  bunx mandu generate --force              # 기존 슬롯 덮어쓰기
 
 FS Routes Workflow (권장):
   1. init → 2. app/ 폴더에 page.tsx 생성 → 3. dev → 4. build → 5. start
+
+Resource-Centric Workflow (새로운 방식):
+  1. init → 2. generate resource → 3. Edit slot → 4. generate → 5. dev
 
 Legacy Workflow:
   1. init → 2. spec-upsert → 3. generate → 4. build → 5. guard → 6. dev

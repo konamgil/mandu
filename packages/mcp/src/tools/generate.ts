@@ -1,18 +1,24 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { loadManifest, generateRoutes, generateManifest, GENERATED_RELATIVE_PATHS, type GeneratedMap } from "@mandujs/core";
+import { loadManifest, generateRoutes, generateManifest, GENERATED_RELATIVE_PATHS, type GeneratedMap, parseResourceSchema, generateResourceArtifacts } from "@mandujs/core";
 import { getProjectPaths, readJsonFile } from "../utils/project.js";
+import path from "path";
+import fs from "fs/promises";
 
 export const generateToolDefinitions: Tool[] = [
   {
     name: "mandu_generate",
     description:
-      "Generate route handlers and components from the spec manifest. Creates server handlers, page components, and slot files.",
+      "Generate route handlers, components, and resource artifacts. Creates server handlers, page components, slot files, and resource CRUD operations.",
     inputSchema: {
       type: "object",
       properties: {
         dryRun: {
           type: "boolean",
           description: "If true, show what would be generated without writing files",
+        },
+        resources: {
+          type: "boolean",
+          description: "Include resource artifact generation (default: true)",
         },
       },
       required: [],
@@ -34,7 +40,7 @@ export function generateTools(projectRoot: string) {
 
   return {
     mandu_generate: async (args: Record<string, unknown>) => {
-      const { dryRun } = args as { dryRun?: boolean };
+      const { dryRun, resources = true } = args as { dryRun?: boolean; resources?: boolean };
 
       // Regenerate manifest from FS Routes first
       const fsResult = await generateManifest(projectRoot);
@@ -79,19 +85,69 @@ export function generateTools(projectRoot: string) {
         };
       }
 
-      // Actually generate
+      // Actually generate routes
       const result = await generateRoutes(manifestResult.data, projectRoot);
 
+      // Generate resources if enabled
+      let resourceResults: {
+        created: string[];
+        skipped: string[];
+        errors: string[];
+      } = {
+        created: [],
+        skipped: [],
+        errors: [],
+      };
+
+      if (resources) {
+        try {
+          const resourcesDir = path.join(projectRoot, "spec", "resources");
+          const entries = await fs.readdir(resourcesDir, { withFileTypes: true });
+          const resourceDirs = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+
+          for (const resourceName of resourceDirs) {
+            const schemaPath = path.join(resourcesDir, resourceName, "schema.ts");
+            try {
+              const parsed = await parseResourceSchema(schemaPath);
+              const resourceResult = await generateResourceArtifacts(parsed, {
+                rootDir: projectRoot,
+                force: false,
+              });
+
+              resourceResults.created.push(...resourceResult.created);
+              resourceResults.skipped.push(...resourceResult.skipped);
+              resourceResults.errors.push(...resourceResult.errors);
+            } catch (err) {
+              resourceResults.errors.push(`Failed to generate resource '${resourceName}': ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        } catch {
+          // spec/resources/ doesn't exist or is empty - not an error
+        }
+      }
+
       return {
-        success: result.success,
-        created: result.created,
-        deleted: result.deleted,
-        skipped: result.skipped,
-        errors: result.errors,
+        success: result.success && resourceResults.errors.length === 0,
+        routes: {
+          created: result.created,
+          deleted: result.deleted,
+          skipped: result.skipped,
+          errors: result.errors,
+        },
+        resources: resources
+          ? {
+              created: resourceResults.created,
+              skipped: resourceResults.skipped,
+              errors: resourceResults.errors,
+            }
+          : undefined,
         summary: {
-          createdCount: result.created.length,
-          deletedCount: result.deleted.length,
-          skippedCount: result.skipped.length,
+          routesCreated: result.created.length,
+          routesDeleted: result.deleted.length,
+          routesSkipped: result.skipped.length,
+          resourcesCreated: resourceResults.created.length,
+          resourcesSkipped: resourceResults.skipped.length,
+          totalErrors: result.errors.length + resourceResults.errors.length,
         },
       };
     },

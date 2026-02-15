@@ -23,6 +23,7 @@ export { runtimeTools, runtimeToolDefinitions } from "./runtime.js";
 export { seoTools, seoToolDefinitions } from "./seo.js";
 export { projectTools, projectToolDefinitions } from "./project.js";
 export { ateTools, ateToolDefinitions } from "./ate.js";
+export { resourceTools, resourceToolDefinitions } from "./resource.js";
 
 // 도구 모듈 import (등록용)
 import { specTools, specToolDefinitions } from "./spec.js";
@@ -38,6 +39,7 @@ import { runtimeTools, runtimeToolDefinitions } from "./runtime.js";
 import { seoTools, seoToolDefinitions } from "./seo.js";
 import { projectTools, projectToolDefinitions } from "./project.js";
 import { ateTools, ateToolDefinitions } from "./ate.js";
+import { resourceTools, resourceToolDefinitions } from "./resource.js";
 
 /**
  * 도구 모듈 정보
@@ -70,6 +72,7 @@ const TOOL_MODULES: ToolModule[] = [
   { category: "seo", definitions: seoToolDefinitions, handlers: seoTools },
   { category: "project", definitions: projectToolDefinitions, handlers: projectTools as ToolModule["handlers"], requiresServer: true },
   { category: "ate", definitions: ateToolDefinitions as any, handlers: ateTools as any },
+  { category: "resource", definitions: resourceToolDefinitions, handlers: resourceTools },
 ];
 
 /**
