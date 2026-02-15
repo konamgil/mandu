@@ -32,8 +32,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@mandujs/core": "workspace:*",
-    "@mandujs/ate": "workspace:*",
+    "@mandujs/core": "^0.18.0",
+    "@mandujs/ate": "^0.17.0",
     "cfonts": "^3.3.0"
   },
   "engines": {

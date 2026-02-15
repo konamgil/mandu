@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@mandujs/core": "^0.18.0",
-    "@mandujs/ate": "workspace:*",
+    "@mandujs/ate": "^0.17.0",
     "@modelcontextprotocol/sdk": "^1.25.3"
   },
   "engines": {

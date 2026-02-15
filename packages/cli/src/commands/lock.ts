@@ -284,24 +284,29 @@ async function showDiff(
     return false;
   }
 
-  // 스냅샷이 없으면 diff 불가
+  // 스냅샷이 없으면 전체 설정을 변경사항으로 표시
   if (!lockfile.snapshot) {
     if (json) {
       console.log(
         JSON.stringify({
-          success: false,
-          error: "SNAPSHOT_MISSING",
-          message:
-            "Lockfile에 스냅샷이 없습니다. '--include-snapshot' 옵션으로 다시 생성하세요.",
+          success: true,
+          warning: "SNAPSHOT_MISSING",
+          message: "스냅샷이 없어 전체 설정을 변경사항으로 표시",
+          hasChanges: true,
         })
       );
     } else {
-      console.error("❌ Lockfile에 스냅샷이 없습니다.");
-      console.error(
-        "   'mandu lock --include-snapshot' 옵션으로 다시 생성하세요."
-      );
+      console.log("⚠️  Lockfile에 스냅샷이 없습니다.");
+      console.log("   전체 설정을 변경사항으로 표시합니다.");
+      console.log("   정확한 diff를 보려면: mandu lock --include-snapshot\n");
     }
-    return false;
+
+    // Show entire config as additions
+    const { mcpServers } = resolveMcpSources(config, mcpConfig);
+    const configForDiff = mcpServers ? { ...config, mcpServers } : config;
+    const fullDiff = diffConfig({}, configForDiff);
+    console.log(formatConfigDiff(fullDiff, { color: true, verbose: true, showSecrets }));
+    return true;
   }
 
   // diff 계산

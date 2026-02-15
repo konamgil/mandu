@@ -206,60 +206,84 @@ async function loadAndHydrate(element, src) {
     const module = await import(src);
     const island = module.default;
 
-    // Island 유효성 검사
-    if (!island || !island.__mandu_island) {
-      throw new Error('[Mandu] Invalid island module: ' + id);
+    // Mandu Island (preferred)
+    if (island && island.__mandu_island === true) {
+      const { definition } = island;
+      const data = getServerData(id);
+
+      // Island 컴포넌트 (Error Boundary + Loading 지원)
+      function IslandComponent() {
+        const [isReady, setIsReady] = useState(false);
+
+        useEffect(() => {
+          setIsReady(true);
+        }, []);
+
+        // setup 호출 및 render
+        const setupResult = definition.setup(data);
+        const content = definition.render(setupResult);
+
+        // Loading wrapper 적용
+        const wrappedContent = definition.loading
+          ? React.createElement(IslandLoadingWrapper, {
+              loading: definition.loading,
+              isReady,
+            }, content)
+          : content;
+
+        // Error Boundary 적용
+        return React.createElement(IslandErrorBoundary, {
+          islandId: id,
+          errorBoundary: definition.errorBoundary,
+        }, wrappedContent);
+      }
+
+      // Hydrate (SSR DOM 재사용 + 이벤트 연결)
+      const root = hydrateRoot(element, React.createElement(IslandComponent));
+      hydratedRoots.set(id, root);
+
+      // 완료 표시
+      element.setAttribute('data-mandu-hydrated', 'true');
+
+      // 성능 마커
+      if (performance.mark) {
+        performance.mark('mandu-hydrated-' + id);
+      }
+
+      // 이벤트 발송
+      element.dispatchEvent(new CustomEvent('mandu:hydrated', {
+        bubbles: true,
+        detail: { id, data }
+      }));
+
+      console.log('[Mandu] Hydrated:', id);
     }
+    // Plain React component fallback
+    else if (typeof island === 'function' || React.isValidElement(island)) {
+      console.warn('[Mandu] Plain component hydration:', id);
+      const data = getServerData(id);
+      const root = hydrateRoot(element, React.createElement(island, data));
+      hydratedRoots.set(id, root);
 
-    const { definition } = island;
-    const data = getServerData(id);
+      // 완료 표시
+      element.setAttribute('data-mandu-hydrated', 'true');
 
-    // Island 컴포넌트 (Error Boundary + Loading 지원)
-    function IslandComponent() {
-      const [isReady, setIsReady] = useState(false);
+      // 성능 마커
+      if (performance.mark) {
+        performance.mark('mandu-hydrated-' + id);
+      }
 
-      useEffect(() => {
-        setIsReady(true);
-      }, []);
+      // 이벤트 발송
+      element.dispatchEvent(new CustomEvent('mandu:hydrated', {
+        bubbles: true,
+        detail: { id, data }
+      }));
 
-      // setup 호출 및 render
-      const setupResult = definition.setup(data);
-      const content = definition.render(setupResult);
-
-      // Loading wrapper 적용
-      const wrappedContent = definition.loading
-        ? React.createElement(IslandLoadingWrapper, {
-            loading: definition.loading,
-            isReady,
-          }, content)
-        : content;
-
-      // Error Boundary 적용
-      return React.createElement(IslandErrorBoundary, {
-        islandId: id,
-        errorBoundary: definition.errorBoundary,
-      }, wrappedContent);
+      console.log('[Mandu] Plain component hydrated:', id);
     }
-
-    // Hydrate (SSR DOM 재사용 + 이벤트 연결)
-    const root = hydrateRoot(element, React.createElement(IslandComponent));
-    hydratedRoots.set(id, root);
-
-    // 완료 표시
-    element.setAttribute('data-mandu-hydrated', 'true');
-
-    // 성능 마커
-    if (performance.mark) {
-      performance.mark('mandu-hydrated-' + id);
+    else {
+      throw new Error('[Mandu] Invalid module: expected Mandu island or React component: ' + id);
     }
-
-    // 이벤트 발송
-    element.dispatchEvent(new CustomEvent('mandu:hydrated', {
-      bubbles: true,
-      detail: { id, data }
-    }));
-
-    console.log('[Mandu] Hydrated:', id);
   } catch (error) {
     console.error('[Mandu] Hydration failed for', id, error);
     element.setAttribute('data-mandu-error', 'true');
@@ -379,6 +403,15 @@ import { jsxDEV } from 'react/jsx-dev-runtime';
 // React internals (ReactDOM이 내부적으로 접근 필요)
 const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
 
+// React 19 client internals (Playwright headless 환경 호환성)
+const __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE =
+  React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE || {};
+
+// Null safety for Playwright headless browsers
+if (__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.S == null) {
+  __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.S = function() {};
+}
+
 // 전역 React 설정 (모든 모듈에서 동일 인스턴스 공유)
 if (typeof window !== 'undefined') {
   window.React = React;
@@ -418,11 +451,15 @@ export {
   PureComponent,
   Children,
   __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED,
+  __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
   // JSX Runtime exports
   jsx,
   jsxs,
   jsxDEV,
 };
+
+// Version export (React 19 compatibility)
+export const version = React.version;
 
 // Default export
 export default React;
