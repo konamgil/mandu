@@ -17,10 +17,12 @@
     "test": "bun test",
     "mandu": "bun run packages/cli/src/main.ts",
     "changeset": "changeset",
-    "version": "changeset version",
+    "version": "changeset version && bun install",
     "publish": "bun run scripts/publish.ts",
     "publish:dry": "bun run scripts/publish.ts --dry-run",
-    "release": "bun run version && bun run publish"
+    "publish:force": "bun run scripts/publish.ts --skip-check",
+    "release": "bun run version && bun run publish",
+    "check:publish": "bun run scripts/pre-publish-check.ts"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.2",

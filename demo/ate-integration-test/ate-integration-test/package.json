@@ -24,10 +24,13 @@
     "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {
+    "@mandujs/ate": "^0.17.0",
     "@mandujs/cli": "^0.17.0",
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/cli": "^4.1.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "playwright": "^1.58.2",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.0.0"
   }
