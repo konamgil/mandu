@@ -507,6 +507,13 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
     scripts.push(`<script type="module" src="${escapeHtmlAttr(bundleManifest.shared.runtime)}"></script>`);
   }
 
+  // 7.5 React internals shim (must run before react-dom/client runs)
+  // React 19: ReactSharedInternals.S can be null in some builds, but react-dom/client expects it.
+  // Safe to patch: only fill when missing.
+  if (hydration && hydration.strategy !== "none") {
+    scripts.push(`<script>\n(function(){\n  try {\n    var React = window.React;\n    var i = React && React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;\n    if (i && i.S == null) {\n      i.S = function(){};\n    }\n  } catch(e) {}\n})();\n</script>`);
+  }
+
   // 8. Router 스크립트
   if (enableClientRouter && bundleManifest?.shared?.router) {
     scripts.push(`<script type="module" src="${escapeHtmlAttr(bundleManifest.shared.router)}"></script>`);
