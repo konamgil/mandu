@@ -1,0 +1,138 @@
+name: ATE E2E Tests (Subset - Impact Analysis)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  analyze-changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      affected-tests: ${{ steps.impact.outputs.tests }}
+      should-run: ${{ steps.impact.outputs.should-run }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Analyze impact
+        id: impact
+        run: |
+          # Get changed files between base and head
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          echo "Analyzing changes between $BASE_SHA and $HEAD_SHA"
+
+          # Get list of changed files
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Create a temporary file for impact analysis
+          echo "$CHANGED_FILES" > changed-files.txt
+
+          # Run impact analysis (assuming you have a script for this)
+          # This is a placeholder - implement actual impact analysis logic
+          if [ -f "scripts/analyze-impact.ts" ]; then
+            AFFECTED_TESTS=$(bun run scripts/analyze-impact.ts changed-files.txt)
+          else
+            # Fallback: run all tests if impact analysis script doesn't exist
+            AFFECTED_TESTS="all"
+          fi
+
+          echo "Affected tests: $AFFECTED_TESTS"
+
+          # Set outputs
+          if [ "$AFFECTED_TESTS" = "none" ]; then
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            echo "tests=" >> $GITHUB_OUTPUT
+          else
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            echo "tests=$AFFECTED_TESTS" >> $GITHUB_OUTPUT
+          fi
+
+  e2e-subset:
+    needs: analyze-changes
+    if: needs.analyze-changes.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run affected E2E tests
+        run: |
+          AFFECTED_TESTS="${{ needs.analyze-changes.outputs.affected-tests }}"
+
+          if [ "$AFFECTED_TESTS" = "all" ]; then
+            echo "Running all E2E tests"
+            bun run test:e2e:ci
+          else
+            echo "Running subset of E2E tests: $AFFECTED_TESTS"
+            # Pass affected test patterns to Playwright
+            bun run test:e2e:ci --grep "$AFFECTED_TESTS"
+          fi
+        env:
+          CI: true
+
+      - name: Upload Playwright Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-subset
+          path: .mandu/reports/
+          retention-days: 7
+
+      - name: Comment PR with test results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const affectedTests = '${{ needs.analyze-changes.outputs.affected-tests }}';
+
+            let body = '## 🧪 ATE E2E Test Results (Subset)\n\n';
+            body += `**Affected tests**: ${affectedTests === 'all' ? 'All tests' : affectedTests}\n\n`;
+
+            // Try to read test results summary
+            try {
+              const summary = fs.readFileSync('.mandu/reports/summary.json', 'utf8');
+              const results = JSON.parse(summary);
+              body += `✅ Passed: ${results.passed}\n`;
+              body += `❌ Failed: ${results.failed}\n`;
+              body += `⏭️ Skipped: ${results.skipped}\n`;
+            } catch (e) {
+              body += '_Test summary not available_\n';
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
