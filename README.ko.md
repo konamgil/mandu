@@ -13,6 +13,7 @@
   <a href="https://www.npmjs.com/package/@mandujs/core"><img src="https://img.shields.io/npm/v/@mandujs/core?label=core" alt="npm core" /></a>
   <a href="https://www.npmjs.com/package/@mandujs/cli"><img src="https://img.shields.io/npm/v/@mandujs/cli?label=cli" alt="npm cli" /></a>
   <a href="https://www.npmjs.com/package/@mandujs/mcp"><img src="https://img.shields.io/npm/v/@mandujs/mcp?label=mcp" alt="npm mcp" /></a>
+  <a href="https://www.npmjs.com/package/@mandujs/ate"><img src="https://img.shields.io/npm/v/@mandujs/ate?label=ate" alt="npm ate" /></a>
   <img src="https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun" alt="Bun" />
   <img src="https://img.shields.io/badge/language-TypeScript-3178c6?logo=typescript" alt="TypeScript" />
   <img src="https://img.shields.io/badge/frontend-React-61dafb?logo=react" alt="React" />
@@ -338,7 +339,8 @@ bunx mandu guard arch --watch
 | **Self-Healing Guard** | 위반 감지 + 자동 수정 제안 + 설명 제공 |
 | **트랜잭션 API** | 스냅샷 기반 롤백이 가능한 원자적 변경 |
 | **SEO 모듈** | Next.js Metadata API 호환, sitemap/robots 생성, JSON-LD 헬퍼 |
-| **MCP 서버** | AI 에이전트가 프레임워크를 직접 조작 (35+ 도구) |
+| **MCP 서버** | AI 에이전트가 프레임워크를 직접 조작 (44+ 도구, ATE 9개 포함) |
+| **ATE (자동화 테스트 엔진)** | AI 기반 E2E 테스팅: 라우트 추출 → 테스트 생성 → 자동 복구 |
 | **실시간 Watch** | 아키텍처 위반 시 MCP push notification으로 에이전트에 실시간 알림 |
 | **Island Hydration** | 선택적 클라이언트 JavaScript로 성능 최적화 |
 | **HMR 지원** | 빠른 개발을 위한 핫 모듈 교체 |
