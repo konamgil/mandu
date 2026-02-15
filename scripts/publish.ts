@@ -13,10 +13,24 @@
 import { $ } from "bun";
 import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
+import { execSync } from "child_process";
 
 const PACKAGES = ["packages/core", "packages/cli", "packages/mcp"];
 const ROOT = join(import.meta.dir, "..");
 const isDryRun = process.argv.includes("--dry-run");
+const skipCheck = process.argv.includes("--skip-check");
+
+// Pre-publish check
+if (!skipCheck) {
+  console.log("🔍 Running pre-publish check...\n");
+  try {
+    execSync("bun run scripts/pre-publish-check.ts", { stdio: "inherit", cwd: ROOT });
+  } catch (err) {
+    console.error("\n❌ Pre-publish check failed!");
+    process.exit(1);
+  }
+  console.log();
+}
 
 interface PackageJson {
   name: string;
