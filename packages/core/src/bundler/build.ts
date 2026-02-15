@@ -205,11 +205,11 @@ async function loadAndHydrate(element, src) {
     // Dynamic import - 이 시점에 Island 모듈 로드
     const module = await import(src);
     const island = module.default;
+    const data = getServerData(id);
 
     // Mandu Island (preferred)
     if (island && island.__mandu_island === true) {
       const { definition } = island;
-      const data = getServerData(id);
 
       // Island 컴포넌트 (Error Boundary + Loading 지원)
       function IslandComponent() {
@@ -258,11 +258,14 @@ async function loadAndHydrate(element, src) {
 
       console.log('[Mandu] Hydrated:', id);
     }
-    // Plain React component fallback
+    // Plain React component fallback (e.g. "use client" pages)
     else if (typeof island === 'function' || React.isValidElement(island)) {
       console.warn('[Mandu] Plain component hydration:', id);
-      const data = getServerData(id);
-      const root = hydrateRoot(element, React.createElement(island, data));
+
+      const root = typeof island === 'function'
+        ? hydrateRoot(element, React.createElement(island, data))
+        : hydrateRoot(element, island);
+
       hydratedRoots.set(id, root);
 
       // 완료 표시
@@ -283,6 +286,18 @@ async function loadAndHydrate(element, src) {
     }
     else {
       throw new Error('[Mandu] Invalid module: expected Mandu island or React component: ' + id);
+    }
+  } catch (error) {
+    console.error('[Mandu] Hydration failed for', id, error);
+    element.setAttribute('data-mandu-error', 'true');
+
+    // 에러 이벤트 발송
+    element.dispatchEvent(new CustomEvent('mandu:hydration-error', {
+      bubbles: true,
+      detail: { id, error: error.message }
+    }));
+  }
+}
     }
   } catch (error) {
     console.error('[Mandu] Hydration failed for', id, error);
@@ -390,6 +405,8 @@ import React, {
   Suspense,
   StrictMode,
   Profiler,
+  // Misc
+  version,
   // Types
   Component,
   PureComponent,
@@ -401,6 +418,9 @@ import { jsx, jsxs } from 'react/jsx-runtime';
 import { jsxDEV } from 'react/jsx-dev-runtime';
 
 // React internals (ReactDOM이 내부적으로 접근 필요)
+// React 19+: __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE
+// React <=18: __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
+const __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE = React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
 const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
 
 // React 19 client internals (Playwright headless 환경 호환성)
@@ -447,9 +467,11 @@ export {
   Suspense,
   StrictMode,
   Profiler,
+  version,
   Component,
   PureComponent,
   Children,
+  __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
   __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED,
   __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
   // JSX Runtime exports
