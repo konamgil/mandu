@@ -167,6 +167,17 @@ bunx @mandujs/mcp --root /path/to/project
 | `mandu_list_changes` | View change history |
 | `mandu_prune_history` | Clean old snapshots |
 
+### ATE (Automation Test Engine) 🆕
+
+| Tool | Description |
+|------|-------------|
+| `mandu.ate.extract` | Extract interaction graph from codebase |
+| `mandu.ate.generate` | Generate Playwright test scenarios |
+| `mandu.ate.run` | Execute Playwright tests with artifacts |
+| `mandu.ate.report` | Generate test summary report |
+| `mandu.ate.heal` | Auto-suggest fixes for failed tests |
+| `mandu.ate.impact` | Compute affected routes (subset testing) |
+
 ---
 
 ## Resources
@@ -322,6 +333,91 @@ Agent:
 5. mandu_watch_stop()
    → Stops watching
 ```
+
+### ATE E2E Testing Workflow
+
+```mermaid
+graph TD
+    A[mandu.ate.extract] -->|interaction-graph.json| B[mandu.ate.generate]
+    B -->|Playwright specs| C[mandu.ate.run]
+    C -->|Test results| D{Success?}
+    D -->|Yes| E[mandu.ate.report]
+    D -->|No| F[mandu.ate.heal]
+    F -->|Suggestions| G[Apply fixes]
+    G --> C
+
+    H[mandu.ate.impact] -->|Affected routes| B
+
+    style A fill:#e1f5ff
+    style B fill:#e1f5ff
+    style C fill:#fff4e1
+    style D fill:#ffe1e1
+    style E fill:#e1ffe1
+    style F fill:#ffe1e1
+    style H fill:#f5e1ff
+```
+
+**Example: Full ATE Pipeline**
+
+```typescript
+// 1. Extract interaction graph
+await mandu.ate.extract({
+  repoRoot: process.cwd(),
+  routeGlobs: ["app/**/page.tsx"]
+});
+
+// 2. Optional: Compute impact for subset testing
+const impact = mandu.ate.impact({
+  repoRoot: process.cwd(),
+  base: "main",
+  head: "HEAD"
+});
+
+// 3. Generate test scenarios
+mandu.ate.generate({
+  repoRoot: process.cwd(),
+  oracleLevel: "L1",
+  onlyRoutes: impact.selectedRoutes  // Subset testing
+});
+
+// 4. Run tests
+const result = await mandu.ate.run({
+  repoRoot: process.cwd(),
+  baseURL: "http://localhost:3333",
+  ci: true
+});
+
+// 5. Generate report
+await mandu.ate.report({
+  repoRoot: process.cwd(),
+  runId: result.runId,
+  startedAt: result.startedAt,
+  finishedAt: result.finishedAt,
+  exitCode: result.exitCode,
+  oracleLevel: "L1"
+});
+
+// 6. Heal if failed
+if (result.exitCode !== 0) {
+  const healing = mandu.ate.heal({
+    repoRoot: process.cwd(),
+    runId: result.runId
+  });
+
+  console.log("Healing suggestions:");
+  healing.suggestions.forEach(s => console.log(s.diff));
+}
+```
+
+**ATE Use Cases:**
+
+- 🤖 **Agent-driven testing**: Claude Code generates and runs E2E tests
+- 🔄 **Self-healing tests**: Auto-suggest selector fixes when tests fail
+- 🎯 **Impact-based testing**: Run only tests affected by code changes
+- 📊 **Multi-oracle validation**: L0 (smoke) → L1 (structure) → L2 (behavior) → L3 (domain)
+- 🚀 **CI/CD ready**: GitHub Actions, GitLab CI integration
+
+**Learn More**: [ATE MCP Integration Guide](../ate/docs/mcp-integration.md)
 
 ---
 

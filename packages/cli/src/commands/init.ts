@@ -17,6 +17,7 @@ export interface InitOptions {
   ui?: UILibrary;
   theme?: boolean;
   minimal?: boolean;
+  withCi?: boolean;
 }
 
 const ALLOWED_TEMPLATES = ["default", "realtime-chat"] as const;
@@ -214,6 +215,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   const css: CSSFramework = options.minimal ? "none" : (options.css || "tailwind");
   const ui: UILibrary = options.minimal ? "none" : (options.ui || "shadcn");
   const theme = options.theme || false;
+  const withCi = options.withCi || false;
 
   console.log(`🥟 Mandu Init`);
   console.log(`📁 프로젝트: ${projectName}`);
@@ -222,6 +224,9 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   console.log(`🧩 UI: ${ui}${ui !== "none" ? " (shadcn/ui)" : ""}`);
   if (theme) {
     console.log(`🌙 테마: Dark mode 지원`);
+  }
+  if (withCi) {
+    console.log(`🔄 CI/CD: GitHub Actions 워크플로우 포함`);
   }
   console.log();
 
@@ -268,6 +273,11 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
 
   // Create .mandu directory for build output
   await fs.mkdir(path.join(targetDir, ".mandu/client"), { recursive: true });
+
+  // Setup CI/CD workflows if requested
+  if (withCi) {
+    await setupCiWorkflows(targetDir);
+  }
 
   // Create minimal layout.tsx if css=none (without globals.css import)
   if (css === "none") {
@@ -628,5 +638,39 @@ async function setupLockfile(targetDir: string): Promise<LockfileResult> {
       success: false,
       error: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+/**
+ * CI/CD 워크플로우 파일 생성 (.github/workflows)
+ */
+async function setupCiWorkflows(targetDir: string): Promise<void> {
+  const workflowsDir = path.join(targetDir, ".github/workflows");
+  await fs.mkdir(workflowsDir, { recursive: true });
+
+  const templatesDir = getTemplatesDir();
+  const sourceWorkflowsDir = path.join(templatesDir, "default/.github/workflows");
+
+  try {
+    // Copy all workflow files
+    const workflowFiles = await fs.readdir(sourceWorkflowsDir);
+    for (const file of workflowFiles) {
+      const src = path.join(sourceWorkflowsDir, file);
+      const dest = path.join(workflowsDir, file);
+      const content = await fs.readFile(src, "utf-8");
+      await fs.writeFile(dest, content);
+    }
+
+    // Copy impact analysis script
+    const scriptsDir = path.join(targetDir, "scripts");
+    await fs.mkdir(scriptsDir, { recursive: true });
+
+    const analyzeImpactSrc = path.join(templatesDir, "default/scripts/analyze-impact.ts");
+    const analyzeImpactDest = path.join(scriptsDir, "analyze-impact.ts");
+    const analyzeImpactContent = await fs.readFile(analyzeImpactSrc, "utf-8");
+    await fs.writeFile(analyzeImpactDest, analyzeImpactContent);
+  } catch (error) {
+    console.warn(`⚠️  CI/CD 워크플로우 설정 경고:`, error);
+    // CI 설정 실패는 프로젝트 생성을 중단하지 않음
   }
 }

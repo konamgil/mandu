@@ -6,8 +6,19 @@ export { extract } from "./extractor";
 export { generateAndWriteScenarios } from "./scenario";
 export { generatePlaywrightSpecs } from "./codegen";
 export { runPlaywright } from "./runner";
-export { composeSummary, writeSummary } from "./report";
-export { heal } from "./heal";
+export { composeSummary, writeSummary, generateReport } from "./report";
+export type { ReportFormat, GenerateReportOptions } from "./report";
+export { generateHtmlReport } from "./reporter/html";
+export type { HtmlReportOptions, HtmlReportResult } from "./reporter/html";
+export { heal, analyzeFeedback, applyHeal } from "./heal";
+export type {
+  HealSuggestion,
+  FeedbackAnalysis,
+  FeedbackInput,
+  ApplyHealInput,
+  ApplyHealResult,
+  FailureCategory,
+} from "./heal";
 export { computeImpact } from "./impact";
 export * from "./selector-map";
 export { parseTrace, generateAlternativeSelectors } from "./trace-parser";
@@ -54,8 +65,17 @@ export async function ateRun(input: RunInput) {
   return { ok: run.exitCode === 0, ...run, startedAt, finishedAt };
 }
 
-export async function ateReport(params: { repoRoot: string; runId: string; startedAt: string; finishedAt: string; exitCode: number; oracleLevel: OracleLevel; impact?: { changedFiles: string[]; selectedRoutes: string[]; mode: "full" | "subset" } }) {
-  const { composeSummary, writeSummary } = await import("./report");
+export async function ateReport(params: {
+  repoRoot: string;
+  runId: string;
+  startedAt: string;
+  finishedAt: string;
+  exitCode: number;
+  oracleLevel: OracleLevel;
+  impact?: { changedFiles: string[]; selectedRoutes: string[]; mode: "full" | "subset" };
+  format?: "json" | "html" | "both";
+}) {
+  const { composeSummary, writeSummary, generateReport } = await import("./report");
   const summary = composeSummary({
     repoRoot: params.repoRoot,
     runId: params.runId,
@@ -66,7 +86,15 @@ export async function ateReport(params: { repoRoot: string; runId: string; start
     impact: params.impact,
   });
   const summaryPath = writeSummary(params.repoRoot, params.runId, summary);
-  return { ok: true, summaryPath, summary };
+
+  const format = params.format ?? "both";
+  const reportPaths = await generateReport({
+    repoRoot: params.repoRoot,
+    runId: params.runId,
+    format,
+  });
+
+  return { ok: true, summaryPath, summary, reportPaths };
 }
 
 export async function ateImpact(input: ImpactInput) {
@@ -79,3 +107,6 @@ export async function ateHeal(input: HealInput) {
   const { heal } = await import("./heal");
   return { ok: true, ...heal(input) };
 }
+
+export { runFullPipeline } from "./pipeline";
+export type { AutoPipelineOptions, AutoPipelineResult } from "./pipeline";

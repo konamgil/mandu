@@ -75,6 +75,7 @@ registerCommand({
       ui: ctx.options.ui as any,
       theme: ctx.options.theme === "true",
       minimal: ctx.options.minimal === "true",
+      withCi: ctx.options["with-ci"] === "true",
     });
   },
 });

@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "runId": "run-2026-02-15-04-30-00",
+  "startedAt": "2026-02-15T04:30:00.000Z",
+  "finishedAt": "2026-02-15T04:30:15.000Z",
+  "ok": false,
+  "oracle": {
+    "level": "L2",
+    "l0": {
+      "ok": false,
+      "errors": [
+        "TypeError: Cannot read property 'user' of undefined at LoginPage.tsx:42",
+        "ReferenceError: handleSubmit is not defined at AuthForm.tsx:18"
+      ]
+    },
+    "l1": {
+      "ok": false,
+      "signals": [
+        "Console error: Failed to load resource /api/users",
+        "Console warning: Deprecated API usage in useAuth hook"
+      ]
+    },
+    "l2": {
+      "ok": true,
+      "signals": []
+    },
+    "l3": {
+      "ok": true,
+      "notes": [
+        "Performance: Initial render took 850ms (acceptable)",
+        "Accessibility: All interactive elements have proper ARIA labels"
+      ]
+    }
+  },
+  "playwright": {
+    "exitCode": 1,
+    "reportDir": ".mandu/reports/run-2026-02-15-04-30-00",
+    "jsonReportPath": ".mandu/reports/latest/playwright-report.json",
+    "junitPath": ".mandu/reports/latest/junit.xml"
+  },
+  "mandu": {
+    "interactionGraphPath": ".mandu/interaction-graph.json",
+    "selectorMapPath": ".mandu/selector-map.json",
+    "scenariosPath": ".mandu/scenarios.json"
+  },
+  "heal": {
+    "attempted": true,
+    "suggestions": [
+      {
+        "kind": "selector_update",
+        "title": "Update login button selector",
+        "diff": "@@ -42,7 +42,7 @@\n-  await page.click('button[type=\"submit\"]');\n+  await page.click('[data-testid=\"login-submit-button\"]');\n"
+      },
+      {
+        "kind": "code_fix",
+        "title": "Fix undefined user property",
+        "diff": "@@ -42,3 +42,4 @@\n-  const userName = response.user.name;\n+  const userName = response?.user?.name ?? 'Guest';\n"
+      }
+    ]
+  },
+  "impact": {
+    "mode": "subset",
+    "changedFiles": [
+      "src/pages/LoginPage.tsx",
+      "src/components/AuthForm.tsx",
+      "src/hooks/useAuth.ts"
+    ],
+    "selectedRoutes": [
+      "/login",
+      "/dashboard",
+      "/profile"
+    ]
+  }
+}

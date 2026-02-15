@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { getAtePaths, ensureDir, writeJson } from "./fs";
 import { createDefaultOracle } from "./oracle";
 import type { SummaryJson, OracleLevel } from "./types";
+import { generateHtmlReport, type HtmlReportOptions } from "./reporter/html";
 
 export function composeSummary(params: {
   repoRoot: string;
@@ -86,4 +87,43 @@ export function writeSummary(repoRoot: string, runId: string, summary: SummaryJs
   }
 
   return outPath;
+}
+
+export type ReportFormat = "json" | "html" | "both";
+
+export interface GenerateReportOptions {
+  repoRoot: string;
+  runId: string;
+  format?: ReportFormat;
+  includeScreenshots?: boolean;
+  includeTraces?: boolean;
+}
+
+export async function generateReport(options: GenerateReportOptions): Promise<{ json?: string; html?: string }> {
+  const { repoRoot, runId, format = "both", includeScreenshots = true, includeTraces = true } = options;
+
+  const result: { json?: string; html?: string } = {};
+
+  // JSON은 이미 writeSummary로 생성되었다고 가정
+  if (format === "json" || format === "both") {
+    const paths = getAtePaths(repoRoot);
+    result.json = join(paths.reportsDir, runId, "summary.json");
+  }
+
+  // HTML 생성
+  if (format === "html" || format === "both") {
+    try {
+      const htmlResult = await generateHtmlReport({
+        repoRoot,
+        runId,
+        includeScreenshots,
+        includeTraces,
+      });
+      result.html = htmlResult.path;
+    } catch (err: any) {
+      throw new Error(`HTML 리포트 생성 실패: ${err.message}`);
+    }
+  }
+
+  return result;
 }

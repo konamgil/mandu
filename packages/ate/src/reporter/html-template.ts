@@ -1,0 +1,275 @@
+import type { SummaryJson } from "../types";
+
+export function generateHtmlTemplate(summary: SummaryJson, screenshotUrls: string[] = []): string {
+  const { runId, startedAt, finishedAt, ok, oracle, playwright, heal, impact } = summary;
+
+  const duration = new Date(finishedAt).getTime() - new Date(startedAt).getTime();
+  const durationStr = `${(duration / 1000).toFixed(2)}s`;
+
+  const passCount = ok ? 1 : 0;
+  const failCount = ok ? 0 : 1;
+  const skipCount = 0;
+
+  const statusClass = ok ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800";
+  const statusText = ok ? "PASSED" : "FAILED";
+
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATE Test Report - ${runId}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      .no-print { display: none; }
+      body { background: white; }
+    }
+    .dark-mode { background: #1a202c; color: #e2e8f0; }
+    .dark-mode .card { background: #2d3748; }
+    .dark-mode .border-gray-200 { border-color: #4a5568; }
+  </style>
+</head>
+<body class="bg-gray-50 p-8">
+  <div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+      <h1 class="text-4xl font-bold text-gray-900 mb-2">ATE Test Report</h1>
+      <div class="flex items-center gap-4 text-sm text-gray-600">
+        <span>Run ID: <strong>${runId}</strong></span>
+        <span>•</span>
+        <span>Started: ${new Date(startedAt).toLocaleString()}</span>
+        <span>•</span>
+        <span>Duration: ${durationStr}</span>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div class="bg-white rounded-lg shadow p-6 border-l-4 ${ok ? "border-green-500" : "border-red-500"}">
+        <div class="text-sm font-medium text-gray-600 mb-1">Status</div>
+        <div class="text-2xl font-bold ${statusClass} inline-block px-3 py-1 rounded">${statusText}</div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+        <div class="text-sm font-medium text-gray-600 mb-1">Passed</div>
+        <div class="text-3xl font-bold text-green-600">${passCount}</div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+        <div class="text-sm font-medium text-gray-600 mb-1">Failed</div>
+        <div class="text-3xl font-bold text-red-600">${failCount}</div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6 border-l-4 border-gray-400">
+        <div class="text-sm font-medium text-gray-600 mb-1">Skipped</div>
+        <div class="text-3xl font-bold text-gray-600">${skipCount}</div>
+      </div>
+    </div>
+
+    <!-- Oracle Levels -->
+    <div class="bg-white rounded-lg shadow mb-8">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-xl font-bold text-gray-900">Oracle Verification (${oracle.level})</h2>
+      </div>
+      <div class="p-6">
+        <div class="space-y-4">
+          ${generateOracleSection("L0: Critical Errors", oracle.l0.ok, oracle.l0.errors)}
+          ${generateOracleSection("L1: Console Warnings", oracle.l1.ok, oracle.l1.signals)}
+          ${generateOracleSection("L2: Network Issues", oracle.l2.ok, oracle.l2.signals)}
+          ${generateOracleSection("L3: Performance Notes", oracle.l3.ok, oracle.l3.notes)}
+        </div>
+      </div>
+    </div>
+
+    <!-- Impact Analysis -->
+    ${generateImpactSection(impact)}
+
+    <!-- Heal Suggestions -->
+    ${generateHealSection(heal)}
+
+    <!-- Screenshots -->
+    ${generateScreenshotsSection(screenshotUrls)}
+
+    <!-- Playwright Trace -->
+    <div class="bg-white rounded-lg shadow mb-8">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-xl font-bold text-gray-900">Playwright Details</h2>
+      </div>
+      <div class="p-6">
+        <div class="space-y-2 text-sm">
+          <div><strong>Exit Code:</strong> ${playwright.exitCode}</div>
+          <div><strong>Report Directory:</strong> <code class="bg-gray-100 px-2 py-1 rounded">${playwright.reportDir}</code></div>
+          ${
+            playwright.jsonReportPath
+              ? `<div><strong>JSON Report:</strong> <code class="bg-gray-100 px-2 py-1 rounded">${playwright.jsonReportPath}</code></div>`
+              : ""
+          }
+          ${
+            playwright.junitPath
+              ? `<div><strong>JUnit XML:</strong> <code class="bg-gray-100 px-2 py-1 rounded">${playwright.junitPath}</code></div>`
+              : ""
+          }
+          <div class="mt-4">
+            <a href="./playwright-report/index.html" target="_blank" class="inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition">
+              View Playwright Report →
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center text-sm text-gray-500 mt-8">
+      Generated by <strong>@mandujs/ate</strong> at ${new Date().toLocaleString()}
+    </div>
+  </div>
+
+  <script>
+    // Dark mode toggle (optional)
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+    }
+  </script>
+</body>
+</html>`;
+}
+
+function generateOracleSection(title: string, ok: boolean, items: string[]): string {
+  const icon = ok ? "✅" : "❌";
+  const statusClass = ok ? "text-green-600" : "text-red-600";
+
+  return `
+    <div class="border border-gray-200 rounded-lg p-4">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="${statusClass} text-xl">${icon}</span>
+        <h3 class="font-semibold text-gray-900">${title}</h3>
+      </div>
+      ${
+        items.length > 0
+          ? `<ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+          ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ul>`
+          : '<div class="text-sm text-gray-500 italic">No issues detected</div>'
+      }
+    </div>
+  `;
+}
+
+function generateImpactSection(impact: SummaryJson["impact"]): string {
+  if (impact.mode === "full") {
+    return `
+      <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
+        <h2 class="text-xl font-bold text-blue-900 mb-2">Impact Analysis</h2>
+        <p class="text-blue-700">Full test run (no filtering applied)</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="bg-white rounded-lg shadow mb-8">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-xl font-bold text-gray-900">Impact Analysis (Subset Mode)</h2>
+      </div>
+      <div class="p-6">
+        <div class="mb-4">
+          <h3 class="font-semibold text-gray-900 mb-2">Changed Files (${impact.changedFiles.length})</h3>
+          ${
+            impact.changedFiles.length > 0
+              ? `<ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+              ${impact.changedFiles.map((file) => `<li><code class="bg-gray-100 px-1">${escapeHtml(file)}</code></li>`).join("")}
+            </ul>`
+              : '<div class="text-sm text-gray-500 italic">No changed files</div>'
+          }
+        </div>
+        <div>
+          <h3 class="font-semibold text-gray-900 mb-2">Selected Routes (${impact.selectedRoutes.length})</h3>
+          ${
+            impact.selectedRoutes.length > 0
+              ? `<ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+              ${impact.selectedRoutes.map((route) => `<li><code class="bg-gray-100 px-1">${escapeHtml(route)}</code></li>`).join("")}
+            </ul>`
+              : '<div class="text-sm text-gray-500 italic">No routes selected</div>'
+          }
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function generateHealSection(heal: SummaryJson["heal"]): string {
+  if (!heal.attempted || heal.suggestions.length === 0) {
+    return `
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-8">
+        <h2 class="text-xl font-bold text-gray-900 mb-2">Heal Suggestions</h2>
+        <p class="text-gray-600 italic">No heal suggestions available</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="bg-white rounded-lg shadow mb-8">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-xl font-bold text-gray-900">Heal Suggestions (${heal.suggestions.length})</h2>
+      </div>
+      <div class="p-6 space-y-4">
+        ${heal.suggestions
+          .map(
+            (sug, idx) => `
+          <div class="border border-yellow-200 bg-yellow-50 rounded-lg p-4">
+            <div class="flex items-start gap-3">
+              <span class="bg-yellow-500 text-white rounded-full w-6 h-6 flex items-center justify-center font-bold text-sm">${idx + 1}</span>
+              <div class="flex-1">
+                <div class="font-semibold text-gray-900 mb-1">${escapeHtml(sug.title)}</div>
+                <div class="text-sm text-gray-600 mb-2">Kind: <code class="bg-white px-2 py-1 rounded">${escapeHtml(sug.kind)}</code></div>
+                <details class="mt-2">
+                  <summary class="cursor-pointer text-blue-600 hover:text-blue-700 text-sm font-medium">View Diff</summary>
+                  <pre class="mt-2 bg-white border border-gray-200 rounded p-3 text-xs overflow-x-auto"><code>${escapeHtml(sug.diff)}</code></pre>
+                </details>
+              </div>
+            </div>
+          </div>
+        `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function generateScreenshotsSection(screenshotUrls: string[]): string {
+  if (screenshotUrls.length === 0) {
+    return "";
+  }
+
+  return `
+    <div class="bg-white rounded-lg shadow mb-8">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-xl font-bold text-gray-900">Screenshots (${screenshotUrls.length})</h2>
+      </div>
+      <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          ${screenshotUrls
+            .map(
+              (url, idx) => `
+            <a href="${escapeHtml(url)}" target="_blank" class="block border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition">
+              <img src="${escapeHtml(url)}" alt="Screenshot ${idx + 1}" class="w-full h-48 object-cover" loading="lazy" />
+              <div class="p-2 bg-gray-50 text-xs text-gray-600 text-center">Screenshot ${idx + 1}</div>
+            </a>
+          `
+            )
+            .join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}

@@ -1008,6 +1008,75 @@ console.log(JSON.stringify(result, null, 2));
 
 ---
 
+---
+
+## 📊 HTML Reports
+
+ATE는 테스트 결과를 시각화하는 HTML 대시보드를 자동으로 생성합니다.
+
+### 사용법
+
+```typescript
+import { generateHtmlReport, generateReport } from "@mandujs/ate";
+
+// 단독 HTML 생성
+const result = await generateHtmlReport({
+  repoRoot: process.cwd(),
+  runId: "run-2026-02-15-04-30-00",
+  includeScreenshots: true,
+  includeTraces: true,
+});
+
+console.log(`HTML report: ${result.path}`);
+
+// JSON + HTML 동시 생성
+const reports = await generateReport({
+  repoRoot: process.cwd(),
+  runId: "run-2026-02-15-04-30-00",
+  format: "both", // 'json' | 'html' | 'both'
+});
+
+console.log(`JSON: ${reports.json}`);
+console.log(`HTML: ${reports.html}`);
+```
+
+### MCP 도구
+
+```typescript
+// MCP를 통한 리포트 생성
+await mcp.callTool("mandu.ate.report", {
+  repoRoot: process.cwd(),
+  runId: "run-xxx",
+  startedAt: "2026-02-15T04:00:00.000Z",
+  finishedAt: "2026-02-15T04:00:10.000Z",
+  exitCode: 0,
+  format: "both", // HTML + JSON 생성
+});
+```
+
+### 리포트 구성
+
+HTML 리포트는 다음을 포함합니다:
+
+- **테스트 결과 요약**: Pass/Fail/Skip 카드
+- **Oracle 검증**: L0~L3 레벨별 상세 결과
+- **Impact Analysis**: 변경된 파일 및 영향받은 라우트
+- **Heal 제안**: 자동 복구 제안 및 diff
+- **스크린샷 갤러리**: 테스트 스크린샷 (선택)
+- **Playwright 링크**: 상세 리포트 및 trace 연결
+
+### 예제
+
+예제 리포트를 생성하려면:
+
+```bash
+bun run packages/ate/examples/generate-sample-report.ts
+```
+
+생성된 `packages/ate/examples/sample-report.html`을 브라우저에서 열어보세요.
+
+---
+
 ## 📄 License
 
 [MPL-2.0](https://opensource.org/licenses/MPL-2.0)

@@ -74,6 +74,7 @@ Options:
   --ui <library>      init 시 UI 라이브러리: shadcn, ark, none (기본: shadcn)
   --theme             init 시 다크모드 테마 시스템 추가
   --minimal           init 시 CSS/UI 없이 최소 템플릿 생성 (--css none --ui none)
+  --with-ci           init 시 GitHub Actions CI/CD 워크플로우 포함 (ATE E2E 테스트)
   --file <path>       spec-upsert spec 파일/monitor 로그 파일 경로
   --watch             build/guard arch 파일 감시 모드
   --output <path>     routes/openapi/doctor/contract/guard 출력 경로
@@ -111,6 +112,7 @@ Notes:
 
 Examples:
   bunx mandu init --name my-app                        # Tailwind + shadcn/ui 기본
+  bunx mandu init --name my-app --with-ci              # CI/CD 워크플로우 포함
   bunx mandu init --name chat-app --template realtime-chat  # 실시간 채팅 스타터 템플릿
   bunx mandu init my-app --minimal                     # CSS/UI 없이 최소 템플릿
   bunx mandu dev
