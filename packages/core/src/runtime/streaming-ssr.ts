@@ -19,6 +19,7 @@ import type { Metadata, MetadataItem } from "../seo/types";
 import { injectSEOIntoOptions, resolveSEO, type SEOOptions } from "../seo/integration/ssr";
 import { PORTS, TIMEOUTS } from "../constants";
 import { escapeHtmlAttr, escapeJsonForInlineScript, escapeJsString } from "./escape";
+import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
 
 // ========== Types ==========
 
@@ -508,10 +509,8 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
   }
 
   // 7.5 React internals shim (must run before react-dom/client runs)
-  // React 19: ReactSharedInternals.S can be null in some builds, but react-dom/client expects it.
-  // Safe to patch: only fill when missing.
   if (hydration && hydration.strategy !== "none") {
-    scripts.push(`<script>\n(function(){\n  try {\n    var React = window.React;\n    var i = React && React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;\n    if (i && i.S == null) {\n      i.S = function(){};\n    }\n  } catch(e) {}\n})();\n</script>`);
+    scripts.push(REACT_INTERNALS_SHIM_SCRIPT);
   }
 
   // 8. Router 스크립트
