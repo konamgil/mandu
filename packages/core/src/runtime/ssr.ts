@@ -6,6 +6,7 @@ import type { BundleManifest } from "../bundler/types";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 import { PORTS, TIMEOUTS } from "../constants";
 import { escapeHtmlAttr, escapeJsonForInlineScript } from "./escape";
+import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
 
 // Re-export streaming SSR utilities
 export {
@@ -251,20 +252,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   ${dataScript}
   ${routeScript}
   ${hydrationScripts}
-  ${needsHydration ? `<script>
-// React 19 internals shim: ensure ReactSharedInternals.S exists before react-dom/client runs.
-// Some builds expect React.__CLIENT_INTERNALS... .S to be a function, but it may be null.
-// This shim is safe: it only fills the slot if missing.
-(function(){
-  try {
-    var React = window.React;
-    var i = React && React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    if (i && i.S == null) {
-      i.S = function(){};
-    }
-  } catch(e) {}
-})();
-</script>` : ""}
+  ${needsHydration ? REACT_INTERNALS_SHIM_SCRIPT : ""}
   ${routerScript}
   ${hmrScript}
   ${bodyEndTags}
