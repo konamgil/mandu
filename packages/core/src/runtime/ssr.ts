@@ -251,6 +251,20 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   ${dataScript}
   ${routeScript}
   ${hydrationScripts}
+  ${needsHydration ? `<script>
+// React 19 internals shim: ensure ReactSharedInternals.S exists before react-dom/client runs.
+// Some builds expect React.__CLIENT_INTERNALS... .S to be a function, but it may be null.
+// This shim is safe: it only fills the slot if missing.
+(function(){
+  try {
+    var React = window.React;
+    var i = React && React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+    if (i && i.S == null) {
+      i.S = function(){};
+    }
+  } catch(e) {}
+})();
+</script>` : ""}
   ${routerScript}
   ${hmrScript}
   ${bodyEndTags}

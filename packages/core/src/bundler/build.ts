@@ -205,11 +205,11 @@ async function loadAndHydrate(element, src) {
     // Dynamic import - 이 시점에 Island 모듈 로드
     const module = await import(src);
     const island = module.default;
+    const data = getServerData(id);
 
     // Mandu Island (preferred)
     if (island && island.__mandu_island === true) {
       const { definition } = island;
-      const data = getServerData(id);
 
       // Island 컴포넌트 (Error Boundary + Loading 지원)
       function IslandComponent() {
@@ -258,11 +258,14 @@ async function loadAndHydrate(element, src) {
 
       console.log('[Mandu] Hydrated:', id);
     }
-    // Plain React component fallback
+    // Plain React component fallback (e.g. "use client" pages)
     else if (typeof island === 'function' || React.isValidElement(island)) {
       console.warn('[Mandu] Plain component hydration:', id);
-      const data = getServerData(id);
-      const root = hydrateRoot(element, React.createElement(island, data));
+
+      const root = typeof island === 'function'
+        ? hydrateRoot(element, React.createElement(island, data))
+        : hydrateRoot(element, island);
+
       hydratedRoots.set(id, root);
 
       // 완료 표시
@@ -390,6 +393,8 @@ import React, {
   Suspense,
   StrictMode,
   Profiler,
+  // Misc
+  version,
   // Types
   Component,
   PureComponent,
@@ -401,15 +406,16 @@ import { jsx, jsxs } from 'react/jsx-runtime';
 import { jsxDEV } from 'react/jsx-dev-runtime';
 
 // React internals (ReactDOM이 내부적으로 접근 필요)
-const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
-
-// React 19 client internals (Playwright headless 환경 호환성)
+// React 19+: __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE
+// React <=18: __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
 const __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE =
   React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE || {};
+const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED =
+  React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
 
-// Null safety for Playwright headless browsers
+// Null safety for Playwright headless browsers (React 19)
 if (__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.S == null) {
-  __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.S = function() {};
+  __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.S = function () {};
 }
 
 // 전역 React 설정 (모든 모듈에서 동일 인스턴스 공유)
@@ -447,19 +453,17 @@ export {
   Suspense,
   StrictMode,
   Profiler,
+  version,
   Component,
   PureComponent,
   Children,
-  __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED,
   __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
+  __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED,
   // JSX Runtime exports
   jsx,
   jsxs,
   jsxDEV,
 };
-
-// Version export (React 19 compatibility)
-export const version = React.version;
 
 // Default export
 export default React;
@@ -849,10 +853,8 @@ async function buildRuntime(
       },
     });
 
-    // 소스 파일 정리
-    await fs.unlink(runtimePath).catch(() => {});
-
     if (!result.success) {
+      // 실패 시 디버깅을 위해 소스 파일을 남겨둠 (_runtime.src.js)
       return {
         success: false,
         outputPath: "",
@@ -860,17 +862,28 @@ async function buildRuntime(
       };
     }
 
+    // 성공 시에만 소스 파일 정리
+    await fs.unlink(runtimePath).catch(() => {});
+
     return {
       success: true,
       outputPath: `/.mandu/client/${outputName}`,
       errors: [],
     };
-  } catch (error) {
-    await fs.unlink(runtimePath).catch(() => {});
+  } catch (error: any) {
+    // 예외 발생 시에도 디버깅을 위해 소스 파일을 남겨둠
+    const extra: string[] = [];
+    if (error?.errors && Array.isArray(error.errors)) {
+      extra.push(...error.errors.map((e: any) => String(e?.message || e)));
+    }
+    if (error?.logs && Array.isArray(error.logs)) {
+      extra.push(...error.logs.map((l: any) => String(l?.message || l)));
+    }
+
     return {
       success: false,
       outputPath: "",
-      errors: [String(error)],
+      errors: [String(error), ...extra].filter(Boolean),
     };
   }
 }
