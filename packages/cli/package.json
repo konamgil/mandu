@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@mandujs/core": "^0.18.2",
-    "@mandujs/ate": "^0.17.0",
+    "@mandujs/ate": "^0.18.2",
     "cfonts": "^3.3.0"
   },
   "engines": {
