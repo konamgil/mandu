@@ -370,6 +370,40 @@ export interface AppContext {
 type RouteComponent = (props: { params: Record<string, string>; loaderData?: unknown }) => React.ReactElement;
 type CreateAppFn = (context: AppContext) => React.ReactElement;
 
+type CompiledIslandLike = {
+  __mandu_island?: boolean;
+  definition?: {
+    setup?: (serverData: unknown) => unknown;
+    render?: (props: unknown) => React.ReactElement;
+  };
+};
+
+function normalizeRouteComponent(input: unknown): RouteComponent {
+  if (typeof input === "function") {
+    return input as RouteComponent;
+  }
+
+  if (input && typeof input === "object") {
+    const maybeIsland = input as CompiledIslandLike;
+    const render = maybeIsland.definition?.render;
+
+    if (maybeIsland.__mandu_island === true && typeof render === "function") {
+      const setup = maybeIsland.definition?.setup;
+      return ((props: { params: Record<string, string>; loaderData?: unknown }) => {
+        const serverData = props.loaderData ?? props;
+        const islandProps = typeof setup === "function" ? setup(serverData) : serverData;
+        return render(islandProps);
+      }) as RouteComponent;
+    }
+
+    if ("component" in maybeIsland && typeof (maybeIsland as { component?: unknown }).component === "function") {
+      return (maybeIsland as { component: RouteComponent }).component;
+    }
+  }
+
+  throw new Error("Invalid page component export: expected function or compiled island");
+}
+
 // ========== Server Registry (인스턴스별 분리) ==========
 
 /**
@@ -890,7 +924,7 @@ async function loadPageData(
   if (pageHandler) {
     try {
       const registration = await pageHandler();
-      const component = registration.component as RouteComponent;
+      const component = normalizeRouteComponent(registration.component);
       registry.registerRouteComponent(route.id, component);
 
       // Filling의 loader 실행
@@ -917,9 +951,7 @@ async function loadPageData(
     try {
       const module = await loader();
       const exported = module.default;
-      const component = typeof exported === "function"
-        ? exported
-        : exported?.component ?? exported;
+      const component = normalizeRouteComponent(exported);
       registry.registerRouteComponent(route.id, component);
 
       // filling이 있으면 loader 실행
