@@ -85,6 +85,25 @@ const baseStyles = `
   .mk-badge-container.panel-open {
     opacity: 0;
     pointer-events: none;
+    transform: scale(0.8);
+  }
+
+  @keyframes mk-badge-breathe {
+    0%, 100% { transform: scale(1) translateY(0px); }
+    50% { transform: scale(1.04) translateY(0px); }
+  }
+
+  @keyframes mk-badge-attention {
+    0%, 100% { transform: scale(1) translateY(0px); }
+    15% { transform: scale(1.08) translateY(0px); }
+    30% { transform: scale(0.98) translateY(0px); }
+    45% { transform: scale(1.04) translateY(0px); }
+    60% { transform: scale(1) translateY(0px); }
+  }
+
+  @keyframes mk-badge-float {
+    0%, 100% { transform: scale(1) translateY(0px); }
+    50% { transform: scale(1) translateY(-3px); }
   }
 `;
 

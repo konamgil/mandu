@@ -203,37 +203,78 @@ export function ManduBadge({
   const character = MANDU_CHARACTERS[state];
   const stateColor = stateColors[state];
   const [isHovered, setIsHovered] = React.useState(false);
+  const [isPressed, setIsPressed] = React.useState(false);
 
   const badgeStyle: React.CSSProperties = {
+    position: 'relative',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px',
-    padding: count > 0 ? '10px 16px' : '0',
-    width: count > 0 ? 'auto' : '48px',
-    height: '48px',
+    width: '52px',
+    height: '52px',
+    padding: 0,
     borderRadius: '9999px',
-    backgroundColor: colors.background.dark,
-    border: `2px solid ${isHovered ? colors.brand.accent : stateColor}`,
+    backgroundColor: isPressed
+      ? colors.background.light
+      : isHovered
+        ? colors.background.medium
+        : colors.background.dark,
+    border: `2px solid ${isPressed ? stateColor : isHovered ? colors.brand.accent : stateColor + '70'}`,
     cursor: 'pointer',
-    transition: `all ${animation.duration.normal} ${animation.easing.spring}`,
-    boxShadow: isHovered
-      ? `0 8px 24px rgba(8, 6, 18, 0.4), 0 0 0 4px ${stateColor}33`
-      : `0 4px 12px rgba(8, 6, 18, 0.3)`,
-    fontSize: '22px',
+    transition: `all 200ms ${animation.easing.spring}`,
+    boxShadow: isPressed
+      ? `0 2px 8px rgba(8, 6, 18, 0.4), inset 0 2px 4px rgba(0, 0, 0, 0.15)`
+      : isHovered
+        ? `0 8px 32px rgba(8, 6, 18, 0.45), 0 0 20px ${stateColor}55, 0 0 0 3px ${stateColor}20`
+        : `0 4px 16px rgba(8, 6, 18, 0.35), 0 0 10px ${stateColor}30`,
     userSelect: 'none',
-    transform: isHovered ? 'scale(1.08)' : 'scale(1)',
+    transform: isPressed
+      ? 'scale(0.92) translateY(1px)'
+      : isHovered
+        ? 'scale(1.1) translateY(-2px)'
+        : 'scale(1) translateY(0px)',
     outline: 'none',
     lineHeight: 1,
+    animation: isHovered || isPressed
+      ? 'none'
+      : state === 'normal'
+        ? 'mk-badge-breathe 3s ease-in-out infinite'
+        : state === 'error' && count > 0
+          ? 'mk-badge-attention 2s ease-in-out infinite'
+          : state === 'loading'
+            ? 'mk-badge-float 2s ease-in-out infinite'
+            : 'none',
   };
 
-  const countStyle: React.CSSProperties = {
-    fontSize: '13px',
-    fontWeight: 700,
-    color: stateColor,
-    minWidth: '18px',
-    textAlign: 'center',
+  const emojiStyle: React.CSSProperties = {
+    fontFamily: "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif",
+    color: colors.text.primary,
+    fontSize: '24px',
     lineHeight: 1,
+    transition: `transform 200ms ${animation.easing.spring}`,
+    transform: isHovered ? 'rotate(-8deg)' : 'rotate(0deg)',
+  };
+
+  const countBubbleStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '-4px',
+    right: '-4px',
+    minWidth: '20px',
+    height: '20px',
+    padding: '0 5px',
+    borderRadius: '9999px',
+    backgroundColor: stateColor,
+    color: colors.background.dark,
+    fontSize: '11px',
+    fontWeight: 700,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    lineHeight: 1,
+    boxShadow: `0 2px 8px ${stateColor}66`,
+    border: `2px solid ${colors.background.dark}`,
+    transition: `all 200ms ${animation.easing.spring}`,
+    transform: isHovered ? 'scale(1.15)' : 'scale(1)',
   };
 
   return (
@@ -242,16 +283,19 @@ export function ManduBadge({
       style={badgeStyle}
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={() => { setIsHovered(false); setIsPressed(false); }}
+      onMouseDown={() => setIsPressed(true)}
+      onMouseUp={() => setIsPressed(false)}
       onFocus={() => setIsHovered(true)}
-      onBlur={() => setIsHovered(false)}
+      onBlur={() => { setIsHovered(false); setIsPressed(false); }}
       aria-label={`Mandu Kitchen: ${character.message}${count > 0 ? `, ${count} issues` : ''}`}
     >
-      <span
-        aria-hidden="true"
-        style={{ fontFamily: "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif" }}
-      >🥟</span>
-      {count > 0 && <span style={countStyle}>{count}</span>}
+      <span aria-hidden="true" style={emojiStyle}>🥟</span>
+      {count > 0 && (
+        <span style={countBubbleStyle}>
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
     </button>
   );
 }
