@@ -322,7 +322,10 @@ export class ManduMcpServer {
  * 리소스 패턴 매칭
  */
 function matchResourcePattern(pattern: string, uri: string): boolean {
-  const regexPattern = pattern.replace(/\{[^}]+\}/g, "([^/]+)");
+  const regexPattern = pattern
+    .split(/\{[^}]+\}/)
+    .map(part => part.replace(/[.+*?^${}()|[\]\\]/g, "\\$&"))
+    .join("([^/]+)");
   const regex = new RegExp(`^${regexPattern}$`);
   return regex.test(uri);
 }
@@ -332,10 +335,16 @@ function matchResourcePattern(pattern: string, uri: string): boolean {
  */
 function extractResourceParams(pattern: string, uri: string): Record<string, string> {
   const paramNames: string[] = [];
-  const regexPattern = pattern.replace(/\{([^}]+)\}/g, (_, name) => {
-    paramNames.push(name);
-    return "([^/]+)";
-  });
+  const regexPattern = pattern
+    .split(/\{([^}]+)\}/)
+    .map((part, index) => {
+      if (index % 2 === 1) {
+        paramNames.push(part);
+        return "([^/]+)";
+      }
+      return part.replace(/[.+*?^${}()|[\]\\]/g, "\\$&");
+    })
+    .join("");
 
   const regex = new RegExp(`^${regexPattern}$`);
   const match = uri.match(regex);
