@@ -375,6 +375,18 @@ export class ManduFilling<TLoaderData = unknown> {
     return Array.from(this.config.handlers.keys());
   }
 
+  /**
+   * Convert to named handler exports compatible with Mandu route.ts files.
+   * Usage: export const { GET, POST } = filling.toHandlers();
+   */
+  toHandlers(): Partial<Record<HttpMethod, (req: Request) => Promise<Response>>> {
+    const result: Partial<Record<HttpMethod, (req: Request) => Promise<Response>>> = {};
+    for (const method of this.config.handlers.keys()) {
+      result[method] = (req: Request) => this.handle(req, {}, undefined);
+    }
+    return result;
+  }
+
   hasMethod(method: HttpMethod): boolean {
     return this.config.handlers.has(method);
   }
