@@ -14,21 +14,21 @@ export const colors = {
     accent: '#E8967A',       // 새우 만두 분홍
   },
   semantic: {
-    success: '#90EE90',
-    warning: '#FFD700',
-    error: '#FF6B6B',
-    info: '#87CEEB',
+    success: '#7EC8A0',      // 세이지 그린 (따뜻한 톤)
+    warning: '#E8B84D',      // 앰버 (부드러운 경고)
+    error: '#E86464',        // 소프트 레드
+    info: '#7AAFC8',         // 스틸 블루 (차분한 정보)
   },
   background: {
-    dark: '#1A1A2E',
-    medium: '#2D2D44',
-    light: '#3D3D5C',
-    overlay: 'rgba(0, 0, 0, 0.85)',
+    dark: '#1C1B2E',         // 따뜻한 다크 인디고
+    medium: '#2A2940',       // 따뜻한 미디엄
+    light: '#3A3854',        // 따뜻한 라이트
+    overlay: 'rgba(10, 8, 20, 0.88)',
   },
   text: {
-    primary: '#FFFFFF',
-    secondary: '#B0B0B0',
-    muted: '#707070',
+    primary: '#F0EDE8',      // 크림 화이트 (따뜻한 톤)
+    secondary: '#A8A4A0',    // 따뜻한 그레이
+    muted: '#6B6866',        // 따뜻한 뮤트
   },
 } as const;
 
@@ -99,11 +99,11 @@ export const borderWidth = {
 // ============================================================================
 
 export const shadows = {
-  sm: '0 1px 2px rgba(0, 0, 0, 0.1)',
-  md: '0 4px 6px rgba(0, 0, 0, 0.15)',
-  lg: '0 10px 15px rgba(0, 0, 0, 0.2)',
-  xl: '0 20px 25px rgba(0, 0, 0, 0.25)',
-  overlay: '0 25px 50px rgba(0, 0, 0, 0.5)',
+  sm: '0 1px 3px rgba(8, 6, 18, 0.12)',
+  md: '0 4px 8px rgba(8, 6, 18, 0.18)',
+  lg: '0 10px 20px rgba(8, 6, 18, 0.24)',
+  xl: '0 20px 30px rgba(8, 6, 18, 0.32)',
+  overlay: '0 25px 50px rgba(8, 6, 18, 0.5)',
 } as const;
 
 // ============================================================================
