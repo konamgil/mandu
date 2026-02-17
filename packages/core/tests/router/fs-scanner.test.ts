@@ -224,6 +224,40 @@ describe("FSScanner", () => {
     }
   });
 
+  it("should detect hydration shell mismatch risk when page.tsx bridges island with null placeholder", async () => {
+    const mismatchDir = join(import.meta.dir, "__test_hydration_mismatch_risk__");
+
+    await mkdir(join(mismatchDir, "app"), { recursive: true });
+
+    await writeFile(
+      join(mismatchDir, "app/page.tsx"),
+      `import HomePageIsland from "./page.island";
+       export default function HomePage() {
+         return (
+           <main>
+             <h1>SSR Shell</h1>
+             {typeof HomePageIsland !== "undefined" && null}
+           </main>
+         );
+       }`
+    );
+
+    await writeFile(
+      join(mismatchDir, "app/page.island.tsx"),
+      `"use client";
+       export default function HomePageIsland() {
+         return <div>Hydrated UI</div>;
+       }`
+    );
+
+    try {
+      const result = await scanRoutes(mismatchDir);
+      expect(result.errors.some((e) => e.type === "hydration_shell_mismatch_risk")).toBe(true);
+    } finally {
+      await rm(mismatchDir, { recursive: true, force: true });
+    }
+  });
+
   it("should detect 'use client' directive in page files as clientModule", async () => {
     const useClientDir = join(import.meta.dir, "__test_use_client__");
 
