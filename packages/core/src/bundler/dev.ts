@@ -143,6 +143,9 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
   // 파일 감시 설정
   const watchers: fs.FSWatcher[] = [];
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // 동시 빌드 방지 (#121): 빌드 중에 변경 발생 시 다음 빌드 대기
+  let isBuilding = false;
+  let pendingBuildFile: string | null = null;
 
   // 파일이 공통 디렉토리에 있는지 확인
   const isInCommonDir = (filePath: string): boolean => {
@@ -157,9 +160,30 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
   };
 
   const handleFileChange = async (changedFile: string) => {
+    // 동시 빌드 방지 (#121): 빌드 중이면 대기 큐에 저장
+    if (isBuilding) {
+      pendingBuildFile = changedFile;
+      return;
+    }
+
+    isBuilding = true;
+    try {
+      await _doBuild(changedFile);
+    } finally {
+      isBuilding = false;
+      // 빌드 중 대기 중인 파일이 있으면 즉시 처리
+      if (pendingBuildFile) {
+        const next = pendingBuildFile;
+        pendingBuildFile = null;
+        await handleFileChange(next);
+      }
+    }
+  };
+
+  const _doBuild = async (changedFile: string) => {
     const normalizedPath = changedFile.replace(/\\/g, "/");
 
-    // 공통 컴포넌트 디렉토리 변경 → 전체 재빌드
+    // 공통 컴포넌트 디렉토리 변경 → 전체 재빌드 (targetRouteIds 없이)
     if (isInCommonDir(changedFile)) {
       console.log(`\n🔄 Common file changed: ${path.basename(changedFile)}`);
       console.log(`   Rebuilding all islands...`);
@@ -223,13 +247,15 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     const route = manifest.routes.find((r) => r.id === routeId);
     if (!route || !route.clientModule) return;
 
-    console.log(`\n🔄 Rebuilding: ${routeId}`);
+    console.log(`\n🔄 Rebuilding island: ${routeId}`);
     const startTime = performance.now();
 
     try {
+      // 단일 island만 재빌드 (Runtime/Router/Vendor 스킵, #122)
       const result = await buildClientBundles(manifest, rootDir, {
         minify: false,
         sourcemap: true,
+        targetRouteIds: [routeId],
       });
 
       const buildTime = performance.now() - startTime;
@@ -286,7 +312,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     console.log(`👀 Watching ${watchers.length} directories for changes...`);
     if (commonWatchDirs.size > 0) {
       const commonDirNames = Array.from(commonWatchDirs)
-        .map(d => path.relative(rootDir, d) || ".")
+        .map(d => (path.relative(rootDir, d) || ".").replace(/\\/g, "/"))
         .join(", ");
       console.log(`📦 Common dirs (full rebuild): ${commonDirNames}`);
     }

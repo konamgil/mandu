@@ -311,7 +311,12 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
     serverPath: SERVER_CSS_PATH,
     close: () => {
       fsWatcher?.close();
-      proc.kill();
+      // Windows에서는 SIGTERM이 무시될 수 있으므로 SIGKILL 사용 (#117)
+      if (process.platform === "win32") {
+        proc.kill("SIGKILL");
+      } else {
+        proc.kill();
+      }
     },
   };
 }
