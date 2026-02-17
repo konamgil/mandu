@@ -28,6 +28,12 @@ export const hydrationToolDefinitions: Tool[] = [
           type: "boolean",
           description: "Generate source maps for debugging",
         },
+        targetRouteIds: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Only rebuild specific islands by routeId. Skips Runtime/Router/Vendor rebuild for faster incremental updates. Omit to rebuild everything.",
+        },
       },
       required: [],
     },
@@ -115,9 +121,10 @@ export function hydrationTools(projectRoot: string) {
 
   return {
     mandu_build: async (args: Record<string, unknown>) => {
-      const { minify, sourcemap } = args as {
+      const { minify, sourcemap, targetRouteIds } = args as {
         minify?: boolean;
         sourcemap?: boolean;
+        targetRouteIds?: string[];
       };
 
       // Load manifest
@@ -130,6 +137,7 @@ export function hydrationTools(projectRoot: string) {
       const result = await buildClientBundles(manifestResult.data, projectRoot, {
         minify,
         sourcemap,
+        targetRouteIds,
       });
 
       return {

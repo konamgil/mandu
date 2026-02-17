@@ -82,8 +82,8 @@ export const guardToolDefinitions: Tool[] = [
       properties: {
         preset: {
           type: "string",
-          enum: ["fsd", "clean", "hexagonal", "atomic", "mandu"],
-          description: "Architecture preset to use (default: from config or 'mandu')",
+          enum: ["fsd", "clean", "hexagonal", "atomic", "cqrs", "mandu"],
+          description: "Architecture preset to use (default: from config or 'mandu'). Use 'cqrs' for Command/Query separation.",
         },
         autoFix: {
           type: "boolean",
@@ -120,7 +120,7 @@ export const guardToolDefinitions: Tool[] = [
         },
         preset: {
           type: "string",
-          enum: ["fsd", "clean", "hexagonal", "atomic", "mandu"],
+          enum: ["fsd", "clean", "hexagonal", "atomic", "cqrs", "mandu"],
           description: "Architecture preset for context",
         },
       },
