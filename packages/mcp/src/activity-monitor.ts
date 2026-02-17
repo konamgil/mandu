@@ -7,7 +7,7 @@
 
 import fs from "fs";
 import path from "path";
-import { spawn, type ChildProcess } from "child_process";
+import type { Subprocess } from "bun";
 
 const TOOL_ICONS: Record<string, string> = {
   // Spec
@@ -266,7 +266,7 @@ function writeDefaultConfig(projectRoot: string, config: Required<MonitorConfig>
 export class ActivityMonitor {
   private logFile = "";
   private logStream: fs.WriteStream | null = null;
-  private tailProcess: ChildProcess | null = null;
+  private tailProcess: Subprocess | null = null;
   private projectRoot: string;
   private config: Required<MonitorConfig>;
   private outputFormat: MonitorOutputFormat;
@@ -813,9 +813,9 @@ export class ActivityMonitor {
   private openTerminal(): void {
     try {
       if (process.platform === "win32") {
-        this.tailProcess = spawn(
-          "cmd",
+        this.tailProcess = Bun.spawn(
           [
+            "cmd",
             "/c",
             "start",
             "Mandu Activity Monitor",
@@ -824,22 +824,19 @@ export class ActivityMonitor {
             "-Command",
             `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; chcp 65001 | Out-Null; Get-Content '${this.logFile}' -Wait -Encoding UTF8`,
           ],
-          { cwd: this.projectRoot, detached: true, stdio: "ignore" }
+          { cwd: this.projectRoot, stdio: ["ignore", "ignore", "ignore"] }
         );
       } else if (process.platform === "darwin") {
-        this.tailProcess = spawn(
-          "osascript",
-          ["-e", `tell application "Terminal" to do script "tail -f '${this.logFile}'"`],
-          { detached: true, stdio: "ignore" }
+        this.tailProcess = Bun.spawn(
+          ["osascript", "-e", `tell application "Terminal" to do script "tail -f '${this.logFile}'"`],
+          { stdio: ["ignore", "ignore", "ignore"] }
         );
       } else {
-        this.tailProcess = spawn(
-          "x-terminal-emulator",
-          ["-e", `tail -f '${this.logFile}'`],
-          { cwd: this.projectRoot, detached: true, stdio: "ignore" }
+        this.tailProcess = Bun.spawn(
+          ["x-terminal-emulator", "-e", `tail -f '${this.logFile}'`],
+          { cwd: this.projectRoot, stdio: ["ignore", "ignore", "ignore"] }
         );
       }
-      this.tailProcess?.unref();
     } catch {
       // Terminal auto-open failed silently
     }

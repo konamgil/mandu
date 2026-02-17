@@ -26,7 +26,7 @@ import {
   generateJsonStatus,
   initializeArchitectureAnalyzer,
   getArchitectureAnalyzer,
-} from "../../../core/src/index.js";
+} from "@mandujs/core";
 import { getProjectPaths } from "../utils/project.js";
 
 export const brainToolDefinitions: Tool[] = [

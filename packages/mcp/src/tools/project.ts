@@ -22,23 +22,36 @@ type DevServerState = {
 };
 
 let devServerState: DevServerState | null = null;
+let devServerStarting = false;
 
 function trimOutput(text: string, maxChars: number = 4000): string {
   if (text.length <= maxChars) return text;
   return text.slice(-maxChars);
 }
 
-async function runCommand(cmd: string[], cwd: string) {
+const COMMAND_TIMEOUT_MS = 120_000; // 2 minutes
+
+async function runCommand(cmd: string[], cwd: string, timeoutMs: number = COMMAND_TIMEOUT_MS) {
   const proc = spawn(cmd, {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
   });
 
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => {
+      proc.kill();
+      reject(new Error(`Command timed out after ${timeoutMs}ms: ${cmd.join(" ")}`));
+    }, timeoutMs)
+  );
+
+  const [stdout, stderr, exitCode] = await Promise.race([
+    Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]),
+    timeoutPromise,
   ]);
 
   return {
@@ -192,6 +205,16 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
 
       await fs.mkdir(baseDir, { recursive: true });
 
+      // Runtime whitelist validation for spawn arguments
+      const VALID_CSS = ["tailwind", "panda", "none"];
+      const VALID_UI = ["shadcn", "ark", "none"];
+      if (css !== undefined && !VALID_CSS.includes(css)) {
+        return { success: false, error: `Invalid css value: ${css}. Must be one of: ${VALID_CSS.join(", ")}` };
+      }
+      if (ui !== undefined && !VALID_UI.includes(ui)) {
+        return { success: false, error: `Invalid ui value: ${ui}. Must be one of: ${VALID_UI.join(", ")}` };
+      }
+
       const initArgs = ["@mandujs/cli", "init", name];
       if (minimal) {
         initArgs.push("--minimal");
@@ -201,7 +224,16 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
         if (theme) initArgs.push("--theme");
       }
 
-      const initResult = await runCommand(["bunx", ...initArgs], baseDir);
+      let initResult: { exitCode: number | null; stdout: string; stderr: string };
+      try {
+        initResult = await runCommand(["bunx", ...initArgs], baseDir);
+      } catch (err) {
+        return {
+          success: false,
+          step: "init",
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
       if (initResult.exitCode !== 0) {
         return {
           success: false,
@@ -216,7 +248,16 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
 
       let installResult: { exitCode: number | null; stdout: string; stderr: string } | null = null;
       if (install !== false) {
-        installResult = await runCommand(["bun", "install"], projectDir);
+        try {
+          installResult = await runCommand(["bun", "install"], projectDir);
+        } catch (err) {
+          return {
+            success: false,
+            step: "install",
+            projectDir,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
         if (installResult.exitCode !== 0) {
           return {
             success: false,
@@ -253,53 +294,60 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
 
     mandu_dev_start: async (args: Record<string, unknown>) => {
       const { cwd } = args as { cwd?: string };
-      if (devServerState) {
+      if (devServerState || devServerStarting) {
         return {
           success: false,
-          message: "Dev server is already running",
-          pid: devServerState.process.pid,
-          cwd: devServerState.cwd,
+          message: devServerStarting
+            ? "Dev server is starting up, please wait"
+            : "Dev server is already running",
+          pid: devServerState?.process.pid,
+          cwd: devServerState?.cwd,
         };
       }
 
-      const targetDir = cwd ? path.resolve(projectRoot, cwd) : projectRoot;
+      devServerStarting = true;
+      try {
+        const targetDir = cwd ? path.resolve(projectRoot, cwd) : projectRoot;
 
-      const proc = spawn(["bun", "run", "dev"], {
-        cwd: targetDir,
-        stdout: "pipe",
-        stderr: "pipe",
-        stdin: "ignore",
-      });
+        const proc = spawn(["bun", "run", "dev"], {
+          cwd: targetDir,
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "ignore",
+        });
 
-      const state: DevServerState = {
-        process: proc,
-        cwd: targetDir,
-        startedAt: new Date(),
-        output: [],
-        maxLines: 50,
-      };
-      devServerState = state;
+        const state: DevServerState = {
+          process: proc,
+          cwd: targetDir,
+          startedAt: new Date(),
+          output: [],
+          maxLines: 50,
+        };
+        devServerState = state;
 
-      consumeStream(proc.stdout, state, "stdout", server).catch(() => {});
-      consumeStream(proc.stderr, state, "stderr", server).catch(() => {});
+        consumeStream(proc.stdout, state, "stdout", server).catch(() => {});
+        consumeStream(proc.stderr, state, "stderr", server).catch(() => {});
 
-      proc.exited.then(() => {
-        if (devServerState?.process === proc) {
-          devServerState = null;
+        proc.exited.then(() => {
+          if (devServerState?.process === proc) {
+            devServerState = null;
+          }
+        }).catch(() => {});
+
+        if (monitor) {
+          monitor.logEvent("dev", `Dev server started (${targetDir})`);
         }
-      }).catch(() => {});
 
-      if (monitor) {
-        monitor.logEvent("dev", `Dev server started (${targetDir})`);
+        return {
+          success: true,
+          pid: proc.pid,
+          cwd: targetDir,
+          startedAt: state.startedAt.toISOString(),
+          message: "Dev server started",
+        };
+      } finally {
+        devServerStarting = false;
       }
-
-      return {
-        success: true,
-        pid: proc.pid,
-        cwd: targetDir,
-        startedAt: state.startedAt.toISOString(),
-        message: "Dev server started",
-      };
     },
 
     mandu_dev_stop: async () => {

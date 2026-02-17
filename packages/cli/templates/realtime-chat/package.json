@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@mandujs/cli": "{{CLI_VERSION}}",
+    "@mandujs/mcp": "latest",
     "@tailwindcss/cli": "^4.1.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

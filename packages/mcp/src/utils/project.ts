@@ -54,7 +54,7 @@ export function getProjectPaths(rootDir: string) {
 export function isInsideProject(filePath: string, rootDir: string): boolean {
   const resolved = path.resolve(filePath);
   const root = path.resolve(rootDir);
-  return resolved.startsWith(root);
+  return resolved === root || resolved.startsWith(root + path.sep);
 }
 
 /**
@@ -73,7 +73,9 @@ export async function readJsonFile<T>(filePath: string): Promise<T | null> {
 }
 
 /**
- * Write JSON file safely
+ * Write JSON file safely.
+ * Note: Callers are responsible for ensuring filePath is within the project root.
+ * All internal callers use paths derived from getProjectPaths() which are scoped to projectRoot.
  */
 export async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
   const dir = path.dirname(filePath);
