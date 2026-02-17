@@ -410,13 +410,6 @@ export function initializeRouter(): void {
   // 링크 클릭 이벤트 위임
   document.addEventListener("click", handleLinkClick);
 
-  // DevTools 자동 초기화 (개발 모드에서 SSR이 __MANDU_DEV_TOOLS__를 주입한 경우)
-  if ((window as any).__MANDU_DEV_TOOLS__) {
-    import("../devtools/init").then(({ initManduKitchen }) => {
-      initManduKitchen({ position: "bottom-right" });
-    }).catch(() => {});
-  }
-
   console.log("[Mandu Router] Initialized");
 }
 

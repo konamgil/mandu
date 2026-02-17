@@ -530,6 +530,11 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
     scripts.push(generateHMRScript(hmrPort));
   }
 
+  // 10. DevTools 번들 로드 (개발 모드)
+  if (isDev) {
+    scripts.push(`<script type="module" src="/.mandu/client/_devtools.js"></script>`);
+  }
+
   // Island wrapper 닫기 (hydration이 필요한 경우)
   const needsHydration = hydration && hydration.strategy !== "none" && routeId && bundleManifest;
   const islandCloseTag = needsHydration ? "</div>" : "";

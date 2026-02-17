@@ -238,10 +238,10 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     hmrScript = generateHMRScript(hmrPort);
   }
 
-  // DevTools 부트스트랩 스크립트 (개발 모드)
+  // DevTools 번들 로드 (개발 모드)
   let devtoolsScript = "";
   if (isDev) {
-    devtoolsScript = generateDevtoolsBootstrapScript();
+    devtoolsScript = generateDevtoolsScript();
   }
 
   return `<!doctype html>
@@ -372,15 +372,11 @@ function generateHMRScript(port: number): string {
 }
 
 /**
- * DevTools 부트스트랩 스크립트 생성 (개발 모드 전용)
+ * DevTools 번들 로드 스크립트 생성 (개발 모드 전용)
+ * _devtools.js 번들이 자체적으로 initManduKitchen()을 호출
  */
-function generateDevtoolsBootstrapScript(): string {
-  return `<script>
-(function() {
-  if (typeof window === 'undefined') return;
-  window.__MANDU_DEV_TOOLS__ = true;
-})();
-</script>`;
+function generateDevtoolsScript(): string {
+  return `<script type="module" src="/.mandu/client/_devtools.js"></script>`;
 }
 
 export function createHTMLResponse(html: string, status: number = 200): Response {

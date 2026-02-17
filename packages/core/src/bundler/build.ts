@@ -745,6 +745,72 @@ if (document.readyState === 'loading') {
 }
 
 /**
+ * DevTools 번들 빌드 (개발 모드 전용)
+ * devtools/init.ts를 브라우저용 번들로 컴파일하여 _devtools.js 생성
+ */
+async function buildDevtoolsBundle(
+  outDir: string,
+  options: BundlerOptions
+): Promise<{ success: boolean; outputPath: string; errors: string[] }> {
+  const srcPath = path.join(outDir, "_devtools.src.js");
+  const outputName = "_devtools.js";
+
+  // devtools/init.ts의 절대 경로 (build.ts → ../devtools/init.ts)
+  const devtoolsInitPath = path.resolve(
+    import.meta.dir, '..', 'devtools', 'init.ts'
+  ).replace(/\\/g, '/');
+
+  const source = `
+import { initManduKitchen } from "${devtoolsInitPath}";
+if (typeof window !== 'undefined') {
+  window.__MANDU_DEV_TOOLS__ = true;
+  initManduKitchen({ position: 'bottom-right' });
+}
+`;
+
+  try {
+    await Bun.write(srcPath, source);
+
+    const result = await Bun.build({
+      entrypoints: [srcPath],
+      outdir: outDir,
+      naming: outputName,
+      minify: false, // dev only
+      sourcemap: options.sourcemap ? "external" : "none",
+      target: "browser",
+      external: ["react", "react-dom", "react-dom/client"],
+      define: {
+        "process.env.NODE_ENV": JSON.stringify("development"),
+        ...options.define,
+      },
+    });
+
+    await fs.unlink(srcPath).catch(() => {});
+
+    if (!result.success) {
+      return {
+        success: false,
+        outputPath: "",
+        errors: result.logs.map((l) => l.message),
+      };
+    }
+
+    return {
+      success: true,
+      outputPath: `/.mandu/client/${outputName}`,
+      errors: [],
+    };
+  } catch (error) {
+    await fs.unlink(srcPath).catch(() => {});
+    return {
+      success: false,
+      outputPath: "",
+      errors: [String(error)],
+    };
+  }
+}
+
+/**
  * Router 런타임 번들 빌드
  */
 async function buildRouterRuntime(
@@ -1251,21 +1317,33 @@ export async function buildClientBundles(
     return { success: errors.length === 0, outputs, errors, manifest: existingManifest, stats };
   }
 
-  // 3-4. Runtime, Router, Vendor 번들 병렬 빌드 (서로 독립적)
-  const [runtimeResult, routerResult, vendorResult] = await Promise.all([
+  // 3-4. Runtime, Router, Vendor, DevTools 번들 병렬 빌드 (서로 독립적)
+  const buildPromises: Promise<any>[] = [
     buildRuntime(outDir, options),
     buildRouterRuntime(outDir, options),
     buildVendorShims(outDir, options),
-  ]);
+  ];
+
+  // DevTools 번들은 dev 모드에서만 빌드
+  const isDev = env === "development";
+  if (isDev) {
+    buildPromises.push(buildDevtoolsBundle(outDir, options));
+  }
+
+  const [runtimeResult, routerResult, vendorResult, devtoolsResult] = await Promise.all(buildPromises);
 
   if (!runtimeResult.success) {
-    errors.push(...runtimeResult.errors.map((e) => `[Runtime] ${e}`));
+    errors.push(...runtimeResult.errors.map((e: string) => `[Runtime] ${e}`));
   }
   if (!routerResult.success) {
-    errors.push(...routerResult.errors.map((e) => `[Router] ${e}`));
+    errors.push(...routerResult.errors.map((e: string) => `[Router] ${e}`));
   }
   if (!vendorResult.success) {
     errors.push(...vendorResult.errors);
+  }
+  if (devtoolsResult && !devtoolsResult.success) {
+    // DevTools 빌드 실패는 경고만 (개발 중단시키지 않음)
+    console.warn("[Mandu] DevTools bundle build failed:", devtoolsResult.errors.join(", "));
   }
 
   // 5. 각 Island 번들 빌드
