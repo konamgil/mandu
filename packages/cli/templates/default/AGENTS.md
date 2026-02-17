@@ -66,7 +66,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 export function CounterIsland() { ... }
 ```
 
-### 2. API 라우트
+### 3. API 라우트
 `app/api/` 폴더에 `route.ts` 파일로 정의:
 ```typescript
 // app/api/users/route.ts
@@ -76,7 +76,7 @@ export default Mandu.filling()
   .post(async (ctx) => { ... });
 ```
 
-### 3. Tailwind CSS v4
+### 4. Tailwind CSS v4
 CSS-first 설정 사용 (`tailwind.config.ts` 없음):
 ```css
 /* app/globals.css */
@@ -86,7 +86,7 @@ CSS-first 설정 사용 (`tailwind.config.ts` 없음):
 }
 ```
 
-### 4. Import Alias
+### 5. Import Alias
 `@/` = `src/` 경로:
 ```typescript
 import { Button } from "@/client/shared/ui/button";
