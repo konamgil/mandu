@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "mandu dev",
+    "dev:safe": "mandu lock && mandu dev",
     "build": "mandu build",
     "start": "mandu start",
     "check": "mandu check",

@@ -196,7 +196,9 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   });
 
   if (port !== desiredPort) {
-    console.warn(`⚠️  Port ${desiredPort} is in use. Using ${port} instead.`);
+    console.warn(`⚠️  Port ${desiredPort} is in use.`);
+    console.warn(`    Dev server:    http://localhost:${port}`);
+    console.warn(`    HMR WebSocket: ws://localhost:${port + HMR_OFFSET}`);
   }
 
   // HMR 서버 시작 (클라이언트 슬롯이 있는 경우)

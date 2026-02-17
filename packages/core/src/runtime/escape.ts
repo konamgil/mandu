@@ -1,4 +1,16 @@
 /**
+ * HTML 텍스트 콘텐츠 이스케이프
+ * <title>, <p> 등 텍스트 노드에 들어갈 문자열을 안전하게 처리.
+ * 속성값과 달리 " ' 는 이스케이프 불필요.
+ */
+export function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
  * HTML 속성값 이스케이프
  * XSS 방지를 위해 HTML 속성값에 들어갈 문자열을 안전하게 처리
  */
