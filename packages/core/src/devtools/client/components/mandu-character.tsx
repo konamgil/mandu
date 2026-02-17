@@ -218,8 +218,8 @@ export function ManduBadge({
     cursor: 'pointer',
     transition: `all ${animation.duration.normal} ${animation.easing.spring}`,
     boxShadow: isHovered
-      ? `0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 4px ${stateColor}33`
-      : `0 4px 12px rgba(0, 0, 0, 0.3)`,
+      ? `0 8px 24px rgba(8, 6, 18, 0.4), 0 0 0 4px ${stateColor}33`
+      : `0 4px 12px rgba(8, 6, 18, 0.3)`,
     fontSize: '22px',
     userSelect: 'none',
     transform: isHovered ? 'scale(1.08)' : 'scale(1)',
