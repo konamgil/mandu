@@ -15,7 +15,16 @@ import fs from "fs/promises";
 export const specToolDefinitions: Tool[] = [
   {
     name: "mandu_list_routes",
-    description: "List all routes in the current Mandu project (reads from .mandu/routes.manifest.json)",
+    description:
+      "List all routes registered in the Mandu project, read from .mandu/routes.manifest.json. " +
+      "Route kinds: " +
+      "'api' (REST endpoint — app/**/route.ts, exports named GET/POST/PUT/PATCH/DELETE handler functions), " +
+      "'page' (SSR page — app/**/page.tsx, React component supporting client-side hydration islands). " +
+      "Special files auto-detected by the filesystem router (not user-created routes): " +
+      "layout.tsx (shared wrapper rendered around child routes), " +
+      "error.tsx (error boundary for the route subtree), " +
+      "loading.tsx (suspense fallback shown while page data loads). " +
+      "Each route may have an associated slotModule (server data loader) and contractModule (Zod API schema).",
     inputSchema: {
       type: "object",
       properties: {},
@@ -24,13 +33,17 @@ export const specToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_get_route",
-    description: "Get details of a specific route by ID",
+    description:
+      "Get full details of a specific route by its ID. " +
+      "Returns the complete route spec: kind, URL pattern, module paths (app, slot, contract, component), " +
+      "HTTP methods, and hydration configuration (for page routes with client islands). " +
+      "Use this before modifying a route to understand its current configuration.",
     inputSchema: {
       type: "object",
       properties: {
         routeId: {
           type: "string",
-          description: "The route ID to retrieve",
+          description: "The route ID to retrieve (use mandu_list_routes to see all IDs)",
         },
       },
       required: ["routeId"],
@@ -38,7 +51,15 @@ export const specToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_add_route",
-    description: "Add a new route by scaffolding files in app/ and optionally in spec/slots/ and spec/contracts/",
+    description:
+      "Scaffold a new route by creating source files in app/ and registering it in the manifest. " +
+      "For 'api' routes: creates app/{path}/route.ts with a GET handler stub. " +
+      "For 'page' routes: creates app/{path}/page.tsx with a React component stub. " +
+      "withSlot=true (default): also creates spec/slots/{routeId}.slot.ts — " +
+      "the server-side data loader that runs on every request before rendering and injects typed props into the page. " +
+      "withContract=true: also creates spec/contracts/{routeId}.contract.ts — " +
+      "Zod schemas for request/response validation, enabling typed handlers, OpenAPI generation, and ATE L2/L3 testing. " +
+      "Automatically runs generateManifest() after creation to link all files.",
     inputSchema: {
       type: "object",
       properties: {
@@ -49,15 +70,15 @@ export const specToolDefinitions: Tool[] = [
         kind: {
           type: "string",
           enum: ["api", "page"],
-          description: "Route type: api (route.ts) or page (page.tsx)",
+          description: "Route type: 'api' creates route.ts with HTTP handlers, 'page' creates page.tsx with a React component",
         },
         withSlot: {
           type: "boolean",
-          description: "Scaffold a slot file in spec/slots/ (default: true)",
+          description: "Also scaffold a server-side data loader at spec/slots/{routeId}.slot.ts (default: true)",
         },
         withContract: {
           type: "boolean",
-          description: "Scaffold a contract file in spec/contracts/",
+          description: "Also scaffold a Zod contract at spec/contracts/{routeId}.contract.ts (default: false)",
         },
       },
       required: ["path", "kind"],
@@ -65,13 +86,18 @@ export const specToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_delete_route",
-    description: "Delete a route's app/ files and rescan (preserves slot/contract files)",
+    description:
+      "Delete a route's app/ source file and regenerate the manifest. " +
+      "Only removes the app/{path}/route.ts or page.tsx file — " +
+      "slot files (spec/slots/) and contract files (spec/contracts/) are intentionally preserved, " +
+      "as they may be reused when the route is recreated. " +
+      "Use mandu_list_routes before deleting to confirm the correct routeId.",
     inputSchema: {
       type: "object",
       properties: {
         routeId: {
           type: "string",
-          description: "The route ID to delete",
+          description: "The route ID to delete (use mandu_list_routes to find it)",
         },
       },
       required: ["routeId"],
@@ -79,7 +105,10 @@ export const specToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_validate_manifest",
-    description: "Validate the current routes manifest (.mandu/routes.manifest.json)",
+    description:
+      "Validate the routes manifest (.mandu/routes.manifest.json) for structural integrity. " +
+      "Checks required fields, valid route kinds, correct module paths, and manifest schema version. " +
+      "Run this after manual manifest edits, after upgrading Mandu, or when routes behave unexpectedly.",
     inputSchema: {
       type: "object",
       properties: {},

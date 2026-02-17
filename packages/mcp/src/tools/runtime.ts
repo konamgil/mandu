@@ -1,10 +1,6 @@
 /**
  * Mandu MCP Runtime Tools
- * Runtime 설정 조회 및 관리 도구
- *
- * - Logger 설정 조회/변경
- * - Normalize 설정 조회
- * - Contract 옵션 확인
+ * Query and manage runtime configuration: logger settings and contract normalize options.
  */
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -17,8 +13,10 @@ export const runtimeToolDefinitions: Tool[] = [
   {
     name: "mandu_get_runtime_config",
     description:
-      "Get current runtime configuration including logger and normalize settings. " +
-      "Shows default values and any overrides from contracts.",
+      "Get the Mandu runtime configuration defaults for logger and normalize settings. " +
+      "Shows default values for every configurable option along with usage examples. " +
+      "Use this to understand the runtime before calling mandu_set_contract_normalize " +
+      "or mandu_generate_logger_config.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -28,8 +26,11 @@ export const runtimeToolDefinitions: Tool[] = [
   {
     name: "mandu_get_contract_options",
     description:
-      "Get normalize and coerce options for a specific contract. " +
-      "These options control how request data is sanitized and type-converted.",
+      "Read the normalize and coerceQueryParams options currently set in a specific contract file. " +
+      "These options control how incoming request data is validated and sanitized: " +
+      "'normalize' removes or blocks undefined fields (Mass Assignment protection), " +
+      "'coerceQueryParams' auto-converts URL query string values to their declared schema types (e.g., '123' → number). " +
+      "Returns the parsed values and their effect, or defaults if no explicit options are set.",
     inputSchema: {
       type: "object",
       properties: {
@@ -44,8 +45,12 @@ export const runtimeToolDefinitions: Tool[] = [
   {
     name: "mandu_set_contract_normalize",
     description:
-      "Set normalize mode for a contract. " +
-      "Modes: 'strip' (remove undefined fields, default), 'strict' (error on undefined), 'passthrough' (allow all).",
+      "Set the normalize mode (and optionally coerceQueryParams) in a route's contract file. " +
+      "Normalize modes: " +
+      "'strip' (default, recommended) — removes any request fields not defined in the schema, preventing Mass Assignment attacks. " +
+      "'strict' — returns HTTP 400 if the request contains any field not defined in the schema. " +
+      "'passthrough' — allows all fields through without filtering (validation only, no sanitization). " +
+      "coerceQueryParams: when true (default), auto-converts query string values to their declared schema types.",
     inputSchema: {
       type: "object",
       properties: {
@@ -57,11 +62,12 @@ export const runtimeToolDefinitions: Tool[] = [
           type: "string",
           enum: ["strip", "strict", "passthrough"],
           description:
-            "Normalize mode: strip (Mass Assignment 방지), strict (에러 발생), passthrough (모두 허용)",
+            "Normalize mode: 'strip' (remove undefined fields, prevents Mass Assignment), " +
+            "'strict' (return 400 on undefined fields), 'passthrough' (allow all fields through)",
         },
         coerceQueryParams: {
           type: "boolean",
-          description: "Whether to auto-convert query string types (default: true)",
+          description: "Auto-convert URL query string values to schema-declared types (default: true)",
         },
       },
       required: ["routeId"],
@@ -70,8 +76,10 @@ export const runtimeToolDefinitions: Tool[] = [
   {
     name: "mandu_list_logger_options",
     description:
-      "List available logger configuration options and their descriptions. " +
-      "Useful for understanding how to configure logging in Mandu.",
+      "List all available logger configuration options with types, defaults, and descriptions. " +
+      "Covers: log format, level, header/body logging (security risk warnings), " +
+      "sampling rate, slow request threshold, redaction fields, custom sink, and skip patterns. " +
+      "Use this as a reference before calling mandu_generate_logger_config.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -81,33 +89,36 @@ export const runtimeToolDefinitions: Tool[] = [
   {
     name: "mandu_generate_logger_config",
     description:
-      "Generate logger configuration code based on requirements. " +
-      "Returns TypeScript code that can be added to the project.",
+      "Generate ready-to-use TypeScript logger configuration code for a specific environment. " +
+      "Returns an import statement and logger() call with environment-appropriate defaults: " +
+      "development: debug level, pretty format, higher verbosity; " +
+      "production: info level, JSON format, 10% sampling, no headers/body. " +
+      "Security note: includeHeaders and includeBody are forced to false in production regardless of input.",
     inputSchema: {
       type: "object",
       properties: {
         environment: {
           type: "string",
           enum: ["development", "production", "testing"],
-          description: "Target environment (default: development)",
+          description: "Target environment — determines default log level, format, and sampling rate (default: development)",
         },
         includeHeaders: {
           type: "boolean",
-          description: "Whether to log request headers (default: false for security)",
+          description: "Log request headers — security risk, only recommended in development (default: false)",
         },
         includeBody: {
           type: "boolean",
-          description: "Whether to log request body (default: false for security)",
+          description: "Log request body — security risk, only recommended in development (default: false)",
         },
         format: {
           type: "string",
           enum: ["pretty", "json"],
-          description: "Log output format (pretty for dev, json for prod)",
+          description: "Log output format: 'pretty' (colored, human-readable) or 'json' (structured, for log aggregators)",
         },
         customRedact: {
           type: "array",
           items: { type: "string" },
-          description: "Additional fields to redact from logs",
+          description: "Additional header or field names to redact/mask from logs",
         },
       },
       required: [],
@@ -160,17 +171,17 @@ export function runtimeTools(projectRoot: string) {
           logger: {
             format: "Log output format: 'pretty' (colored, dev) or 'json' (structured, prod)",
             level: "Minimum log level: 'debug' | 'info' | 'warn' | 'error'",
-            includeHeaders: "⚠️ Security risk if true - logs request headers",
-            includeBody: "⚠️ Security risk if true - logs request body",
-            maxBodyBytes: "Maximum body size to log (truncates larger bodies)",
-            sampleRate: "Sampling rate 0-1 (1 = 100% logging)",
-            slowThresholdMs: "Requests slower than this get detailed logging",
-            redact: "Header/field names to mask in logs",
+            includeHeaders: "⚠️ Security risk if true — logs all request headers including Authorization, Cookie",
+            includeBody: "⚠️ Security risk if true — logs raw request body; may expose PII",
+            maxBodyBytes: "Maximum body bytes to log (truncates larger bodies to avoid log bloat)",
+            sampleRate: "Sampling rate 0.0–1.0 (1.0 = 100% of requests logged)",
+            slowThresholdMs: "Requests exceeding this threshold (ms) are logged at warn level with details",
+            redact: "Header/field names to mask in logs (replaces value with '[REDACTED]')",
           },
           normalize: {
-            mode: "strip: remove undefined fields (Mass Assignment 방지), strict: error on undefined, passthrough: allow all",
-            coerceQueryParams: "Auto-convert query string '123' → number 123",
-            deep: "Apply normalization to nested objects",
+            mode: "strip: remove undefined fields (prevents Mass Assignment attacks), strict: return 400 on undefined fields, passthrough: allow all fields (validation only)",
+            coerceQueryParams: "Auto-convert URL query string '123' → number 123 based on schema type",
+            deep: "Apply normalization recursively to nested objects",
           },
         },
         usage: {
@@ -242,11 +253,11 @@ export default Mandu.contract({
         },
         explanation: {
           normalize: {
-            strip: "정의되지 않은 필드 제거 (Mass Assignment 공격 방지)",
-            strict: "정의되지 않은 필드 있으면 400 에러",
-            passthrough: "모든 필드 허용 (검증만, 필터링 안 함)",
+            strip: "Removes any request fields not defined in the schema — prevents Mass Assignment attacks (recommended default)",
+            strict: "Returns HTTP 400 if the request contains any field not defined in the schema",
+            passthrough: "Allows all fields through without filtering — validation only, no sanitization",
           },
-          coerceQueryParams: "URL query string은 항상 문자열이므로, 스키마 타입으로 자동 변환",
+          coerceQueryParams: "URL query strings are always plain strings; this option auto-converts them to the declared schema types (e.g., '42' → number, 'true' → boolean)",
         },
       };
     },
@@ -341,10 +352,10 @@ export default Mandu.contract({
         message: `Updated ${route.contractModule}`,
         securityNote:
           normalize === "passthrough"
-            ? "⚠️ passthrough 모드는 Mass Assignment 공격에 취약할 수 있습니다. 신뢰할 수 있는 입력에만 사용하세요."
+            ? "⚠️ passthrough mode may be vulnerable to Mass Assignment attacks. Only use with trusted, fully-validated input."
             : normalize === "strict"
-            ? "strict 모드는 클라이언트가 추가 필드를 보내면 400 에러를 반환합니다."
-            : "strip 모드 (권장): 정의되지 않은 필드는 자동 제거됩니다.",
+            ? "strict mode returns HTTP 400 if the client sends any field not defined in the contract schema."
+            : "strip mode (recommended): fields not defined in the schema are automatically removed from the request.",
       };
     },
 
@@ -355,78 +366,78 @@ export default Mandu.contract({
             name: "format",
             type: '"pretty" | "json"',
             default: "pretty",
-            description: "로그 출력 형식. pretty는 개발용 컬러 출력, json은 운영용 구조화 로그",
+            description: "Log output format: 'pretty' (colored, human-readable for dev) or 'json' (structured, for log aggregators in prod)",
           },
           {
             name: "level",
             type: '"debug" | "info" | "warn" | "error"',
             default: "info",
-            description: "최소 로그 레벨. debug는 모든 요청 상세, error는 에러만",
+            description: "Minimum log level: 'debug' (all requests with details), 'info' (standard), 'warn' (slow/suspicious only), 'error' (errors only)",
           },
           {
             name: "includeHeaders",
             type: "boolean",
             default: false,
-            description: "⚠️ 요청 헤더 로깅. 민감 정보 노출 위험",
+            description: "⚠️ Security risk — logs all request headers including Authorization and Cookie. Only enable in development.",
           },
           {
             name: "includeBody",
             type: "boolean",
             default: false,
-            description: "⚠️ 요청 바디 로깅. 민감 정보 노출 + 스트림 문제",
+            description: "⚠️ Security risk — logs raw request body which may contain PII or credentials. Only enable in development.",
           },
           {
             name: "maxBodyBytes",
             type: "number",
             default: 1024,
-            description: "바디 로깅 시 최대 크기 (초과분 truncate)",
+            description: "Maximum bytes of request body to log (larger bodies are truncated to avoid log bloat)",
           },
           {
             name: "redact",
             type: "string[]",
             default: '["authorization", "cookie", "password", ...]',
-            description: "로그에서 마스킹할 헤더/필드명",
+            description: "Header or field names to mask in logs (values are replaced with '[REDACTED]')",
           },
           {
             name: "requestId",
             type: '"auto" | ((ctx) => string)',
             default: "auto",
-            description: "요청 ID 생성 방식. auto는 UUID 또는 타임스탬프 기반",
+            description: "Request ID generation strategy: 'auto' uses UUID or timestamp-based ID, or provide a custom function",
           },
           {
             name: "sampleRate",
-            type: "number (0-1)",
+            type: "number (0.0–1.0)",
             default: 1,
-            description: "샘플링 비율. 운영에서 로그 양 조절 (0.1 = 10%)",
+            description: "Fraction of requests to log (1.0 = 100%, 0.1 = 10%). Reduce in production to control log volume.",
           },
           {
             name: "slowThresholdMs",
             type: "number",
             default: 1000,
-            description: "느린 요청 임계값. 초과 시 warn 레벨로 상세 출력",
+            description: "Requests exceeding this duration (ms) are logged at warn level with full details",
           },
           {
             name: "includeTraceOnSlow",
             type: "boolean",
             default: true,
-            description: "느린 요청에 Trace 리포트 포함",
+            description: "Include a timing trace report in the log entry for slow requests",
           },
           {
             name: "sink",
             type: "(entry: LogEntry) => void",
             default: "console",
-            description: "커스텀 로그 출력 (Pino, CloudWatch 등 연동)",
+            description: "Custom log output handler — use for integrating with Pino, CloudWatch, Datadog, etc.",
           },
           {
             name: "skip",
             type: "(string | RegExp)[]",
             default: "[]",
-            description: '로깅 제외 경로 패턴. 예: ["/health", /^\\/static\\//]',
+            description: 'URL path patterns to exclude from logging. Example: ["/health", /^\\/static\\//]',
           },
         ],
         presets: {
-          devLogger: "개발용: debug 레벨, pretty 포맷, 헤더 포함",
-          prodLogger: "운영용: info 레벨, json 포맷, 헤더/바디 미포함",
+          devLogger: "Development preset: debug level, pretty format, detailed output",
+          prodLogger: "Production preset: info level, JSON format, no headers/body logging",
         },
       };
     },
@@ -471,10 +482,10 @@ export const appLogger = logger(${JSON.stringify(config, null, 2)});
 
       const warnings: string[] = [];
       if (includeHeaders && isProd) {
-        warnings.push("⚠️ includeHeaders: true는 프로덕션에서 민감 정보 노출 위험이 있습니다.");
+        warnings.push("⚠️ includeHeaders: true in production may expose sensitive Authorization, Cookie, and API key headers in logs.");
       }
       if (includeBody && isProd) {
-        warnings.push("⚠️ includeBody: true는 프로덕션에서 민감 정보 노출 위험이 있습니다.");
+        warnings.push("⚠️ includeBody: true in production may expose PII, passwords, or credentials in logs.");
       }
 
       return {
@@ -483,9 +494,9 @@ export const appLogger = logger(${JSON.stringify(config, null, 2)});
         code,
         warnings: warnings.length > 0 ? warnings : undefined,
         tips: [
-          "devLogger() 또는 prodLogger() 프리셋을 사용할 수도 있습니다.",
-          "sink 옵션으로 Pino, CloudWatch 등 외부 시스템 연동 가능",
-          "skip 옵션으로 /health, /metrics 등 제외 가능",
+          "You can also use the devLogger() or prodLogger() preset helpers for quick setup.",
+          "Use the 'sink' option to integrate with external systems like Pino, CloudWatch, or Datadog.",
+          "Use the 'skip' option to exclude health check and static asset paths (e.g., ['/health', '/metrics']).",
         ],
       };
     },

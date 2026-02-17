@@ -8,17 +8,27 @@ export const generateToolDefinitions: Tool[] = [
   {
     name: "mandu_generate",
     description:
-      "Generate route handlers, components, and resource artifacts. Creates server handlers, page components, slot files, and resource CRUD operations.",
+      "Generate all Mandu framework artifacts from the current routes manifest and resource schemas. " +
+      "Runs two generation steps: " +
+      "(1) Route generation: for every route in .mandu/routes.manifest.json, creates " +
+      "a server-side handler in .mandu/generated/server/{routeId}.route.ts and " +
+      "a web component in .mandu/generated/web/{routeId}.route.tsx. " +
+      "These generated files wire up slots and contracts automatically — do NOT edit them directly. " +
+      "Instead, edit source files in app/ (route definition) or spec/ (slots, contracts). " +
+      "(2) Resource generation (resources=true, default): scans spec/resources/{name}/schema.ts " +
+      "and generates CRUD boilerplate (repository, service, handlers) for each declared resource. " +
+      "Run this after adding routes, modifying slot/contract files, or changing resource schemas. " +
+      "Use dryRun=true to preview what would be created or overwritten without writing any files.",
     inputSchema: {
       type: "object",
       properties: {
         dryRun: {
           type: "boolean",
-          description: "If true, show what would be generated without writing files",
+          description: "Preview what would be generated without writing files (default: false)",
         },
         resources: {
           type: "boolean",
-          description: "Include resource artifact generation (default: true)",
+          description: "Include resource artifact generation from spec/resources/ (default: true)",
         },
       },
       required: [],
@@ -26,7 +36,11 @@ export const generateToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_generate_status",
-    description: "Get the current generation status and generated file map",
+    description:
+      "Show the current state of all generated artifacts from .mandu/generated.map.json. " +
+      "Returns: generation timestamp, source spec version, total file count, " +
+      "and a list of generated files per route with their kinds (server handler, web component, slot stub). " +
+      "If no generated.map.json exists, prompts to run mandu_generate first.",
     inputSchema: {
       type: "object",
       properties: {},

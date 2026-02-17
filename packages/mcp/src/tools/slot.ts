@@ -11,13 +11,19 @@ import path from "path";
 export const slotToolDefinitions: Tool[] = [
   {
     name: "mandu_read_slot",
-    description: "Read the contents of a slot file for a specific route",
+    description:
+      "Read the TypeScript source of a route's slot file and validate its structure. " +
+      "In Mandu, a 'slot' is the server-side data loader for a route: " +
+      "it runs on every request before rendering and returns a typed object " +
+      "that is injected into the page component as props (for pages) or as handler context (for API routes). " +
+      "Slot files live at spec/slots/{routeId}.slot.ts and are auto-linked by generateManifest(). " +
+      "Returns the raw source, line count, and any structural validation issues.",
     inputSchema: {
       type: "object",
       properties: {
         routeId: {
           type: "string",
-          description: "The route ID whose slot file to read",
+          description: "The route ID whose slot file to read (use mandu_list_routes to find IDs)",
         },
       },
       required: ["routeId"],
@@ -26,13 +32,21 @@ export const slotToolDefinitions: Tool[] = [
   {
     name: "mandu_validate_slot",
     description:
-      "Validate slot content without writing, get issues and suggestions",
+      "Validate TypeScript slot content against Mandu's structural rules — without writing any files. " +
+      "A valid slot must export a default function (or use the slot() builder) that accepts a Request " +
+      "and returns a plain serializable object (becomes the typed props injected into the page). " +
+      "Returns: " +
+      "errors (must fix before use), " +
+      "warnings (best-practice suggestions), " +
+      "autoFixable issues (with corrected code preview), " +
+      "manualFixRequired items (issues needing human review). " +
+      "Use this before writing a slot file with the Edit tool to catch structural problems early.",
     inputSchema: {
       type: "object",
       properties: {
         content: {
           type: "string",
-          description: "The TypeScript content to validate",
+          description: "The TypeScript slot source code to validate",
         },
       },
       required: ["content"],
@@ -84,7 +98,7 @@ export function slotTools(projectRoot: string) {
 
         const content = await file.text();
 
-        // 기존 슬롯 내용도 검증
+        // Validate existing slot content structure
         const validation = validateSlotContent(content);
 
         return {
@@ -110,11 +124,11 @@ export function slotTools(projectRoot: string) {
 
       const validation = validateSlotContent(content);
 
-      // 자동 수정 가능한 항목 분류
+      // Classify issues by whether they can be auto-fixed
       const autoFixable = validation.issues.filter((i) => i.autoFixable);
       const manualFix = validation.issues.filter((i) => !i.autoFixable);
 
-      // 수정 미리보기 제공
+      // Generate correction preview for auto-fixable issues
       let correctionPreview = null;
       if (autoFixable.length > 0) {
         const correction = correctSlotContent(content, validation.issues);

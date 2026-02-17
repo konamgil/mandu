@@ -16,7 +16,15 @@ import fs from "fs/promises";
 export const contractToolDefinitions: Tool[] = [
   {
     name: "mandu_list_contracts",
-    description: "List all contracts in the current Mandu project",
+    description:
+      "List all routes that have a contract module defined. " +
+      "In Mandu, a 'contract' is a Zod-based schema file (spec/contracts/{routeId}.contract.ts) that defines " +
+      "the request/response shape for an API route. Contracts enable: " +
+      "(1) automatic input validation and sanitization (strip/strict/passthrough normalize modes), " +
+      "(2) TypeScript type inference for slot handlers, " +
+      "(3) OpenAPI 3.0 spec generation via mandu_generate_openapi, " +
+      "(4) ATE L2 (schema validation) and L3 (full behavioral) test generation. " +
+      "Also returns a list of API routes that are missing contracts.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -25,13 +33,17 @@ export const contractToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_get_contract",
-    description: "Get details of a specific contract by route ID",
+    description:
+      "Get the full TypeScript source of a contract file for a specific route. " +
+      "Returns the raw content of spec/contracts/{routeId}.contract.ts, " +
+      "which contains Zod schemas for each HTTP method's request body/query params and response shape. " +
+      "If the route has no contract, returns a suggestion to create one with mandu_create_contract.",
     inputSchema: {
       type: "object",
       properties: {
         routeId: {
           type: "string",
-          description: "The route ID to retrieve contract for",
+          description: "The route ID to retrieve the contract for",
         },
       },
       required: ["routeId"],
@@ -39,22 +51,27 @@ export const contractToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_create_contract",
-    description: "Create a new contract for a route",
+    description:
+      "Create a new contract file for a route and link it in the manifest. " +
+      "Generates spec/contracts/{routeId}.contract.ts with Zod schema stubs for each HTTP method. " +
+      "Template includes: request schema (body for POST/PUT/PATCH, query for GET/DELETE) and response schema. " +
+      "After creation: edit the Zod schemas to match your actual API shape, " +
+      "then run mandu_generate to regenerate typed handlers with validation.",
     inputSchema: {
       type: "object",
       properties: {
         routeId: {
           type: "string",
-          description: "The route ID to create contract for",
+          description: "The route ID to create a contract for",
         },
         description: {
           type: "string",
-          description: "API description (optional)",
+          description: "Human-readable API description added as a comment in the contract file",
         },
         methods: {
           type: "array",
           items: { type: "string" },
-          description: "HTTP methods to include (default: route methods or ['GET', 'POST'])",
+          description: "HTTP methods to generate schemas for (default: route's declared methods or ['GET', 'POST'])",
         },
       },
       required: ["routeId"],
@@ -62,7 +79,11 @@ export const contractToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_update_route_contract",
-    description: "Update a route to add or change its contract module",
+    description:
+      "Update the manifest to link an existing contract file to a route. " +
+      "Use this when the contract file already exists but the manifest's contractModule path needs updating, " +
+      "or when moving a contract file to a new location. " +
+      "Does not modify the contract file itself — only updates the manifest reference and lock file.",
     inputSchema: {
       type: "object",
       properties: {
@@ -72,7 +93,7 @@ export const contractToolDefinitions: Tool[] = [
         },
         contractModule: {
           type: "string",
-          description: "Path to contract file (e.g., spec/contracts/users.contract.ts)",
+          description: "Relative path to the contract file from project root (e.g., spec/contracts/users.contract.ts)",
         },
       },
       required: ["routeId", "contractModule"],
@@ -80,7 +101,12 @@ export const contractToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_validate_contracts",
-    description: "Validate all contracts against their slot implementations",
+    description:
+      "Validate all contracts against their linked slot implementations for consistency. " +
+      "Checks that every HTTP method defined in a contract has a matching handler in the slot, " +
+      "response types are compatible, and no orphaned contracts exist. " +
+      "Run this after modifying contracts or slots, or before running ATE tests to catch mismatches early. " +
+      "Returns a list of violations with file locations, descriptions, and fix suggestions.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -89,18 +115,27 @@ export const contractToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_sync_contract_slot",
-    description: "Sync contract and slot to resolve mismatches",
+    description:
+      "Detect and generate code to resolve HTTP method mismatches between a contract and its slot. " +
+      "'contract-to-slot': finds HTTP methods defined in the contract but missing from the slot — " +
+      "generates handler stub code to add to the slot file. " +
+      "'slot-to-contract': finds slot handlers not documented in the contract — " +
+      "generates Zod schema stubs to add to the contract. " +
+      "Returns generated code snippets to review — does NOT auto-write files. " +
+      "Copy the output and use the Edit tool to apply the changes.",
     inputSchema: {
       type: "object",
       properties: {
         routeId: {
           type: "string",
-          description: "The route ID to sync",
+          description: "The route ID to sync (must have both contractModule and slotModule)",
         },
         direction: {
           type: "string",
           enum: ["contract-to-slot", "slot-to-contract"],
-          description: "Direction of sync: contract-to-slot adds slot stubs, slot-to-contract adds contract schemas",
+          description:
+            "'contract-to-slot': generate slot handler stubs for undocumented contract methods. " +
+            "'slot-to-contract': generate contract schema stubs for undocumented slot handlers.",
         },
       },
       required: ["routeId", "direction"],
@@ -108,21 +143,25 @@ export const contractToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_generate_openapi",
-    description: "Generate OpenAPI 3.0 specification from contracts",
+    description:
+      "Generate an OpenAPI 3.0 specification JSON file from all routes with contract modules. " +
+      "Only routes with a defined contractModule are included — add contracts with mandu_create_contract first. " +
+      "Output is written to openapi.json (or a custom path). " +
+      "The generated spec can be served with Swagger UI, Redoc, or imported into any OpenAPI-compatible tooling.",
     inputSchema: {
       type: "object",
       properties: {
         output: {
           type: "string",
-          description: "Output file path (default: openapi.json)",
+          description: "Output file path relative to project root (default: openapi.json)",
         },
         title: {
           type: "string",
-          description: "API title (default: Mandu API)",
+          description: "API title shown in the spec (default: 'Mandu API')",
         },
         version: {
           type: "string",
-          description: "API version (default: from manifest)",
+          description: "API version string (default: taken from the manifest version)",
         },
       },
       required: [],
