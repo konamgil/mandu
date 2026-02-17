@@ -778,7 +778,8 @@ if (typeof window !== 'undefined') {
       minify: false, // dev only
       sourcemap: options.sourcemap ? "external" : "none",
       target: "browser",
-      external: ["react", "react-dom", "react-dom/client"],
+      // React를 인라인 번들링 (import map 없이도 독립 동작)
+      // DevTools는 Shadow DOM 격리 → 앱 React와 충돌 없음
       define: {
         "process.env.NODE_ENV": JSON.stringify("development"),
         ...options.define,
@@ -1251,6 +1252,15 @@ export async function buildClientBundles(
   // Hydration 라우트가 없어도 빈 매니페스트를 저장해야 함
   // (이전 빌드의 stale 매니페스트 참조 방지)
   if (hydratedRoutes.length === 0) {
+    // Dev 모드에서는 DevTools 번들 빌드 (island 없어도 동작해야 함)
+    const isDev = env === "development";
+    if (isDev) {
+      const devtoolsResult = await buildDevtoolsBundle(outDir, options);
+      if (!devtoolsResult.success) {
+        console.warn("[Mandu] DevTools bundle build failed:", devtoolsResult.errors.join(", "));
+      }
+    }
+
     const emptyManifest = createEmptyManifest(env);
     await fs.writeFile(
       path.join(rootDir, ".mandu/manifest.json"),

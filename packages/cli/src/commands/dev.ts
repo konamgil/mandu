@@ -1,6 +1,7 @@
 import {
   startServer,
   startDevBundler,
+  buildClientBundles,
   createHMRServer,
   needsHydration,
   loadEnv,
@@ -235,6 +236,11 @@ export async function dev(options: DevOptions = {}): Promise<void> {
         }
       },
     });
+  }
+
+  if (!hasIslands) {
+    // Island 없어도 DevTools 번들은 빌드 (dev 모드에서 _devtools.js 필요)
+    await buildClientBundles(manifest, rootDir, { minify: false });
   }
 
   if (hasIslands && hmrEnabled) {
