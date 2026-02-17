@@ -221,7 +221,28 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
     throw err;
   }
 
-  // stdout 모니터링 (빌드 완료 감지)
+  // 출력 파일 워처로 빌드 완료 감지 (stdout 패턴보다 신뢰성 높음, #111)
+  // Tailwind CLI stdout 출력 형식은 버전마다 달라질 수 있으므로 파일 변경으로 감지
+  let fsWatcher: ReturnType<typeof fs.watch> | null = null;
+  let lastMtime = 0;
+
+  const startFileWatcher = () => {
+    try {
+      fsWatcher = fs.watch(outputPath, () => {
+        // 연속 이벤트 중복 방지 (50ms 이내 재발생 무시)
+        const now = Date.now();
+        if (now - lastMtime < 50) return;
+        lastMtime = now;
+        console.log(`   ✅ CSS rebuilt`);
+        onBuild?.({ success: true, outputPath });
+      });
+    } catch {
+      // 파일이 아직 없으면 500ms 후 재시도
+      setTimeout(startFileWatcher, 500);
+    }
+  };
+
+  // stdout 로그용 (빌드 시작/완료 메시지 표시)
   (async () => {
     const reader = proc.stdout.getReader();
     const decoder = new TextDecoder();
@@ -234,19 +255,15 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
       const lines = text.split("\n").filter((l) => l.trim());
 
       for (const line of lines) {
-        // Tailwind v4 출력 패턴: "Done in Xms" 또는 빌드 완료 메시지
-        if (line.includes("Done in") || line.includes("Rebuilt in")) {
-          console.log(`   ✅ CSS ${line.trim()}`);
-          onBuild?.({
-            success: true,
-            outputPath,
-          });
-        } else if (line.includes("warn") || line.includes("Warning")) {
+        if (line.includes("warn") || line.includes("Warning")) {
           console.log(`   ⚠️  CSS ${line.trim()}`);
         }
       }
     }
   })();
+
+  // 초기 빌드 완료 후 파일 워처 시작
+  startFileWatcher();
 
   // stderr 모니터링 (에러 감지)
   (async () => {
@@ -293,6 +310,7 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
     outputPath,
     serverPath: SERVER_CSS_PATH,
     close: () => {
+      fsWatcher?.close();
       proc.kill();
     },
   };

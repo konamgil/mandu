@@ -428,6 +428,7 @@ export function generateHMRClientScript(port: number): string {
   let reconnectAttempts = 0;
   const maxReconnectAttempts = ${TIMEOUTS.HMR_MAX_RECONNECT};
   const reconnectDelay = ${TIMEOUTS.HMR_RECONNECT_DELAY};
+  const staleIslands = new Set();
 
   function connect() {
     try {
@@ -464,8 +465,9 @@ export function generateHMRClientScript(port: number): string {
   function scheduleReconnect() {
     if (reconnectAttempts < maxReconnectAttempts) {
       reconnectAttempts++;
-      console.log('[Mandu HMR] Reconnecting... (' + reconnectAttempts + '/' + maxReconnectAttempts + ')');
-      setTimeout(connect, reconnectDelay * reconnectAttempts);
+      var delay = Math.min(reconnectDelay * Math.pow(2, reconnectAttempts - 1), 30000);
+      console.log('[Mandu HMR] Reconnecting in ' + delay + 'ms (' + reconnectAttempts + '/' + maxReconnectAttempts + ')');
+      setTimeout(connect, delay);
     }
   }
 
@@ -483,6 +485,7 @@ export function generateHMRClientScript(port: number): string {
       case 'island-update':
         const routeId = message.data?.routeId;
         console.log('[Mandu HMR] Island updated:', routeId);
+        staleIslands.add(routeId);
 
         // 현재 페이지의 island인지 확인
         const island = document.querySelector('[data-mandu-island="' + routeId + '"]');
@@ -559,6 +562,22 @@ export function generateHMRClientScript(port: number): string {
   // 페이지 이탈 시 정리
   window.addEventListener('beforeunload', function() {
     if (ws) ws.close();
+  });
+
+  // 페이지 이동 시 stale island 감지 후 리로드 (#115)
+  function checkStaleIslandsOnNavigation() {
+    if (staleIslands.size === 0) return;
+    for (const id of staleIslands) {
+      if (document.querySelector('[data-mandu-island="' + id + '"]')) {
+        console.log('[Mandu HMR] Stale island detected after navigation, reloading...');
+        location.reload();
+        return;
+      }
+    }
+  }
+  window.addEventListener('popstate', checkStaleIslandsOnNavigation);
+  window.addEventListener('pageshow', function(e) {
+    if (e.persisted) checkStaleIslandsOnNavigation();
   });
 
   // Ping 전송 (연결 유지)

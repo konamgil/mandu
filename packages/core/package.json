@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/core",
-  "version": "0.18.3",
+  "version": "0.18.5",
   "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
   "main": "./src/index.ts",
@@ -44,7 +44,13 @@
   },
   "peerDependencies": {
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "@tailwindcss/cli": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@tailwindcss/cli": {
+      "optional": true
+    }
   },
   "dependencies": {
     "chokidar": "^5.0.0",
