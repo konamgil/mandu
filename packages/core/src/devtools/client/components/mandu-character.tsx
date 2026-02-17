@@ -202,29 +202,38 @@ export function ManduBadge({
 }: ManduBadgeProps): React.ReactElement {
   const character = MANDU_CHARACTERS[state];
   const stateColor = stateColors[state];
+  const [isHovered, setIsHovered] = React.useState(false);
 
   const badgeStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '6px',
-    padding: '8px 12px',
+    gap: '8px',
+    padding: count > 0 ? '10px 16px' : '0',
+    width: count > 0 ? 'auto' : '48px',
+    height: '48px',
     borderRadius: '9999px',
     backgroundColor: colors.background.dark,
-    border: `2px solid ${stateColor}`,
+    border: `2px solid ${isHovered ? colors.brand.accent : stateColor}`,
     cursor: 'pointer',
-    transition: `all ${animation.duration.fast} ${animation.easing.easeOut}`,
-    boxShadow: colors.background.overlay,
-    fontSize: '16px',
+    transition: `all ${animation.duration.normal} ${animation.easing.spring}`,
+    boxShadow: isHovered
+      ? `0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 4px ${stateColor}33`
+      : `0 4px 12px rgba(0, 0, 0, 0.3)`,
+    fontSize: '22px',
     userSelect: 'none',
+    transform: isHovered ? 'scale(1.08)' : 'scale(1)',
+    outline: 'none',
+    lineHeight: 1,
   };
 
   const countStyle: React.CSSProperties = {
-    fontSize: '12px',
-    fontWeight: 600,
+    fontSize: '13px',
+    fontWeight: 700,
     color: stateColor,
     minWidth: '18px',
     textAlign: 'center',
+    lineHeight: 1,
   };
 
   return (
@@ -232,9 +241,13 @@ export function ManduBadge({
       data-testid={testIds.badge}
       style={badgeStyle}
       onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocus={() => setIsHovered(true)}
+      onBlur={() => setIsHovered(false)}
       aria-label={`Mandu Kitchen: ${character.message}${count > 0 ? `, ${count} issues` : ''}`}
     >
-      <span aria-hidden="true">{character.emoji}</span>
+      <span aria-hidden="true">🥟</span>
       {count > 0 && <span style={countStyle}>{count}</span>}
     </button>
   );
