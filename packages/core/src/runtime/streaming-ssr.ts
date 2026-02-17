@@ -577,6 +577,7 @@ function generateDeferredDataScript(routeId: string, key: string, data: unknown)
 
 /**
  * HMR 스크립트 생성
+ * ssr.ts의 generateHMRScript와 동일한 구현을 유지해야 함 (#114)
  */
 function generateHMRScript(port: number): string {
   const hmrPort = port + PORTS.HMR_OFFSET;
@@ -585,6 +586,15 @@ function generateHMRScript(port: number): string {
   var ws = null;
   var reconnectAttempts = 0;
   var maxReconnectAttempts = ${TIMEOUTS.HMR_MAX_RECONNECT};
+  var baseDelay = ${TIMEOUTS.HMR_RECONNECT_DELAY};
+
+  function scheduleReconnect() {
+    if (reconnectAttempts < maxReconnectAttempts) {
+      reconnectAttempts++;
+      var delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts - 1), 30000);
+      setTimeout(connect, delay);
+    }
+  }
 
   function connect() {
     try {
@@ -599,17 +609,27 @@ function generateHMRScript(port: number): string {
           if (msg.type === 'reload' || msg.type === 'island-update') {
             console.log('[Mandu HMR] Reloading...');
             location.reload();
+          } else if (msg.type === 'css-update') {
+            var cssPath = (msg.data && msg.data.cssPath) || '/.mandu/client/globals.css';
+            var links = document.querySelectorAll('link[rel="stylesheet"]');
+            var updated = false;
+            for (var i = 0; i < links.length; i++) {
+              var href = links[i].getAttribute('href') || '';
+              var base = href.split('?')[0];
+              if (base === cssPath || href.includes('globals.css') || href.includes('.mandu/client')) {
+                links[i].setAttribute('href', base + '?t=' + Date.now());
+                updated = true;
+              }
+            }
+            if (!updated) location.reload();
+          } else if (msg.type === 'error') {
+            console.error('[Mandu HMR] Build error:', msg.data && msg.data.message);
           }
         } catch(err) {}
       };
-      ws.onclose = function() {
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++;
-          setTimeout(connect, ${TIMEOUTS.HMR_RECONNECT_DELAY} * reconnectAttempts);
-        }
-      };
+      ws.onclose = function() { scheduleReconnect(); };
     } catch(err) {
-      setTimeout(connect, ${TIMEOUTS.HMR_RECONNECT_DELAY});
+      scheduleReconnect();
     }
   }
   connect();

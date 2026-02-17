@@ -111,4 +111,10 @@ export interface BundlerOptions {
    * 주의: splitting=true인 경우 청크 파일 관리가 필요합니다.
    */
   splitting?: boolean;
+  /**
+   * 빌드할 Island routeId 목록 (부분 빌드용, #122)
+   * - 지정 시 해당 Island만 재빌드 (Runtime/Router/Vendor 스킵)
+   * - 미지정 시 전체 빌드 (기본값)
+   */
+  targetRouteIds?: string[];
 }

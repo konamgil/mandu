@@ -1205,6 +1205,52 @@ export async function buildClientBundles(
     };
   }
 
+  // 부분 빌드 모드: targetRouteIds가 지정되면 해당 Island만 재빌드 (#122)
+  if (options.targetRouteIds && options.targetRouteIds.length > 0) {
+    const targetRoutes = hydratedRoutes.filter((r) => options.targetRouteIds!.includes(r.id));
+
+    for (const route of targetRoutes) {
+      try {
+        const result = await buildIsland(route, rootDir, outDir, options);
+        outputs.push(result);
+      } catch (error) {
+        errors.push(`[${route.id}] ${String(error)}`);
+      }
+    }
+
+    // 기존 매니페스트를 읽어 변경된 Island만 갱신
+    let existingManifest: BundleManifest;
+    try {
+      const manifestData = await fs.readFile(path.join(rootDir, ".mandu/manifest.json"), "utf-8");
+      existingManifest = JSON.parse(manifestData) as BundleManifest;
+    } catch {
+      // 기존 매니페스트 없으면 전체 빌드로 재시도 (targetRouteIds 제거)
+      return buildClientBundles(manifest, rootDir, { ...options, targetRouteIds: undefined });
+    }
+
+    for (const output of outputs) {
+      if (existingManifest.bundles[output.routeId]) {
+        existingManifest.bundles[output.routeId].js = output.outputPath;
+      } else {
+        const route = targetRoutes.find((r) => r.id === output.routeId);
+        const hydration = route ? getRouteHydration(route) : null;
+        existingManifest.bundles[output.routeId] = {
+          js: output.outputPath,
+          dependencies: ["_runtime", "_react"],
+          priority: hydration?.priority || HYDRATION.DEFAULT_PRIORITY,
+        };
+      }
+    }
+
+    await fs.writeFile(
+      path.join(rootDir, ".mandu/manifest.json"),
+      JSON.stringify(existingManifest, null, 2)
+    );
+
+    const stats = calculateStats(outputs, startTime);
+    return { success: errors.length === 0, outputs, errors, manifest: existingManifest, stats };
+  }
+
   // 3-4. Runtime, Router, Vendor 번들 병렬 빌드 (서로 독립적)
   const [runtimeResult, routerResult, vendorResult] = await Promise.all([
     buildRuntime(outDir, options),

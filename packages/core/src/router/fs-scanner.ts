@@ -335,7 +335,7 @@ export class FSScanner {
     // 루트 레이아웃
     const rootLayout = layoutMap.get(".");
     if (rootLayout) {
-      chain.push(join(this.config.routesDir, rootLayout.relativePath));
+      chain.push(join(this.config.routesDir, rootLayout.relativePath).replace(/\\/g, "/"));
     }
 
     // 중첩 레이아웃
@@ -344,7 +344,7 @@ export class FSScanner {
       currentPath = currentPath ? `${currentPath}/${segment.raw}` : segment.raw;
       const layout = layoutMap.get(currentPath);
       if (layout) {
-        chain.push(join(this.config.routesDir, layout.relativePath));
+        chain.push(join(this.config.routesDir, layout.relativePath).replace(/\\/g, "/"));
       }
     }
 
@@ -364,7 +364,7 @@ export class FSScanner {
     while (currentPath) {
       const file = fileMap.get(currentPath);
       if (file) {
-        return join(this.config.routesDir, file.relativePath);
+        return join(this.config.routesDir, file.relativePath).replace(/\\/g, "/");
       }
       // 상위 디렉토리로
       const lastSlash = currentPath.lastIndexOf("/");
@@ -373,7 +373,7 @@ export class FSScanner {
 
     // 루트 체크
     const rootFile = fileMap.get(".");
-    return rootFile ? join(this.config.routesDir, rootFile.relativePath) : undefined;
+    return rootFile ? join(this.config.routesDir, rootFile.relativePath).replace(/\\/g, "/") : undefined;
   }
 
   /**
