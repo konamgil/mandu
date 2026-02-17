@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import type { BundleManifest } from "../bundler/types";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 import { PORTS, TIMEOUTS } from "../constants";
-import { escapeHtmlAttr, escapeJsonForInlineScript } from "./escape";
+import { escapeHtmlAttr, escapeHtmlText, escapeJsonForInlineScript } from "./escape";
 import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
 
 // Re-export streaming SSR utilities
@@ -243,7 +243,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtmlAttr(title)}</title>
+  <title>${escapeHtmlText(title)}</title>
   ${cssLinkTag}
   ${headTags}
 </head>
