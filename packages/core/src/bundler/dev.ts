@@ -533,7 +533,19 @@ export function generateHMRClientScript(port: number): string {
     const overlay = document.createElement('div');
     overlay.id = 'mandu-hmr-error';
     overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);color:#ff6b6b;font-family:monospace;padding:40px;z-index:99999;overflow:auto;';
-    overlay.innerHTML = '<h2 style="color:#ff6b6b;margin:0 0 20px;">🔥 Build Error</h2><pre style="white-space:pre-wrap;word-break:break-all;">' + (message || 'Unknown error') + '</pre><button onclick="this.parentElement.remove()" style="position:fixed;top:20px;right:20px;background:#333;color:#fff;border:none;padding:10px 20px;cursor:pointer;">Close</button>';
+    const h2 = document.createElement('h2');
+    h2.style.cssText = 'color:#ff6b6b;margin:0 0 20px;';
+    h2.textContent = '🔥 Build Error';
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'white-space:pre-wrap;word-break:break-all;';
+    pre.textContent = message || 'Unknown error';
+    const btn = document.createElement('button');
+    btn.style.cssText = 'position:fixed;top:20px;right:20px;background:#333;color:#fff;border:none;padding:10px 20px;cursor:pointer;';
+    btn.textContent = 'Close';
+    btn.onclick = function() { overlay.remove(); };
+    overlay.appendChild(h2);
+    overlay.appendChild(pre);
+    overlay.appendChild(btn);
     document.body.appendChild(overlay);
   }
 

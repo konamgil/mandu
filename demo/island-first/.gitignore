@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.mandu/
+mandu-report.json
+*.log
+.env
+.env.local
+.env.*.local

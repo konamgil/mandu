@@ -158,6 +158,7 @@ export interface StreamingLoaderResult<T = unknown> {
  */
 function isJSONSerializable(value: unknown, path: string = "root", isDev: boolean = false): { valid: boolean; issues: string[] } {
   const issues: string[] = [];
+  const seen = new WeakSet<object>();
 
   function check(val: unknown, currentPath: string): void {
     if (val === undefined) {
@@ -198,6 +199,12 @@ function isJSONSerializable(value: unknown, path: string = "root", isDev: boolea
     }
 
     if (type === "object") {
+      // 순환 참조 감지 — 무한 재귀 방지
+      if (seen.has(val as object)) {
+        issues.push(`${currentPath}: 순환 참조가 감지되었습니다 (JSON 직렬화 불가)`);
+        return;
+      }
+      seen.add(val as object);
       for (const [key, v] of Object.entries(val as Record<string, unknown>)) {
         check(v, `${currentPath}.${key}`);
       }

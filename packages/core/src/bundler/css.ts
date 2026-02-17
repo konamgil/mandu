@@ -259,8 +259,20 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
 
       const text = decoder.decode(value).trim();
       if (text) {
-        // bash_profile 경고는 무시
+        // 환경 경고 무시
         if (text.includes(".bash_profile") || text.includes("$'\\377")) {
+          continue;
+        }
+        // Tailwind CLI 정상 진행 메시지는 info 레벨로 처리
+        // (패키지 해석, 다운로드, 잠금 파일 등은 정상 동작)
+        if (
+          text.includes("Resolving dependencies") ||
+          text.includes("Resolved, downloaded") ||
+          text.includes("Saved lockfile") ||
+          text.includes("≈ tailwindcss") ||
+          text.match(/^v?\d+\.\d+\.\d+/) // 버전 출력
+        ) {
+          if (text) console.log(`   ℹ️  CSS: ${text}`);
           continue;
         }
         console.error(`   ❌ CSS Error: ${text}`);
