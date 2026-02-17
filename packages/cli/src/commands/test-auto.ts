@@ -17,7 +17,7 @@ export async function testAuto(opts: { ci?: boolean; impact?: boolean; baseURL?:
     let onlyRoutes: string[] | undefined;
     let impactInfo: any = { mode: "full", changedFiles: [], selectedRoutes: [] };
     if (opts.impact) {
-      const impactRes = ateImpact({ repoRoot });
+      const impactRes = await ateImpact({ repoRoot });
       onlyRoutes = impactRes.selectedRoutes.length ? impactRes.selectedRoutes : undefined;
       impactInfo = {
         mode: onlyRoutes ? "subset" : "full",
@@ -27,7 +27,7 @@ export async function testAuto(opts: { ci?: boolean; impact?: boolean; baseURL?:
     }
 
     // 3) generate
-    const genRes = ateGenerate({ repoRoot, oracleLevel, onlyRoutes });
+    const genRes = await ateGenerate({ repoRoot, oracleLevel, onlyRoutes });
 
     // 4) run
     const runRes = await ateRun({ repoRoot, ci: opts.ci, headless: opts.ci, baseURL: opts.baseURL });

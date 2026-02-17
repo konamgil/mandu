@@ -12,7 +12,9 @@
     "start": "mandu start",
     "check": "mandu check",
     "guard": "mandu guard",
-    "test": "bun test"
+    "test": "bun test",
+    "test:auto": "mandu test:auto",
+    "test:e2e:ci": "mandu test:auto --ci"
   },
   "dependencies": {
     "@mandujs/core": "{{CORE_VERSION}}",

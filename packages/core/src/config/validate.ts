@@ -71,7 +71,7 @@ const ServerConfigSchema = z
  */
 const GuardConfigSchema = z
   .object({
-    preset: z.enum(["mandu", "fsd", "clean", "hexagonal", "atomic"]).default("mandu"),
+    preset: z.enum(["mandu", "fsd", "clean", "hexagonal", "atomic", "cqrs"]).default("mandu"),
     srcDir: z.string().default("src"),
     exclude: z.array(z.string()).default([]),
     realtime: z.boolean().default(true),
