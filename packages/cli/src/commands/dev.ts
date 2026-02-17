@@ -243,6 +243,35 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     await buildClientBundles(manifest, rootDir, { minify: false });
   }
 
+  // Dev 번들러 콜백 (named 함수로 추출 — 재시작 시 재사용)
+  const handleRebuild = (result: { routeId: string; success: boolean; error?: string }) => {
+    if (result.success) {
+      if (result.routeId === "*") {
+        hmrServer?.broadcast({
+          type: "reload",
+          data: { timestamp: Date.now() },
+        });
+      } else {
+        hmrServer?.broadcast({
+          type: "island-update",
+          data: { routeId: result.routeId, timestamp: Date.now() },
+        });
+      }
+    } else {
+      hmrServer?.broadcast({
+        type: "error",
+        data: { routeId: result.routeId, message: result.error },
+      });
+    }
+  };
+
+  const handleBundlerError = (error: Error, routeId?: string) => {
+    hmrServer?.broadcast({
+      type: "error",
+      data: { routeId, message: error.message },
+    });
+  };
+
   if (hasIslands && hmrEnabled) {
     // HMR 서버 시작
     hmrServer = createHMRServer(port);
@@ -252,43 +281,40 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       rootDir,
       manifest,
       watchDirs: devConfig.watchDirs,
-      onRebuild: (result) => {
-        if (result.success) {
-          if (result.routeId === "*") {
-            hmrServer?.broadcast({
-              type: "reload",
-              data: {
-                timestamp: Date.now(),
-              },
-            });
-          } else {
-            hmrServer?.broadcast({
-              type: "island-update",
-              data: {
-                routeId: result.routeId,
-                timestamp: Date.now(),
-              },
-            });
-          }
-        } else {
-          hmrServer?.broadcast({
-            type: "error",
-            data: {
-              routeId: result.routeId,
-              message: result.error,
-            },
-          });
-        }
-      },
-      onError: (error, routeId) => {
-        hmrServer?.broadcast({
-          type: "error",
-          data: {
-            routeId,
-            message: error.message,
-          },
-        });
-      },
+      onRebuild: handleRebuild,
+      onError: handleBundlerError,
+    });
+
+    // 재시작 핸들러 등록
+    hmrServer.setRestartHandler(async () => {
+      // 1. 레지스트리 초기화
+      clearDefaultRegistry();
+      registeredLayouts.clear();
+
+      // 2. 라우트 재스캔
+      const resolved = await resolveManifest(rootDir, { fsRoutes: config.fsRoutes });
+      manifest = resolved.manifest;
+
+      // 3. 핸들러 재등록 (importFresh)
+      await registerHandlers(manifest, true);
+
+      // 4. Dev 번들러 재시작
+      devBundler?.close();
+      devBundler = await startDevBundler({
+        rootDir,
+        manifest,
+        watchDirs: devConfig.watchDirs,
+        onRebuild: handleRebuild,
+        onError: handleBundlerError,
+      });
+
+      // 5. 브라우저 전체 리로드
+      hmrServer?.broadcast({
+        type: "reload",
+        data: { timestamp: Date.now() },
+      });
+
+      console.log("✅ Full restart completed");
     });
   }
 

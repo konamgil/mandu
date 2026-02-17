@@ -25,6 +25,7 @@ export interface PanelContainerProps {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
   onClose: () => void;
+  onRestart?: () => void;
   position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
   children: React.ReactNode;
 }
@@ -77,6 +78,22 @@ const styles = {
   },
   logo: {
     fontSize: typography.fontSize.lg,
+  },
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  restartButton: {
+    background: 'transparent',
+    border: 'none',
+    color: colors.text.secondary,
+    fontSize: typography.fontSize.md,
+    cursor: 'pointer',
+    padding: spacing.xs,
+    borderRadius: borderRadius.sm,
+    lineHeight: 1,
+    transition: `all ${animation.duration.fast}`,
   },
   closeButton: {
     background: 'transparent',
@@ -161,6 +178,7 @@ export function PanelContainer({
   activeTab,
   onTabChange,
   onClose,
+  onRestart,
   position,
   children,
 }: PanelContainerProps): React.ReactElement {
@@ -168,6 +186,7 @@ export function PanelContainer({
   const [height, setHeight] = useState(400);
   const [hoveredTab, setHoveredTab] = useState<TabId | null>(null);
   const [isCloseHovered, setIsCloseHovered] = useState(false);
+  const [isRestartHovered, setIsRestartHovered] = useState(false);
 
   const getTabBadgeCount = useCallback((tabId: TabId): number => {
     switch (tabId) {
@@ -207,18 +226,39 @@ export function PanelContainer({
           <span style={styles.logo}>🥟</span>
           <span>Mandu Kitchen</span>
         </div>
-        <button
-          style={{
-            ...styles.closeButton,
-            ...(isCloseHovered ? { color: colors.text.primary, backgroundColor: 'rgba(255, 255, 255, 0.08)' } : {}),
-          }}
-          onClick={onClose}
-          onMouseEnter={() => setIsCloseHovered(true)}
-          onMouseLeave={() => setIsCloseHovered(false)}
-          aria-label="패널 닫기"
-        >
-          ×
-        </button>
+        <div style={styles.headerActions}>
+          {onRestart && (
+            <button
+              data-testid={testIds.restartButton}
+              style={{
+                ...styles.restartButton,
+                ...(isRestartHovered ? {
+                  color: colors.semantic.warning,
+                  backgroundColor: `${colors.semantic.warning}18`,
+                } : {}),
+              }}
+              onClick={onRestart}
+              onMouseEnter={() => setIsRestartHovered(true)}
+              onMouseLeave={() => setIsRestartHovered(false)}
+              aria-label="캐시 지우고 완전 재시작"
+              title="캐시 지우고 완전 재시작"
+            >
+              🔄
+            </button>
+          )}
+          <button
+            style={{
+              ...styles.closeButton,
+              ...(isCloseHovered ? { color: colors.text.primary, backgroundColor: 'rgba(255, 255, 255, 0.08)' } : {}),
+            }}
+            onClick={onClose}
+            onMouseEnter={() => setIsCloseHovered(true)}
+            onMouseLeave={() => setIsCloseHovered(false)}
+            aria-label="패널 닫기"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}

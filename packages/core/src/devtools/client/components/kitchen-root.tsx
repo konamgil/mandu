@@ -244,6 +244,47 @@ function KitchenApp({ config }: KitchenAppProps): React.ReactElement | null {
     getStateManager().clearGuardViolations();
   }, []);
 
+  const handleRestart = useCallback(async () => {
+    try {
+      // 1. Service Worker 해제
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const reg of registrations) {
+          await reg.unregister();
+        }
+      }
+
+      // 2. Cache API 클리어
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        for (const name of cacheNames) {
+          await caches.delete(name);
+        }
+      }
+
+      // 3. window.__MANDU_* globals 삭제
+      for (const key of Object.keys(window)) {
+        if (key.startsWith('__MANDU_')) {
+          delete (window as any)[key];
+        }
+      }
+
+      // 4. HMR 서버에 POST /restart
+      const hmrPort = (window as any).__MANDU_HMR_PORT__;
+      if (hmrPort) {
+        await fetch(`http://localhost:${hmrPort}/restart`, { method: 'POST' });
+      }
+
+      // 5. 3초 fallback reload (서버가 reload 브로드캐스트를 못 보낸 경우)
+      setTimeout(() => {
+        location.reload();
+      }, 3000);
+    } catch (err) {
+      console.error('[Mandu Kitchen] Restart failed:', err);
+      location.reload();
+    }
+  }, []);
+
   // Calculate error count
   const errorCount = useMemo(() => {
     return state.errors.filter(
@@ -315,6 +356,7 @@ function KitchenApp({ config }: KitchenAppProps): React.ReactElement | null {
           activeTab={state.activeTab}
           onTabChange={handleTabChange}
           onClose={handlePanelClose}
+          onRestart={handleRestart}
           position={position}
         >
           {renderPanelContent()}

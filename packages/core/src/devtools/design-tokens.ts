@@ -258,6 +258,7 @@ export const testIds = {
   tabGuard: 'mk-tab-guard',
   errorList: 'mk-error-list',
   mandu: 'mk-mandu',
+  restartButton: 'mk-restart-button',
 } as const;
 
 export type TestId = (typeof testIds)[keyof typeof testIds];

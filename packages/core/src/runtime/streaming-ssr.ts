@@ -587,6 +587,7 @@ function generateDeferredDataScript(routeId: string, key: string, data: unknown)
 function generateHMRScript(port: number): string {
   const hmrPort = port + PORTS.HMR_OFFSET;
   return `<script>
+window.__MANDU_HMR_PORT__ = ${hmrPort};
 (function() {
   var ws = null;
   var reconnectAttempts = 0;

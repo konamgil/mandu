@@ -347,6 +347,8 @@ export interface HMRServer {
   broadcast: (message: HMRMessage) => void;
   /** 서버 중지 */
   close: () => void;
+  /** 재시작 핸들러 등록 */
+  setRestartHandler: (handler: () => Promise<void>) => void;
 }
 
 export interface HMRMessage {
@@ -368,10 +370,49 @@ export interface HMRMessage {
 export function createHMRServer(port: number): HMRServer {
   const clients = new Set<any>();
   const hmrPort = port + PORTS.HMR_OFFSET;
+  let restartHandler: (() => Promise<void>) | null = null;
+
+  const corsHeaders: Record<string, string> = {
+    "Access-Control-Allow-Origin": `http://localhost:${port}`,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
 
   const server = Bun.serve({
     port: hmrPort,
-    fetch(req, server) {
+    async fetch(req, server) {
+      const url = new URL(req.url);
+
+      // CORS preflight
+      if (req.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: corsHeaders });
+      }
+
+      // POST /restart → 재시작 핸들러 호출
+      if (req.method === "POST" && url.pathname === "/restart") {
+        if (!restartHandler) {
+          return new Response(
+            JSON.stringify({ error: "No restart handler registered" }),
+            { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        try {
+          console.log("🔄 Full restart requested from DevTools");
+          await restartHandler();
+          return new Response(
+            JSON.stringify({ status: "restarted" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error("❌ Restart failed:", message);
+          return new Response(
+            JSON.stringify({ error: message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
       // WebSocket 업그레이드
       if (server.upgrade(req)) {
         return;
@@ -385,7 +426,7 @@ export function createHMRServer(port: number): HMRServer {
           port: hmrPort,
         }),
         {
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     },
@@ -443,6 +484,9 @@ export function createHMRServer(port: number): HMRServer {
       clients.clear();
       server.stop();
     },
+    setRestartHandler: (handler: () => Promise<void>) => {
+      restartHandler = handler;
+    },
   };
 }
 
@@ -455,6 +499,7 @@ export function generateHMRClientScript(port: number): string {
 
   return `
 (function() {
+  window.__MANDU_HMR_PORT__ = ${hmrPort};
   const HMR_PORT = ${hmrPort};
   let ws = null;
   let reconnectAttempts = 0;

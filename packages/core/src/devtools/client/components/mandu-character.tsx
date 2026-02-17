@@ -6,7 +6,7 @@
 import React from 'react';
 import type { ManduState } from '../../types';
 import { MANDU_CHARACTERS } from '../../types';
-import { colors, animation, testIds } from '../../design-tokens';
+import { colors, typography, animation, testIds } from '../../design-tokens';
 
 // ============================================================================
 // Styles
@@ -246,13 +246,16 @@ export function ManduBadge({
             : 'none',
   };
 
-  const emojiStyle: React.CSSProperties = {
-    fontFamily: "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif",
-    color: colors.text.primary,
-    fontSize: '24px',
+  const textStyle: React.CSSProperties = {
+    fontFamily: typography.fontFamily.sans,
+    color: colors.brand.accent,
+    fontSize: '14px',
+    fontWeight: typography.fontWeight.bold,
     lineHeight: 1,
+    letterSpacing: '0.5px',
     transition: `transform 200ms ${animation.easing.spring}`,
     transform: isHovered ? 'rotate(-8deg)' : 'rotate(0deg)',
+    userSelect: 'none',
   };
 
   const countBubbleStyle: React.CSSProperties = {
@@ -290,7 +293,7 @@ export function ManduBadge({
       onBlur={() => { setIsHovered(false); setIsPressed(false); }}
       aria-label={`Mandu Kitchen: ${character.message}${count > 0 ? `, ${count} issues` : ''}`}
     >
-      <span aria-hidden="true" style={emojiStyle}>🥟</span>
+      <span aria-hidden="true" style={textStyle}>MK</span>
       {count > 0 && (
         <span style={countBubbleStyle}>
           {count > 99 ? '99+' : count}
