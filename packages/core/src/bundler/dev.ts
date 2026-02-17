@@ -103,8 +103,18 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
       const normalizedPath = absPath.replace(/\\/g, "/");
       clientModuleToRoute.set(normalizedPath, route.id);
 
-      // 감시할 디렉토리 추가
+      // Also register *.client.tsx/ts files in the same directory (#140)
+      // e.g. if clientModule is app/page.island.tsx, also map app/page.client.tsx → same routeId
       const dir = path.dirname(absPath);
+      const baseStem = path.basename(absPath).replace(/\.(island|client)\.(tsx?|jsx?)$/, "");
+      for (const ext of [".client.tsx", ".client.ts", ".client.jsx", ".client.js"]) {
+        const clientPath = path.join(dir, baseStem + ext).replace(/\\/g, "/");
+        if (clientPath !== normalizedPath) {
+          clientModuleToRoute.set(clientPath, route.id);
+        }
+      }
+
+      // 감시할 디렉토리 추가
       watchDirs.add(dir);
     }
   }
@@ -224,21 +234,17 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     // clientModule 매핑에서 routeId 찾기
     let routeId = clientModuleToRoute.get(normalizedPath);
 
-    // .client.ts 또는 .client.tsx 파일인 경우 파일명에서 routeId 추출
-    if (!routeId) {
-      let basename: string | null = null;
-
-      if (changedFile.endsWith(".client.ts")) {
-        basename = path.basename(changedFile, ".client.ts");
-      } else if (changedFile.endsWith(".client.tsx")) {
-        basename = path.basename(changedFile, ".client.tsx");
-      }
-
-      if (basename) {
-        const route = manifest.routes.find((r) => r.id === basename);
-        if (route) {
-          routeId = route.id;
-        }
+    // Fallback for *.client.tsx/ts: find route whose clientModule is in the same directory (#140)
+    // basename matching (e.g. "page" !== "index") is unreliable — use directory-based matching instead
+    if (!routeId && (changedFile.endsWith(".client.ts") || changedFile.endsWith(".client.tsx"))) {
+      const changedDir = path.dirname(path.resolve(rootDir, changedFile)).replace(/\\/g, "/");
+      const matchedRoute = manifest.routes.find((r) => {
+        if (!r.clientModule) return false;
+        const routeDir = path.dirname(path.resolve(rootDir, r.clientModule)).replace(/\\/g, "/");
+        return routeDir === changedDir;
+      });
+      if (matchedRoute) {
+        routeId = matchedRoute.id;
       }
     }
 
