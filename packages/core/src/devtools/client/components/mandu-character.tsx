@@ -247,7 +247,10 @@ export function ManduBadge({
       onBlur={() => setIsHovered(false)}
       aria-label={`Mandu Kitchen: ${character.message}${count > 0 ? `, ${count} issues` : ''}`}
     >
-      <span aria-hidden="true">🥟</span>
+      <span
+        aria-hidden="true"
+        style={{ fontFamily: "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif" }}
+      >🥟</span>
       {count > 0 && <span style={countStyle}>{count}</span>}
     </button>
   );

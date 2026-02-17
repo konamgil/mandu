@@ -112,7 +112,7 @@ const styles = {
   tabActive: {
     color: colors.brand.accent,
     borderBottomColor: colors.brand.accent,
-    backgroundColor: colors.background.medium,
+    backgroundColor: 'rgba(232, 150, 122, 0.12)',
   },
   tabIcon: {
     fontSize: typography.fontSize.md,
@@ -166,6 +166,8 @@ export function PanelContainer({
 }: PanelContainerProps): React.ReactElement {
   const [isResizing, setIsResizing] = useState(false);
   const [height, setHeight] = useState(400);
+  const [hoveredTab, setHoveredTab] = useState<TabId | null>(null);
+  const [isCloseHovered, setIsCloseHovered] = useState(false);
 
   const getTabBadgeCount = useCallback((tabId: TabId): number => {
     switch (tabId) {
@@ -206,8 +208,13 @@ export function PanelContainer({
           <span>Mandu Kitchen</span>
         </div>
         <button
-          style={styles.closeButton}
+          style={{
+            ...styles.closeButton,
+            ...(isCloseHovered ? { color: colors.text.primary, backgroundColor: 'rgba(255, 255, 255, 0.08)' } : {}),
+          }}
           onClick={onClose}
+          onMouseEnter={() => setIsCloseHovered(true)}
+          onMouseLeave={() => setIsCloseHovered(false)}
           aria-label="패널 닫기"
         >
           ×
@@ -229,8 +236,14 @@ export function PanelContainer({
               style={{
                 ...styles.tab,
                 ...(isActive ? styles.tabActive : {}),
+                ...(!isActive && hoveredTab === tab.id ? {
+                  color: colors.text.primary,
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                } : {}),
               }}
               onClick={() => onTabChange(tab.id)}
+              onMouseEnter={() => setHoveredTab(tab.id)}
+              onMouseLeave={() => setHoveredTab(null)}
             >
               <span style={styles.tabIcon}>{tab.icon}</span>
               <span>{tab.label}</span>

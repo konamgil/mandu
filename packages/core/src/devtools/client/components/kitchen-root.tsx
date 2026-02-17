@@ -43,6 +43,19 @@ const baseStyles = `
     line-height: 1.5;
   }
 
+  button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    color: inherit;
+    font-size: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+    padding: 0;
+    margin: 0;
+  }
+
   .mk-badge-container {
     position: fixed;
     z-index: ${zIndex.devtools};
