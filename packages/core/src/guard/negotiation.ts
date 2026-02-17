@@ -1010,30 +1010,80 @@ function toCamelCase(str: string): string {
     .replace(/^(.)/, (_, c) => c.toLowerCase());
 }
 
+// 한국어 도메인 키워드 → 영문 slug 매핑
+const KOREAN_DOMAIN_MAP: Record<string, string> = {
+  "채팅": "chat", "메시지": "message", "사용자": "user", "유저": "user",
+  "인증": "auth", "로그인": "login", "로그아웃": "logout", "회원가입": "signup",
+  "결제": "payment", "주문": "order", "상품": "product", "장바구니": "cart",
+  "알림": "notification", "푸시": "push",
+  "게시글": "post", "게시판": "board", "댓글": "comment", "좋아요": "like",
+  "검색": "search", "필터": "filter", "정렬": "sort",
+  "파일": "file", "업로드": "upload", "다운로드": "download", "이미지": "image",
+  "대시보드": "dashboard", "통계": "stats", "분석": "analytics",
+  "설정": "settings", "프로필": "profile", "계정": "account",
+  "팀": "team", "프로젝트": "project", "태스크": "task", "일정": "schedule",
+  "컴포넌트": "component", "레이아웃": "layout", "네비게이션": "navigation",
+  "실시간": "realtime", "스트리밍": "streaming", "웹소켓": "websocket",
+};
+
 function extractFeatureName(intent: string): string {
-  // 한글/영문에서 핵심 명사 추출 시도
-  const patterns = [
-    /(?:추가|구현|만들)(?:어|해)[줘요]?\s*[:\-]?\s*(.+)/,
-    /(.+?)\s*(?:기능|시스템|모듈)/,
-    /(?:add|implement|create)\s+(.+)/i,
+  // 1. 영문 패턴 우선 시도 (가장 신뢰도 높음)
+  const englishPatterns = [
+    /(?:add|implement|create|build)\s+(.+)/i,
+    /(.+?)\s+(?:feature|system|module|service)/i,
   ];
 
-  for (const pattern of patterns) {
+  for (const pattern of englishPatterns) {
     const match = intent.match(pattern);
     if (match) {
-      return match[1]
+      const slug = match[1]
         .trim()
         .toLowerCase()
         .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9-]/g, "");
+        .replace(/[^a-z0-9-]/g, "")
+        .replace(/^-+|-+$/g, "");
+      if (slug) return slug;
     }
   }
 
-  // 기본값: 첫 단어
-  return intent
-    .split(/\s+/)[0]
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "") || "feature";
+  // 2. 한글 패턴 시도 → 매칭된 텍스트에서 도메인 키워드 추출
+  const koreanPatterns = [
+    /(?:추가|구현|만들|개발|작성|생성)(?:어|해|하)[줘요]?\s*[:\-]?\s*(.+)/,
+    /(.+?)\s*(?:기능|시스템|모듈|서비스|페이지|컴포넌트)\s*(?:추가|구현|만들|개발)?/,
+    /(.+?)\s*(?:을|를|의|에)\s/,
+  ];
+
+  for (const pattern of koreanPatterns) {
+    const match = intent.match(pattern);
+    if (match) {
+      const captured = match[1].trim();
+      // 캡처된 텍스트에서 도메인 키워드 매칭
+      const slug = koreanToSlug(captured);
+      if (slug) return slug;
+    }
+  }
+
+  // 3. intent 전체에서 도메인 키워드 직접 탐색
+  const slug = koreanToSlug(intent);
+  if (slug) return slug;
+
+  // 4. intent에서 영문 단어 추출 시도
+  const englishWord = intent.match(/[a-z][a-z0-9-]{2,}/i)?.[0]?.toLowerCase();
+  if (englishWord) return englishWord;
+
+  return "feature";
+}
+
+function koreanToSlug(text: string): string {
+  const matches: string[] = [];
+  for (const [korean, english] of Object.entries(KOREAN_DOMAIN_MAP)) {
+    if (text.includes(korean)) {
+      matches.push(english);
+    }
+  }
+  if (matches.length === 0) return "";
+  // 여러 키워드 매칭 시 하이폰으로 연결 (최대 2개)
+  return matches.slice(0, 2).join("-");
 }
 
 /**

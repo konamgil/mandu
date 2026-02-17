@@ -222,7 +222,8 @@ describe("scenario", () => {
     const bundle = generateScenariosFromGraph(graph, "L1");
 
     // Assert
-    expect(bundle.scenarios[0].id).toBe("route:/api/v1/users");
+    expect(bundle.scenarios[0].id).toBe("api:/api/v1/users");
+    expect(bundle.scenarios[0].kind).toBe("api-smoke");
     expect(bundle.scenarios[0].route).toBe("/api/v1/users");
   });
 });
