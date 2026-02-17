@@ -280,23 +280,31 @@ export const guardToolDefinitions: Tool[] = [
       "Negotiate with the framework before implementing a feature. " +
       "Describes your intent and gets back the recommended project structure, " +
       "file templates, and related architecture decisions. " +
-      "Use this BEFORE writing code to ensure architectural consistency.",
+      "Use this BEFORE writing code to ensure architectural consistency. " +
+      "IMPORTANT: Always provide 'featureName' as a short English slug (e.g., 'chat', 'user-auth', 'payment'). " +
+      "Even if the user speaks Korean, YOU must translate the feature name to English.",
     inputSchema: {
       type: "object",
       properties: {
         intent: {
           type: "string",
-          description: "What you want to implement (e.g., '사용자 인증 기능 추가', 'Add payment integration')",
+          description: "What you want to implement, in any language (e.g., '사용자 인증 기능 추가', 'Add payment integration')",
+        },
+        featureName: {
+          type: "string",
+          description: "REQUIRED: Short English slug for the feature name (e.g., 'chat', 'user-auth', 'payment', 'file-upload'). " +
+            "You MUST translate the user's intent to a concise English identifier. " +
+            "Use lowercase kebab-case. This becomes the directory/module name.",
         },
         requirements: {
           type: "array",
           items: { type: "string" },
-          description: "Specific requirements (e.g., ['JWT 기반', 'OAuth 지원'])",
+          description: "Specific requirements (e.g., ['JWT-based', 'OAuth support'])",
         },
         constraints: {
           type: "array",
           items: { type: "string" },
-          description: "Constraints to respect (e.g., ['기존 User 모델 활용', 'Redis 세션'])",
+          description: "Constraints to respect (e.g., ['use existing User model', 'Redis sessions'])",
         },
         category: {
           type: "string",
@@ -976,8 +984,9 @@ Mandu.filling()
     // ═══════════════════════════════════════════════════════════════════════════
 
     mandu_negotiate: async (args: Record<string, unknown>) => {
-      const { intent, requirements, constraints, category, preset } = args as {
+      const { intent, featureName, requirements, constraints, category, preset } = args as {
         intent: string;
+        featureName?: string;
         requirements?: string[];
         constraints?: string[];
         category?: FeatureCategory;
@@ -993,6 +1002,7 @@ Mandu.filling()
 
       const request: NegotiationRequest = {
         intent,
+        featureName,
         requirements,
         constraints,
         category,
@@ -1041,8 +1051,9 @@ Mandu.filling()
     },
 
     mandu_generate_scaffold: async (args: Record<string, unknown>) => {
-      const { intent, category, dryRun = false, overwrite = false, preset } = args as {
+      const { intent, featureName, category, dryRun = false, overwrite = false, preset } = args as {
         intent: string;
+        featureName?: string;
         category?: FeatureCategory;
         dryRun?: boolean;
         overwrite?: boolean;
@@ -1057,7 +1068,7 @@ Mandu.filling()
       }
 
       // 먼저 협상하여 구조 계획 얻기
-      const plan = await negotiate({ intent, category, preset }, projectRoot);
+      const plan = await negotiate({ intent, featureName, category, preset }, projectRoot);
 
       if (!plan.approved) {
         return {
