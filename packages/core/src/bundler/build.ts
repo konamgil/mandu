@@ -482,10 +482,6 @@ function generateReactDOMShimSource(): string {
 import ReactDOM, {
   createPortal,
   flushSync,
-  render,
-  unmountComponentAtNode,
-  findDOMNode,
-  hydrate,
   version,
 } from 'react-dom';
 
@@ -493,10 +489,6 @@ import ReactDOM, {
 export {
   createPortal,
   flushSync,
-  render,
-  unmountComponentAtNode,
-  findDOMNode,
-  hydrate,
   version,
 };
 
@@ -1213,20 +1205,19 @@ export async function buildClientBundles(
     };
   }
 
-  // 3. Runtime 번들 빌드
-  const runtimeResult = await buildRuntime(outDir, options);
+  // 3-4. Runtime, Router, Vendor 번들 병렬 빌드 (서로 독립적)
+  const [runtimeResult, routerResult, vendorResult] = await Promise.all([
+    buildRuntime(outDir, options),
+    buildRouterRuntime(outDir, options),
+    buildVendorShims(outDir, options),
+  ]);
+
   if (!runtimeResult.success) {
     errors.push(...runtimeResult.errors.map((e) => `[Runtime] ${e}`));
   }
-
-  // 3.5. Client-side Router 런타임 빌드
-  const routerResult = await buildRouterRuntime(outDir, options);
   if (!routerResult.success) {
     errors.push(...routerResult.errors.map((e) => `[Router] ${e}`));
   }
-
-  // 4. Vendor shim 번들 빌드 (React, ReactDOM, ReactDOMClient)
-  const vendorResult = await buildVendorShims(outDir, options);
   if (!vendorResult.success) {
     errors.push(...vendorResult.errors);
   }
