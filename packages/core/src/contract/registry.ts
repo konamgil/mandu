@@ -90,6 +90,19 @@ export interface ContractRegistryDiff {
   };
 }
 
+/** Zod 내부 구조를 duck typing으로 접근하기 위한 인터페이스 */
+interface ZodLike {
+  _def?: {
+    typeName?: string;
+    innerType?: ZodLike;
+    schema?: ZodLike;
+    type?: ZodLike;
+    shape?: (() => Record<string, ZodLike>) | Record<string, ZodLike>;
+    values?: unknown[] | Record<string, unknown>;
+    value?: unknown;
+  };
+}
+
 async function loadContract(contractPath: string, rootDir: string): Promise<ContractSchema | null> {
   try {
     const fullPath = path.join(rootDir, contractPath);
@@ -127,20 +140,20 @@ function extractRequestInfo(contract: ContractSchema): ContractRegistryEntry["re
   return requestInfo;
 }
 
-function unwrapSchema(schema: any): any {
+function unwrapSchema(schema: ZodLike): ZodLike {
   let current = schema;
   let depth = 0;
 
   while (current && current._def && depth < 10) {
-    const typeName = current._def.typeName as string | undefined;
+    const typeName = current._def.typeName;
     if (typeName === "ZodOptional" || typeName === "ZodDefault") {
-      current = current._def.innerType;
+      current = current._def.innerType ?? current;
     } else if (typeName === "ZodEffects") {
-      current = current._def.schema;
+      current = current._def.schema ?? current;
     } else if (typeName === "ZodNullable") {
-      current = current._def.innerType;
+      current = current._def.innerType ?? current;
     } else if (typeName === "ZodBranded" || typeName === "ZodCatch") {
-      current = current._def.type;
+      current = current._def.type ?? current;
     } else {
       break;
     }
@@ -150,16 +163,16 @@ function unwrapSchema(schema: any): any {
   return current;
 }
 
-function isOptionalSchema(schema: any): boolean {
+function isOptionalSchema(schema: ZodLike): boolean {
   let current = schema;
   let depth = 0;
   while (current && current._def && depth < 10) {
-    const typeName = current._def.typeName as string | undefined;
+    const typeName = current._def.typeName;
     if (typeName === "ZodOptional" || typeName === "ZodDefault") {
       return true;
     }
     if (typeName === "ZodEffects" || typeName === "ZodNullable" || typeName === "ZodBranded" || typeName === "ZodCatch") {
-      current = current._def.schema ?? current._def.innerType ?? current._def.type;
+      current = current._def.schema ?? current._def.innerType ?? current._def.type ?? current;
       depth += 1;
       continue;
     }
@@ -168,19 +181,19 @@ function isOptionalSchema(schema: any): boolean {
   return false;
 }
 
-function summarizeSchema(schema: any): SchemaSummary | undefined {
+function summarizeSchema(schema: ZodLike): SchemaSummary | undefined {
   if (!schema || !schema._def) return undefined;
 
   const base = unwrapSchema(schema);
   const def = base?._def;
   if (!def) return undefined;
 
-  const typeName = def.typeName as string | undefined;
+  const typeName = def.typeName;
 
   if (typeName === "ZodObject") {
-    const shape = typeof def.shape === "function" ? def.shape() : def.shape;
+    const shape = typeof def.shape === "function" ? def.shape() : (def.shape as Record<string, ZodLike> | undefined);
     const keys = Object.keys(shape ?? {}).sort();
-    const required = keys.filter((key) => !isOptionalSchema(shape[key]));
+    const required = keys.filter((key) => !isOptionalSchema((shape ?? {})[key]));
     return {
       type: "object",
       keys,
@@ -193,13 +206,13 @@ function summarizeSchema(schema: any): SchemaSummary | undefined {
     values.sort();
     return {
       type: "enum",
-      values,
+      values: values as Array<string | number>,
     };
   }
 
   if (typeName === "ZodNativeEnum") {
-    const rawValues = def.values ? Object.values(def.values) : [];
-    const values = rawValues.filter((v: any) => typeof v === "string" || typeof v === "number");
+    const rawValues = def.values && !Array.isArray(def.values) ? Object.values(def.values) : [];
+    const values = rawValues.filter((v: unknown) => typeof v === "string" || typeof v === "number") as Array<string | number>;
     values.sort();
     return {
       type: "enum",
@@ -210,7 +223,7 @@ function summarizeSchema(schema: any): SchemaSummary | undefined {
   if (typeName === "ZodLiteral") {
     return {
       type: "literal",
-      value: def.value as any,
+      value: def.value as string | number | boolean | null,
     };
   }
 
@@ -221,7 +234,12 @@ function summarizeSchema(schema: any): SchemaSummary | undefined {
 }
 
 function extractSchemaSummaries(contract: ContractSchema): ContractRegistryEntry["schemas"] {
-  const request: Record<string, any> = {};
+  const request: Record<string, {
+    query?: SchemaSummary;
+    body?: SchemaSummary;
+    params?: SchemaSummary;
+    headers?: SchemaSummary;
+  }> = {};
   const response: Record<number, SchemaSummary> = {};
 
   for (const method of HTTP_METHODS) {
@@ -229,10 +247,10 @@ function extractSchemaSummaries(contract: ContractSchema): ContractRegistryEntry
     if (!methodSchema) continue;
 
     request[method] = {
-      query: methodSchema.query ? summarizeSchema(methodSchema.query) : undefined,
-      body: methodSchema.body ? summarizeSchema(methodSchema.body) : undefined,
-      params: methodSchema.params ? summarizeSchema(methodSchema.params) : undefined,
-      headers: methodSchema.headers ? summarizeSchema(methodSchema.headers) : undefined,
+      query: methodSchema.query ? summarizeSchema(methodSchema.query as ZodLike) : undefined,
+      body: methodSchema.body ? summarizeSchema(methodSchema.body as ZodLike) : undefined,
+      params: methodSchema.params ? summarizeSchema(methodSchema.params as ZodLike) : undefined,
+      headers: methodSchema.headers ? summarizeSchema(methodSchema.headers as ZodLike) : undefined,
     };
   }
 
@@ -241,8 +259,11 @@ function extractSchemaSummaries(contract: ContractSchema): ContractRegistryEntry
     if (Number.isNaN(code)) continue;
     if (!schema) continue;
 
-    const actualSchema = (schema as any).schema ?? schema;
-    response[code] = summarizeSchema(actualSchema);
+    const actualSchema = (schema as { schema?: unknown }).schema ?? schema;
+    const summary = summarizeSchema(actualSchema as ZodLike);
+    if (summary) {
+      response[code] = summary;
+    }
   }
 
   return {

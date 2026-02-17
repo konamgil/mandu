@@ -2,10 +2,10 @@
  * Root Layout
  *
  * 모든 페이지의 공통 레이아웃
- * globals.css를 여기서 임포트
+ * - html/head/body 태그는 Mandu SSR이 자동으로 생성합니다
+ * - 여기서는 body 내부의 공통 래퍼만 정의합니다
+ * - CSS는 Mandu가 자동으로 주입합니다: /.mandu/client/globals.css
  */
-
-import "./globals.css";
 
 interface RootLayoutProps {
   children: React.ReactNode;
@@ -13,15 +13,8 @@ interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="ko">
-      <head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>demo/test-app</title>
-      </head>
-      <body className="min-h-screen bg-background font-sans antialiased">
-        {children}
-      </body>
-    </html>
+    <div className="min-h-screen bg-background font-sans antialiased">
+      {children}
+    </div>
   );
 }
