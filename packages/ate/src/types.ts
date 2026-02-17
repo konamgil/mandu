@@ -36,7 +36,7 @@ export interface InteractionGraph {
 }
 
 export type InteractionNode =
-  | { kind: "route"; id: string; file: string; path: string }
+  | { kind: "route"; id: string; file: string; path: string; methods?: string[] }
   | { kind: "modal"; id: string; file: string; name: string }
   | { kind: "action"; id: string; file: string; name: string };
 

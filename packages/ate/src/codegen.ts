@@ -78,29 +78,56 @@ export function generatePlaywrightSpecs(repoRoot: string, opts?: { onlyRoutes?: 
       const safeId = s.id.replace(/[^a-zA-Z0-9_-]/g, "_");
       const filePath = join(paths.autoE2eDir, `${safeId}.spec.ts`);
 
-      const oracle = oracleTemplate(s.oracleLevel, s.route);
+      let code: string;
 
-      // Generate selector examples if selector map exists
-      let selectorExamples = "";
-      if (selectorMap && selectorMap.entries.length > 0) {
-        const exampleEntry = selectorMap.entries[0];
-        const locatorChain = buildPlaywrightLocatorChain(exampleEntry);
-        selectorExamples = `    // Example: Selector with fallback chain\n    // const loginBtn = ${locatorChain};\n`;
+      if (s.kind === "api-smoke") {
+        // API route: fetch-based test
+        const methods = s.methods ?? ["GET"];
+        const testCases = methods.map((method) => {
+          return [
+            `  test(${JSON.stringify(`${method} ${s.route}`)}, async ({ baseURL }) => {`,
+            `    const url = (baseURL ?? "http://localhost:3333") + ${JSON.stringify(s.route)};`,
+            `    const res = await fetch(url, { method: ${JSON.stringify(method)} });`,
+            `    expect(res.status).toBeLessThan(500);`,
+            `    expect(res.headers.get("content-type")).toBeTruthy();`,
+            method === "GET" ? `    const body = await res.text();\n    expect(body.length).toBeGreaterThan(0);` : "",
+            `  });`,
+          ].filter(Boolean).join("\n");
+        });
+
+        code = [
+          specHeader(),
+          `test.describe(${JSON.stringify(s.id)}, () => {`,
+          ...testCases,
+          `});`,
+          "",
+        ].join("\n");
+      } else {
+        // Page route: browser-based test
+        const oracle = oracleTemplate(s.oracleLevel, s.route);
+
+        // Generate selector examples if selector map exists
+        let selectorExamples = "";
+        if (selectorMap && selectorMap.entries.length > 0) {
+          const exampleEntry = selectorMap.entries[0];
+          const locatorChain = buildPlaywrightLocatorChain(exampleEntry);
+          selectorExamples = `    // Example: Selector with fallback chain\n    // const loginBtn = ${locatorChain};\n`;
+        }
+
+        code = [
+          specHeader(),
+          `test.describe(${JSON.stringify(s.id)}, () => {`,
+          `  test(${JSON.stringify(`smoke ${s.route}`)}, async ({ page, baseURL }) => {`,
+          `    const url = (baseURL ?? "http://localhost:3333") + ${JSON.stringify(s.route === "/" ? "/" : s.route)};`,
+          `    ${oracle.setup.split("\n").join("\n    ")}`,
+          `    await page.goto(url);`,
+          selectorExamples,
+          `    ${oracle.assertions.split("\n").join("\n    ")}`,
+          `  });`,
+          `});`,
+          "",
+        ].join("\n");
       }
-
-      const code = [
-        specHeader(),
-        `test.describe(${JSON.stringify(s.id)}, () => {`,
-        `  test(${JSON.stringify(`smoke ${s.route}`)}, async ({ page, baseURL }) => {`,
-        `    const url = (baseURL ?? "http://localhost:3333") + ${JSON.stringify(s.route === "/" ? "/" : s.route)};`,
-        `    ${oracle.setup.split("\n").join("\n    ")}`,
-        `    await page.goto(url);`,
-        selectorExamples,
-        `    ${oracle.assertions.split("\n").join("\n    ")}`,
-        `  });`,
-        `});`,
-        "",
-      ].join("\n");
 
       try {
         writeFileSync(filePath, code, "utf8");

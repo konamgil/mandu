@@ -3,8 +3,9 @@ import { getAtePaths, readJson, writeJson } from "./fs";
 
 export interface GeneratedScenario {
   id: string;
-  kind: "route-smoke";
+  kind: "route-smoke" | "api-smoke";
   route: string;
+  methods?: string[];
   oracleLevel: OracleLevel;
 }
 
@@ -28,18 +29,22 @@ export function generateScenariosFromGraph(graph: InteractionGraph, oracleLevel:
     throw new Error("빈 interaction graph입니다 (nodes가 없습니다)");
   }
 
-  const routes = graph.nodes.filter((n) => n.kind === "route") as Array<{ kind: "route"; id: string; path: string }>;
+  const routes = graph.nodes.filter((n) => n.kind === "route") as Array<{ kind: "route"; id: string; path: string; methods?: string[] }>;
 
   if (routes.length === 0) {
     console.warn("[ATE] 경고: route가 없습니다. 빈 시나리오 번들을 생성합니다.");
   }
 
-  const scenarios: GeneratedScenario[] = routes.map((r) => ({
-    id: `route:${r.id}`,
-    kind: "route-smoke",
-    route: r.id,
-    oracleLevel,
-  }));
+  const scenarios: GeneratedScenario[] = routes.map((r) => {
+    const isApi = r.path.startsWith("/api/") || (r.methods && r.methods.length > 0);
+    return {
+      id: `${isApi ? "api" : "route"}:${r.id}`,
+      kind: isApi ? "api-smoke" : "route-smoke",
+      route: r.id,
+      ...(isApi && r.methods ? { methods: r.methods } : {}),
+      oracleLevel,
+    };
+  });
 
   return {
     schemaVersion: 1,

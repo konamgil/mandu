@@ -4,7 +4,12 @@ import { createEmptyGraph, addEdge, addNode } from "./ir";
 import { getAtePaths, writeJson } from "./fs";
 import type { ExtractInput, InteractionGraph } from "./types";
 
-const DEFAULT_ROUTE_GLOBS = ["app/**/page.tsx", "routes/**/page.tsx"]; // demo-first default
+const DEFAULT_ROUTE_GLOBS = [
+  "app/**/page.tsx",
+  "app/**/route.ts",
+  "routes/**/page.tsx",
+  "routes/**/route.ts",
+];
 
 function isStringLiteral(node: any /* ts-morph Node */, SyntaxKind: any): boolean {
   return node.getKind() === SyntaxKind.StringLiteral;
@@ -68,16 +73,41 @@ export async function extract(input: ExtractInput): Promise<{ ok: true; graphPat
       const rel = relative(repoRoot, filePath);
       const relNormalized = rel.replace(/\\/g, "/");
 
-      // route node id: normalize to path without trailing /page.tsx
+      const isApiRoute = relNormalized.endsWith("/route.ts");
+
+      // route node id: normalize to path without trailing /page.tsx or /route.ts
       const routePath = relNormalized
         .replace(/^app\//, "/")
         .replace(/^routes\//, "/")
         .replace(/\/page\.tsx$/, "")
+        .replace(/\/route\.ts$/, "")
         .replace(/\/index\.tsx$/, "")
         .replace(/\/page$/, "")
         .replace(/\\/g, "/");
 
-      addNode(graph, { kind: "route", id: routePath === "" ? "/" : routePath, file: relNormalized, path: routePath === "" ? "/" : routePath });
+      // API route: extract HTTP methods from exports (GET, POST, PUT, PATCH, DELETE)
+      let methods: string[] = [];
+      if (isApiRoute) {
+        const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+        const exportDecls = sourceFile.getExportedDeclarations();
+        for (const [name] of exportDecls) {
+          if (HTTP_METHODS.includes(name)) {
+            methods.push(name);
+          }
+        }
+        if (methods.length === 0) methods = ["GET"]; // default
+      }
+
+      addNode(graph, {
+        kind: "route",
+        id: routePath === "" ? "/" : routePath,
+        file: relNormalized,
+        path: routePath === "" ? "/" : routePath,
+        ...(isApiRoute ? { methods } : {}),
+      });
+
+      // API route에는 JSX/navigation이 없으므로 건너뜀
+      if (isApiRoute) continue;
 
       // ManduLink / Link literal extraction: <Link href="/x"> or <ManduLink to="/x">
       try {
