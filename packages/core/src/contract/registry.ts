@@ -259,6 +259,8 @@ function extractSchemaSummaries(contract: ContractSchema): ContractRegistryEntry
     if (Number.isNaN(code)) continue;
     if (!schema) continue;
 
+    // 일부 핸들러는 응답 스키마를 { schema: ZodSchema } 형태로 래핑해서 반환함
+    // summarizeSchema는 원시 Zod 스키마를 기대하므로 내부 schema 필드 언래핑
     const actualSchema = (schema as { schema?: unknown }).schema ?? schema;
     const summary = summarizeSchema(actualSchema as ZodLike);
     if (summary) {

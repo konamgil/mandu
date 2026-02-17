@@ -75,7 +75,7 @@ describe("CORS 처리", () => {
     });
 
     expect([200, 204]).toContain(res.status);
-    expect(res.headers.get("access-control-allow-methods")).toBeDefined();
+    expect(res.headers.get("access-control-allow-methods")).not.toBeNull();
   });
 });
 
@@ -154,8 +154,7 @@ describe("정적 파일 보안 (Path Traversal 방지)", () => {
 
     const res = await fetch(`http://localhost:${port}/.mandu/client/nonexistent-bundle.js`);
 
-    // 파일 없으면 라우트 매칭으로 넘어가거나 404
-    expect([404, 500]).toContain(res.status);
+    expect(res.status).toBe(404);
   });
 });
 
@@ -163,7 +162,13 @@ describe("ServerRegistry 격리성", () => {
   let servers: ManduServer[] = [];
 
   afterEach(() => {
-    for (const s of servers) s.stop();
+    for (const s of servers) {
+      try {
+        s.stop();
+      } catch {
+        // 정리 중 에러는 무시 — 나머지 서버는 계속 정리
+      }
+    }
     servers = [];
     clearDefaultRegistry();
   });
@@ -205,6 +210,8 @@ describe("ServerRegistry 격리성", () => {
     expect(before.status).toBe(200);
 
     // 클리어 후 핸들러 없음
+    // TODO: 이상적으로는 404를 반환해야 하지만, 현재 서버는 핸들러 없을 때 500 반환
+    //       서버 구현 개선 시 expect(after.status).toBe(404)로 강화 필요
     registry.clear();
     const after = await fetch(`http://localhost:${port}/api/health`);
     expect([404, 500]).toContain(after.status);

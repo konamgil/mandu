@@ -120,7 +120,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     console.log("\n👀 파일 감시 모드...");
     console.log("   Ctrl+C로 종료\n");
 
-    await watchAndRebuild(manifest, cwd, resolvedBuildOptions);
+    await watchAndRebuild(cwd, resolvedBuildOptions, { fsRoutes: config.fsRoutes });
   }
 
   return true;
@@ -129,11 +129,14 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
 /**
  * 파일 감시 및 재빌드
  * FS Routes 프로젝트: app/ 디렉토리의 island 파일 감시
+ *
+ * 파일 변경 시마다 resolveManifest를 재호출하여 새로 추가/삭제된
+ * 라우트가 번들에 반영되도록 합니다.
  */
 async function watchAndRebuild(
-  manifest: RoutesManifest,
   rootDir: string,
-  options: BuildOptions
+  options: BuildOptions,
+  resolveOptions: Parameters<typeof resolveManifest>[1] = {}
 ): Promise<void> {
   // FS Routes 프로젝트는 app/ 디렉토리를, 구버전은 spec/slots/ 감시
   const fsRoutesDir = path.join(rootDir, "app");
@@ -173,9 +176,8 @@ async function watchAndRebuild(
         normalizedFilename.endsWith(".island.ts") ||
         normalizedFilename.endsWith(".island.jsx") ||
         normalizedFilename.endsWith(".island.js");
-      const isPageFile =
-        normalizedFilename.endsWith("/page.tsx") ||
-        normalizedFilename.endsWith("/page.ts");
+      // 루트 레벨(page.tsx) 및 중첩 경로(/nested/page.tsx) 모두 감지, .js/.jsx 포함
+      const isPageFile = /(?:^|\/)page\.[jt]sx?$/.test(normalizedFilename);
 
       if (!isIslandFile && !isPageFile) return;
     } else {
@@ -186,7 +188,10 @@ async function watchAndRebuild(
     console.log(`\n🔄 변경 감지: ${normalizedFilename}`);
 
     try {
-      const result = await buildClientBundles(manifest!, rootDir, {
+      // 파일 추가/삭제 반영을 위해 매 재빌드마다 매니페스트 재조회
+      const { manifest: freshManifest } = await resolveManifest(rootDir, resolveOptions);
+
+      const result = await buildClientBundles(freshManifest, rootDir, {
         minify: options.minify,
         sourcemap: options.sourcemap,
         outDir: options.outDir,
