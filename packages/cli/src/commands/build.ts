@@ -128,37 +128,62 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
 
 /**
  * 파일 감시 및 재빌드
+ * FS Routes 프로젝트: app/ 디렉토리의 island 파일 감시
  */
 async function watchAndRebuild(
   manifest: RoutesManifest,
   rootDir: string,
   options: BuildOptions
 ): Promise<void> {
+  // FS Routes 프로젝트는 app/ 디렉토리를, 구버전은 spec/slots/ 감시
+  const fsRoutesDir = path.join(rootDir, "app");
   const slotsDir = path.join(rootDir, "spec", "slots");
 
-  // 디렉토리 존재 확인
+  let watchDir: string;
+  let watchMode: "fs-routes" | "slots";
+
   try {
-    await fs.access(slotsDir);
+    await fs.access(fsRoutesDir);
+    watchDir = fsRoutesDir;
+    watchMode = "fs-routes";
   } catch {
-    console.warn(`⚠️  슬롯 디렉토리가 없습니다: ${slotsDir}`);
-    return;
+    try {
+      await fs.access(slotsDir);
+      watchDir = slotsDir;
+      watchMode = "slots";
+    } catch {
+      console.warn(`⚠️  감시할 디렉토리가 없습니다 (app/ 또는 spec/slots/)`);
+      return;
+    }
   }
+
+  console.log(`👀 감시 중: ${watchDir}`);
 
   const { watch } = await import("fs");
 
-  const watcher = watch(slotsDir, { recursive: true }, async (event, filename) => {
+  const watcher = watch(watchDir, { recursive: true }, async (event, filename) => {
     if (!filename) return;
 
-    // .client.ts 파일만 감시
-    if (!filename.endsWith(".client.ts")) return;
+    const normalizedFilename = filename.replace(/\\/g, "/");
 
-    const routeId = filename.replace(".client.ts", "").replace(/\\/g, "/").split("/").pop();
-    if (!routeId) return;
+    // FS Routes: island 파일 변경 감지
+    if (watchMode === "fs-routes") {
+      const isIslandFile =
+        normalizedFilename.endsWith(".island.tsx") ||
+        normalizedFilename.endsWith(".island.ts") ||
+        normalizedFilename.endsWith(".island.jsx") ||
+        normalizedFilename.endsWith(".island.js");
+      const isPageFile =
+        normalizedFilename.endsWith("/page.tsx") ||
+        normalizedFilename.endsWith("/page.ts");
 
-    const route = manifest!.routes.find((r) => r.id === routeId);
-    if (!route || !route.clientModule) return;
+      if (!isIslandFile && !isPageFile) return;
+    } else {
+      // Slots: .client.ts 파일만 감시
+      if (!normalizedFilename.endsWith(".client.ts")) return;
+    }
 
-    console.log(`\n🔄 변경 감지: ${routeId}`);
+    console.log(`\n🔄 변경 감지: ${normalizedFilename}`);
 
     try {
       const result = await buildClientBundles(manifest!, rootDir, {
@@ -168,9 +193,9 @@ async function watchAndRebuild(
       });
 
       if (result.success) {
-        console.log(`✅ 재빌드 완료: ${routeId}`);
+        console.log(`✅ 재빌드 완료`);
       } else {
-        console.error(`❌ 재빌드 실패: ${routeId}`);
+        console.error(`❌ 재빌드 실패`);
         for (const error of result.errors) {
           console.error(`   ${error}`);
         }

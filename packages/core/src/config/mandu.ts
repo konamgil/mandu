@@ -26,7 +26,7 @@ export interface ManduConfig {
         };
   };
   guard?: {
-    preset?: "mandu" | "fsd" | "clean" | "hexagonal" | "atomic";
+    preset?: "mandu" | "fsd" | "clean" | "hexagonal" | "atomic" | "cqrs";
     srcDir?: string;
     exclude?: string[];
     realtime?: boolean;

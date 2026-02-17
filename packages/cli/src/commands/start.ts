@@ -124,6 +124,11 @@ export async function start(options: StartOptions = {}): Promise<void> {
     console.warn(`⚠️  Port ${desiredPort} is in use. Using ${port} instead.`);
   }
 
+  // CSS 경로 결정 (빌드된 CSS 파일 존재 시 주입)
+  const cssFilePath = path.join(rootDir, ".mandu", "client", "globals.css");
+  const hasCss = fs.existsSync(cssFilePath);
+  const cssPath: string | false = hasCss ? "/.mandu/client/globals.css" : false;
+
   // 메인 서버 시작 (프로덕션 모드)
   const server = startServer(manifest, {
     port,
@@ -134,6 +139,7 @@ export async function start(options: StartOptions = {}): Promise<void> {
     cors: serverConfig.cors,
     streaming: serverConfig.streaming,
     rateLimit: serverConfig.rateLimit,
+    cssPath,
   });
 
   const actualPort = server.server.port ?? port;

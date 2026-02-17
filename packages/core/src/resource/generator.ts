@@ -4,6 +4,7 @@
  */
 
 import type { ParsedResource } from "./parser";
+import type { ResourceDefinition } from "./schema";
 import { generateResourceContract } from "./generators/contract";
 import { generateResourceTypes } from "./generators/types";
 import { generateResourceSlot } from "./generators/slot";
@@ -129,7 +130,7 @@ export async function generateResourceArtifacts(
  * Generate contract file
  */
 async function generateContract(
-  definition: any,
+  definition: ResourceDefinition,
   resourceName: string,
   contractsDir: string,
   result: GeneratorResult
@@ -147,7 +148,7 @@ async function generateContract(
  * Generate types file
  */
 async function generateTypes(
-  definition: any,
+  definition: ResourceDefinition,
   resourceName: string,
   typesDir: string,
   result: GeneratorResult
@@ -165,7 +166,7 @@ async function generateTypes(
  * Generate slot file (PRESERVE if exists!)
  */
 async function generateSlot(
-  definition: any,
+  definition: ResourceDefinition,
   resourceName: string,
   slotsDir: string,
   force: boolean,
@@ -195,7 +196,7 @@ async function generateSlot(
  * Generate client file
  */
 async function generateClient(
-  definition: any,
+  definition: ResourceDefinition,
   resourceName: string,
   clientDir: string,
   result: GeneratorResult

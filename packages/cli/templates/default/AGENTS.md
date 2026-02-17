@@ -45,7 +45,20 @@ npm install / yarn install / pnpm install
 
 ## 주요 규칙
 
-### 1. Island 컴포넌트
+### 1. Layout 컴포넌트
+`html/head/body` 태그는 Mandu SSR이 자동으로 생성합니다. Layout은 body 내부 래퍼만 정의합니다:
+```tsx
+// app/layout.tsx
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-background font-sans antialiased">
+      {children}
+    </div>
+  );
+}
+```
+
+### 2. Island 컴포넌트
 클라이언트 상호작용이 필요한 컴포넌트는 `*.island.tsx`로 명명:
 ```tsx
 // src/client/widgets/counter/Counter.island.tsx
@@ -83,7 +96,7 @@ import { Button } from "@/client/shared/ui/button";
 
 ```bash
 bun install     # 최초 설치
-bun run dev     # 개발 서버 (http://localhost:4000)
+bun run dev     # 개발 서버 (http://localhost:3333)
 bun run build   # 프로덕션 빌드
 bun run guard   # 아키텍처 검증
 ```
