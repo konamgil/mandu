@@ -2,14 +2,15 @@
  * Statistics Tests
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import {
   createScanRecord,
   calculateLayerStatistics,
   analyzeTrend,
   generateGuardMarkdownReport,
 } from "../../src/guard/statistics";
-import type { ViolationReport, Violation, ScanRecord } from "../../src/guard/types";
+import type { ViolationReport, Violation } from "../../src/guard/types";
+import type { ScanRecord } from "../../src/guard/statistics";
 
 describe("createScanRecord", () => {
   it("should create scan record from report", () => {
@@ -21,6 +22,8 @@ describe("createScanRecord", () => {
         "circular-dependency": 1,
         "cross-slice": 0,
         "deep-nesting": 0,
+        "file-type": 0,
+        "invalid-shared-segment": 0,
       },
       violations: [
         createMockViolation("features", "widgets", "src/features/auth/login.tsx"),
@@ -50,6 +53,8 @@ describe("createScanRecord", () => {
         "circular-dependency": 0,
         "cross-slice": 0,
         "deep-nesting": 0,
+        "file-type": 0,
+        "invalid-shared-segment": 0,
       },
       violations: [
         createMockViolation("features", "widgets", "src/features/auth/login.tsx"),
@@ -189,6 +194,8 @@ describe("generateGuardMarkdownReport", () => {
         "circular-dependency": 0,
         "cross-slice": 0,
         "deep-nesting": 0,
+        "file-type": 0,
+        "invalid-shared-segment": 0,
       },
       violations: [
         createMockViolation("features", "widgets", "src/features/auth/login.tsx"),
@@ -215,6 +222,8 @@ describe("generateGuardMarkdownReport", () => {
         "circular-dependency": 0,
         "cross-slice": 0,
         "deep-nesting": 0,
+        "file-type": 0,
+        "invalid-shared-segment": 0,
       },
       violations: [],
       filesAnalyzed: 10,
@@ -266,6 +275,8 @@ function createMockScanRecord(violations: number, timestamp?: number): ScanRecor
       "circular-dependency": 0,
       "cross-slice": 0,
       "deep-nesting": 0,
+      "file-type": 0,
+      "invalid-shared-segment": 0,
     },
     byLayer: { features: violations },
     hotspots: [{ file: "test.ts", count: violations }],

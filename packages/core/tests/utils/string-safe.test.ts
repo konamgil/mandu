@@ -2,7 +2,7 @@
  * DNA-005: UTF-16 Safe String Tests
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import {
   sliceUtf16Safe,
   truncateSafe,

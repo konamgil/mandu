@@ -1,10 +1,9 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { ErrorClassifier, type ManduError } from "@mandujs/core/error";
 import {
   loadManifest,
   runGuardCheck,
   runAutoCorrect,
-  ErrorClassifier,
-  type ManduError,
   type GeneratedMap,
   // Self-Healing Guard imports
   checkWithHealing,

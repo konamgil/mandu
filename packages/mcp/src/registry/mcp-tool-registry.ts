@@ -8,7 +8,7 @@
  */
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import type { McpToolPlugin } from "@mandujs/core";
+import type { McpToolPlugin } from "@mandujs/core/plugins";
 import { pluginToTool } from "../adapters/tool-adapter.js";
 
 /**

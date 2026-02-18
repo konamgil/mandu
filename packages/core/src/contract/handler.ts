@@ -96,7 +96,7 @@ type InferResponseUnion<TResponse extends ContractSchema["response"]> = {
  * ```
  */
 export type ContractHandlers<T extends ContractSchema> = {
-  [M in Extract<keyof T["request"], ContractMethod>]?: HandlerFn<
+  [M in ContractMethod as M extends keyof T["request"] ? M : never]?: HandlerFn<
     InferContextFromMethod<
       T["request"][M] extends MethodRequestSchema ? T["request"][M] : undefined
     >,

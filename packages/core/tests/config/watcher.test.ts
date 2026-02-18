@@ -2,7 +2,7 @@
  * DNA-006: Config Hot Reload Tests
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { mkdtemp, writeFile, rm, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -37,7 +37,7 @@ describe("DNA-006: Config Hot Reload", () => {
         JSON.stringify(config)
       );
 
-      const callback = vi.fn();
+      const callback = mock();
       const watcher = await watchConfig(tempDir, callback);
 
       try {
@@ -57,7 +57,7 @@ describe("DNA-006: Config Hot Reload", () => {
         JSON.stringify(config)
       );
 
-      const callback = vi.fn();
+      const callback = mock();
       const watcher = await watchConfig(tempDir, callback, { immediate: true });
 
       try {
@@ -78,7 +78,7 @@ describe("DNA-006: Config Hot Reload", () => {
       const configPath = join(tempDir, "mandu.config.json");
       await writeFile(configPath, JSON.stringify(initialConfig));
 
-      const callback = vi.fn();
+      const callback = mock();
       const watcher = await watchConfig(tempDir, callback, { debounceMs: 10 });
 
       try {
@@ -108,7 +108,7 @@ describe("DNA-006: Config Hot Reload", () => {
       const configPath = join(tempDir, "mandu.config.json");
       await writeFile(configPath, JSON.stringify(initialConfig));
 
-      const callback = vi.fn();
+      const callback = mock();
       const watcher = await watchConfig(tempDir, callback);
 
       try {
@@ -131,8 +131,8 @@ describe("DNA-006: Config Hot Reload", () => {
       const configPath = join(tempDir, "mandu.config.json");
       await writeFile(configPath, '{"server": {"port": 3000}}');
 
-      const callback = vi.fn();
-      const onError = vi.fn();
+      const callback = mock();
+      const onError = mock();
       const watcher = await watchConfig(tempDir, callback, {
         debounceMs: 10,
         onError,
@@ -161,7 +161,7 @@ describe("DNA-006: Config Hot Reload", () => {
       const configPath = join(tempDir, "mandu.config.json");
       await writeFile(configPath, JSON.stringify(config));
 
-      const callback = vi.fn();
+      const callback = mock();
       const watcher = await watchConfig(tempDir, callback, { debounceMs: 10 });
 
       try {
@@ -187,7 +187,7 @@ describe("DNA-006: Config Hot Reload", () => {
       const guardPath = join(tempDir, ".mandu", "guard.json");
       await writeFile(guardPath, JSON.stringify(guardConfig));
 
-      const callback = vi.fn();
+      const callback = mock();
       const watcher = await watchConfig(tempDir, callback);
 
       try {
@@ -204,7 +204,7 @@ describe("DNA-006: Config Hot Reload", () => {
       const configPath = join(tempDir, "test.config.json");
       await writeFile(configPath, "{}");
 
-      const onChange = vi.fn();
+      const onChange = mock();
       const stop = watchConfigFile(configPath, onChange, 10);
 
       try {
@@ -218,7 +218,7 @@ describe("DNA-006: Config Hot Reload", () => {
     });
 
     it("should return noop function for non-existent file", () => {
-      const stop = watchConfigFile("/non/existent/file.json", vi.fn());
+      const stop = watchConfigFile("/non/existent/file.json", mock());
       expect(stop).toBeInstanceOf(Function);
       stop(); // should not throw
     });

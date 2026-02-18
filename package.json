@@ -22,7 +22,9 @@
     "publish:dry": "bun run scripts/publish.ts --dry-run",
     "publish:force": "bun run scripts/publish.ts --skip-check",
     "release": "bun run version && bun run publish",
-    "check:publish": "bun run scripts/pre-publish-check.ts"
+    "typecheck": "bun run scripts/typecheck.ts",
+    "check:publish": "bun run scripts/pre-publish-check.ts",
+    "prepare": "lefthook install"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.2",
@@ -31,6 +33,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "bun-types": "^1.3.7",
+    "lefthook": "^1.11.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {

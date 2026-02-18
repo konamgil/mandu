@@ -39,6 +39,7 @@ function parseJson(content: string, filePath: string): unknown {
 async function parseYaml(content: string, filePath: string): Promise<unknown> {
   try {
     // yaml 패키지 동적 로드
+    // @ts-ignore dynamic optional import
     const yaml = await import("yaml").catch(() => null);
 
     if (!yaml) {
@@ -64,7 +65,9 @@ async function parseYaml(content: string, filePath: string): Promise<unknown> {
 async function parseToml(content: string, filePath: string): Promise<unknown> {
   try {
     // @iarna/toml 또는 toml 패키지 동적 로드
+    // @ts-ignore dynamic optional import
     const toml = await import("@iarna/toml").catch(() =>
+      // @ts-ignore dynamic optional import
       import("toml").catch(() => null)
     );
 

@@ -178,7 +178,7 @@ export async function runPreAction(params: {
   const showBanner =
     !SKIP_BANNER_COMMANDS.has(command) &&
     !isTruthyEnv("MANDU_HIDE_BANNER") &&
-    shouldShowBanner();
+    shouldShowBanner(process.argv);
 
   if (showBanner && version) {
     console.log(renderMiniBanner(version));

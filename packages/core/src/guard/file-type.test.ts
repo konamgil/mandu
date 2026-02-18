@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { validateFileAnalysis } from "./validator";
 import { fsdPreset } from "./presets/fsd";
 import type { FileAnalysis, GuardConfig } from "./types";

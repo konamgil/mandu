@@ -2,7 +2,7 @@
  * DNA-008: Structured Logging - Transports Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock, spyOn } from "bun:test";
 import {
   transportRegistry,
   attachLogTransport,
@@ -23,7 +23,7 @@ describe("DNA-008: Structured Logging - Transports", () => {
 
   describe("transportRegistry", () => {
     it("should attach and detach transports", () => {
-      const transport = vi.fn();
+      const transport = mock();
 
       attachLogTransport("test", transport);
       expect(transportRegistry.has("test")).toBe(true);
@@ -36,8 +36,8 @@ describe("DNA-008: Structured Logging - Transports", () => {
     });
 
     it("should dispatch records to all transports", async () => {
-      const transport1 = vi.fn();
-      const transport2 = vi.fn();
+      const transport1 = mock();
+      const transport2 = mock();
 
       attachLogTransport("t1", transport1);
       attachLogTransport("t2", transport2);
@@ -56,7 +56,7 @@ describe("DNA-008: Structured Logging - Transports", () => {
     });
 
     it("should filter by minLevel", async () => {
-      const transport = vi.fn();
+      const transport = mock();
       attachLogTransport("filtered", transport, { minLevel: "warn" });
 
       // info 레벨 - 무시됨
@@ -82,7 +82,7 @@ describe("DNA-008: Structured Logging - Transports", () => {
     });
 
     it("should respect enabled flag", async () => {
-      const transport = vi.fn();
+      const transport = mock();
       attachLogTransport("toggleable", transport, { enabled: false });
 
       await transportRegistry.dispatch({
@@ -121,7 +121,7 @@ describe("DNA-008: Structured Logging - Transports", () => {
       const errorTransport = () => {
         throw new Error("Transport error");
       };
-      const goodTransport = vi.fn();
+      const goodTransport = mock();
 
       attachLogTransport("error", errorTransport);
       attachLogTransport("good", goodTransport);
@@ -136,8 +136,8 @@ describe("DNA-008: Structured Logging - Transports", () => {
     });
 
     it("should list all transports", () => {
-      attachLogTransport("t1", vi.fn());
-      attachLogTransport("t2", vi.fn(), { minLevel: "warn" });
+      attachLogTransport("t1", mock());
+      attachLogTransport("t2", mock(), { minLevel: "warn" });
 
       const list = transportRegistry.list();
       expect(list).toHaveLength(2);
@@ -195,9 +195,9 @@ describe("DNA-008: Structured Logging - Transports", () => {
 
   describe("createConsoleTransport", () => {
     it("should log to console based on level", () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-      const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
+      const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
+      const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
 
       const transport = createConsoleTransport({ format: "pretty" });
 
@@ -232,7 +232,7 @@ describe("DNA-008: Structured Logging - Transports", () => {
 
   describe("createFilteredTransport", () => {
     it("should filter records based on predicate", () => {
-      const inner = vi.fn();
+      const inner = mock();
       const filtered = createFilteredTransport(inner, (r) => r.status === 500);
 
       filtered({ timestamp: "t1", level: "info", status: 200 });
