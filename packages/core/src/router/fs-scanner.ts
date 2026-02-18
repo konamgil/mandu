@@ -341,20 +341,23 @@ export class FSScanner {
     return { routes, routeErrors };
   }
 
-  private hasHydrationShellMismatchRisk(pageContent: string, islandRelativePath: string): boolean {
-    const islandBase = islandRelativePath
-      .split("/")
-      .pop()
-      ?.replace(/\.(tsx?|jsx?)$/, "")
-      .replace(/[^a-zA-Z0-9_$]/g, "") ?? "pageisland";
+  private hasHydrationShellMismatchRisk(pageContent: string, _islandRelativePath: string): boolean {
+    // import문에서 island 모듈의 변수명을 직접 파싱
+    const importMatch = pageContent.match(
+      /import\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+from\s+["'][^"']*\.island(?:\.(?:tsx?|jsx?))?["']/
+    );
+
+    if (!importMatch) {
+      return false;
+    }
+
+    const islandVarName = importMatch[1];
 
     // 대표적인 anti-pattern:
     // import X from "./page.island" + {typeof X !== 'undefined' && null}
-    const importsIslandModule = /from\s+["'][^"']*\.island(?:\.(?:tsx?|jsx?))?["']/.test(pageContent);
-    const hasPlaceholderNullBridge = /typeof\s+[A-Za-z_$][A-Za-z0-9_$]*\s*!==\s*["']undefined["']\s*&&\s*null/.test(pageContent)
-      || new RegExp(`typeof\\s+${islandBase}\\s*!==\\s*["']undefined["']\\s*&&\\s*null`).test(pageContent);
-
-    return importsIslandModule && hasPlaceholderNullBridge;
+    return new RegExp(
+      `typeof\\s+${islandVarName}\\s*!==\\s*["']undefined["']\\s*&&\\s*null`
+    ).test(pageContent);
   }
 
   /**
