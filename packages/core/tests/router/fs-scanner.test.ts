@@ -258,6 +258,94 @@ describe("FSScanner", () => {
     }
   });
 
+  it("should NOT report hydration mismatch when island is used normally without null bridge", async () => {
+    const normalDir = join(import.meta.dir, "__test_hydration_normal__");
+
+    await mkdir(join(normalDir, "app"), { recursive: true });
+
+    await writeFile(
+      join(normalDir, "app/page.tsx"),
+      `import PageIsland from "./page.island";
+       export default function Page() {
+         return <PageIsland />;
+       }`
+    );
+
+    await writeFile(
+      join(normalDir, "app/page.island.tsx"),
+      `"use client";
+       export default function PageIsland() {
+         return <div>Normal Island</div>;
+       }`
+    );
+
+    try {
+      const result = await scanRoutes(normalDir);
+      expect(result.errors.some((e) => e.type === "hydration_shell_mismatch_risk")).toBe(false);
+    } finally {
+      await rm(normalDir, { recursive: true, force: true });
+    }
+  });
+
+  it("should NOT report hydration mismatch when null bridge exists but no island import", async () => {
+    const noIslandDir = join(import.meta.dir, "__test_hydration_no_island__");
+
+    await mkdir(join(noIslandDir, "app"), { recursive: true });
+
+    await writeFile(
+      join(noIslandDir, "app/page.tsx"),
+      `export default function Page() {
+         return (
+           <main>
+             {typeof window !== "undefined" && null}
+             <h1>Hello</h1>
+           </main>
+         );
+       }`
+    );
+
+    try {
+      const result = await scanRoutes(noIslandDir);
+      expect(result.errors.some((e) => e.type === "hydration_shell_mismatch_risk")).toBe(false);
+    } finally {
+      await rm(noIslandDir, { recursive: true, force: true });
+    }
+  });
+
+  it("should NOT false-positive when page imports island and has unrelated typeof guard", async () => {
+    const fpDir = join(import.meta.dir, "__test_hydration_fp__");
+
+    await mkdir(join(fpDir, "app"), { recursive: true });
+
+    await writeFile(
+      join(fpDir, "app/page.tsx"),
+      `import PageIsland from "./page.island";
+       export default function Page() {
+         return (
+           <main>
+             {typeof window !== "undefined" && null}
+             <PageIsland />
+           </main>
+         );
+       }`
+    );
+
+    await writeFile(
+      join(fpDir, "app/page.island.tsx"),
+      `"use client";
+       export default function PageIsland() {
+         return <div>Island</div>;
+       }`
+    );
+
+    try {
+      const result = await scanRoutes(fpDir);
+      expect(result.errors.some((e) => e.type === "hydration_shell_mismatch_risk")).toBe(false);
+    } finally {
+      await rm(fpDir, { recursive: true, force: true });
+    }
+  });
+
   it("should detect 'use client' directive in page files as clientModule", async () => {
     const useClientDir = join(import.meta.dir, "__test_use_client__");
 
