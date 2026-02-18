@@ -1,0 +1,6 @@
+skills / metabase / metabase / typescript-write 
+typescript-write 
+$ npx skills add https://github.com/metabase/metabase --skill typescript-write SKILL.md 
+TypeScript/JavaScript Development Skill 
+@./../_shared/development-workflow.md
+@./../_shared/typescript-commands.md Weekly Installs 92 Repository metabase/metabase First Seen Jan 17, 2026 Security Audits Gen Agent Trust Hub Fail Socket Pass Snyk Pass Installed on claude-code 70 opencode 51 cursor 48 gemini-cli 46 codex 45 github-copilot 42

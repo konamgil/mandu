@@ -1,0 +1,81 @@
+skills / pproenca / dot-skills / typescript 
+typescript 
+$ npx skills add https://github.com/pproenca/dot-skills --skill typescript SKILL.md 
+TypeScript Best Practices 
+Comprehensive performance optimization guide for TypeScript applications. Contains 45 rules across 8 categories, prioritized by impact to guide automated refactoring and code generation. 
+When to Apply 
+Reference these guidelines when: 
+Configuring tsconfig.json for a new or existing project 
+Writing complex type definitions or generics 
+Optimizing async/await patterns and data fetching 
+Organizing modules and managing imports 
+Reviewing code for compilation or runtime performance 
+Rule Categories by Priority Priority Category Impact Prefix 1 Type System Performance CRITICAL 
+type- 2 Compiler Configuration CRITICAL 
+tscfg- 3 Async Patterns HIGH 
+async- 4 Module Organization HIGH 
+module- 5 Type Safety Patterns MEDIUM-HIGH 
+safety- 6 Memory Management MEDIUM 
+mem- 7 Runtime Optimization LOW-MEDIUM 
+runtime- 8 Advanced Patterns LOW 
+advanced- 
+Table of Contents 
+Type System Performance — CRITICAL 
+1.1 Add Explicit Return Types to Exported Functions — CRITICAL (30-50% faster declaration emit) 
+1.2 Avoid Deeply Nested Generic Types — CRITICAL (prevents exponential instantiation cost) 
+1.3 Avoid Large Union Types — CRITICAL (quadratic O(n²) comparison cost) 
+1.4 Extract Conditional Types to Named Aliases — CRITICAL (enables compiler caching, prevents re-evaluation) 
+1.5 Limit Type Recursion Depth — HIGH (prevents exponential type expansion when applicable) 
+1.6 Prefer Interfaces Over Type Intersections — CRITICAL (2-5× faster type resolution) 
+1.7 Simplify Complex Mapped Types — HIGH (reduces type computation by 50-80% when applicable) 
+Compiler Configuration — CRITICAL 
+2.1 Configure Include and Exclude Properly — CRITICAL (prevents scanning thousands of unnecessary files) 
+2.2 Enable Incremental Compilation — CRITICAL (50-90% faster rebuilds) 
+2.3 Enable isolatedDeclarations for Parallel Declaration Emit — CRITICAL (enables parallel .d.ts generation without type-checker) 
+2.4 Enable skipLibCheck for Faster Builds — CRITICAL (20-40% faster compilation) 
+2.5 Enable strictFunctionTypes for Faster Variance Checks — CRITICAL (enables optimized variance checking) 
+2.6 Use erasableSyntaxOnly for Node.js Native TypeScript — HIGH (prevents 100% of Node.js type-stripping runtime errors) 
+2.7 Use isolatedModules for Single-File Transpilation — CRITICAL (80-90% faster transpilation with bundlers) 
+2.8 Use Project References for Large Codebases — CRITICAL (60-80% faster incremental builds) 
+Async Patterns — HIGH 
+3.1 Annotate Async Function Return Types — HIGH (prevents runtime errors, improves inference) 
+3.2 Avoid await Inside Loops — HIGH (N× faster for N iterations, 10 users = 10× improvement) 
+3.3 Avoid Unnecessary async/await — HIGH (eliminates trivial Promise wrappers and improves stack traces) 
+3.4 Defer await Until Value Is Needed — HIGH (enables implicit parallelization) 
+3.5 Use Promise.all for Independent Operations — HIGH (2-10× improvement in I/O-bound code) 
+Module Organization — HIGH 
+4.1 Avoid Barrel File Imports — HIGH (200-800ms import cost, 30-50% larger bundles) 
+4.2 Avoid Circular Dependencies — HIGH (prevents runtime undefined errors and slow compilation) 
+4.3 Control @types Package Inclusion — HIGH (prevents type conflicts and reduces memory usage) 
+4.4 Use Dynamic Imports for Large Modules — HIGH (reduces initial bundle by 30-70%) 
+4.5 Use Type-Only Imports for Types — HIGH (eliminates runtime imports for type information) 
+Type Safety Patterns — MEDIUM-HIGH 
+5.1 Enable noUncheckedIndexedAccess — MEDIUM-HIGH (prevents 100% of unchecked index access errors at compile time) 
+5.2 Enable strictNullChecks — MEDIUM-HIGH (prevents null/undefined runtime errors) 
+5.3 Prefer unknown Over any — MEDIUM-HIGH (forces type narrowing, prevents runtime errors) 
+5.4 Use Assertion Functions for Validation — MEDIUM-HIGH (reduces validation boilerplate by 50-70%) 
+5.5 Use const Assertions for Literal Types — MEDIUM-HIGH (preserves literal types, enables better inference) 
+5.6 Use Exhaustive Checks for Union Types — MEDIUM-HIGH (prevents 100% of missing case errors at compile time) 
+5.7 Use Type Guards for Runtime Type Checking — MEDIUM-HIGH (eliminates type assertions, catches errors at boundaries) 
+Memory Management — MEDIUM 
+6.1 Avoid Closure Memory Leaks — MEDIUM (prevents retained references in long-lived callbacks) 
+6.2 Avoid Global State Accumulation — MEDIUM (prevents unbounded memory growth) 
+6.3 Clean Up Event Listeners — MEDIUM (prevents unbounded memory growth) 
+6.4 Clear Timers and Intervals — MEDIUM (prevents callback retention and repeated execution) 
+6.5 Use WeakMap for Object Metadata — MEDIUM (prevents memory leaks, enables automatic cleanup) 
+Runtime Optimization — LOW-MEDIUM 
+7.1 Avoid Object Spread in Hot Loops — LOW-MEDIUM (reduces object allocations by N×) 
+7.2 Cache Property Access in Loops — LOW-MEDIUM (reduces property lookups by N× in hot paths) 
+7.3 Prefer Native Array Methods Over Lodash — LOW-MEDIUM (eliminates library overhead, enables tree-shaking) 
+7.4 Use for-of for Simple Iteration — LOW-MEDIUM (reduces iteration boilerplate by 30-50%) 
+7.5 Use Modern String Methods — LOW-MEDIUM (2-5× faster than regex for simple patterns) 
+7.6 Use Set/Map for O(1) Lookups — LOW-MEDIUM (O(n) to O(1) per lookup) 
+Advanced Patterns — LOW 
+8.1 Use Branded Types for Type-Safe IDs — LOW (prevents mixing incompatible ID types) 
+8.2 Use satisfies for Type Validation with Inference — LOW (prevents property access errors, enables 100% autocomplete accuracy) 
+8.3 Use Template Literal Types for String Patterns — LOW (prevents 100% of string format errors at compile time) 
+References 
+https://github.com/microsoft/TypeScript/wiki/Performance 
+https://www.typescriptlang.org/docs/handbook/ 
+https://v8.dev/blog 
+https://nodejs.org/en/learn/diagnostics/memory Weekly Installs 518 Repository pproenca/dot-skills First Seen Jan 17, 2026 Security Audits Gen Agent Trust Hub Pass Socket Pass Snyk Pass Installed on claude-code 346 opencode 327 gemini-cli 288 codex 284 github-copilot 259 cursor 254

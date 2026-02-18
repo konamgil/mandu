@@ -1,0 +1,12 @@
+skills / metabase / metabase / typescript-review 
+typescript-review 
+$ npx skills add https://github.com/metabase/metabase --skill typescript-review SKILL.md 
+TypeScript/JavaScript Code Review Skill 
+@./../_shared/typescript-commands.md 
+Code Review Guidelines 
+Review pull requests with a focus on: 
+Compliance with project coding standards and conventions 
+Code quality and best practices 
+Clear and correct JSDoc comments 
+Type safety and proper TypeScript usage 
+React best practices (when applicable) Weekly Installs 94 Repository metabase/metabase First Seen Jan 20, 2026 Security Audits Gen Agent Trust Hub Pass Socket Pass Snyk Pass Installed on claude-code 69 opencode 60 codex 53 gemini-cli 52 cursor 46 github-copilot 46
