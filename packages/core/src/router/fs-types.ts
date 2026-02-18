@@ -184,7 +184,7 @@ export interface ScanResult {
  */
 export interface ScanError {
   /** 에러 타입 */
-  type: "invalid_segment" | "duplicate_route" | "file_read_error" | "pattern_conflict";
+  type: "invalid_segment" | "duplicate_route" | "file_read_error" | "pattern_conflict" | "hydration_shell_mismatch_risk";
 
   /** 에러 메시지 */
   message: string;

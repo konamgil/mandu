@@ -276,19 +276,37 @@ export class FSScanner {
 
       // clientModule 결정: island 파일 또는 "use client"가 있는 page 자체
       let clientModule: string | undefined;
+      let pageFileContent: string | null = null;
+
+      if (file.type === "page") {
+        try {
+          pageFileContent = await Bun.file(file.absolutePath).text();
+        } catch {
+          pageFileContent = null;
+        }
+      }
+
       if (islands?.[0]) {
         // 우선순위: 명시적 island 파일
         clientModule = join(this.config.routesDir, islands[0].relativePath);
-      } else if (file.type === "page") {
+
+        // SSR shell + island placeholder 패턴은 hydration mismatch 위험이 매우 높으므로 에러로 처리
+        if (pageFileContent && this.hasHydrationShellMismatchRisk(pageFileContent, islands[0].relativePath)) {
+          routeErrors.push({
+            type: "hydration_shell_mismatch_risk",
+            message:
+              `Hydration mismatch risk detected in \"${file.relativePath}\": ` +
+              `page.tsx renders an SSR shell while hydration is delegated to \"${islands[0].relativePath}\". ` +
+              `Use a single render tree for first paint (e.g. route entry directly exports island component).`,
+            filePath: file.absolutePath,
+            conflictsWith: islands[0].absolutePath,
+          });
+        }
+      } else if (file.type === "page" && pageFileContent) {
         // page 파일 자체에서 "use client" 확인
-        try {
-          const fileContent = await Bun.file(file.absolutePath).text();
-          const hasUseClient = /^\s*["']use client["']/m.test(fileContent);
-          if (hasUseClient) {
-            clientModule = modulePath;
-          }
-        } catch {
-          // 파일 읽기 실패 시 무시
+        const hasUseClient = /^\s*["']use client["']/m.test(pageFileContent);
+        if (hasUseClient) {
+          clientModule = modulePath;
         }
       }
 
@@ -321,6 +339,25 @@ export class FSScanner {
     }
 
     return { routes, routeErrors };
+  }
+
+  private hasHydrationShellMismatchRisk(pageContent: string, _islandRelativePath: string): boolean {
+    // import문에서 island 모듈의 변수명을 직접 파싱
+    const importMatch = pageContent.match(
+      /import\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+from\s+["'][^"']*\.island(?:\.(?:tsx?|jsx?))?["']/
+    );
+
+    if (!importMatch) {
+      return false;
+    }
+
+    const islandVarName = importMatch[1];
+
+    // 대표적인 anti-pattern:
+    // import X from "./page.island" + {typeof X !== 'undefined' && null}
+    return new RegExp(
+      `typeof\\s+${islandVarName}\\s*!==\\s*["']undefined["']\\s*&&\\s*null`
+    ).test(pageContent);
   }
 
   /**
