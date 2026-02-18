@@ -6,7 +6,8 @@
 
 import { describe, it, expect, mock } from "bun:test";
 import { z } from "zod";
-import { Mandu, createClient, contractFetch } from "./index";
+import { Mandu } from "../index";
+import { createClient, contractFetch } from "./index";
 
 // === Test Contract ===
 const testContract = Mandu.contract({

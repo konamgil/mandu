@@ -171,7 +171,10 @@ export function createMockDeps(overrides: Partial<FillingDeps> = {}): FillingDep
       set: asyncNoop,
       delete: asyncNoop,
     },
-    fetch: (async () => new Response()) as typeof fetch,
+    fetch: Object.assign(
+      async (): Promise<Response> => new Response(),
+      { preconnect: (_url: string) => {} }
+    ) as typeof fetch,
     logger: {
       debug: noop,
       info: noop,

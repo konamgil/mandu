@@ -9,7 +9,8 @@
 
 import { describe, it, expect } from "bun:test";
 import { z } from "zod";
-import { Mandu, type InferContract, type InferQuery, type InferBody, type InferResponse } from "./index";
+import { Mandu } from "../index";
+import type { InferContract, InferQuery, InferBody, InferResponse } from "./index";
 
 // === Test Schemas ===
 const UserSchema = z.object({
