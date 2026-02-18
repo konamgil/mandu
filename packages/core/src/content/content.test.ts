@@ -345,8 +345,8 @@ describe("LoaderContext", () => {
       data: { title: "Hello", count: 5 },
     });
 
-    expect(valid.title).toBe("Hello");
-    expect(valid.count).toBe(5);
+    expect((valid as Record<string, unknown>).title).toBe("Hello");
+    expect((valid as Record<string, unknown>).count).toBe(5);
 
     // Invalid data should throw
     await expect(
@@ -370,7 +370,7 @@ describe("LoaderContext", () => {
       data: { anything: "goes" },
     });
 
-    expect(data.anything).toBe("goes");
+    expect((data as Record<string, unknown>).anything).toBe("goes");
   });
 
   test("generateDigest creates hash", () => {

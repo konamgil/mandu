@@ -1,5 +1,5 @@
 import type { Server } from "bun";
-import type { RoutesManifest, HydrationConfig } from "../spec/schema";
+import type { RoutesManifest, RouteSpec, HydrationConfig } from "../spec/schema";
 import type { BundleManifest } from "../bundler/types";
 import type { ManduFilling } from "../filling/filling";
 import { ManduContext } from "../filling/context";
@@ -917,13 +917,14 @@ async function loadPageData(
     try {
       const module = await loader();
       const exported: unknown = module.default;
+      const exportedObj = exported as Record<string, unknown> | null;
       const component = typeof exported === "function"
         ? (exported as RouteComponent)
-        : (exported as any)?.component ?? exported;
+        : (exportedObj?.component ?? exported);
       registry.registerRouteComponent(route.id, component as RouteComponent);
 
       // filling이 있으면 loader 실행
-      const filling = typeof exported === "object" && exported !== null ? (exported as any)?.filling : null;
+      const filling = typeof exported === "object" && exported !== null ? (exportedObj as Record<string, unknown>)?.filling as ManduFilling | null : null;
       if (filling?.hasLoader?.()) {
         const ctx = new ManduContext(req, params);
         loaderData = await filling.executeLoader(ctx);
@@ -1127,18 +1128,19 @@ async function handleRequestInternal(
     return handlePageRoute(req, url, route, params, registry);
   }
 
-  // 4. 알 수 없는 라우트 종류
+  // 4. 알 수 없는 라우트 종류 — exhaustiveness check
+  const _exhaustive: never = route;
   return err({
     errorType: "FRAMEWORK_BUG",
     code: "MANDU_F003",
     httpStatus: 500,
-    message: `Unknown route kind: ${route.kind}`,
+    message: `Unknown route kind: ${(_exhaustive as RouteSpec).kind}`,
     summary: "알 수 없는 라우트 종류 - 프레임워크 버그",
     fix: {
       file: ".mandu/routes.manifest.json",
       suggestion: "라우트의 kind는 'api' 또는 'page'여야 합니다",
     },
-    route: { id: route.id, pattern: route.pattern },
+    route: { id: (_exhaustive as RouteSpec).id, pattern: (_exhaustive as RouteSpec).pattern },
     timestamp: new Date().toISOString(),
   });
 }

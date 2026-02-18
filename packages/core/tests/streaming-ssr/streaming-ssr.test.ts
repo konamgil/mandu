@@ -12,6 +12,7 @@ import {
   SuspenseIsland,
   DeferredData,
   defer,
+  type StreamingMetrics,
 } from "../../src/runtime/streaming-ssr";
 
 // 테스트용 간단한 컴포넌트
@@ -166,14 +167,15 @@ describe("Streaming SSR", () => {
 
   describe("SuspenseIsland", () => {
     it("should render island with data attributes", async () => {
+      const islandChild = React.createElement(TestIsland, { count: 5 });
       const island = React.createElement(
         SuspenseIsland,
         {
           routeId: "test-island",
           priority: "visible",
           bundleSrc: "/.mandu/client/test.js",
+          children: islandChild,
         },
-        React.createElement(TestIsland, { count: 5 })
       );
 
       const stream = await renderToStream(island, {});
@@ -199,8 +201,7 @@ describe("Streaming SSR", () => {
       // fallback은 클라이언트 하이드레이션 중에만 표시
       const island = React.createElement(
         SuspenseIsland,
-        { routeId: "test-island", priority: "idle" },
-        React.createElement(TestIsland, { count: 10 })
+        { routeId: "test-island", priority: "idle", children: React.createElement(TestIsland, { count: 10 }) },
       );
 
       const stream = await renderToStream(island, {});
@@ -224,7 +225,7 @@ describe("Streaming SSR", () => {
       const promise = Promise.resolve({ name: "John", age: 30 });
 
       const element = React.createElement(
-        DeferredData,
+        DeferredData<{ name: string; age: number }>,
         {
           promise,
           children: (data: { name: string; age: number }) =>
@@ -293,15 +294,19 @@ describe("Streaming SSR", () => {
       const stream = await renderToStream(element, {
         routeId: "test-page",
         bundleManifest: {
+          version: 1,
+          buildTime: new Date().toISOString(),
+          env: "development",
           bundles: {
             "test-page": {
               js: "/.mandu/client/test-page.js",
-              css: null,
-              deps: [],
+              dependencies: [],
+              priority: "visible",
             },
           },
           shared: {
             runtime: "/.mandu/client/_runtime.js",
+            vendor: "/.mandu/client/_vendor.js",
             router: "/.mandu/client/_router.js",
           },
           importMap: {
@@ -331,8 +336,14 @@ describe("Streaming SSR", () => {
       const element = React.createElement(SimpleComponent, { message: "Test" });
       const stream = await renderToStream(element, {
         bundleManifest: {
+          version: 1,
+          buildTime: new Date().toISOString(),
+          env: "development",
           bundles: {},
-          shared: {},
+          shared: {
+            runtime: "/.mandu/client/_runtime.js",
+            vendor: "/.mandu/client/_vendor.js",
+          },
           importMap: {
             imports: {
               react: "/.mandu/shared/react.js",
@@ -479,7 +490,7 @@ describe("Serialization Guards", () => {
 
 describe("Metrics Collection", () => {
   it("should collect and report metrics", async () => {
-    let collectedMetrics: any = null;
+    let collectedMetrics: StreamingMetrics | null = null;
 
     const element = React.createElement(SimpleComponent, { message: "Test" });
     const stream = await renderToStream(element, {
@@ -495,10 +506,10 @@ describe("Metrics Collection", () => {
     }
 
     expect(collectedMetrics).not.toBeNull();
-    expect(collectedMetrics.shellReadyTime).toBeGreaterThanOrEqual(0);
-    expect(collectedMetrics.allReadyTime).toBeGreaterThanOrEqual(collectedMetrics.shellReadyTime);
-    expect(collectedMetrics.hasError).toBe(false);
-    expect(collectedMetrics.startTime).toBeGreaterThan(0);
+    expect(collectedMetrics!.shellReadyTime).toBeGreaterThanOrEqual(0);
+    expect(collectedMetrics!.allReadyTime).toBeGreaterThanOrEqual(collectedMetrics!.shellReadyTime);
+    expect(collectedMetrics!.hasError).toBe(false);
+    expect(collectedMetrics!.startTime).toBeGreaterThan(0);
   });
 });
 
@@ -531,8 +542,8 @@ describe("Failure Scenarios", () => {
     const response = await renderStreamingResponse(element, {
       isDev: true,
       criticalData: {
-        invalidFn: () => {}, // function은 직렬화 불가
-      } as any,
+        invalidFn: () => {}, // intentionally invalid type: function is not JSON-serializable
+      } as unknown as Record<string, unknown>,
     });
 
     expect(response.status).toBe(500);
@@ -548,8 +559,8 @@ describe("Failure Scenarios", () => {
     const response = await renderStreamingResponse(element, {
       isDev: false,
       criticalData: {
-        invalidFn: () => {},
-      } as any,
+        invalidFn: () => {}, // intentionally invalid type: function is not JSON-serializable
+      } as unknown as Record<string, unknown>,
     });
 
     // 에러가 발생하지 않고 응답이 반환됨
@@ -562,8 +573,8 @@ describe("Failure Scenarios", () => {
     const response = await renderStreamingResponse(element, {
       isDev: true,
       criticalData: {
-        fn: () => {},
-      } as any,
+        fn: () => {}, // intentionally invalid type: function is not JSON-serializable
+      } as unknown as Record<string, unknown>,
     });
 
     expect(response.status).toBe(500);
@@ -680,7 +691,7 @@ describe("Streaming Core Value Tests", () => {
    * - 준비된 deferred는 base stream 완료 후 주입됨
    */
   it("CORE #2: Deferred scripts are injected after base stream", async () => {
-    const deferredResolvers: Record<string, (value: any) => void> = {};
+    const deferredResolvers: Record<string, (value: unknown) => void> = {};
 
     // 지연 Promise 생성 (수동 resolve)
     const deferredPromises: Record<string, Promise<unknown>> = {
@@ -782,7 +793,7 @@ describe("Streaming Core Value Tests", () => {
   it("CORE #3: Error callbacks are invoked and metrics record hasError", async () => {
     let errorCallbackInvoked = false;
     let shellErrorInvoked = false;
-    let collectedMetrics: any = null;
+    let collectedMetrics: StreamingMetrics | null = null;
 
     // 에러를 발생시키는 컴포넌트
     function ThrowingComponent(): React.ReactElement {
@@ -825,8 +836,9 @@ describe("Streaming Core Value Tests", () => {
       expect(errorCallbackInvoked).toBe(true);
 
       // 메트릭에 에러 기록
-      if (collectedMetrics) {
-        expect(collectedMetrics.hasError).toBe(true);
+      if (collectedMetrics != null) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- TS narrows to never due to upstream type issues
+        expect((collectedMetrics as unknown as StreamingMetrics).hasError).toBe(true);
       }
     } catch (error) {
       // 만약 스트림 생성 자체가 실패하면 여기로 옴
@@ -864,7 +876,7 @@ describe("Streaming Core Value Tests", () => {
    * 핵심 가치 메트릭: deferredChunkCount가 실제 주입된 수 반영
    */
   it("Metrics: deferredChunkCount reflects actual injected scripts", async () => {
-    let collectedMetrics: any = null;
+    let collectedMetrics: StreamingMetrics | null = null;
 
     const deferredPromises: Record<string, Promise<unknown>> = {
       fast1: Promise.resolve({ id: 1 }),
@@ -887,7 +899,7 @@ describe("Streaming Core Value Tests", () => {
 
     // 핵심 검증: deferredChunkCount가 실제 주입된 수 (2개)를 반영
     expect(collectedMetrics).not.toBeNull();
-    expect(collectedMetrics.deferredChunkCount).toBe(2); // fast1, fast2만 성공
+    expect(collectedMetrics!.deferredChunkCount).toBe(2); // fast1, fast2만 성공
   });
 });
 

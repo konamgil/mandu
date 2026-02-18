@@ -224,6 +224,7 @@ export function generateTemplatePatches(
               file: violation.file,
               description: violation.suggestion,
               type: "modify",
+              content: "",
               confidence: 0.4,
             });
           }

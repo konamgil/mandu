@@ -67,8 +67,8 @@ for (const pkgDir of packages) {
       issues.forEach(issue => console.log(`  ${issue}`));
     }
     console.log();
-  } catch (err: any) {
-    console.error(`❌ Error reading ${pkgPath}:`, err.message);
+  } catch (err: unknown) {
+    console.error(`❌ Error reading ${pkgPath}:`, err instanceof Error ? err.message : String(err));
     hasIssues = true;
   }
 }

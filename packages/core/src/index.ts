@@ -23,6 +23,7 @@ export * from "./intent";
 export * from "./devtools";
 export * from "./paths";
 export * from "./resource";
+export * from "./types";
 
 // ── Resolve export * ambiguities (TS2308) ──
 // When the same name is exported from multiple submodules via `export *`,

@@ -38,4 +38,4 @@ export {
 
 // Result helpers
 export type { Result } from "./result";
-export { ok, err, statusFromError, errorToResponse } from "./result";
+export { ok, err, isOk, isErr, statusFromError, errorToResponse } from "./result";

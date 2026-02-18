@@ -102,6 +102,11 @@ export type {
   JsonLd,
   JsonLdType,
 
+  // Template Literal Types
+  OGProperty,
+  TwitterProperty,
+  MetaProperty,
+
   // Google SEO 최적화
   GoogleMeta,
   FormatDetection,

@@ -5,11 +5,11 @@
  * npm publish 전에 실행되어 ambiguous export 에러를 방지합니다.
  */
 
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll } from "bun:test";
 
 describe("Module Exports", () => {
   const IMPORT_TIMEOUT = 15000;
-  let core: any;
+  let core: Record<string, unknown>;
 
   beforeAll(async () => {
     core = await import("../src/index");

@@ -15,7 +15,7 @@ export async function testAuto(opts: { ci?: boolean; impact?: boolean; baseURL?:
 
     // 2) impact subset (optional)
     let onlyRoutes: string[] | undefined;
-    let impactInfo: any = { mode: "full", changedFiles: [], selectedRoutes: [] };
+    let impactInfo: { mode: "full" | "subset"; changedFiles: string[]; selectedRoutes: string[] } = { mode: "full", changedFiles: [], selectedRoutes: [] };
     if (opts.impact) {
       const impactRes = await ateImpact({ repoRoot });
       onlyRoutes = impactRes.selectedRoutes.length ? impactRes.selectedRoutes : undefined;

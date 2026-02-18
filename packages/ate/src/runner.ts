@@ -31,8 +31,8 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
   try {
     ensureDir(runDir);
     ensureDir(latestDir);
-  } catch (err: any) {
-    throw new Error(`Report 디렉토리 생성 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`Report 디렉토리 생성 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const baseURL = input.baseURL ?? process.env.BASE_URL ?? "http://localhost:3333";
@@ -57,8 +57,8 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
       stdio: "inherit",
       env,
     });
-  } catch (err: any) {
-    throw new Error(`Playwright 프로세스 시작 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`Playwright 프로세스 시작 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const exitCode: number = await new Promise((resolve, reject) => {
@@ -91,8 +91,8 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
   // record minimal run metadata
   try {
     writeJson(join(runDir, "run.json"), { ...result, baseURL, at: new Date().toISOString() });
-  } catch (err: any) {
-    console.warn(`[ATE] Run metadata 저장 실패: ${err.message}`);
+  } catch (err: unknown) {
+    console.warn(`[ATE] Run metadata 저장 실패: ${err instanceof Error ? err.message : String(err)}`);
     // Non-fatal: continue
   }
 

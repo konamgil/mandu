@@ -66,7 +66,7 @@ export function deduplicatePatches(patches: PatchSuggestion[]): PatchSuggestion[
   const result: PatchSuggestion[] = [];
 
   for (const patch of patches) {
-    const key = `${patch.file}:${patch.type}:${patch.command || ""}`;
+    const key = `${patch.file}:${patch.type}:${patch.type === "command" ? patch.command : ""}`;
     if (!seen.has(key)) {
       seen.add(key);
       result.push(patch);
@@ -103,8 +103,10 @@ export function generatePatchDescription(patch: PatchSuggestion): string {
     case "delete":
       return `[파일 삭제] ${patch.file}\n  설명: ${patch.description}\n  신뢰도: ${confidenceLabel}`;
 
-    default:
-      return `[${patch.type}] ${patch.file}\n  설명: ${patch.description}`;
+    default: {
+      const _exhaustive: never = patch;
+      return `[unknown] ${(_exhaustive as PatchSuggestion).file}\n  설명: ${(_exhaustive as PatchSuggestion).description}`;
+    }
   }
 }
 
@@ -229,12 +231,14 @@ export async function applyPatch(
         }
       }
 
-      default:
+      default: {
+        const _exhaustive: never = patch;
         return {
           applied: false,
-          patch,
-          error: `Unknown patch type: ${patch.type}`,
+          patch: _exhaustive as PatchSuggestion,
+          error: `Unknown patch type`,
         };
+      }
     }
   } catch (error) {
     return {

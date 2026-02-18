@@ -8,6 +8,15 @@ import { setupHappyDom } from "../setup";
 
 setupHappyDom();
 
+/** Window extended with Mandu hydration globals */
+interface ManduWindow {
+  __MANDU_DATA__: Record<string, unknown>;
+  __MANDU_ROOTS__?: Map<string, unknown>;
+}
+function getManduWindow(): ManduWindow {
+  return window as unknown as ManduWindow;
+}
+
 function createIslandElement(
   id: string,
   src: string,
@@ -25,8 +34,8 @@ function createIslandElement(
 
 function cleanup() {
   document.body.innerHTML = "";
-  (window as any).__MANDU_DATA__ = {};
-  (window as any).__MANDU_ROOTS__?.clear();
+  getManduWindow().__MANDU_DATA__ = {};
+  getManduWindow().__MANDU_ROOTS__?.clear();
 }
 
 describe("Edge Cases - Missing Attributes", () => {
@@ -68,14 +77,14 @@ describe("Edge Cases - Invalid Island", () => {
   afterEach(cleanup);
 
   test("__mandu_island 플래그 없는 모듈 감지", () => {
-    const invalidIsland = {
+    const invalidIsland: Record<string, unknown> = {
       definition: {
         setup: () => ({}),
         render: () => null,
       },
     };
 
-    expect((invalidIsland as any).__mandu_island).toBeUndefined();
+    expect(invalidIsland.__mandu_island).toBeUndefined();
   });
 
   test("setup 함수 없는 Island 감지", () => {
@@ -83,10 +92,10 @@ describe("Edge Cases - Invalid Island", () => {
       __mandu_island: true,
       definition: {
         render: () => null,
-      },
+      } as Record<string, unknown>,
     };
 
-    expect((invalidIsland.definition as any).setup).toBeUndefined();
+    expect(invalidIsland.definition.setup).toBeUndefined();
   });
 
   test("render 함수 없는 Island 감지", () => {
@@ -94,10 +103,10 @@ describe("Edge Cases - Invalid Island", () => {
       __mandu_island: true,
       definition: {
         setup: () => ({}),
-      },
+      } as Record<string, unknown>,
     };
 
-    expect((invalidIsland.definition as any).render).toBeUndefined();
+    expect(invalidIsland.definition.render).toBeUndefined();
   });
 });
 
@@ -109,10 +118,10 @@ describe("Edge Cases - Error Handling", () => {
     const errorIsland = {
       __mandu_island: true,
       definition: {
-        setup: () => {
+        setup: (_data?: unknown) => {
           throw new Error("Setup error");
         },
-        render: () => null,
+        render: (_state?: unknown) => null,
       },
     };
 
@@ -123,8 +132,8 @@ describe("Edge Cases - Error Handling", () => {
     const errorIsland = {
       __mandu_island: true,
       definition: {
-        setup: () => ({}),
-        render: () => {
+        setup: (_data?: unknown) => ({}),
+        render: (_state?: unknown): null => {
           throw new Error("Render error");
         },
       },
@@ -138,7 +147,7 @@ describe("Edge Cases - Error Handling", () => {
     const asyncErrorIsland = {
       __mandu_island: true,
       definition: {
-        setup: async () => {
+        setup: async (_data?: unknown) => {
           throw new Error("Async setup error");
         },
         render: () => null,
@@ -250,7 +259,7 @@ describe("Edge Cases - Event Handling", () => {
   test("mandu:hydrated 커스텀 이벤트 발송", () => {
     const el = createIslandElement("event-test", "/test.js");
     let eventReceived = false;
-    let eventDetail: any = null;
+    let eventDetail: { id: string; data: { value: number } } | null = null;
 
     el.addEventListener("mandu:hydrated", ((e: CustomEvent) => {
       eventReceived = true;
@@ -266,8 +275,8 @@ describe("Edge Cases - Event Handling", () => {
     );
 
     expect(eventReceived).toBe(true);
-    expect(eventDetail.id).toBe("event-test");
-    expect(eventDetail.data.value).toBe(42);
+    expect(eventDetail!.id).toBe("event-test");
+    expect((eventDetail!.data as { value: number }).value).toBe(42);
   });
 
   test("interaction 우선순위 이벤트 리스너", () => {
@@ -297,7 +306,7 @@ describe("Edge Cases - Performance", () => {
 
     performance.mark = ((name: string) => {
       marks.push(name);
-    }) as any;
+    }) as unknown as typeof performance.mark;
 
     performance.mark("mandu-hydrated-test-island");
 

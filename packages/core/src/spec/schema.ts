@@ -59,68 +59,34 @@ export type RouteKind = z.infer<typeof RouteKind>;
 export const SpecHttpMethod = z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]);
 export type SpecHttpMethod = z.infer<typeof SpecHttpMethod>;
 
-export const RouteSpec = z
+// ---- 공통 필드 ----
+const RouteSpecBase = {
+  id: z.string().min(1, "id는 필수입니다"),
+  pattern: z.string().startsWith("/", "pattern은 /로 시작해야 합니다"),
+  module: z.string().min(1, "module 경로는 필수입니다"),
+  slotModule: z.string().optional(),
+  clientModule: z.string().optional(),
+  contractModule: z.string().optional(),
+  hydration: HydrationConfig.optional(),
+  loader: LoaderConfig.optional(),
+  streaming: z.boolean().optional(),
+};
+
+// ---- Page 라우트 ----
+export const PageRouteSpec = z
   .object({
-    id: z.string().min(1, "id는 필수입니다"),
-    pattern: z.string().startsWith("/", "pattern은 /로 시작해야 합니다"),
-    kind: RouteKind,
-
-    // HTTP 메서드 (API용)
+    ...RouteSpecBase,
+    kind: z.literal("page"),
+    // page 필수
+    componentModule: z.string().min(1, "kind가 'page'인 경우 componentModule은 필수입니다"),
+    // page 전용 optional
     methods: z.array(SpecHttpMethod).optional(),
-
-    // 서버 모듈 (generated route handler)
-    module: z.string().min(1, "module 경로는 필수입니다"),
-
-    // 페이지 컴포넌트 모듈 (generated)
-    componentModule: z.string().optional(),
-
-    // 서버 슬롯 (비즈니스 로직)
-    slotModule: z.string().optional(),
-
-    // 클라이언트 슬롯 (interactive 로직) [NEW]
-    clientModule: z.string().optional(),
-
-    // Contract 모듈 (API 스키마 정의) [NEW]
-    contractModule: z.string().optional(),
-
-    // Hydration 설정 [NEW]
-    hydration: HydrationConfig.optional(),
-
-    // Loader 설정 [NEW]
-    loader: LoaderConfig.optional(),
-
-    // Streaming SSR 설정 [NEW v0.9.18]
-    // - true: 이 라우트에 Streaming SSR 적용
-    // - false: 이 라우트에 전통적 SSR 적용
-    // - undefined: 서버 설정 따름
-    streaming: z.boolean().optional(),
-
-    // Layout 체인 [NEW v0.9.33]
-    // - 페이지에 적용할 레이아웃 모듈 경로 배열
-    // - 배열 순서: 외부 → 내부 (Root → Parent → Child)
     layoutChain: z.array(z.string()).optional(),
-
-    // Loading UI 모듈 경로 [NEW v0.9.33]
     loadingModule: z.string().optional(),
-
-    // Error UI 모듈 경로 [NEW v0.9.33]
     errorModule: z.string().optional(),
   })
   .refine(
     (route) => {
-      if (route.kind === "page" && !route.componentModule) {
-        return false;
-      }
-      return true;
-    },
-    {
-      message: "kind가 'page'인 경우 componentModule은 필수입니다",
-      path: ["componentModule"],
-    }
-  )
-  .refine(
-    (route) => {
-      // clientModule이 있으면 hydration.strategy가 none이 아니어야 함
       if (route.clientModule && route.hydration?.strategy === "none") {
         return false;
       }
@@ -131,6 +97,46 @@ export const RouteSpec = z
       path: ["hydration"],
     }
   );
+
+export type PageRouteSpec = z.infer<typeof PageRouteSpec>;
+
+// ---- API 라우트 ----
+export const ApiRouteSpec = z.object({
+  ...RouteSpecBase,
+  kind: z.literal("api"),
+  // api 전용
+  methods: z.array(SpecHttpMethod).optional(),
+  // page 전용 필드도 optional로 허용 (호환성)
+  componentModule: z.string().optional(),
+  layoutChain: z.array(z.string()).optional(),
+  loadingModule: z.string().optional(),
+  errorModule: z.string().optional(),
+});
+
+export type ApiRouteSpec = z.infer<typeof ApiRouteSpec>;
+
+// ---- discriminatedUnion ----
+export const RouteSpec = z.discriminatedUnion("kind", [
+  // PageRouteSpec에 .refine()이 적용되어 있으므로 내부 shape를 직접 사용
+  z.object({
+    ...RouteSpecBase,
+    kind: z.literal("page"),
+    componentModule: z.string().min(1, "kind가 'page'인 경우 componentModule은 필수입니다"),
+    methods: z.array(SpecHttpMethod).optional(),
+    layoutChain: z.array(z.string()).optional(),
+    loadingModule: z.string().optional(),
+    errorModule: z.string().optional(),
+  }),
+  z.object({
+    ...RouteSpecBase,
+    kind: z.literal("api"),
+    methods: z.array(SpecHttpMethod).optional(),
+    componentModule: z.string().optional(),
+    layoutChain: z.array(z.string()).optional(),
+    loadingModule: z.string().optional(),
+    errorModule: z.string().optional(),
+  }),
+]);
 
 export type RouteSpec = z.infer<typeof RouteSpec>;
 
@@ -165,6 +171,28 @@ export const RoutesManifest = z
   );
 
 export type RoutesManifest = z.infer<typeof RoutesManifest>;
+
+// ========== Assertion Functions ==========
+
+/**
+ * Asserts that the given route is a page route.
+ * After this call, TypeScript narrows the type to PageRouteSpec.
+ */
+export function assertPageRoute(route: RouteSpec): asserts route is PageRouteSpec {
+  if (route.kind !== "page") {
+    throw new Error(`Expected page route, got "${route.kind}" (id: ${route.id})`);
+  }
+}
+
+/**
+ * Asserts that the given route is an API route.
+ * After this call, TypeScript narrows the type to ApiRouteSpec.
+ */
+export function assertApiRoute(route: RouteSpec): asserts route is ApiRouteSpec {
+  if (route.kind !== "api") {
+    throw new Error(`Expected API route, got "${route.kind}" (id: ${route.id})`);
+  }
+}
 
 // ========== 유틸리티 함수 ==========
 

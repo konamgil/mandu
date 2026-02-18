@@ -198,7 +198,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
             file: p.file,
             type: p.type,
             description: p.description,
-            command: p.command,
+            ...(p.type === "command" ? { command: p.command } : {}),
             confidence: p.confidence,
           })),
           nextCommand: analysis.nextCommand,

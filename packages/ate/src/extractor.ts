@@ -3,6 +3,7 @@ import { relative, join } from "node:path";
 import { createEmptyGraph, addEdge, addNode } from "./ir";
 import { getAtePaths, writeJson } from "./fs";
 import type { ExtractInput, InteractionGraph } from "./types";
+import type { Node, CallExpression, JsxAttribute, SyntaxKindEnum } from "./ts-morph-types";
 
 const DEFAULT_ROUTE_GLOBS = [
   "app/**/page.tsx",
@@ -11,15 +12,15 @@ const DEFAULT_ROUTE_GLOBS = [
   "routes/**/route.ts",
 ];
 
-function isStringLiteral(node: any /* ts-morph Node */, SyntaxKind: any): boolean {
-  return node.getKind() === SyntaxKind.StringLiteral;
+function isStringLiteral(node: Node, SK: SyntaxKindEnum): boolean {
+  return node.getKind() === SK.StringLiteral;
 }
 
-function tryExtractLiteralArg(callExpr: any /* ts-morph CallExpression */, argIndex = 0, SyntaxKind: any): string | null {
+function tryExtractLiteralArg(callExpr: CallExpression, argIndex = 0, SK: SyntaxKindEnum): string | null {
   const args = callExpr.getArguments();
   const arg = args[argIndex];
   if (!arg) return null;
-  if (isStringLiteral(arg, SyntaxKind)) return arg.getLiteralValue();
+  if (isStringLiteral(arg, SK)) return (arg as Node & { getLiteralValue(): string }).getLiteralValue();
   return null;
 }
 
@@ -46,8 +47,8 @@ export async function extract(input: ExtractInput): Promise<{ ok: true; graphPat
       onlyFiles: true,
       ignore: ["**/node_modules/**", "**/.mandu/**"],
     });
-  } catch (err: any) {
-    throw new Error(`파일 검색 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`파일 검색 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   if (routeFiles.length === 0) {
@@ -56,15 +57,16 @@ export async function extract(input: ExtractInput): Promise<{ ok: true; graphPat
 
   // Lazy load ts-morph only when needed
   const { Project, SyntaxKind } = await import("ts-morph");
+  const SK = SyntaxKind as unknown as SyntaxKindEnum;
 
-  let project: any; // ts-morph Project
+  let project: InstanceType<typeof Project>;
   try {
     project = new Project({
       tsConfigFilePath: input.tsconfigPath ? join(repoRoot, input.tsconfigPath) : undefined,
       skipAddingFilesFromTsConfig: true,
     });
-  } catch (err: any) {
-    throw new Error(`TypeScript 프로젝트 초기화 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`TypeScript 프로젝트 초기화 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   for (const filePath of routeFiles) {
@@ -111,73 +113,74 @@ export async function extract(input: ExtractInput): Promise<{ ok: true; graphPat
 
       // ManduLink / Link literal extraction: <Link href="/x"> or <ManduLink to="/x">
       try {
-        const jsxAttrs = sourceFile.getDescendantsOfKind(SyntaxKind.JsxAttribute);
+        const jsxAttrs = sourceFile.getDescendantsOfKind(SyntaxKind.JsxAttribute) as unknown as JsxAttribute[];
         for (const attr of jsxAttrs) {
           try {
-            const name = (attr as any).getNameNode?.().getText?.() ?? (attr as any).getName?.() ?? "";
+            const name = attr.getNameNode?.().getText?.() ?? attr.getName?.() ?? "";
             if (name !== "to" && name !== "href") continue;
-            const init = (attr as any).getInitializer?.();
+            const init = attr.getInitializer?.();
             if (!init) continue;
-            if (init.getKind?.() === SyntaxKind.StringLiteral) {
-              const raw = (init as any).getLiteralValue?.() ?? init.getText?.();
+            if (init.getKind?.() === SK.StringLiteral) {
+              const raw = init.getLiteralValue?.() ?? init.getText?.();
               const to = typeof raw === "string" ? raw.replace(/^"|"$/g, "") : null;
               if (typeof to === "string" && to.startsWith("/")) {
                 addEdge(graph, { kind: "navigate", from: routePath || "/", to, file: relNormalized, source: `<jsx ${name}>` });
               }
             }
-          } catch (err: any) {
+          } catch (err: unknown) {
             // Skip invalid JSX attributes
-            warnings.push(`JSX 속성 파싱 실패 (${relNormalized}): ${err.message}`);
+            warnings.push(`JSX 속성 파싱 실패 (${relNormalized}): ${err instanceof Error ? err.message : String(err)}`);
           }
         }
-      } catch (err: any) {
-        warnings.push(`JSX 분석 실패 (${relNormalized}): ${err.message}`);
+      } catch (err: unknown) {
+        warnings.push(`JSX 분석 실패 (${relNormalized}): ${err instanceof Error ? err.message : String(err)}`);
       }
 
       // mandu.navigate("/x") literal
       try {
-        const calls = sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression);
+        const calls = sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression) as unknown as CallExpression[];
         for (const call of calls) {
           try {
             const exprText = call.getExpression().getText();
             if (exprText === "mandu.navigate" || exprText.endsWith(".navigate")) {
-              const to = tryExtractLiteralArg(call, 0, SyntaxKind);
+              const to = tryExtractLiteralArg(call, 0, SK);
               if (to && to.startsWith("/")) {
                 addEdge(graph, { kind: "navigate", from: routePath || "/", to, file: relNormalized, source: "mandu.navigate" });
               }
             }
             if (exprText === "mandu.modal.open" || exprText.endsWith(".modal.open")) {
-              const modal = tryExtractLiteralArg(call, 0, SyntaxKind);
+              const modal = tryExtractLiteralArg(call, 0, SK);
               if (modal) {
                 addEdge(graph, { kind: "openModal", from: routePath || "/", modal, file: relNormalized, source: "mandu.modal.open" });
               }
             }
             if (exprText === "mandu.action.run" || exprText.endsWith(".action.run")) {
-              const action = tryExtractLiteralArg(call, 0, SyntaxKind);
+              const action = tryExtractLiteralArg(call, 0, SK);
               if (action) {
                 addEdge(graph, { kind: "runAction", from: routePath || "/", action, file: relNormalized, source: "mandu.action.run" });
               }
             }
-          } catch (err: any) {
+          } catch (err: unknown) {
             // Skip invalid call expressions
-            warnings.push(`함수 호출 파싱 실패 (${relNormalized}): ${err.message}`);
+            warnings.push(`함수 호출 파싱 실패 (${relNormalized}): ${err instanceof Error ? err.message : String(err)}`);
           }
         }
-      } catch (err: any) {
-        warnings.push(`함수 호출 분석 실패 (${relNormalized}): ${err.message}`);
+      } catch (err: unknown) {
+        warnings.push(`함수 호출 분석 실패 (${relNormalized}): ${err instanceof Error ? err.message : String(err)}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Graceful degradation: skip this file and continue
-      warnings.push(`파일 파싱 실패 (${filePath}): ${err.message}`);
-      console.warn(`[ATE] 파일 스킵: ${filePath} - ${err.message}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      warnings.push(`파일 파싱 실패 (${filePath}): ${msg}`);
+      console.warn(`[ATE] 파일 스킵: ${filePath} - ${msg}`);
       continue;
     }
   }
 
   try {
     writeJson(paths.interactionGraphPath, graph);
-  } catch (err: any) {
-    throw new Error(`Interaction graph 저장 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`Interaction graph 저장 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return {

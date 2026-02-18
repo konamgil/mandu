@@ -51,49 +51,43 @@ export interface GenerateOptions {
  * FSRouteConfig를 RouteSpec으로 변환
  */
 export function fsRouteToRouteSpec(fsRoute: FSRouteConfig): RouteSpec {
-  const routeSpec: RouteSpec = {
+  const base = {
     id: fsRoute.id,
     pattern: fsRoute.pattern,
-    kind: fsRoute.kind,
     module: fsRoute.module,
   };
 
-  // 페이지 라우트의 경우
   if (fsRoute.kind === "page") {
-    routeSpec.componentModule = fsRoute.componentModule;
-
-    // Island (클라이언트 모듈)
-    if (fsRoute.clientModule) {
-      routeSpec.clientModule = fsRoute.clientModule;
-      routeSpec.hydration = fsRoute.hydration ?? {
-        strategy: "island",
-        priority: "visible",
-        preload: false,
-      };
-    }
-
-    // Layout 체인
-    if (fsRoute.layoutChain && fsRoute.layoutChain.length > 0) {
-      routeSpec.layoutChain = fsRoute.layoutChain;
-    }
-
-    // Loading UI
-    if (fsRoute.loadingModule) {
-      routeSpec.loadingModule = fsRoute.loadingModule;
-    }
-
-    // Error UI
-    if (fsRoute.errorModule) {
-      routeSpec.errorModule = fsRoute.errorModule;
-    }
+    const pageRoute: RouteSpec = {
+      ...base,
+      kind: "page" as const,
+      componentModule: fsRoute.componentModule ?? "",
+      ...(fsRoute.clientModule
+        ? {
+            clientModule: fsRoute.clientModule,
+            hydration: fsRoute.hydration ?? {
+              strategy: "island" as const,
+              priority: "visible" as const,
+              preload: false,
+            },
+          }
+        : {}),
+      ...(fsRoute.layoutChain && fsRoute.layoutChain.length > 0
+        ? { layoutChain: fsRoute.layoutChain }
+        : {}),
+      ...(fsRoute.loadingModule ? { loadingModule: fsRoute.loadingModule } : {}),
+      ...(fsRoute.errorModule ? { errorModule: fsRoute.errorModule } : {}),
+    };
+    return pageRoute;
   }
 
-  // API 라우트의 경우
-  if (fsRoute.kind === "api" && fsRoute.methods) {
-    routeSpec.methods = fsRoute.methods;
-  }
-
-  return routeSpec;
+  // API 라우트
+  const apiRoute: RouteSpec = {
+    ...base,
+    kind: "api" as const,
+    ...(fsRoute.methods ? { methods: fsRoute.methods } : {}),
+  };
+  return apiRoute;
 }
 
 /**

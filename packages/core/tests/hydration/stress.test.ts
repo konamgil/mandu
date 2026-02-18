@@ -8,6 +8,15 @@ import { setupHappyDom } from "../setup";
 
 setupHappyDom();
 
+/** Window extended with Mandu hydration globals */
+interface ManduWindow {
+  __MANDU_DATA__: Record<string, { serverData: Record<string, unknown>; timestamp: number }>;
+  __MANDU_ROOTS__?: Map<string, unknown>;
+}
+function getManduWindow(): ManduWindow {
+  return window as unknown as ManduWindow;
+}
+
 function createIslandElement(id: string, src: string, priority = "visible"): HTMLElement {
   const el = document.createElement("div");
   el.setAttribute("data-mandu-island", id);
@@ -20,8 +29,8 @@ function createIslandElement(id: string, src: string, priority = "visible"): HTM
 
 function cleanup() {
   document.body.innerHTML = "";
-  (window as any).__MANDU_DATA__ = {};
-  (window as any).__MANDU_ROOTS__?.clear();
+  getManduWindow().__MANDU_DATA__ = {};
+  getManduWindow().__MANDU_ROOTS__?.clear();
 }
 
 describe("Stress Test - Large Number of Islands", () => {
@@ -72,26 +81,26 @@ describe("Stress Test - Large Server Data", () => {
       value: Math.random(),
     }));
 
-    (window as any).__MANDU_DATA__ = {
+    getManduWindow().__MANDU_DATA__ = {
       "large-array-island": {
         serverData: { items: largeArray },
         timestamp: Date.now(),
       },
     };
 
-    const data = (window as any).__MANDU_DATA__["large-array-island"].serverData;
+    const data = getManduWindow().__MANDU_DATA__["large-array-island"].serverData as { items: unknown[] };
     expect(data.items.length).toBe(10000);
   });
 
   test("깊이 중첩된 객체 처리", () => {
-    const createDeepObject = (depth: number): any => {
+    const createDeepObject = (depth: number): Record<string, unknown> => {
       if (depth === 0) return { value: "leaf" };
       return { nested: createDeepObject(depth - 1) };
     };
 
     const deepData = createDeepObject(50);
 
-    (window as any).__MANDU_DATA__ = {
+    getManduWindow().__MANDU_DATA__ = {
       "deep-island": {
         serverData: deepData,
         timestamp: Date.now(),
@@ -99,9 +108,9 @@ describe("Stress Test - Large Server Data", () => {
     };
 
     // 50단계 깊이까지 접근
-    let current = (window as any).__MANDU_DATA__["deep-island"].serverData;
+    let current: Record<string, unknown> = getManduWindow().__MANDU_DATA__["deep-island"].serverData;
     for (let i = 0; i < 50; i++) {
-      current = current.nested;
+      current = current.nested as Record<string, unknown>;
     }
     expect(current.value).toBe("leaf");
   });
@@ -109,14 +118,14 @@ describe("Stress Test - Large Server Data", () => {
   test("큰 문자열 데이터 처리", () => {
     const largeString = "x".repeat(1_000_000); // 1MB 문자열
 
-    (window as any).__MANDU_DATA__ = {
+    getManduWindow().__MANDU_DATA__ = {
       "large-string-island": {
         serverData: { content: largeString },
         timestamp: Date.now(),
       },
     };
 
-    const data = (window as any).__MANDU_DATA__["large-string-island"].serverData;
+    const data = getManduWindow().__MANDU_DATA__["large-string-island"].serverData as { content: string };
     expect(data.content.length).toBe(1_000_000);
   });
 });
@@ -233,11 +242,11 @@ describe("Stress Test - Complex Island Definitions", () => {
   afterEach(cleanup);
 
   test("복잡한 setup 로직 처리", () => {
-    const complexSetup = (data: any) => {
+    const complexSetup = (data: Record<string, unknown>) => {
       // 복잡한 계산 시뮬레이션
-      const result: any = {};
+      const result: Record<string, number> = {};
       for (let i = 0; i < 1000; i++) {
-        result[`key${i}`] = Math.sqrt(i) * (data.multiplier || 1);
+        result[`key${i}`] = Math.sqrt(i) * ((data.multiplier as number) || 1);
       }
       return result;
     };

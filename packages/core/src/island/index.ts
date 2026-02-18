@@ -133,10 +133,10 @@ export function island<P extends Record<string, unknown>>(
 // isIsland() - Island 컴포넌트 체크
 // ============================================================================
 
-export function isIsland(component: unknown): component is IslandComponent<unknown> {
+export function isIsland(component: unknown): component is IslandComponent<any> {
   return (
     typeof component === 'function' &&
-    (component as IslandComponent<unknown>).__island === true
+    (component as IslandComponent<any>).__island === true
   );
 }
 

@@ -8,13 +8,14 @@
  */
 
 import type { CLI_ERROR_CODES } from "../errors";
+import type { CSSFramework, UILibrary } from "./init";
 
 /**
  * 명령어 실행 컨텍스트
  */
-export interface CommandContext {
+export interface CommandContext<TOptions extends Record<string, unknown> = Record<string, string>> {
   args: string[];
-  options: Record<string, string>;
+  options: TOptions;
 }
 
 /**
@@ -32,6 +33,24 @@ export interface CommandRegistration {
   /** 명령어 실행 */
   run: (ctx: CommandContext) => Promise<boolean>;
 }
+
+/**
+ * Mapped type: derive a handler map from a command options map.
+ *
+ * Given a mapping of command names to their option types, produces
+ * the corresponding handler signatures automatically.
+ *
+ * @example
+ * ```typescript
+ * type Cmds = { build: { watch: boolean }; dev: { port: number } };
+ * type Handlers = CommandHandlers<Cmds>;
+ * // => { build: (ctx: CommandContext<{ watch: boolean }>) => Promise<boolean>;
+ * //      dev:   (ctx: CommandContext<{ port: number }>)    => Promise<boolean>; }
+ * ```
+ */
+export type CommandHandlers<TMap extends Record<string, Record<string, unknown>>> = {
+  [K in keyof TMap]: (ctx: CommandContext<TMap[K]>) => Promise<boolean>;
+};
 
 /**
  * 명령어 레지스트리
@@ -71,8 +90,8 @@ registerCommand({
     return init({
       name: ctx.options.name || ctx.options._positional,
       template: ctx.options.template,
-      css: ctx.options.css as any,
-      ui: ctx.options.ui as any,
+      css: ctx.options.css as CSSFramework | undefined,
+      ui: ctx.options.ui as UILibrary | undefined,
       theme: ctx.options.theme === "true",
       minimal: ctx.options.minimal === "true",
       withCi: ctx.options["with-ci"] === "true",

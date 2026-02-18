@@ -2,7 +2,7 @@
  * DNA-007: Error Code Extraction Tests
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import {
   extractErrorCode,
   extractStatusCode,
@@ -234,7 +234,7 @@ describe("DNA-007: Error Code Extraction", () => {
   describe("serializeError", () => {
     it("should serialize error to JSON-safe object", () => {
       const err = new Error("Test error");
-      (err as any).code = "TEST_CODE";
+      (err as Error & { code?: string }).code = "TEST_CODE";
 
       const serialized = serializeError(err);
 

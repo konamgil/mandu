@@ -228,7 +228,7 @@ describe("runtimeInjected", () => {
     const schema = runtimeInjected(z.string());
     const { RUNTIME_INJECTED } = require("./symbols.js");
 
-    expect((schema as any)[RUNTIME_INJECTED]).toBe(true);
+    expect((schema as unknown as Record<symbol, unknown>)[RUNTIME_INJECTED]).toBe(true); // accessing runtime-injected symbol
   });
 });
 

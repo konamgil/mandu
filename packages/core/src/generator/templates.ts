@@ -304,7 +304,7 @@ interface Props {
 }
 
 function ${pageName}Page({ params, loaderData }: Props): React.ReactElement {
-  const serverData = (loaderData || {}) as any;
+  const serverData = (loaderData || {}) as Record<string, unknown>;
   const setupResult = islandModule.definition.setup(serverData);
   return islandModule.definition.render(setupResult) as React.ReactElement;
 }
@@ -333,7 +333,7 @@ interface Props {
 }
 
 export default function ${pageName}Page({ params, loaderData }: Props): React.ReactElement {
-  const serverData = (loaderData || {}) as any;
+  const serverData = (loaderData || {}) as Record<string, unknown>;
   const setupResult = islandModule.definition.setup(serverData);
   return islandModule.definition.render(setupResult) as React.ReactElement;
 }

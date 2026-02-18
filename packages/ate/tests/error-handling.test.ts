@@ -15,10 +15,11 @@ describe("Error Handling", () => {
       try {
         readJson(missingPath);
         expect.unreachable("Should have thrown");
-      } catch (err: any) {
+      } catch (err: unknown) {
         expect(err).toBeInstanceOf(ATEFileError);
-        expect(err.code).toBe("FILE_NOT_FOUND");
-        expect(err.message).toContain("찾을 수 없습니다");
+        const ateErr = err as ATEFileError;
+        expect(ateErr.code).toBe("FILE_NOT_FOUND");
+        expect(ateErr.message).toContain("찾을 수 없습니다");
       } finally {
         rmSync(testDir, { recursive: true, force: true });
       }
@@ -32,10 +33,11 @@ describe("Error Handling", () => {
       try {
         readJson(invalidPath);
         expect.unreachable("Should have thrown");
-      } catch (err: any) {
+      } catch (err: unknown) {
         expect(err).toBeInstanceOf(ATEFileError);
-        expect(err.code).toBe("INVALID_JSON");
-        expect(err.message).toContain("잘못된 JSON 형식");
+        const ateErr = err as ATEFileError;
+        expect(ateErr.code).toBe("INVALID_JSON");
+        expect(ateErr.message).toContain("잘못된 JSON 형식");
       } finally {
         rmSync(testDir, { recursive: true, force: true });
       }
@@ -67,8 +69,9 @@ describe("Error Handling", () => {
       try {
         await extract({ repoRoot: "" });
         expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(err.message).toContain("repoRoot");
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toContain("repoRoot");
       }
     });
 
@@ -104,11 +107,12 @@ describe("Error Handling", () => {
       };
 
       try {
-        generateScenariosFromGraph(graph, "INVALID" as any);
+        generateScenariosFromGraph(graph, "INVALID" as unknown as "L1"); // intentionally invalid
         expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(err.message).toContain("잘못된 oracleLevel");
-        expect(err.message).toContain("INVALID");
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toContain("잘못된 oracleLevel");
+        expect((err as Error).message).toContain("INVALID");
       }
     });
 
@@ -138,8 +142,9 @@ describe("Error Handling", () => {
       try {
         generatePlaywrightSpecs(testDir);
         expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(err.message).toContain("시나리오 번들 읽기 실패");
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toContain("시나리오 번들 읽기 실패");
       } finally {
         rmSync(testDir, { recursive: true, force: true });
       }
@@ -188,8 +193,9 @@ describe("Error Handling", () => {
           oracleLevel: "L1",
         });
         expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(err.message).toContain("repoRoot");
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toContain("repoRoot");
       }
     });
 
@@ -198,10 +204,11 @@ describe("Error Handling", () => {
       const testDir = mkdtempSync(join(tmpdir(), "ate-report-test-"));
 
       try {
-        writeSummary(testDir, "", {} as any);
+        writeSummary(testDir, "", {} as unknown as Parameters<typeof writeSummary>[2]); // intentionally invalid
         expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(err.message).toContain("runId");
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toContain("runId");
       } finally {
         rmSync(testDir, { recursive: true, force: true });
       }
@@ -215,8 +222,9 @@ describe("Error Handling", () => {
       try {
         await computeImpact({ repoRoot: "" });
         expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(err.message).toContain("repoRoot");
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toContain("repoRoot");
       }
     });
 
@@ -231,8 +239,9 @@ describe("Error Handling", () => {
           head: "HEAD",
         });
         expect.unreachable("Should have thrown");
-      } catch (err: any) {
-        expect(err.message).toContain("Invalid git revision");
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toContain("Invalid git revision");
       } finally {
         rmSync(testDir, { recursive: true, force: true });
       }

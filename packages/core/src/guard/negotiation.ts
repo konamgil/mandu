@@ -990,14 +990,42 @@ export interface ${toPascalCase(name)}ResponseDto {
 }
 `;
 
+    case "controller":
+      return `/**
+ * ${purpose}
+ *
+ * Controller - 요청/응답 처리
+ */
+
+export class ${toPascalCase(name)}Controller {
+  // TODO: Implement controller methods
+}
+`;
+
+    case "hook":
+      return `/**
+ * ${purpose}
+ *
+ * Custom Hook
+ */
+
+export function use${toPascalCase(name)}() {
+  // TODO: Implement hook logic
+}
+`;
+
     case "util":
-    default:
       return `/**
  * ${purpose}
  */
 
 // TODO: Implement utility functions
 `;
+
+    default: {
+      const _exhaustive: never = template;
+      throw new Error(`Unhandled file template: ${_exhaustive}`);
+    }
   }
 }
 

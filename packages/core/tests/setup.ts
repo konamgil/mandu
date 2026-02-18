@@ -8,9 +8,10 @@ import { beforeAll, afterAll } from "bun:test";
 
 const happyDomStateKey = Symbol.for("mandu.happyDomState");
 type HappyDomState = { count: number; registered: boolean };
+const globalRecord = globalThis as unknown as Record<symbol, unknown>;
 const happyDomState: HappyDomState =
-  (globalThis as any)[happyDomStateKey] ?? { count: 0, registered: false };
-(globalThis as any)[happyDomStateKey] = happyDomState;
+  (globalRecord[happyDomStateKey] as HappyDomState) ?? { count: 0, registered: false };
+globalRecord[happyDomStateKey] = happyDomState;
 
 // IntersectionObserver Mock
 class MockIntersectionObserver {
@@ -50,23 +51,25 @@ export function setupHappyDom(): void {
     happyDomState.count += 1;
 
     // window.__MANDU_DATA__ 초기화
-    if ((globalThis as any).window) {
-      (globalThis as any).window.__MANDU_DATA__ = {};
-      (globalThis as any).window.__MANDU_ROOTS__ = new Map();
+    const g = globalThis as unknown as Record<string, unknown>;
+    if (g.window) {
+      const w = g.window as Record<string, unknown>;
+      w.__MANDU_DATA__ = {};
+      w.__MANDU_ROOTS__ = new Map();
     }
 
-    (globalThis as any).IntersectionObserver = MockIntersectionObserver;
+    g.IntersectionObserver = MockIntersectionObserver;
 
     // requestIdleCallback Mock
-    (globalThis as any).requestIdleCallback = (cb: () => void) => {
+    g.requestIdleCallback = (cb: () => void) => {
       return setTimeout(cb, 0);
     };
 
     // performance.mark Mock
     if (!globalThis.performance) {
-      (globalThis as any).performance = {};
+      g.performance = {};
     }
-    (globalThis as any).performance.mark = (name: string) => {
+    (g.performance as Record<string, unknown>).mark = (name: string) => {
       console.log(`[Performance] Mark: ${name}`);
     };
   });

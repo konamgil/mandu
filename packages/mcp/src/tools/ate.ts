@@ -10,6 +10,7 @@ import {
   analyzeFeedback,
   applyHeal,
 } from "@mandujs/ate";
+import type { OracleLevel } from "@mandujs/ate";
 
 export const ateToolDefinitions: Tool[] = [
   {
@@ -248,38 +249,95 @@ export const ateToolDefinitions: Tool[] = [
 export function ateTools(projectRoot: string) {
   return {
     "mandu.ate.extract": async (args: Record<string, unknown>) => {
-      return await ateExtract(args as any);
+      const { repoRoot, tsconfigPath, routeGlobs, buildSalt } = args as {
+        repoRoot: string;
+        tsconfigPath?: string;
+        routeGlobs?: string[];
+        buildSalt?: string;
+      };
+      return await ateExtract({ repoRoot, tsconfigPath, routeGlobs, buildSalt });
     },
     "mandu.ate.generate": async (args: Record<string, unknown>) => {
-      return ateGenerate(args as any);
+      const { repoRoot, oracleLevel, onlyRoutes } = args as {
+        repoRoot: string;
+        oracleLevel?: OracleLevel;
+        onlyRoutes?: string[];
+      };
+      return ateGenerate({ repoRoot, oracleLevel, onlyRoutes });
     },
     "mandu.ate.run": async (args: Record<string, unknown>) => {
-      return await ateRun(args as any);
+      const { repoRoot, baseURL, ci, headless, browsers } = args as {
+        repoRoot: string;
+        baseURL?: string;
+        ci?: boolean;
+        headless?: boolean;
+        browsers?: ("chromium" | "firefox" | "webkit")[];
+      };
+      return await ateRun({ repoRoot, baseURL, ci, headless, browsers });
     },
     "mandu.ate.report": async (args: Record<string, unknown>) => {
-      const input = args as any;
+      const { repoRoot, runId, startedAt, finishedAt, exitCode, oracleLevel, format, impact } = args as {
+        repoRoot: string;
+        runId: string;
+        startedAt: string;
+        finishedAt: string;
+        exitCode: number;
+        oracleLevel?: OracleLevel;
+        format?: "json" | "html" | "both";
+        impact?: { changedFiles: string[]; selectedRoutes: string[]; mode: "full" | "subset" };
+      };
       return await ateReport({
-        repoRoot: input.repoRoot,
-        runId: input.runId,
-        startedAt: input.startedAt,
-        finishedAt: input.finishedAt,
-        exitCode: input.exitCode,
-        oracleLevel: input.oracleLevel ?? "L1",
-        format: input.format ?? "both",
-        impact: input.impact,
+        repoRoot,
+        runId,
+        startedAt,
+        finishedAt,
+        exitCode,
+        oracleLevel: oracleLevel ?? "L1",
+        format: format ?? "both",
+        impact,
       });
     },
     "mandu.ate.heal": async (args: Record<string, unknown>) => {
-      return ateHeal(args as any);
+      const { repoRoot, runId } = args as { repoRoot: string; runId: string };
+      return ateHeal({ repoRoot, runId });
     },
     "mandu.ate.impact": async (args: Record<string, unknown>) => {
-      return ateImpact(args as any);
+      const { repoRoot, base, head } = args as {
+        repoRoot: string;
+        base?: string;
+        head?: string;
+      };
+      return ateImpact({ repoRoot, base, head });
     },
     "mandu.ate.auto_pipeline": async (args: Record<string, unknown>) => {
-      return await runFullPipeline(args as any);
+      const {
+        repoRoot, baseURL, oracleLevel, ci, useImpactAnalysis,
+        base, head, autoHeal, tsconfigPath, routeGlobs, buildSalt,
+      } = args as {
+        repoRoot: string;
+        baseURL?: string;
+        oracleLevel?: OracleLevel;
+        ci?: boolean;
+        useImpactAnalysis?: boolean;
+        base?: string;
+        head?: string;
+        autoHeal?: boolean;
+        tsconfigPath?: string;
+        routeGlobs?: string[];
+        buildSalt?: string;
+      };
+      return await runFullPipeline({
+        repoRoot, baseURL, oracleLevel, ci, useImpactAnalysis,
+        base, head, autoHeal, tsconfigPath, routeGlobs, buildSalt,
+      });
     },
     "mandu.ate.feedback": async (args: Record<string, unknown>) => {
-      const result = analyzeFeedback(args as any);
+      const { repoRoot, runId, autoApply } = args as {
+        repoRoot: string;
+        runId: string;
+        autoApply?: boolean;
+      };
+      const result = analyzeFeedback({ repoRoot, runId, autoApply });
       return {
         ok: true,
         category: result.category,
@@ -290,7 +348,13 @@ export function ateTools(projectRoot: string) {
       };
     },
     "mandu.ate.apply_heal": async (args: Record<string, unknown>) => {
-      const result = applyHeal(args as any);
+      const { repoRoot, runId, healIndex, createBackup } = args as {
+        repoRoot: string;
+        runId: string;
+        healIndex: number;
+        createBackup?: boolean;
+      };
+      const result = applyHeal({ repoRoot, runId, healIndex, createBackup });
       return {
         ok: result.success,
         ...result,

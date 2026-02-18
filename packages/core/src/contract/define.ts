@@ -28,6 +28,15 @@
  */
 
 import { z, type ZodType, type ZodObject, type ZodRawShape } from 'zod';
+import {
+  getZodTypeName,
+  getZodInnerType,
+  getZodArrayElementType,
+  getZodObjectShape,
+  getZodEnumValues,
+  getZodChecks,
+  isZodRequired,
+} from './zod-utils';
 
 // ============================================================================
 // Types
@@ -58,7 +67,7 @@ export interface EndpointDefinition<
   tags?: string[];
 }
 
-export type ContractDefinition = Record<string, EndpointDefinition<any, any, any>>;
+export type ContractDefinition = Record<string, EndpointDefinition>;
 
 // ============================================================================
 // Contract Metadata
@@ -116,7 +125,7 @@ export function isContract<T extends ContractDefinition>(
   return (
     typeof value === 'object' &&
     value !== null &&
-    (value as ContractMeta<any>).__contract === true
+    (value as ContractMeta<ContractDefinition>).__contract === true
   );
 }
 
@@ -412,8 +421,7 @@ function generateSchemas<T extends ContractDefinition>(
 }
 
 function zodToOpenAPI(schema: ZodType): Record<string, unknown> {
-  const def = (schema as any)._def;
-  const typeName = def.typeName;
+  const typeName = getZodTypeName(schema);
 
   switch (typeName) {
     case 'ZodString':
@@ -422,25 +430,32 @@ function zodToOpenAPI(schema: ZodType): Record<string, unknown> {
       return { type: 'number' };
     case 'ZodBoolean':
       return { type: 'boolean' };
-    case 'ZodArray':
-      return { type: 'array', items: zodToOpenAPI(def.type) };
+    case 'ZodArray': {
+      const elementType = getZodArrayElementType(schema);
+      return { type: 'array', items: elementType ? zodToOpenAPI(elementType) : {} };
+    }
     case 'ZodObject': {
       const properties: Record<string, unknown> = {};
       const required: string[] = [];
-      for (const [key, value] of Object.entries(def.shape())) {
-        properties[key] = zodToOpenAPI(value as ZodType);
-        if (!(value as any).isOptional?.()) {
+      const shape = getZodObjectShape(schema) ?? {};
+      for (const [key, value] of Object.entries(shape)) {
+        properties[key] = zodToOpenAPI(value);
+        if (isZodRequired(value)) {
           required.push(key);
         }
       }
       return { type: 'object', properties, required };
     }
-    case 'ZodOptional':
-      return zodToOpenAPI(def.innerType);
-    case 'ZodNullable':
-      return { ...zodToOpenAPI(def.innerType), nullable: true };
+    case 'ZodOptional': {
+      const inner = getZodInnerType(schema);
+      return inner ? zodToOpenAPI(inner) : {};
+    }
+    case 'ZodNullable': {
+      const inner = getZodInnerType(schema);
+      return { ...(inner ? zodToOpenAPI(inner) : {}), nullable: true };
+    }
     case 'ZodEnum':
-      return { type: 'string', enum: def.values };
+      return { type: 'string', enum: getZodEnumValues(schema) };
     default:
       return { type: 'object' };
   }

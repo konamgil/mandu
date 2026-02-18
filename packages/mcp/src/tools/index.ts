@@ -4,6 +4,7 @@
  * 도구 정의 및 레지스트리 등록
  */
 
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import type { ActivityMonitor } from "../activity-monitor.js";
 import { mcpToolRegistry } from "../registry/mcp-tool-registry.js";
@@ -48,7 +49,7 @@ import { componentTools, componentToolDefinitions } from "./component.js";
  */
 interface ToolModule {
   category: string;
-  definitions: any;
+  definitions: Tool[];
   handlers: (
     projectRoot: string,
     server?: Server,
@@ -73,7 +74,7 @@ const TOOL_MODULES: ToolModule[] = [
   { category: "runtime", definitions: runtimeToolDefinitions, handlers: runtimeTools },
   { category: "seo", definitions: seoToolDefinitions, handlers: seoTools },
   { category: "project", definitions: projectToolDefinitions, handlers: projectTools as ToolModule["handlers"], requiresServer: true },
-  { category: "ate", definitions: ateToolDefinitions as any, handlers: ateTools as any },
+  { category: "ate", definitions: ateToolDefinitions, handlers: ateTools as ToolModule["handlers"] },
   { category: "resource", definitions: resourceToolDefinitions, handlers: resourceTools },
   { category: "component", definitions: componentToolDefinitions, handlers: componentTools },
 ];
