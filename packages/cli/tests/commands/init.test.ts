@@ -72,4 +72,18 @@ describe("init command mcp backup naming", () => {
     const recreated = JSON.parse(await fs.readFile(mcpPath, "utf-8"));
     expect(recreated?.mcpServers?.mandu?.command).toBe("bunx");
   });
+
+  it("creates .gemini/settings.json with mandu server", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mandu-gemini-test-"));
+    tempDirs.push(dir);
+
+    const result = await __test__.setupMcpConfig(dir);
+
+    expect(result.geminiJson.status).toBe("created");
+
+    const geminiPath = path.join(dir, ".gemini", "settings.json");
+    const content = JSON.parse(await fs.readFile(geminiPath, "utf-8"));
+    expect(content.mcpServers.mandu.command).toBe("bunx");
+    expect(content.mcpServers.mandu.args).toEqual(["@mandujs/mcp"]);
+  });
 });

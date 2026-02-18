@@ -462,6 +462,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   console.log(`\n🤖 AI 에이전트 통합:`);
   logMcpConfigStatus(".mcp.json", mcpResult!.mcpJson, "Claude Code 자동 연결");
   logMcpConfigStatus(".claude.json", mcpResult!.claudeJson, "Claude MCP 로컬 범위");
+  logMcpConfigStatus(".gemini/settings.json", mcpResult!.geminiJson, "Gemini CLI 자동 연결");
   console.log(`   AGENTS.md → 에이전트 가이드 (Bun 사용 명시)`);
 
   // Lockfile 안내
@@ -583,6 +584,7 @@ interface McpConfigFileResult {
 interface McpConfigResult {
   mcpJson: McpConfigFileResult;
   claudeJson: McpConfigFileResult;
+  geminiJson: McpConfigFileResult;
 }
 
 function logMcpConfigStatus(
@@ -619,7 +621,7 @@ function logMcpConfigStatus(
 }
 
 /**
- * .mcp.json / .claude.json 설정 (AI 에이전트 통합)
+ * .mcp.json / .claude.json / .gemini/settings.json 설정 (AI 에이전트 통합)
  * - 파일 없으면 새로 생성
  * - 파일 있으면 mandu 서버만 추가/업데이트 (다른 설정 유지)
  */
@@ -637,6 +639,8 @@ async function setupMcpConfig(
 ): Promise<McpConfigResult> {
   const mcpPath = path.join(targetDir, ".mcp.json");
   const claudePath = path.join(targetDir, ".claude.json");
+  const geminiDir = path.join(targetDir, ".gemini");
+  const geminiPath = path.join(geminiDir, "settings.json");
 
   const manduServer = {
     command: "bunx",
@@ -726,7 +730,11 @@ async function setupMcpConfig(
   const mcpJson = await updateMcpFile(mcpPath);
   const claudeJson = await updateMcpFile(claudePath);
 
-  return { mcpJson, claudeJson };
+  // Gemini CLI: .gemini/settings.json (프로젝트 스코프)
+  await fs.mkdir(geminiDir, { recursive: true });
+  const geminiJson = await updateMcpFile(geminiPath);
+
+  return { mcpJson, claudeJson, geminiJson };
 }
 
 interface LockfileResult {

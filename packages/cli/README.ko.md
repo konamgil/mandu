@@ -23,22 +23,30 @@ bun add -D @mandujs/cli
 ## 빠른 시작
 
 ```bash
-# 새 프로젝트 생성
-bunx @mandujs/cli init my-app
-cd my-app
+# 대화형 모드 (권장)
+bunx @mandujs/cli init
+
+# 비대화형 모드
+bunx @mandujs/cli init my-app --yes
 
 # 개발 서버 시작
+cd my-app
 bun run dev
 ```
 
+대화형 모드에서는 프로젝트 이름, 템플릿, 의존성 설치 여부를 묻습니다.
+`--yes` / `-y` 플래그로 프롬프트를 건너뛸 수 있고, `--no-install`로 자동 설치를 비활성화합니다.
+
 ## 명령어
 
-### `mandu init <project-name>`
+### `mandu init [project-name]`
 
-새 Mandu 프로젝트를 생성합니다.
+새 Mandu 프로젝트를 생성합니다. 이름 생략 시 대화형 모드로 진입합니다.
 
 ```bash
-bunx @mandujs/cli init my-app
+bunx @mandujs/cli init           # 대화형
+bunx @mandujs/cli init my-app    # 비대화형 (기본 옵션)
+bunx @mandujs/cli init my-app --yes --no-install  # 설치 건너뛰기
 ```
 
 생성되는 구조:
@@ -220,6 +228,18 @@ bun test           # 테스트 실행
 bun test --watch   # 감시 모드
 ```
 
+## AI 에이전트 통합
+
+`mandu init` 시 MCP(Model Context Protocol) 설정이 자동 생성됩니다:
+
+| 에이전트 | 설정 파일 | 자동 설정 |
+|----------|-----------|-----------|
+| Claude Code | `.mcp.json` | Yes |
+| Claude Desktop | `.claude.json` | Yes |
+| Gemini CLI | `.gemini/settings.json` | Yes |
+
+`@mandujs/mcp` 서버가 `mandu_negotiate`, `mandu_generate_scaffold`, `mandu_guard` 등의 도구를 제공하여 AI 에이전트가 아키텍처를 자동으로 스캐폴딩, 검증, 유지합니다.
+
 ## 요구 사항
 
 - Bun >= 1.0.0
@@ -228,6 +248,7 @@ bun test --watch   # 감시 모드
 ## 관련 패키지
 
 - [@mandujs/core](https://www.npmjs.com/package/@mandujs/core) - 핵심 런타임
+- [@mandujs/mcp](https://www.npmjs.com/package/@mandujs/mcp) - MCP 서버
 
 ## 라이선스
 

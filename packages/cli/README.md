@@ -30,10 +30,14 @@ bunx @mandujs/cli init my-app
 ### 1. Create a New Project
 
 ```bash
-bunx @mandujs/cli init my-app
-cd my-app
-bun install
+# Interactive mode (recommended)
+bunx @mandujs/cli init
+
+# Non-interactive mode
+bunx @mandujs/cli init my-app --yes
 ```
+
+The interactive mode asks for project name, template selection, and whether to install dependencies. Use `--yes` / `-y` to skip prompts. Use `--no-install` to skip automatic `bun install`.
 
 ### 2. Start Development Server
 
@@ -101,7 +105,7 @@ That's it!
 
 | Command | Description |
 |---------|-------------|
-| `mandu init [name]` | Create new project |
+| `mandu init [name]` | Create new project (interactive / `--yes` for non-interactive) |
 | `mandu dev` | Start dev server (FS Routes + HMR) |
 | `mandu build` | Build for production |
 
@@ -162,9 +166,8 @@ That's it!
 ### Modern Workflow (Recommended)
 
 ```bash
-# 1. Create project
-bunx @mandujs/cli init my-app
-cd my-app && bun install
+# 1. Create project (interactive — auto installs dependencies)
+bunx @mandujs/cli init
 
 # 2. Create pages
 # app/page.tsx        → /
@@ -340,6 +343,18 @@ bunx mandu build --minify --sourcemap
 
 ---
 
+## AI Agent Integration
+
+Mandu automatically configures MCP (Model Context Protocol) for AI coding agents during `init`:
+
+| Agent | Config File | Auto-configured |
+|-------|-------------|-----------------|
+| Claude Code | `.mcp.json` | Yes |
+| Claude Desktop | `.claude.json` | Yes |
+| Gemini CLI | `.gemini/settings.json` | Yes |
+
+The `@mandujs/mcp` server provides tools like `mandu_negotiate`, `mandu_generate_scaffold`, `mandu_guard`, and more — enabling AI agents to scaffold, validate, and maintain architecture automatically.
+
 ## Requirements
 
 - Bun >= 1.0.0
@@ -351,4 +366,4 @@ bunx mandu build --minify --sourcemap
 
 ## License
 
-MIT
+MPL-2.0
