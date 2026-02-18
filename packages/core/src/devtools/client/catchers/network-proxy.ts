@@ -158,7 +158,7 @@ export class NetworkProxy {
     const self = this;
     const originalFetch = this.originalFetch;
 
-    (window as any).fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const interceptedFetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
       const url = typeof input === 'string'
         ? input
         : input instanceof URL
@@ -227,6 +227,10 @@ export class NetworkProxy {
         throw error;
       }
     };
+
+    // Bun's fetch type includes `preconnect`, use Object.assign to preserve it
+    Object.assign(interceptedFetch, { preconnect: window.fetch.preconnect });
+    window.fetch = interceptedFetch as typeof fetch;
   }
 
   // --------------------------------------------------------------------------

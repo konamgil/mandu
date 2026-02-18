@@ -38,10 +38,10 @@ function normalizePath(path: string, rootDir: string): string {
  * Resolve import specifier to file path
  */
 function resolveImport(
-  sourceFile: any, // ts-morph SourceFile (lazy loaded)
+  sourceFile: import("./ts-morph-types").SourceFile,
   importSpecifier: string,
   rootDir: string,
-  project: any // ts-morph Project (lazy loaded)
+  project: import("./ts-morph-types").Project
 ): string | null {
   // Skip external modules (no relative/absolute path)
   if (!importSpecifier.startsWith(".") && !importSpecifier.startsWith("/")) {

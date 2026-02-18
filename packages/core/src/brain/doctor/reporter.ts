@@ -210,7 +210,7 @@ export function generateJsonReport(analysis: DoctorAnalysis): string {
         file: p.file,
         type: p.type,
         description: p.description,
-        command: p.command,
+        ...(p.type === "command" ? { command: p.command } : {}),
         confidence: p.confidence,
       })),
       nextCommand: analysis.nextCommand,
@@ -281,7 +281,7 @@ export function generateDoctorMarkdownReport(analysis: DoctorAnalysis): string {
       lines.push(`- **대상**: \`${p.file}\``);
       lines.push(`- **신뢰도**: ${confidenceLabel}`);
 
-      if (p.command) {
+      if (p.type === "command") {
         lines.push("");
         lines.push("```bash");
         lines.push(p.command);

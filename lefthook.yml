@@ -1,0 +1,4 @@
+pre-push:
+  commands:
+    typecheck:
+      run: bun run typecheck

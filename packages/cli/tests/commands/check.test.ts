@@ -13,7 +13,7 @@ describe("runLegacyGuardWithAutoHeal", () => {
         violations: [],
       });
 
-    const result = await runLegacyGuardWithAutoHeal({ routes: [] } as any, "/tmp", {
+    const result = await runLegacyGuardWithAutoHeal({ routes: [] } as unknown as Parameters<typeof runLegacyGuardWithAutoHeal>[0], "/tmp", {
       runGuardCheck,
       runAutoCorrect: mock().mockResolvedValue({ fixed: true }),
       isAutoCorrectableViolation: mock().mockReturnValue(true),
@@ -26,7 +26,7 @@ describe("runLegacyGuardWithAutoHeal", () => {
   });
 
   it("keeps nextAction when violations remain", async () => {
-    const result = await runLegacyGuardWithAutoHeal({ routes: [] } as any, "/tmp", {
+    const result = await runLegacyGuardWithAutoHeal({ routes: [] } as unknown as Parameters<typeof runLegacyGuardWithAutoHeal>[0], "/tmp", {
       runGuardCheck: mock().mockResolvedValue({
         passed: false,
         violations: [{ ruleId: "manual-fix" }],

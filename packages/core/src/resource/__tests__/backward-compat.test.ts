@@ -277,7 +277,7 @@ describe("Backward Compatibility - Error Handling", () => {
       validateResourceDefinition({
         name: "",
         fields: {},
-      } as any);
+      } as unknown as Parameters<typeof validateResourceDefinition>[0]); // intentionally invalid
       expect(false).toBe(true); // Should not reach here
     } catch (error) {
       expect(error).toBeDefined();
@@ -292,7 +292,7 @@ describe("Backward Compatibility - Error Handling", () => {
       validateResourceDefinition({
         name: "test",
         fields: {},
-      } as any);
+      } as unknown as Parameters<typeof validateResourceDefinition>[0]); // intentionally invalid
       expect(false).toBe(true); // Should not reach here
     } catch (error) {
       expect(error).toBeDefined();

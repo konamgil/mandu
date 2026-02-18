@@ -163,7 +163,7 @@ export function createMockDeps(overrides: Partial<FillingDeps> = {}): FillingDep
 
   return {
     db: {
-      query: async () => [] as any,
+      query: async () => [] as never,
       transaction: async (fn) => fn(),
     },
     cache: {

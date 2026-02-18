@@ -185,12 +185,14 @@ function handleMessage(request: WorkerRequest): WorkerResponse {
         };
       }
 
-      default:
+      default: {
+        const unknownType: string = request.type;
         return {
           id: request.id,
           success: false,
-          error: `Unknown request type: ${(request as any).type}`,
+          error: `Unknown request type: ${unknownType}`,
         };
+      }
     }
   } catch (error) {
     return {
@@ -202,10 +204,15 @@ function handleMessage(request: WorkerRequest): WorkerResponse {
 }
 
 // Worker 컨텍스트에서만 실행
-if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'function') {
-  self.onmessage = (event: MessageEvent<WorkerRequest>) => {
+interface WorkerSelf {
+  postMessage: (message: WorkerResponse) => void;
+  onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
+}
+const workerSelf = typeof self !== 'undefined' ? (self as unknown as WorkerSelf) : undefined;
+if (workerSelf && typeof workerSelf.postMessage === 'function') {
+  workerSelf.onmessage = (event: MessageEvent<WorkerRequest>) => {
     const response = handleMessage(event.data);
-    (self as any).postMessage(response);
+    workerSelf.postMessage(response);
   };
 }
 

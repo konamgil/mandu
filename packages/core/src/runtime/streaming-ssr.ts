@@ -245,6 +245,15 @@ function validateCriticalData(data: Record<string, unknown> | undefined, isDev: 
 // ========== Streaming Warnings ==========
 
 /**
+ * Streaming 경고 상태 (module-level, globalThis as any 제거)
+ */
+const streamingWarnings = {
+  _warned: false,
+  markWarned() { this._warned = true; },
+  hasWarned() { return this._warned; },
+};
+
+/**
  * 프록시/버퍼링 관련 경고 (개발 모드)
  */
 function warnStreamingCaveats(isDev: boolean): void {
@@ -685,9 +694,9 @@ export async function renderToStream(
   validateCriticalData(criticalData, isDev);
 
   // 스트리밍 주의사항 경고 (첫 요청 시 1회만)
-  if (isDev && !(globalThis as any).__MANDU_STREAMING_WARNED__) {
+  if (isDev && !streamingWarnings.hasWarned()) {
     warnStreamingCaveats(isDev);
-    (globalThis as any).__MANDU_STREAMING_WARNED__ = true;
+    streamingWarnings.markWarned();
   }
 
   const encoder = new TextEncoder();

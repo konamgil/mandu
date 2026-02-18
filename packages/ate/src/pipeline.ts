@@ -57,9 +57,10 @@ export async function runFullPipeline(options: AutoPipelineOptions): Promise<Aut
       });
       result.steps.extract.ok = true;
       console.log("✅ [ATE Pipeline] Extract 완료");
-    } catch (err: any) {
-      result.steps.extract.error = err.message;
-      console.error(`❌ [ATE Pipeline] Extract 실패: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      result.steps.extract.error = msg;
+      console.error(`❌ [ATE Pipeline] Extract 실패: ${msg}`);
       return result;
     }
 
@@ -72,9 +73,10 @@ export async function runFullPipeline(options: AutoPipelineOptions): Promise<Aut
       });
       result.steps.generate.ok = true;
       console.log("✅ [ATE Pipeline] Generate 완료");
-    } catch (err: any) {
-      result.steps.generate.error = err.message;
-      console.error(`❌ [ATE Pipeline] Generate 실패: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      result.steps.generate.error = msg;
+      console.error(`❌ [ATE Pipeline] Generate 실패: ${msg}`);
       return result;
     }
 
@@ -100,14 +102,15 @@ export async function runFullPipeline(options: AutoPipelineOptions): Promise<Aut
         console.log(
           `✅ [ATE Pipeline] Impact Analysis 완료 - ${impact.selectedRoutes.length}개 라우트 선택됨`,
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
         result.steps.impact = {
           ok: false,
           mode: "full",
           selectedRoutes: [],
-          error: err.message,
+          error: msg,
         };
-        console.warn(`⚠️ [ATE Pipeline] Impact Analysis 실패, 전체 테스트 실행: ${err.message}`);
+        console.warn(`⚠️ [ATE Pipeline] Impact Analysis 실패, 전체 테스트 실행: ${msg}`);
         // Impact analysis 실패 시에도 계속 진행 (full test)
       }
     }
@@ -132,9 +135,10 @@ export async function runFullPipeline(options: AutoPipelineOptions): Promise<Aut
       console.log(
         `${exitCode === 0 ? "✅" : "⚠️"} [ATE Pipeline] Run 완료 - exitCode: ${exitCode}`,
       );
-    } catch (err: any) {
-      result.steps.run.error = err.message;
-      console.error(`❌ [ATE Pipeline] Run 실패: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      result.steps.run.error = msg;
+      console.error(`❌ [ATE Pipeline] Run 실패: ${msg}`);
       return result;
     }
 
@@ -158,9 +162,10 @@ export async function runFullPipeline(options: AutoPipelineOptions): Promise<Aut
       });
       result.steps.report = { ok: true, summaryPath: reportResult.summaryPath };
       console.log(`✅ [ATE Pipeline] Report 완료 - ${reportResult.summaryPath}`);
-    } catch (err: any) {
-      result.steps.report.error = err.message;
-      console.error(`❌ [ATE Pipeline] Report 실패: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      result.steps.report.error = msg;
+      console.error(`❌ [ATE Pipeline] Report 실패: ${msg}`);
       return result;
     }
 
@@ -179,13 +184,14 @@ export async function runFullPipeline(options: AutoPipelineOptions): Promise<Aut
         console.log(
           `✅ [ATE Pipeline] Heal 완료 - ${healResult.suggestions?.length ?? 0}개 제안 생성됨`,
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
         result.steps.heal = {
           ok: false,
           suggestionsCount: 0,
-          error: err.message,
+          error: msg,
         };
-        console.warn(`⚠️ [ATE Pipeline] Heal 실패: ${err.message}`);
+        console.warn(`⚠️ [ATE Pipeline] Heal 실패: ${msg}`);
         // Heal 실패는 전체 파이프라인 실패로 보지 않음
       }
     }
@@ -197,9 +203,9 @@ export async function runFullPipeline(options: AutoPipelineOptions): Promise<Aut
     );
 
     return result;
-  } catch (err: any) {
+  } catch (err: unknown) {
     throw new ATEFileError(
-      `파이프라인 실행 중 예상치 못한 오류: ${err.message}`,
+      `파이프라인 실행 중 예상치 못한 오류: ${err instanceof Error ? err.message : String(err)}`,
       "PIPELINE_ERROR",
       options.repoRoot,
     );

@@ -235,8 +235,14 @@ export interface SourcemapParseResult {
 /**
  * 간단한 Sourcemap 파서 (Base64 VLQ 디코딩)
  */
+interface RawSourcemap {
+  mappings: string;
+  sources: string[];
+  names?: string[];
+}
+
 export class SourcemapParser {
-  private sourcemap: any;
+  private sourcemap: RawSourcemap;
 
   constructor(sourcemapContent: string) {
     try {
@@ -405,7 +411,7 @@ export function createViteMiddleware(projectRoot: string) {
   const provider = new SourceContextProvider({ projectRoot });
   const handler = provider.createHandler();
 
-  return async (req: any, res: any, next: () => void) => {
+  return async (req: { url?: string }, res: { setHeader: (key: string, value: string) => void; statusCode: number; end: (data: string) => void }, next: () => void) => {
     // __mandu_source__ 엔드포인트만 처리
     if (!req.url?.startsWith('/api/__mandu_source__')) {
       return next();
@@ -435,7 +441,7 @@ export function manduSourceContextPlugin(options?: Partial<SourceContextProvider
   return {
     name: 'mandu-source-context',
 
-    configureServer(server: any) {
+    configureServer(server: { config: { root?: string }; middlewares: { use: (middleware: ReturnType<typeof createViteMiddleware>) => void } }) {
       const projectRoot = options?.projectRoot ?? server.config.root ?? process.cwd();
 
       server.middlewares.use(createViteMiddleware(projectRoot));

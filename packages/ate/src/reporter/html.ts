@@ -40,8 +40,8 @@ export async function generateHtmlReport(options: HtmlReportOptions): Promise<Ht
   try {
     const content = readFileSync(summaryPath, "utf-8");
     summary = JSON.parse(content);
-  } catch (err: any) {
-    throw new Error(`Summary 파일 읽기 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`Summary 파일 읽기 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // 2. 스크린샷 URL 수집 (선택)
@@ -57,8 +57,8 @@ export async function generateHtmlReport(options: HtmlReportOptions): Promise<Ht
             screenshotUrls.push(`./screenshots/${f}`);
           });
       }
-    } catch (err: any) {
-      console.warn(`스크린샷 수집 실패: ${err.message}`);
+    } catch (err: unknown) {
+      console.warn(`스크린샷 수집 실패: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -70,8 +70,8 @@ export async function generateHtmlReport(options: HtmlReportOptions): Promise<Ht
   try {
     ensureDir(join(htmlPath, "..")); // 상위 디렉토리 확인
     writeFileSync(htmlPath, html, "utf-8");
-  } catch (err: any) {
-    throw new Error(`HTML 파일 저장 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`HTML 파일 저장 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const size = Buffer.byteLength(html, "utf-8");

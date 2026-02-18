@@ -73,24 +73,28 @@ export interface AdapterConfig {
 // ========== Doctor Types ==========
 
 /**
- * Patch suggestion from Doctor
+ * Patch suggestion from Doctor (discriminated union by type)
+ *
+ * type별로 필요한 필드가 타입 레벨에서 강제됨:
+ * - add: content 필수
+ * - modify: content 필수, line optional
+ * - delete: file + confidence만 필요
+ * - command: command 필수
  */
-export interface PatchSuggestion {
+interface PatchSuggestionBase {
   /** Target file path */
   file: string;
   /** Description of the change */
   description: string;
-  /** Type of patch */
-  type: "add" | "modify" | "delete" | "command";
-  /** Content to add/modify (for add/modify types) */
-  content?: string;
-  /** Line number to modify (for modify type) */
-  line?: number;
-  /** Command to run (for command type) */
-  command?: string;
   /** Confidence level (0-1) */
   confidence: number;
 }
+
+export type PatchSuggestion =
+  | (PatchSuggestionBase & { type: "add"; content: string })
+  | (PatchSuggestionBase & { type: "modify"; content: string; line?: number })
+  | (PatchSuggestionBase & { type: "delete" })
+  | (PatchSuggestionBase & { type: "command"; command: string });
 
 /**
  * Doctor analysis result

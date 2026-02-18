@@ -39,14 +39,14 @@ export async function computeImpact(input: ImpactInput): Promise<{ changedFiles:
   // Verify git revisions
   try {
     verifyGitRev(repoRoot, base);
-  } catch (err: any) {
-    throw new Error(`잘못된 base revision: ${base} (${err.message})`);
+  } catch (err: unknown) {
+    throw new Error(`잘못된 base revision: ${base} (${err instanceof Error ? err.message : String(err)})`);
   }
 
   try {
     verifyGitRev(repoRoot, head);
-  } catch (err: any) {
-    throw new Error(`잘못된 head revision: ${head} (${err.message})`);
+  } catch (err: unknown) {
+    throw new Error(`잘못된 head revision: ${head} (${err instanceof Error ? err.message : String(err)})`);
   }
 
   let out: string;
@@ -55,8 +55,8 @@ export async function computeImpact(input: ImpactInput): Promise<{ changedFiles:
       cwd: repoRoot,
       stdio: ["ignore", "pipe", "pipe"],
     }).toString("utf8");
-  } catch (err: any) {
-    throw new Error(`Git diff 실행 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`Git diff 실행 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const changedFiles = out.split("\n").map((s) => toPosixPath(s.trim())).filter(Boolean);
@@ -71,8 +71,8 @@ export async function computeImpact(input: ImpactInput): Promise<{ changedFiles:
   let graph: InteractionGraph;
   try {
     graph = readJson<InteractionGraph>(paths.interactionGraphPath);
-  } catch (err: any) {
-    throw new Error(`Interaction graph 읽기 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`Interaction graph 읽기 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   if (!graph.nodes || graph.nodes.length === 0) {
@@ -95,8 +95,8 @@ export async function computeImpact(input: ImpactInput): Promise<{ changedFiles:
       include: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       exclude: ["**/node_modules/**", "**/*.test.ts", "**/*.spec.ts"],
     });
-  } catch (err: any) {
-    warnings.push(`Dependency graph 빌드 실패: ${err.message}`);
+  } catch (err: unknown) {
+    warnings.push(`Dependency graph 빌드 실패: ${err instanceof Error ? err.message : String(err)}`);
     // Fallback: only direct file matching
     const selected = new Set<string>();
     for (const changedFile of changedFiles) {
@@ -136,8 +136,8 @@ export async function computeImpact(input: ImpactInput): Promise<{ changedFiles:
           }
         }
       }
-    } catch (err: any) {
-      warnings.push(`파일 영향 분석 실패 (${changedFile}): ${err.message}`);
+    } catch (err: unknown) {
+      warnings.push(`파일 영향 분석 실패 (${changedFile}): ${err instanceof Error ? err.message : String(err)}`);
       // Continue with next file
     }
   }

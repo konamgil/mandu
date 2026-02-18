@@ -146,25 +146,25 @@ describe("normalizeForHash", () => {
       ["a", 2],
       ["m", 3],
     ]);
-    const normalized = normalizeForHash({ data: map }) as any;
+    const normalized = normalizeForHash({ data: map }) as Record<string, Record<string, unknown>>;
 
     expect(normalized.data.__type__).toBe("Map");
-    expect(normalized.data.entries[0][0]).toBe("a"); // 정렬됨
+    expect((normalized.data.entries as string[][])[0][0]).toBe("a"); // 정렬됨
   });
 
   it("should handle Set as sorted array", () => {
     const set = new Set([3, 1, 2]);
-    const normalized = normalizeForHash({ data: set }) as any;
+    const normalized = normalizeForHash({ data: set }) as Record<string, Record<string, unknown>>;
 
     expect(normalized.data.__type__).toBe("Set");
     expect(normalized.data.items).toEqual([1, 2, 3]); // 정렬됨
   });
 
   it("should detect circular references", () => {
-    const obj: any = { a: 1 };
+    const obj: Record<string, unknown> = { a: 1 };
     obj.self = obj;
 
-    const normalized = normalizeForHash(obj) as any;
+    const normalized = normalizeForHash(obj) as Record<string, unknown>;
     expect(normalized.self).toBe("__circular__");
   });
 
@@ -184,7 +184,7 @@ describe("normalizeForHash", () => {
 
   it("should normalize Error objects", () => {
     const error = new TypeError("test error");
-    const normalized = normalizeForHash({ error }) as any;
+    const normalized = normalizeForHash({ error }) as Record<string, Record<string, unknown>>;
 
     expect(normalized.error.__type__).toBe("Error");
     expect(normalized.error.name).toBe("TypeError");

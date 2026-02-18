@@ -639,7 +639,7 @@ export function applyLogger(
   loggerInstance: ReturnType<typeof logger>
 ): void {
   lifecycle.onRequest.push({ fn: loggerInstance.onRequest, scope: "global" });
-  lifecycle.onError.push({ fn: loggerInstance.onError as any, scope: "global" });
+  lifecycle.onError.push({ fn: loggerInstance.onError as (ctx: ManduContext, error: Error) => void, scope: "global" });
   lifecycle.afterHandle.push({ fn: loggerInstance.afterHandle, scope: "global" });
   lifecycle.afterResponse.push({ fn: loggerInstance.afterResponse, scope: "global" });
 }

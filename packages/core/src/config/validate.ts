@@ -157,6 +157,22 @@ export interface ValidationResult {
 }
 
 /**
+ * Assertion function: narrows unknown config to ValidatedManduConfig or throws.
+ *
+ * Useful in code paths that receive untrusted config objects and need
+ * to guarantee the type after the call without a separate null-check.
+ */
+export function assertValidConfig(cfg: unknown): asserts cfg is ValidatedManduConfig {
+  const result = ManduConfigSchema.safeParse(cfg);
+  if (!result.success) {
+    const messages = result.error.errors.map(
+      (e) => `${e.path.join(".")}: ${e.message}`
+    );
+    throw new Error(`Invalid ManduConfig:\n  ${messages.join("\n  ")}`);
+  }
+}
+
+/**
  * 설정 파일 검증
  */
 export async function validateConfig(rootDir: string): Promise<ValidationResult> {

@@ -2,7 +2,7 @@
  * Guard Presets Tests
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import {
   presets,
   getPreset,
@@ -36,7 +36,7 @@ describe("presets", () => {
   });
 
   it("should throw for unknown preset", () => {
-    expect(() => getPreset("unknown" as any)).toThrow("Unknown guard preset");
+    expect(() => getPreset("unknown" as unknown as Parameters<typeof getPreset>[0])).toThrow("Unknown guard preset"); // intentionally invalid
   });
 
   it("should list all presets", () => {

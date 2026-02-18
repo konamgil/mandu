@@ -60,16 +60,16 @@ export function generateAndWriteScenarios(repoRoot: string, oracleLevel: OracleL
   let graph: InteractionGraph;
   try {
     graph = readJson<InteractionGraph>(paths.interactionGraphPath);
-  } catch (err: any) {
-    throw new Error(`Interaction graph 읽기 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`Interaction graph 읽기 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const bundle = generateScenariosFromGraph(graph, oracleLevel);
 
   try {
     writeJson(paths.scenariosPath, bundle);
-  } catch (err: any) {
-    throw new Error(`시나리오 파일 저장 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`시나리오 파일 저장 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return { scenariosPath: paths.scenariosPath, count: bundle.scenarios.length };

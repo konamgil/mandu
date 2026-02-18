@@ -224,6 +224,19 @@ export interface ResolvedVerification {
 }
 
 // ============================================================================
+// Template Literal Types for Meta Properties
+// ============================================================================
+
+/** OpenGraph meta property name (og:title, og:description, etc.) */
+export type OGProperty = `og:${string}`;
+
+/** Twitter meta property name (twitter:card, twitter:site, etc.) */
+export type TwitterProperty = `twitter:${string}`;
+
+/** Union of well-known meta property prefixes plus arbitrary strings */
+export type MetaProperty = OGProperty | TwitterProperty | string;
+
+// ============================================================================
 // Open Graph Types
 // ============================================================================
 

@@ -34,15 +34,17 @@ export function getAtePaths(repoRoot: string): AtePaths {
 export function ensureDir(path: string): void {
   try {
     mkdirSync(path, { recursive: true });
-  } catch (err: any) {
-    if (err.code === "EACCES") {
+  } catch (err: unknown) {
+    const isNodeError = err instanceof Error && "code" in err;
+    const code = isNodeError ? (err as NodeJS.ErrnoException).code : undefined;
+    if (code === "EACCES") {
       throw new ATEFileError(
         `디렉토리 생성 권한이 없습니다: ${path}`,
         "PERMISSION_DENIED",
         path,
       );
     }
-    if (err.code === "ENOSPC") {
+    if (code === "ENOSPC") {
       throw new ATEFileError(
         `디스크 공간이 부족합니다: ${path}`,
         "NO_SPACE",
@@ -50,8 +52,8 @@ export function ensureDir(path: string): void {
       );
     }
     throw new ATEFileError(
-      `디렉토리 생성 실패: ${path} (${err.message})`,
-      err.code || "UNKNOWN",
+      `디렉토리 생성 실패: ${path} (${err instanceof Error ? err.message : String(err)})`,
+      code || "UNKNOWN",
       path,
     );
   }
@@ -65,18 +67,20 @@ export function writeJson(path: string, data: unknown): void {
   try {
     ensureDir(dirname(path));
     writeFileSync(path, JSON.stringify(data, null, 2), "utf8");
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof ATEFileError) {
       throw err;
     }
-    if (err.code === "EACCES") {
+    const isNodeError = err instanceof Error && "code" in err;
+    const code = isNodeError ? (err as NodeJS.ErrnoException).code : undefined;
+    if (code === "EACCES") {
       throw new ATEFileError(
         `파일 쓰기 권한이 없습니다: ${path}`,
         "PERMISSION_DENIED",
         path,
       );
     }
-    if (err.code === "ENOSPC") {
+    if (code === "ENOSPC") {
       throw new ATEFileError(
         `디스크 공간이 부족합니다: ${path}`,
         "NO_SPACE",
@@ -84,8 +88,8 @@ export function writeJson(path: string, data: unknown): void {
       );
     }
     throw new ATEFileError(
-      `JSON 파일 쓰기 실패: ${path} (${err.message})`,
-      err.code || "UNKNOWN",
+      `JSON 파일 쓰기 실패: ${path} (${err instanceof Error ? err.message : String(err)})`,
+      code || "UNKNOWN",
       path,
     );
   }
@@ -107,11 +111,13 @@ export function readJson<T>(path: string): T {
 
     const content = readFileSync(path, "utf8");
     return JSON.parse(content) as T;
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof ATEFileError) {
       throw err;
     }
-    if (err.code === "EACCES") {
+    const isNodeError = err instanceof Error && "code" in err;
+    const code = isNodeError ? (err as NodeJS.ErrnoException).code : undefined;
+    if (code === "EACCES") {
       throw new ATEFileError(
         `파일 읽기 권한이 없습니다: ${path}`,
         "PERMISSION_DENIED",
@@ -126,8 +132,8 @@ export function readJson<T>(path: string): T {
       );
     }
     throw new ATEFileError(
-      `JSON 파일 읽기 실패: ${path} (${err.message})`,
-      err.code || "UNKNOWN",
+      `JSON 파일 읽기 실패: ${path} (${err instanceof Error ? err.message : String(err)})`,
+      code || "UNKNOWN",
       path,
     );
   }

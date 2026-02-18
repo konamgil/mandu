@@ -32,6 +32,20 @@ import {
 } from "./symbols.js";
 
 // ============================================
+// 타입 안전한 Symbol 프로퍼티 접근 유틸리티
+// ============================================
+
+/**
+ * SchemaRecord: Zod 스키마를 symbol 키 접근 가능한 레코드로 변환.
+ * `as any` 캐스팅을 이 한 곳에서만 수행하여 나머지 코드의 타입 안전성을 보장.
+ */
+type SchemaRecord = Record<symbol, unknown>;
+
+function asRecord(schema: z.ZodType): SchemaRecord {
+  return schema as unknown as SchemaRecord;
+}
+
+// ============================================
 // 메타데이터 부착
 // ============================================
 
@@ -60,7 +74,7 @@ export function withMetadata<
   key: K,
   value: SymbolMetadataMap[K]
 ): T {
-  (schema as any)[key] = value;
+  asRecord(schema)[key] = value;
   return schema;
 }
 
@@ -79,8 +93,9 @@ export function withMetadataMultiple<T extends z.ZodType>(
   schema: T,
   entries: Array<[symbol, unknown]>
 ): T {
+  const record = asRecord(schema);
   for (const [key, value] of entries) {
-    (schema as any)[key] = value;
+    record[key] = value;
   }
   return schema;
 }
@@ -100,14 +115,14 @@ export function getMetadata<K extends keyof SymbolMetadataMap>(
   schema: z.ZodType,
   key: K
 ): SymbolMetadataMap[K] | undefined {
-  return (schema as any)[key];
+  return asRecord(schema)[key] as SymbolMetadataMap[K] | undefined;
 }
 
 /**
  * 스키마에 특정 메타데이터가 있는지 확인
  */
 export function hasMetadata(schema: z.ZodType, key: symbol): boolean {
-  return key in (schema as any);
+  return key in asRecord(schema);
 }
 
 /**
@@ -116,15 +131,16 @@ export function hasMetadata(schema: z.ZodType, key: symbol): boolean {
 export function getAllMetadata(
   schema: z.ZodType
 ): Partial<SymbolMetadataMap> {
-  const result: Partial<SymbolMetadataMap> = {};
+  const result = {} as Record<symbol, unknown>;
+  const record = asRecord(schema);
 
   for (const sym of ALL_METADATA_SYMBOLS) {
-    if (sym in (schema as any)) {
-      (result as any)[sym] = (schema as any)[sym];
+    if (sym in record) {
+      result[sym] = record[sym];
     }
   }
 
-  return result;
+  return result as Partial<SymbolMetadataMap>;
 }
 
 // ============================================
@@ -138,7 +154,7 @@ export function removeMetadata<T extends z.ZodType>(
   schema: T,
   key: symbol
 ): T {
-  delete (schema as any)[key];
+  delete asRecord(schema)[key];
   return schema;
 }
 
@@ -146,9 +162,10 @@ export function removeMetadata<T extends z.ZodType>(
  * 스키마에서 모든 mandu 메타데이터 제거
  */
 export function clearAllMetadata<T extends z.ZodType>(schema: T): T {
+  const record = asRecord(schema);
   for (const sym of ALL_METADATA_SYMBOLS) {
-    if (sym in (schema as any)) {
-      delete (schema as any)[sym];
+    if (sym in record) {
+      delete record[sym];
     }
   }
   return schema;
@@ -165,9 +182,11 @@ export function copyMetadata<T extends z.ZodType>(
   from: z.ZodType,
   to: T
 ): T {
+  const fromRecord = asRecord(from);
+  const toRecord = asRecord(to);
   for (const sym of ALL_METADATA_SYMBOLS) {
-    if (sym in (from as any)) {
-      (to as any)[sym] = (from as any)[sym];
+    if (sym in fromRecord) {
+      toRecord[sym] = fromRecord[sym];
     }
   }
   return to;
@@ -273,7 +292,7 @@ export function getManduSymbolKeys(obj: object): symbol[] {
  * 스키마에 메타데이터가 있는지 확인
  */
 export function hasAnyMetadata(schema: z.ZodType): boolean {
-  return getManduSymbolKeys(schema as any).length > 0;
+  return getManduSymbolKeys(schema as object).length > 0;
 }
 
 /**
@@ -283,10 +302,11 @@ export function serializeMetadata(
   schema: z.ZodType
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
+  const record = asRecord(schema);
 
-  for (const sym of getManduSymbolKeys(schema as any)) {
+  for (const sym of getManduSymbolKeys(schema as object)) {
     const name = sym.description ?? sym.toString();
-    result[name] = (schema as any)[sym];
+    result[name] = record[sym];
   }
 
   return result;

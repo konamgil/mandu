@@ -2,7 +2,7 @@
  * DNA-001: Plugin Registry Tests
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { z } from "zod";
 import {
   PluginRegistry,
@@ -27,7 +27,7 @@ describe("DNA-001: Plugin Registry", () => {
           version: "1.0.0",
           category: "custom",
         },
-        register: vi.fn(),
+        register: mock(),
       });
 
       expect(plugin.meta.id).toBe("test-plugin");
@@ -37,7 +37,7 @@ describe("DNA-001: Plugin Registry", () => {
 
   describe("register", () => {
     it("should register a plugin successfully", async () => {
-      const registerFn = vi.fn();
+      const registerFn = mock();
       const plugin = definePlugin({
         meta: {
           id: "my-plugin",
@@ -62,7 +62,7 @@ describe("DNA-001: Plugin Registry", () => {
           version: "1.0.0",
           category: "custom",
         },
-        register: vi.fn(),
+        register: mock(),
       });
 
       await registry.register(plugin);
@@ -84,7 +84,7 @@ describe("DNA-001: Plugin Registry", () => {
             apiKey: z.string().min(1),
             timeout: z.number().default(5000),
           }),
-          register: vi.fn(),
+          register: mock(),
         });
 
       // Invalid config should throw
@@ -100,7 +100,7 @@ describe("DNA-001: Plugin Registry", () => {
     });
 
     it("should apply schema defaults when config is undefined", async () => {
-      let captured: { timeout: number } | undefined;
+      let captured: { timeout?: number } | undefined;
 
       const plugin = definePlugin({
         meta: {
@@ -134,14 +134,14 @@ describe("DNA-001: Plugin Registry", () => {
         configSchema: z.object({
           apiKey: z.string().min(1),
         }),
-        register: vi.fn(),
+        register: mock(),
       });
 
       await expect(registry.register(plugin)).rejects.toThrow("Invalid config");
     });
 
     it("should call onLoad hook", async () => {
-      const onLoad = vi.fn();
+      const onLoad = mock();
       const plugin = definePlugin({
         meta: {
           id: "with-hook",
@@ -149,7 +149,7 @@ describe("DNA-001: Plugin Registry", () => {
           version: "1.0.0",
           category: "custom",
         },
-        register: vi.fn(),
+        register: mock(),
         onLoad,
       });
 
@@ -160,7 +160,7 @@ describe("DNA-001: Plugin Registry", () => {
 
   describe("unregister", () => {
     it("should unregister a plugin", async () => {
-      const onUnload = vi.fn();
+      const onUnload = mock();
       const plugin = definePlugin({
         meta: {
           id: "removable",
@@ -168,7 +168,7 @@ describe("DNA-001: Plugin Registry", () => {
           version: "1.0.0",
           category: "custom",
         },
-        register: vi.fn(),
+        register: mock(),
         onUnload,
       });
 
@@ -264,7 +264,7 @@ describe("DNA-001: Plugin Registry", () => {
 
   describe("Build Plugin", () => {
     it("should register build plugin", async () => {
-      const onBuildStart = vi.fn();
+      const onBuildStart = mock();
       const plugin = definePlugin({
         meta: {
           id: "build-analyzer",
@@ -277,7 +277,7 @@ describe("DNA-001: Plugin Registry", () => {
             id: "analyzer",
             name: "Bundle Analyzer",
             onBuildStart,
-            onBuildEnd: vi.fn(),
+            onBuildEnd: mock(),
           });
         },
       });
@@ -292,7 +292,7 @@ describe("DNA-001: Plugin Registry", () => {
 
   describe("Logger Transport", () => {
     it("should register logger transport", async () => {
-      const sendFn = vi.fn();
+      const sendFn = mock();
       const plugin = definePlugin({
         meta: {
           id: "logger-file",
@@ -319,7 +319,7 @@ describe("DNA-001: Plugin Registry", () => {
 
   describe("MCP Tool", () => {
     it("should register MCP tool", async () => {
-      const execute = vi.fn().mockResolvedValue({ result: "success" });
+      const execute = mock().mockResolvedValue({ result: "success" });
       const plugin = definePlugin({
         meta: {
           id: "mcp-custom",
@@ -388,13 +388,13 @@ describe("DNA-001: Plugin Registry", () => {
 
   describe("Server Lifecycle", () => {
     it("should call onServerStart for all plugins", async () => {
-      const onServerStart1 = vi.fn();
-      const onServerStart2 = vi.fn();
+      const onServerStart1 = mock();
+      const onServerStart2 = mock();
 
       await registry.register(
         definePlugin({
           meta: { id: "p1", name: "P1", version: "1.0.0", category: "custom" },
-          register: vi.fn(),
+          register: mock(),
           onServerStart: onServerStart1,
         })
       );
@@ -402,7 +402,7 @@ describe("DNA-001: Plugin Registry", () => {
       await registry.register(
         definePlugin({
           meta: { id: "p2", name: "P2", version: "1.0.0", category: "custom" },
-          register: vi.fn(),
+          register: mock(),
           onServerStart: onServerStart2,
         })
       );
@@ -414,12 +414,12 @@ describe("DNA-001: Plugin Registry", () => {
     });
 
     it("should call onServerStop for all plugins", async () => {
-      const onServerStop = vi.fn();
+      const onServerStop = mock();
 
       await registry.register(
         definePlugin({
           meta: { id: "p1", name: "P1", version: "1.0.0", category: "custom" },
-          register: vi.fn(),
+          register: mock(),
           onServerStop,
         })
       );

@@ -25,6 +25,8 @@
 import { z, type ZodType } from 'zod';
 import { ManduFillingFactory, type ManduFilling } from '../filling/filling';
 import type { ManduContext } from '../filling/context';
+import { getZodTypeName, getZodObjectShape, getZodArrayElementType } from '../contract/zod-utils';
+import type { ZodTypeAny } from 'zod';
 
 // ============================================================================
 // Types
@@ -51,7 +53,7 @@ export interface IntentDefinition<TInput = unknown, TOutput = unknown> {
   guard?: (ctx: ManduContext) => Response | void | Promise<Response | void>;
 }
 
-export type IntentMap = Record<string, IntentDefinition<any, any>>;
+export type IntentMap = Record<string, IntentDefinition<unknown, unknown>>;
 
 export interface IntentMeta {
   __intent: true;
@@ -86,7 +88,7 @@ export function intent(intents: IntentMap): ManduFilling & IntentMeta {
   const docs: IntentDocumentation[] = [];
 
   // 메서드별로 핸들러 그룹화
-  const methodHandlers: Record<HttpMethod, IntentDefinition<any, any>[]> = {
+  const methodHandlers: Record<HttpMethod, IntentDefinition<unknown, unknown>[]> = {
     GET: [],
     POST: [],
     PUT: [],
@@ -115,12 +117,13 @@ export function intent(intents: IntentMap): ManduFilling & IntentMeta {
   }
 
   // 각 메서드에 대해 핸들러 등록
-  const registerMethod = (method: HttpMethod, handlers: IntentDefinition<any, any>[]) => {
+  const registerMethod = (method: HttpMethod, handlers: IntentDefinition<unknown, unknown>[]) => {
     if (handlers.length === 0) return;
 
     const methodLower = method.toLowerCase() as Lowercase<HttpMethod>;
+    const fillingWithMethods = filling as ManduFilling & Record<Lowercase<HttpMethod>, (handler: (ctx: ManduContext) => Response | Promise<Response>) => ManduFilling>;
 
-    (filling as any)[methodLower](async (ctx: ManduContext) => {
+    fillingWithMethods[methodLower](async (ctx: ManduContext) => {
       // 경로 매칭 (path가 있는 경우)
       for (const def of handlers) {
         if (def.path && !matchPath(ctx.url, def.path)) {
@@ -135,11 +138,15 @@ export function intent(intents: IntentMap): ManduFilling & IntentMeta {
           }
         }
 
-        // Input 검증
+        // Input 검증 (ctx.body() throws ValidationError on schema mismatch)
         if (def.input && ['POST', 'PUT', 'PATCH'].includes(method)) {
-          const bodyResult = await ctx.body(def.input);
-          if (!bodyResult.success) {
-            return ctx.error('Validation failed', bodyResult.error);
+          try {
+            await ctx.body(def.input);
+          } catch (validationError) {
+            return ctx.error(
+              'Validation failed',
+              validationError instanceof Error ? validationError : new Error(String(validationError))
+            );
           }
         }
 
@@ -247,26 +254,30 @@ export function generateOpenAPIFromIntent(
  */
 function zodToJsonSchema(schema: ZodType<unknown>): Record<string, unknown> {
   // 실제 구현은 zod-to-json-schema 라이브러리 사용 권장
-  const def = (schema as any)._def;
+  const typeName = getZodTypeName(schema as ZodTypeAny);
 
-  if (def.typeName === 'ZodString') {
+  if (typeName === 'ZodString') {
     return { type: 'string' };
   }
-  if (def.typeName === 'ZodNumber') {
+  if (typeName === 'ZodNumber') {
     return { type: 'number' };
   }
-  if (def.typeName === 'ZodBoolean') {
+  if (typeName === 'ZodBoolean') {
     return { type: 'boolean' };
   }
-  if (def.typeName === 'ZodObject') {
+  if (typeName === 'ZodObject') {
     const properties: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(def.shape())) {
-      properties[key] = zodToJsonSchema(value as ZodType<unknown>);
+    const shape = getZodObjectShape(schema as ZodTypeAny);
+    if (shape) {
+      for (const [key, value] of Object.entries(shape)) {
+        properties[key] = zodToJsonSchema(value as ZodType<unknown>);
+      }
     }
     return { type: 'object', properties };
   }
-  if (def.typeName === 'ZodArray') {
-    return { type: 'array', items: zodToJsonSchema(def.type) };
+  if (typeName === 'ZodArray') {
+    const elementType = getZodArrayElementType(schema as ZodTypeAny);
+    return { type: 'array', items: elementType ? zodToJsonSchema(elementType as ZodType<unknown>) : {} };
   }
 
   return { type: 'unknown' };

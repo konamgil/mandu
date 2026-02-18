@@ -13,6 +13,20 @@ export const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 export const err = (error: ManduError): Result<never> => ({ ok: false, error });
 
 /**
+ * Result가 성공인지 검사하는 type guard
+ */
+export function isOk<T>(result: Result<T>): result is { ok: true; value: T } {
+  return result.ok === true;
+}
+
+/**
+ * Result가 실패인지 검사하는 type guard
+ */
+export function isErr<T>(result: Result<T>): result is { ok: false; error: ManduError } {
+  return result.ok === false;
+}
+
+/**
  * ManduError -> HTTP status 매핑
  */
 export function statusFromError(error: ManduError): number {

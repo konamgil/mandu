@@ -42,7 +42,7 @@ describe("normalizeData", () => {
     const input = { name: "Kim", age: 25, admin: true };
     const result = normalizeData(schema, input, { mode: "passthrough" });
 
-    expect(result).toEqual({ name: "Kim", age: 25, admin: true });
+    expect(result as Record<string, unknown>).toEqual({ name: "Kim", age: 25, admin: true });
   });
 
   test("기본 모드는 strip", () => {

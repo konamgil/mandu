@@ -7,6 +7,8 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { generateResourceArtifacts } from "../generator";
 import type { ParsedResource } from "../parser";
+import type { ResourceField, ResourceDefinition } from "../schema";
+import { validateResourceDefinition } from "../schema";
 import path from "path";
 import fs from "fs/promises";
 import os from "os";
@@ -29,7 +31,7 @@ afterAll(async () => {
 /**
  * Create a test parsed resource
  */
-function createTestParsedResource(resourceName: string, definition: any): ParsedResource {
+function createTestParsedResource(resourceName: string, definition: ParsedResource["definition"]): ParsedResource {
   return {
     definition,
     filePath: path.join(testDir, "spec", "resources", `${resourceName}.resource.ts`),
@@ -70,10 +72,10 @@ describe("Performance - Resource Generation", () => {
   });
 
   test("should handle resource with 50 fields in < 1000ms", async () => {
-    const fields: Record<string, any> = {};
+    const fields: Record<string, ResourceField> = {};
     for (let i = 0; i < 50; i++) {
       fields[`field${i}`] = {
-        type: i % 5 === 0 ? "number" : "string",
+        type: i % 5 === 0 ? "number" as const : "string" as const,
         required: i % 2 === 0,
         default: i % 3 === 0 ? `value${i}` : undefined,
       };
@@ -169,7 +171,7 @@ describe("Performance - Schema Validation", () => {
   test("should validate complex schema (50 fields) in < 50ms", async () => {
     const { validateResourceDefinition } = await import("../schema");
 
-    const fields: Record<string, any> = {};
+    const fields: Record<string, ResourceField> = {};
     for (let i = 0; i < 50; i++) {
       fields[`field${i}`] = {
         type: (["string", "number", "boolean", "date", "email"] as const)[i % 5],
@@ -177,7 +179,7 @@ describe("Performance - Schema Validation", () => {
       };
     }
 
-    const definition = {
+    const definition: ResourceDefinition = {
       name: "complex",
       fields,
       options: {
@@ -280,7 +282,7 @@ describe("Performance - Comparison Benchmarks", () => {
     );
 
     // Large resource
-    const largeFields: Record<string, any> = {};
+    const largeFields: Record<string, ResourceField> = {};
     for (let i = 0; i < 30; i++) {
       largeFields[`field${i}`] = {
         type: (["string", "number", "boolean"] as const)[i % 3],

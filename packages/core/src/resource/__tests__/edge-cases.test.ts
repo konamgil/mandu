@@ -10,6 +10,7 @@ import {
   validateResourceDefinition,
   FieldTypes,
   type ResourceDefinition,
+  type ResourceField,
 } from "../schema";
 
 describe("Edge Cases - Resource Names", () => {
@@ -30,7 +31,7 @@ describe("Edge Cases - Resource Names", () => {
       fields: {
         id: { type: "uuid", required: true },
       },
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     expect(() => validateResourceDefinition(definition)).toThrow(/Resource name is required/);
   });
@@ -41,7 +42,7 @@ describe("Edge Cases - Resource Names", () => {
       fields: {
         id: { type: "uuid", required: true },
       },
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     expect(() => validateResourceDefinition(definition)).toThrow(/Invalid resource name/);
   });
@@ -52,7 +53,7 @@ describe("Edge Cases - Resource Names", () => {
       fields: {
         id: { type: "uuid", required: true },
       },
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     expect(() => validateResourceDefinition(definition)).toThrow(/Invalid resource name/);
   });
@@ -63,7 +64,7 @@ describe("Edge Cases - Resource Names", () => {
       fields: {
         id: { type: "uuid", required: true },
       },
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     expect(() => validateResourceDefinition(definition)).toThrow(/Invalid resource name/);
   });
@@ -121,7 +122,7 @@ describe("Edge Cases - Field Names", () => {
       fields: {
         _privateField: { type: "string", required: true },
       },
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     // Field names must start with a letter (not underscore)
     expect(() => validateResourceDefinition(definition)).toThrow(/Invalid field name/);
@@ -133,7 +134,7 @@ describe("Edge Cases - Field Names", () => {
       fields: {
         "1field": { type: "string", required: true },
       },
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     expect(() => validateResourceDefinition(definition)).toThrow(/Invalid field name/);
   });
@@ -206,7 +207,7 @@ describe("Edge Cases - Field Types", () => {
       fields: {
         id: { type: "unsupported_type", required: true },
       },
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     expect(() => validateResourceDefinition(definition)).toThrow(/Invalid field type/);
   });
@@ -230,7 +231,7 @@ describe("Edge Cases - Field Types", () => {
       fields: {
         tags: { type: "array", required: true },
       },
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     expect(() => validateResourceDefinition(definition)).toThrow(/missing "items" property/);
   });
@@ -433,9 +434,9 @@ describe("Edge Cases - Resource Options", () => {
 
 describe("Edge Cases - Large Schemas", () => {
   test("should handle resource with many fields (50 fields)", () => {
-    const fields: Record<string, any> = {};
+    const fields: Record<string, ResourceField> = {};
     for (let i = 0; i < 50; i++) {
-      fields[`field${i}`] = { type: "string", required: i % 2 === 0 };
+      fields[`field${i}`] = { type: "string" as const, required: i % 2 === 0 };
     }
 
     const definition: ResourceDefinition = {
@@ -483,7 +484,7 @@ describe("Edge Cases - Boundary Conditions", () => {
     const definition = {
       name: "test",
       fields: {},
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     expect(() => validateResourceDefinition(definition)).toThrow(
       /must have at least one field/
@@ -494,7 +495,7 @@ describe("Edge Cases - Boundary Conditions", () => {
     const definition = {
       name: "test",
       fields: null,
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     expect(() => validateResourceDefinition(definition)).toThrow(
       /must have at least one field/
@@ -505,7 +506,7 @@ describe("Edge Cases - Boundary Conditions", () => {
     const definition = {
       name: "test",
       fields: undefined,
-    } as any;
+    } as unknown as ResourceDefinition; // intentionally invalid
 
     expect(() => validateResourceDefinition(definition)).toThrow(
       /must have at least one field/

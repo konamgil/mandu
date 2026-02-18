@@ -27,6 +27,9 @@ export function normalizeMetadataBase(
 /**
  * 상대 URL을 절대 URL로 변환
  */
+export function resolveUrl(url: URL, metadataBase: URL | null): URL;
+export function resolveUrl(url: string | null | undefined, metadataBase: URL | null): URL | null;
+export function resolveUrl(url: string | URL | null | undefined, metadataBase: URL | null): URL | null;
 export function resolveUrl(
   url: string | URL | null | undefined,
   metadataBase: URL | null
@@ -69,6 +72,10 @@ export function resolveUrl(
 /**
  * URL을 문자열로 변환 (렌더링용)
  */
+export function urlToString(url: URL): string;
+export function urlToString(url: string): string;
+export function urlToString(url: null | undefined): null;
+export function urlToString(url: URL | string | null | undefined): string | null;
 export function urlToString(url: URL | string | null | undefined): string | null {
   if (!url) return null
   if (url instanceof URL) return url.href

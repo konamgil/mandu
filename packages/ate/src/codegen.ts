@@ -47,8 +47,8 @@ export function generatePlaywrightSpecs(repoRoot: string, opts?: { onlyRoutes?: 
   let bundle: ScenarioBundle;
   try {
     bundle = readJson<ScenarioBundle>(paths.scenariosPath);
-  } catch (err: any) {
-    throw new Error(`시나리오 번들 읽기 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`시나리오 번들 읽기 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   if (!bundle.scenarios || bundle.scenarios.length === 0) {
@@ -59,15 +59,15 @@ export function generatePlaywrightSpecs(repoRoot: string, opts?: { onlyRoutes?: 
   let selectorMap;
   try {
     selectorMap = readSelectorMap(repoRoot);
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Selector map is optional
-    warnings.push(`Selector map 읽기 실패 (무시): ${err.message}`);
+    warnings.push(`Selector map 읽기 실패 (무시): ${err instanceof Error ? err.message : String(err)}`);
   }
 
   try {
     ensureDir(paths.autoE2eDir);
-  } catch (err: any) {
-    throw new Error(`E2E 디렉토리 생성 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`E2E 디렉토리 생성 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const files: string[] = [];
@@ -132,13 +132,15 @@ export function generatePlaywrightSpecs(repoRoot: string, opts?: { onlyRoutes?: 
       try {
         writeFileSync(filePath, code, "utf8");
         files.push(filePath);
-      } catch (err: any) {
-        warnings.push(`Spec 파일 쓰기 실패 (${filePath}): ${err.message}`);
-        console.error(`[ATE] Spec 생성 실패: ${filePath} - ${err.message}`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warnings.push(`Spec 파일 쓰기 실패 (${filePath}): ${msg}`);
+        console.error(`[ATE] Spec 생성 실패: ${filePath} - ${msg}`);
       }
-    } catch (err: any) {
-      warnings.push(`Spec 생성 실패 (${s.id}): ${err.message}`);
-      console.error(`[ATE] Spec 생성 에러: ${s.id} - ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      warnings.push(`Spec 생성 실패 (${s.id}): ${msg}`);
+      console.error(`[ATE] Spec 생성 에러: ${s.id} - ${msg}`);
       // Continue with next scenario
     }
   }
@@ -158,9 +160,10 @@ export function generatePlaywrightSpecs(repoRoot: string, opts?: { onlyRoutes?: 
         Bun.write(configPath, desiredConfig);
       }
     }
-  } catch (err: any) {
-    warnings.push(`Playwright config 생성 실패: ${err.message}`);
-    console.warn(`[ATE] Playwright config 생성 실패: ${err.message}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    warnings.push(`Playwright config 생성 실패: ${msg}`);
+    console.warn(`[ATE] Playwright config 생성 실패: ${msg}`);
   }
 
   return { files, warnings };

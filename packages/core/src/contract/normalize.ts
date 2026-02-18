@@ -21,6 +21,12 @@
  */
 
 import { z, type ZodTypeAny, type ZodObject, type ZodRawShape } from "zod";
+import {
+  getZodChecks,
+  getZodInnerType,
+  getZodArrayElementType,
+  getZodDefaultValue,
+} from "./zod-utils";
 
 /**
  * 정규화 모드
@@ -249,18 +255,18 @@ function applyCoercion(schema: ZodTypeAny): ZodTypeAny {
   if (schema instanceof z.ZodNumber) {
     let coerced = z.coerce.number();
     // 기존 체크 유지 (min, max 등)
-    const checks = (schema as any)._def.checks || [];
+    const checks = getZodChecks(schema);
     for (const check of checks) {
       switch (check.kind) {
         case "min":
           coerced = check.inclusive
-            ? coerced.gte(check.value)
-            : coerced.gt(check.value);
+            ? coerced.gte(check.value!)
+            : coerced.gt(check.value!);
           break;
         case "max":
           coerced = check.inclusive
-            ? coerced.lte(check.value)
-            : coerced.lt(check.value);
+            ? coerced.lte(check.value!)
+            : coerced.lt(check.value!);
           break;
         case "int":
           coerced = coerced.int();
@@ -294,23 +300,23 @@ function applyCoercion(schema: ZodTypeAny): ZodTypeAny {
 
   // ZodOptional → 내부 스키마에 coercion 적용
   if (schema instanceof z.ZodOptional) {
-    return applyCoercion((schema as any)._def.innerType).optional();
+    return applyCoercion(getZodInnerType(schema)!).optional();
   }
 
   // ZodDefault → 내부 스키마에 coercion 적용
   if (schema instanceof z.ZodDefault) {
-    const inner = applyCoercion((schema as any)._def.innerType);
-    return inner.default((schema as any)._def.defaultValue());
+    const inner = applyCoercion(getZodInnerType(schema)!);
+    return inner.default(getZodDefaultValue(schema));
   }
 
   // ZodNullable → 내부 스키마에 coercion 적용
   if (schema instanceof z.ZodNullable) {
-    return applyCoercion((schema as any)._def.innerType).nullable();
+    return applyCoercion(getZodInnerType(schema)!).nullable();
   }
 
   // ZodArray → 배열 요소에 coercion 적용 (쿼리스트링 배열)
   if (schema instanceof z.ZodArray) {
-    return z.array(applyCoercion((schema as any)._def.type));
+    return z.array(applyCoercion(getZodArrayElementType(schema)!));
   }
 
   // 그 외는 원본 반환

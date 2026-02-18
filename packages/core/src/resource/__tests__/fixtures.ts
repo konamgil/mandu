@@ -166,7 +166,7 @@ export const invalidResourceFixtures = {
     fields: {
       id: { type: "uuid", required: true },
     },
-  } as any,
+  } as unknown as ResourceDefinition, // intentionally invalid: missing name
 
   invalidName: {
     name: "123-invalid",
@@ -190,7 +190,7 @@ export const invalidResourceFixtures = {
   invalidFieldType: {
     name: "valid",
     fields: {
-      field: { type: "invalid" as any, required: true },
+      field: { type: "invalid" as unknown as "string", required: true }, // intentionally invalid type
     },
   } as ResourceDefinition,
 

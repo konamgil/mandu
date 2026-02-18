@@ -40,7 +40,7 @@ export interface ResourceField {
   /** 배열 타입인 경우 요소 타입 */
   items?: FieldType;
   /** 커스텀 Zod 스키마 (고급 사용) */
-  schema?: z.ZodType<any>;
+  schema?: z.ZodTypeAny;
 }
 
 // ============================================

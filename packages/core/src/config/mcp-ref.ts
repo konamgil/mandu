@@ -17,7 +17,7 @@
  */
 
 import { z } from "zod";
-import { withMetadata, withMetadataMultiple } from "./metadata.js";
+import { withMetadata, withMetadataMultiple, getMetadata, hasMetadata } from "./metadata.js";
 import {
   SCHEMA_REFERENCE,
   SENSITIVE_FIELD,
@@ -313,7 +313,7 @@ export function createMcpServerSchemaWithSecrets() {
  * 스키마가 MCP 서버 참조인지 확인
  */
 export function isMcpServerRef(schema: z.ZodType): boolean {
-  const ref = (schema as any)[SCHEMA_REFERENCE] as SchemaReferenceMetadata | undefined;
+  const ref = getMetadata(schema, SCHEMA_REFERENCE);
   return ref?.type === "mcpServer";
 }
 
@@ -321,7 +321,7 @@ export function isMcpServerRef(schema: z.ZodType): boolean {
  * 스키마에서 MCP 서버 이름 추출
  */
 export function getMcpServerName(schema: z.ZodType): string | undefined {
-  const ref = (schema as any)[SCHEMA_REFERENCE] as SchemaReferenceMetadata | undefined;
+  const ref = getMetadata(schema, SCHEMA_REFERENCE);
   return ref?.type === "mcpServer" ? ref.name : undefined;
 }
 
@@ -329,20 +329,20 @@ export function getMcpServerName(schema: z.ZodType): string | undefined {
  * 스키마가 민감 필드인지 확인
  */
 export function isSensitiveField(schema: z.ZodType): boolean {
-  return SENSITIVE_FIELD in (schema as any);
+  return hasMetadata(schema, SENSITIVE_FIELD);
 }
 
 /**
  * 스키마가 보호된 필드인지 확인
  */
 export function isProtectedField(schema: z.ZodType): boolean {
-  return PROTECTED_FIELD in (schema as any);
+  return hasMetadata(schema, PROTECTED_FIELD);
 }
 
 /**
  * 스키마가 환경 변수 기반인지 확인
  */
 export function isEnvBasedField(schema: z.ZodType): boolean {
-  const source = (schema as any)[FIELD_SOURCE] as FieldSourceMetadata | undefined;
+  const source = getMetadata(schema, FIELD_SOURCE);
   return source?.source === "env";
 }

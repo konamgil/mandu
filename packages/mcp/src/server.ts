@@ -16,6 +16,7 @@ import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { loadManduConfig, startWatcher, type ManduConfig } from "@mandujs/core";
@@ -113,13 +114,13 @@ export class ManduMcpServer {
     });
 
     // 도구 실행 요청
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async (request, _extra) => {
       const { name, arguments: args } = request.params;
 
       // DNA-007 + DNA-016: Tool Executor로 실행
       const result = await this.toolExecutor.execute(name, args || {});
 
-      return result.response;
+      return result.response as unknown as CallToolResult;
     });
   }
 

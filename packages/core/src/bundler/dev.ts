@@ -396,7 +396,7 @@ export interface HMRMessage {
  * HMR WebSocket 서버 생성
  */
 export function createHMRServer(port: number): HMRServer {
-  const clients = new Set<any>();
+  const clients = new Set<{ send: (data: string) => void; close: () => void }>();
   const hmrPort = port + PORTS.HMR_OFFSET;
   let restartHandler: (() => Promise<void>) | null = null;
 

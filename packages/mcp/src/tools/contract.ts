@@ -8,6 +8,7 @@ import {
   openAPIToJSON,
   type RouteSpec,
   type RoutesManifest,
+  type SpecHttpMethod,
 } from "@mandujs/core";
 import { getProjectPaths, readJsonFile, writeJsonFile } from "../utils/project.js";
 import path from "path";
@@ -295,7 +296,7 @@ export function contractTools(projectRoot: string) {
       // Generate contract with custom methods if provided
       const routeWithMethods: RouteSpec = {
         ...route,
-        methods: methods as any || route.methods || ["GET", "POST"],
+        methods: (methods as SpecHttpMethod[] | undefined) || route.methods || ["GET", "POST"],
       };
 
       const contractContent = generateContractTemplate(routeWithMethods);

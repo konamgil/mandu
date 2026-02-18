@@ -25,15 +25,19 @@ import type {
 type PluginState = "pending" | "loaded" | "error" | "unloaded";
 
 /**
- * 등록된 플러그인 정보
+ * 등록된 플러그인 정보 (discriminated union by state)
+ *
+ * state에 따라 접근 가능한 필드가 타입 레벨에서 결정됨:
+ * - pending: plugin, config만 존재
+ * - loaded: plugin, config, loadedAt 존재
+ * - error: plugin, config, error 존재
+ * - unloaded: plugin만 존재
  */
-interface RegisteredPlugin<TConfig = unknown> {
-  plugin: Plugin<TConfig>;
-  state: PluginState;
-  config?: TConfig;
-  error?: Error;
-  loadedAt?: Date;
-}
+type RegisteredPlugin<TConfig = unknown> =
+  | { state: "pending"; plugin: Plugin<TConfig>; config?: TConfig }
+  | { state: "loaded"; plugin: Plugin<TConfig>; config?: TConfig; loadedAt: Date }
+  | { state: "error"; plugin: Plugin<TConfig>; config?: TConfig; error: Error }
+  | { state: "unloaded"; plugin: Plugin<TConfig> };
 
 /**
  * 소유자 정보 포함 리소스
@@ -89,7 +93,7 @@ export class PluginRegistry {
         const error = new Error(
           `Invalid config for plugin "${id}": ${result.error.message}`
         );
-        this.plugins.set(id, { plugin, state: "error", error });
+        this.plugins.set(id, { plugin: plugin as Plugin<unknown>, state: "error", config: validatedConfig, error });
         throw error;
       }
       validatedConfig = result.data;
@@ -97,7 +101,7 @@ export class PluginRegistry {
 
     // 등록
     this.plugins.set(id, {
-      plugin,
+      plugin: plugin as Plugin<unknown>,
       state: "pending",
       config: validatedConfig,
     });
@@ -112,16 +116,23 @@ export class PluginRegistry {
         await plugin.onLoad();
       }
 
-      const entry = this.plugins.get(id)!;
-      entry.state = "loaded";
-      entry.loadedAt = new Date();
+      this.plugins.set(id, {
+        state: "loaded",
+        plugin: plugin as Plugin<unknown>,
+        config: validatedConfig,
+        loadedAt: new Date(),
+      });
 
       this.logger.info(`Plugin loaded: ${id} (v${plugin.meta.version})`);
     } catch (error) {
-      const entry = this.plugins.get(id)!;
-      entry.state = "error";
-      entry.error = error instanceof Error ? error : new Error(String(error));
-      throw entry.error;
+      const pluginError = error instanceof Error ? error : new Error(String(error));
+      this.plugins.set(id, {
+        state: "error",
+        plugin: plugin as Plugin<unknown>,
+        config: validatedConfig,
+        error: pluginError,
+      });
+      throw pluginError;
     }
   }
 
@@ -142,7 +153,6 @@ export class PluginRegistry {
     // 등록된 리소스 정리
     this.removeOwnedResources(id);
 
-    entry.state = "unloaded";
     this.plugins.delete(id);
 
     this.logger.info(`Plugin unloaded: ${id}`);

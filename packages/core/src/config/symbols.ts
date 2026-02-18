@@ -133,7 +133,7 @@ export const ALL_METADATA_SYMBOLS = [
  * 심볼이 mandu 메타데이터 심볼인지 확인
  */
 export function isManduMetadataSymbol(sym: symbol): boolean {
-  return ALL_METADATA_SYMBOLS.includes(sym as any);
+  return (ALL_METADATA_SYMBOLS as readonly symbol[]).includes(sym);
 }
 
 /**

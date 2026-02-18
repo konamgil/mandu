@@ -9,6 +9,14 @@ import { setupHappyDom } from "../setup";
 setupHappyDom();
 import React from "react";
 
+/** Window extended with Mandu hydration globals */
+interface ManduWindow {
+  __MANDU_DATA__: Record<string, { serverData: Record<string, unknown>; timestamp: number }>;
+}
+function getManduWindow(): ManduWindow {
+  return window as unknown as ManduWindow;
+}
+
 // Island 함수 시뮬레이션 (실제 island() 함수와 동일한 구조)
 interface IslandDefinition<T, S> {
   setup: (serverData: T) => S;
@@ -32,7 +40,7 @@ function island<T = unknown, S = unknown>(
 
 function cleanup() {
   document.body.innerHTML = "";
-  (window as any).__MANDU_DATA__ = {};
+  getManduWindow().__MANDU_DATA__ = {};
 }
 
 describe("Integration - Island Factory", () => {
@@ -54,7 +62,7 @@ describe("Integration - Island Factory", () => {
     expect(() => {
       island({
         render: () => null,
-      } as any);
+      } as unknown as IslandDefinition<unknown, unknown>); // intentionally invalid
     }).toThrow("[Mandu Island] setup must be a function");
   });
 
@@ -62,7 +70,7 @@ describe("Integration - Island Factory", () => {
     expect(() => {
       island({
         setup: () => ({}),
-      } as any);
+      } as unknown as IslandDefinition<unknown, unknown>); // intentionally invalid
     }).toThrow("[Mandu Island] render must be a function");
   });
 });
@@ -76,7 +84,7 @@ describe("Integration - React Elements", () => {
 
     expect(element.type).toBe("div");
     expect(element.props.className).toBe("test");
-    expect(element.props.children).toBe("Hello");
+    expect((element.props as Record<string, unknown>).children).toBe("Hello");
   });
 
   test("Island render가 React 요소 반환", () => {
@@ -89,7 +97,7 @@ describe("Integration - React Elements", () => {
     const element = testIsland.definition.render(state);
 
     expect(React.isValidElement(element)).toBe(true);
-    expect((element as any).props.children).toBe("Hello World");
+    expect((element as React.ReactElement<{ children: string }>).props.children).toBe("Hello World");
   });
 
   test("중첩된 React 요소 생성", () => {
@@ -106,8 +114,8 @@ describe("Integration - React Elements", () => {
     const state = testIsland.definition.setup({ items: ["a", "b", "c"] });
     const element = testIsland.definition.render(state);
 
-    expect((element as any).type).toBe("ul");
-    expect((element as any).props.children.length).toBe(3);
+    expect((element as React.ReactElement<{ children: unknown[] }>).type).toBe("ul");
+    expect((element as React.ReactElement<{ children: unknown[] }>).props.children.length).toBe(3);
   });
 });
 
@@ -186,7 +194,7 @@ describe("Integration - Server Data Flow", () => {
 
   test("window.__MANDU_DATA__에서 데이터 로드", () => {
     // 서버에서 전달된 데이터 시뮬레이션
-    (window as any).__MANDU_DATA__ = {
+    getManduWindow().__MANDU_DATA__ = {
       "user-profile": {
         serverData: {
           id: 123,
@@ -206,7 +214,7 @@ describe("Integration - Server Data Flow", () => {
         React.createElement("div", null, `${state.displayName} <${state.contactEmail}>`),
     });
 
-    const serverData = (window as any).__MANDU_DATA__["user-profile"].serverData;
+    const serverData = getManduWindow().__MANDU_DATA__["user-profile"].serverData as { id: number; name: string; email: string };
     const state = testIsland.definition.setup(serverData);
 
     expect(state.displayName).toBe("Test User");
@@ -316,10 +324,10 @@ describe("Integration - Performance Marks", () => {
     const marks: string[] = [];
     const measures: { name: string; duration: number }[] = [];
 
-    performance.mark = ((name: string) => marks.push(name)) as any;
-    performance.measure = ((name: string, start: string, end: string) => {
-      measures.push({ name, duration: 0 });
-    }) as any;
+    performance.mark = ((name: string) => marks.push(name)) as unknown as typeof performance.mark;
+    performance.measure = ((_name: string, _start: string, _end: string) => {
+      measures.push({ name: _name, duration: 0 });
+    }) as unknown as typeof performance.measure;
 
     // 하이드레이션 시작/완료 마킹
     performance.mark("mandu-hydrate-start-test");

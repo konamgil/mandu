@@ -30,7 +30,7 @@ export interface KitchenInstance {
   /** DevTools 언마운트 및 정리 */
   destroy: () => void;
   /** 상태 관리자 접근 */
-  getState: () => any;
+  getState: () => Record<string, unknown>;
   /** 에러 리포트 */
   reportError: (error: Error | string) => void;
   /** DevTools 열기 */
@@ -213,7 +213,7 @@ function createInstance(): KitchenInstance {
 function createNoopInstance(): KitchenInstance {
   return {
     destroy: () => {},
-    getState: () => ({} as any),
+    getState: () => ({}),
     reportError: () => {},
     open: () => {},
     close: () => {},

@@ -30,7 +30,7 @@ afterAll(async () => {
 /**
  * Create a test parsed resource (no file import needed)
  */
-function createTestParsedResource(resourceName: string, definition: any): ParsedResource {
+function createTestParsedResource(resourceName: string, definition: ParsedResource["definition"]): ParsedResource {
   return {
     definition,
     filePath: path.join(testDir, "spec", "resources", `${resourceName}.resource.ts`),

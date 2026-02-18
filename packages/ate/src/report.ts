@@ -27,8 +27,8 @@ export function composeSummary(params: {
   let oracle;
   try {
     oracle = createDefaultOracle(params.oracleLevel);
-  } catch (err: any) {
-    throw new Error(`Oracle 생성 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`Oracle 생성 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return {
@@ -74,16 +74,16 @@ export function writeSummary(repoRoot: string, runId: string, summary: SummaryJs
 
   try {
     ensureDir(runDir);
-  } catch (err: any) {
-    throw new Error(`Report 디렉토리 생성 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`Report 디렉토리 생성 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const outPath = join(runDir, "summary.json");
 
   try {
     writeJson(outPath, summary);
-  } catch (err: any) {
-    throw new Error(`Summary 파일 저장 실패: ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`Summary 파일 저장 실패: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return outPath;
@@ -120,8 +120,8 @@ export async function generateReport(options: GenerateReportOptions): Promise<{ 
         includeTraces,
       });
       result.html = htmlResult.path;
-    } catch (err: any) {
-      throw new Error(`HTML 리포트 생성 실패: ${err.message}`);
+    } catch (err: unknown) {
+      throw new Error(`HTML 리포트 생성 실패: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

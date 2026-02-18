@@ -929,14 +929,15 @@ async function buildRuntime(
       outputPath: `/.mandu/client/${outputName}`,
       errors: [],
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 예외 발생 시에도 디버깅을 위해 소스 파일을 남겨둠
     const extra: string[] = [];
-    if (error?.errors && Array.isArray(error.errors)) {
-      extra.push(...error.errors.map((e: any) => String(e?.message || e)));
+    const errObj = error as Record<string, unknown> | null;
+    if (errObj && Array.isArray(errObj.errors)) {
+      extra.push(...errObj.errors.map((e: unknown) => String((e as Record<string, unknown>)?.message || e)));
     }
-    if (error?.logs && Array.isArray(error.logs)) {
-      extra.push(...error.logs.map((l: any) => String(l?.message || l)));
+    if (errObj && Array.isArray(errObj.logs)) {
+      extra.push(...errObj.logs.map((l: unknown) => String((l as Record<string, unknown>)?.message || l)));
     }
 
     return {
@@ -1328,19 +1329,18 @@ export async function buildClientBundles(
   }
 
   // 3-4. Runtime, Router, Vendor, DevTools 번들 병렬 빌드 (서로 독립적)
-  const buildPromises: Promise<any>[] = [
-    buildRuntime(outDir, options),
-    buildRouterRuntime(outDir, options),
-    buildVendorShims(outDir, options),
-  ];
-
-  // DevTools 번들은 dev 모드에서만 빌드
   const isDev = env === "development";
-  if (isDev) {
-    buildPromises.push(buildDevtoolsBundle(outDir, options));
-  }
+  const runtimePromise = buildRuntime(outDir, options);
+  const routerPromise = buildRouterRuntime(outDir, options);
+  const vendorPromise = buildVendorShims(outDir, options);
+  const devtoolsPromise = isDev ? buildDevtoolsBundle(outDir, options) : null;
 
-  const [runtimeResult, routerResult, vendorResult, devtoolsResult] = await Promise.all(buildPromises);
+  const [runtimeResult, routerResult, vendorResult, devtoolsResult] = await Promise.all([
+    runtimePromise,
+    routerPromise,
+    vendorPromise,
+    devtoolsPromise,
+  ]);
 
   if (!runtimeResult.success) {
     errors.push(...runtimeResult.errors.map((e: string) => `[Runtime] ${e}`));

@@ -8,7 +8,16 @@ import { setupHappyDom } from "../setup";
 
 setupHappyDom();
 
-// 테스트용 Island 모듈 생성
+/** Window extended with Mandu hydration globals */
+interface ManduWindow {
+  __MANDU_DATA__: Record<string, { serverData: Record<string, unknown>; timestamp: number }>;
+  __MANDU_ROOTS__?: Map<string, unknown>;
+}
+function getManduWindow(): ManduWindow {
+  return window as unknown as ManduWindow;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- test helper needs flexible typing
 function createMockIsland(setupFn?: (data: any) => any, renderFn?: (state: any) => any) {
   return {
     __mandu_island: true,
@@ -33,8 +42,8 @@ function createIslandElement(id: string, src: string, priority = "visible"): HTM
 // 정리 함수
 function cleanup() {
   document.body.innerHTML = "";
-  (window as any).__MANDU_DATA__ = {};
-  (window as any).__MANDU_ROOTS__?.clear();
+  getManduWindow().__MANDU_DATA__ = {};
+  getManduWindow().__MANDU_ROOTS__?.clear();
 }
 
 describe("Hydration Core", () => {
@@ -50,14 +59,14 @@ describe("Hydration Core", () => {
   });
 
   test("서버 데이터가 window.__MANDU_DATA__에 저장되어야 함", () => {
-    (window as any).__MANDU_DATA__ = {
+    getManduWindow().__MANDU_DATA__ = {
       "test-island": {
         serverData: { initialCount: 10 },
         timestamp: Date.now(),
       },
     };
 
-    const data = (window as any).__MANDU_DATA__["test-island"];
+    const data = getManduWindow().__MANDU_DATA__["test-island"];
     expect(data.serverData.initialCount).toBe(10);
   });
 
@@ -145,7 +154,7 @@ describe("Server Data Handling", () => {
       value: data?.missing ?? "default",
     }));
 
-    const state = island.definition.setup(undefined as any);
+    const state = island.definition.setup(undefined); // intentionally passing undefined to test fallback
     expect(state.value).toBe("default");
   });
 });
@@ -176,12 +185,12 @@ describe("Multiple Islands", () => {
   });
 
   test("각 Island이 독립적인 서버 데이터를 가져야 함", () => {
-    (window as any).__MANDU_DATA__ = {
+    getManduWindow().__MANDU_DATA__ = {
       "island-a": { serverData: { value: "A" }, timestamp: Date.now() },
       "island-b": { serverData: { value: "B" }, timestamp: Date.now() },
     };
 
-    expect((window as any).__MANDU_DATA__["island-a"].serverData.value).toBe("A");
-    expect((window as any).__MANDU_DATA__["island-b"].serverData.value).toBe("B");
+    expect(getManduWindow().__MANDU_DATA__["island-a"].serverData.value).toBe("A");
+    expect(getManduWindow().__MANDU_DATA__["island-b"].serverData.value).toBe("B");
   });
 });

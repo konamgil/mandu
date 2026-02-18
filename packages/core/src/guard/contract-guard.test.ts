@@ -78,6 +78,7 @@ describe("Contract Guard", () => {
             pattern: "/",
             kind: "page",
             module: "generated/routes/home.ts",
+            componentModule: "generated/routes/home.tsx",
             slotModule: "spec/slots/home.slot.ts",
             // No contractModule - but that's fine for pages
           },

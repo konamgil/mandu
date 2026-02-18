@@ -11,8 +11,7 @@ function fnv1a64Hex(input: string): string {
 
 function getBuildSaltFallback(): string {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    const salt = (typeof process !== "undefined" && (process as any)?.env?.MANDU_BUILD_SALT) as string | undefined;
+    const salt = (typeof process !== "undefined" && process.env?.MANDU_BUILD_SALT) as string | undefined;
     return salt ?? "dev";
   } catch {
     return "dev";
