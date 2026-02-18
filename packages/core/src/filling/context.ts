@@ -222,6 +222,71 @@ export class CookieManager {
   hasPendingCookies(): boolean {
     return this.responseCookies.size > 0;
   }
+
+  /**
+   * 서명된 쿠키 읽기 (HMAC-SHA256 검증)
+   * @returns 값(검증 성공), null(쿠키 없음), false(서명 불일치)
+   * @example
+   * const userId = await ctx.cookies.getSigned('session', SECRET);
+   * if (userId === false) return ctx.unauthorized('Invalid session');
+   * if (userId === null) return ctx.unauthorized('No session');
+   */
+  async getSigned(name: string, secret: string): Promise<string | null | false> {
+    const raw = this.get(name);
+    if (!raw) return null;
+    const dotIndex = raw.lastIndexOf(".");
+    if (dotIndex === -1) return false;
+    const value = raw.slice(0, dotIndex);
+    const signature = raw.slice(dotIndex + 1);
+    if (!value || !signature) return false;
+    const expected = await hmacSign(value, secret);
+    return signature === expected ? decodeURIComponent(value) : false;
+  }
+
+  /**
+   * 서명된 쿠키 설정 (HMAC-SHA256)
+   * @example
+   * await ctx.cookies.setSigned('session', userId, SECRET, { httpOnly: true });
+   */
+  async setSigned(name: string, value: string, secret: string, options?: CookieOptions): Promise<void> {
+    const encoded = encodeURIComponent(value);
+    const signature = await hmacSign(encoded, secret);
+    this.set(name, `${encoded}.${signature}`, options);
+  }
+
+  /**
+   * JSON 쿠키를 스키마로 파싱 + 검증 (Zod 호환 duck typing)
+   * @returns 파싱된 값 또는 null(쿠키 없음/파싱 실패/검증 실패)
+   * @example
+   * const prefs = ctx.cookies.getParsed('prefs', z.object({ theme: z.string() }));
+   */
+  getParsed<T>(name: string, schema: { parse: (v: unknown) => T }): T | null {
+    const raw = this.get(name);
+    if (raw == null) return null;
+    try {
+      const decoded = decodeURIComponent(raw);
+      const parsed = JSON.parse(decoded);
+      return schema.parse(parsed);
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * HMAC-SHA256 서명 생성 (WebCrypto API)
+ */
+async function hmacSign(data: string, secret: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
+  return btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=+$/, "");
 }
 
 // ========== ManduContext ==========

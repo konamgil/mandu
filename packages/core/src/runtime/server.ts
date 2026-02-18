@@ -2,7 +2,7 @@ import type { Server } from "bun";
 import type { RoutesManifest, RouteSpec, HydrationConfig } from "../spec/schema";
 import type { BundleManifest } from "../bundler/types";
 import type { ManduFilling } from "../filling/filling";
-import { ManduContext } from "../filling/context";
+import { ManduContext, type CookieManager } from "../filling/context";
 import { Router } from "./router";
 import { renderSSR, renderStreamingResponse } from "./ssr";
 import { type ErrorFallbackProps } from "./boundary";
@@ -872,6 +872,7 @@ async function handleApiRoute(
 
 interface PageLoadResult {
   loaderData: unknown;
+  cookies?: CookieManager;
 }
 
 /**
@@ -888,6 +889,7 @@ async function loadPageData(
   // 1. PageHandler 방식 (신규 - filling 포함)
   const pageHandler = registry.pageHandlers.get(route.id);
   if (pageHandler) {
+    let cookies: CookieManager | undefined;
     try {
       const registration = await pageHandler();
       const component = registration.component as RouteComponent;
@@ -897,6 +899,9 @@ async function loadPageData(
       if (registration.filling?.hasLoader()) {
         const ctx = new ManduContext(req, params);
         loaderData = await registration.filling.executeLoader(ctx);
+        if (ctx.cookies.hasPendingCookies()) {
+          cookies = ctx.cookies;
+        }
       }
     } catch (error) {
       const pageError = createPageLoadErrorResponse(
@@ -908,7 +913,7 @@ async function loadPageData(
       return err(pageError);
     }
 
-    return ok({ loaderData });
+    return ok({ loaderData, cookies });
   }
 
   // 2. PageLoader 방식 (레거시 호환)
@@ -924,11 +929,17 @@ async function loadPageData(
       registry.registerRouteComponent(route.id, component as RouteComponent);
 
       // filling이 있으면 loader 실행
+      let cookies: CookieManager | undefined;
       const filling = typeof exported === "object" && exported !== null ? (exportedObj as Record<string, unknown>)?.filling as ManduFilling | null : null;
       if (filling?.hasLoader?.()) {
         const ctx = new ManduContext(req, params);
         loaderData = await filling.executeLoader(ctx);
+        if (ctx.cookies.hasPendingCookies()) {
+          cookies = ctx.cookies;
+        }
       }
+
+      return ok({ loaderData, cookies });
     } catch (error) {
       const pageError = createPageLoadErrorResponse(
         route.id,
@@ -953,7 +964,8 @@ async function renderPageSSR(
   params: Record<string, string>,
   loaderData: unknown,
   url: string,
-  registry: ServerRegistry
+  registry: ServerRegistry,
+  cookies?: CookieManager
 ): Promise<Result<Response>> {
   const settings = registry.settings;
   const defaultAppCreator = createDefaultAppFactory(registry);
@@ -982,7 +994,7 @@ async function renderPageSSR(
       : settings.streaming;
 
     if (useStreaming) {
-      return ok(await renderStreamingResponse(app, {
+      const streamingResponse = await renderStreamingResponse(app, {
         title: `${route.id} - Mandu`,
         isDev: settings.isDev,
         hmrPort: settings.hmrPort,
@@ -1007,11 +1019,12 @@ async function renderPageSSR(
             });
           }
         },
-      }));
+      });
+      return ok(cookies ? cookies.applyToResponse(streamingResponse) : streamingResponse);
     }
 
     // 기존 renderToString 방식
-    return ok(renderSSR(app, {
+    const ssrResponse = renderSSR(app, {
       title: `${route.id} - Mandu`,
       isDev: settings.isDev,
       hmrPort: settings.hmrPort,
@@ -1022,7 +1035,8 @@ async function renderPageSSR(
       enableClientRouter: true,
       routePattern: route.pattern,
       cssPath: settings.cssPath,
-    }));
+    });
+    return ok(cookies ? cookies.applyToResponse(ssrResponse) : ssrResponse);
   } catch (error) {
     const ssrError = createSSRErrorResponse(
       route.id,
@@ -1052,21 +1066,22 @@ async function handlePageRoute(
     return loadResult;
   }
 
-  const { loaderData } = loadResult.value;
+  const { loaderData, cookies } = loadResult.value;
 
   // 2. Client-side Routing: 데이터만 반환 (JSON)
   if (url.searchParams.has("_data")) {
-    return ok(Response.json({
+    const jsonResponse = Response.json({
       routeId: route.id,
       pattern: route.pattern,
       params,
       loaderData: loaderData ?? null,
       timestamp: Date.now(),
-    }));
+    });
+    return ok(cookies ? cookies.applyToResponse(jsonResponse) : jsonResponse);
   }
 
   // 3. SSR 렌더링
-  return renderPageSSR(route, params, loaderData, req.url, registry);
+  return renderPageSSR(route, params, loaderData, req.url, registry, cookies);
 }
 
 // ---------- Main Request Dispatcher ----------
