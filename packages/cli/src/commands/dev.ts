@@ -272,6 +272,20 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     });
   };
 
+  // SSR 파일 변경 콜백 (page.tsx, layout.tsx → 서버 핸들러 재등록 + 브라우저 리로드)
+  const handleSSRChange = async (filePath: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`\n🔄 [${timestamp}] SSR 변경 감지 → 핸들러 재등록`);
+    clearDefaultRegistry();
+    registeredLayouts.clear();
+    await registerHandlers(manifest, true);
+    hmrServer?.broadcast({
+      type: "reload",
+      data: { timestamp: Date.now() },
+    });
+    console.log(`   ✅ SSR 갱신 완료 — 브라우저 리로드`);
+  };
+
   if (hasIslands && hmrEnabled) {
     // HMR 서버 시작
     hmrServer = createHMRServer(port);
@@ -283,6 +297,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       watchDirs: devConfig.watchDirs,
       onRebuild: handleRebuild,
       onError: handleBundlerError,
+      onSSRChange: handleSSRChange,
     });
 
     // 재시작 핸들러 등록
@@ -306,6 +321,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
         watchDirs: devConfig.watchDirs,
         onRebuild: handleRebuild,
         onError: handleBundlerError,
+        onSSRChange: handleSSRChange,
       });
 
       // 5. 브라우저 전체 리로드

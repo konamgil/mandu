@@ -1168,6 +1168,7 @@ function startBunServerWithFallback(options: {
       port: 0,
       hostname,
       fetch,
+      idleTimeout: 255,
     });
     return { server, port: server.port ?? 0, attempts: 0 };
   }
@@ -1182,6 +1183,7 @@ function startBunServerWithFallback(options: {
         port: candidate,
         hostname,
         fetch,
+        idleTimeout: 255,
       });
       return { server, port: server.port ?? candidate, attempts: attempt };
     } catch (error) {

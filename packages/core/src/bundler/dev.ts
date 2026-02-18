@@ -20,6 +20,11 @@ export interface DevBundlerOptions {
   /** 에러 콜백 */
   onError?: (error: Error, routeId?: string) => void;
   /**
+   * SSR 파일 변경 콜백 (page.tsx, layout.tsx 등)
+   * 클라이언트 번들 리빌드 없이 서버 핸들러 재등록이 필요한 경우 호출
+   */
+  onSSRChange?: (filePath: string) => void;
+  /**
    * 추가 watch 디렉토리 (공통 컴포넌트 등)
    * 상대 경로 또는 절대 경로 모두 지원
    * 기본값: ["src/components", "components", "src/shared", "shared", "src/lib", "lib", "src/hooks", "hooks", "src/utils", "utils"]
@@ -75,6 +80,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     manifest,
     onRebuild,
     onError,
+    onSSRChange,
     watchDirs: customWatchDirs = [],
     disableDefaultWatchDirs = false,
   } = options;
@@ -94,6 +100,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
 
   // clientModule 경로에서 routeId 매핑 생성
   const clientModuleToRoute = new Map<string, string>();
+  const serverModuleSet = new Set<string>(); // SSR 모듈 (page.tsx, layout.tsx)
   const watchDirs = new Set<string>();
   const commonWatchDirs = new Set<string>(); // 공통 디렉토리 (전체 재빌드 트리거)
 
@@ -116,6 +123,20 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
 
       // 감시할 디렉토리 추가
       watchDirs.add(dir);
+    }
+
+    // SSR 모듈 등록 (page.tsx, layout.tsx) — #151
+    if (route.componentModule) {
+      const absPath = path.resolve(rootDir, route.componentModule).replace(/\\/g, "/");
+      serverModuleSet.add(absPath);
+      watchDirs.add(path.dirname(path.resolve(rootDir, route.componentModule)));
+    }
+    if (route.layoutChain) {
+      for (const layoutPath of route.layoutChain) {
+        const absPath = path.resolve(rootDir, layoutPath).replace(/\\/g, "/");
+        serverModuleSet.add(absPath);
+        watchDirs.add(path.dirname(path.resolve(rootDir, layoutPath)));
+      }
     }
   }
 
@@ -248,7 +269,14 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
       }
     }
 
-    if (!routeId) return;
+    if (!routeId) {
+      // SSR 모듈 변경 감지 (page.tsx, layout.tsx) — #151
+      if (onSSRChange && serverModuleSet.has(normalizedPath)) {
+        console.log(`\n🔄 SSR file changed: ${path.basename(changedFile)}`);
+        onSSRChange(normalizedPath);
+      }
+      return;
+    }
 
     const route = manifest.routes.find((r) => r.id === routeId);
     if (!route || !route.clientModule) return;
