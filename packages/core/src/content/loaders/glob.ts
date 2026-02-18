@@ -46,6 +46,7 @@ async function parseFrontmatter(
 
   try {
     // yaml 동적 로드
+    // @ts-ignore dynamic optional import
     const yaml = await import("yaml").catch(() => null);
 
     if (!yaml) {

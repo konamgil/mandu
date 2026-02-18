@@ -171,7 +171,7 @@ export function useIslandEvent<T = unknown>(
   handler: (data: T) => void
 ): IslandEventHandle<T>["emit"] & IslandEventHandle<T> {
   if (typeof window === "undefined") {
-    const noop = (() => {}) as IslandEventHandle<T>["emit"] & IslandEventHandle<T>;
+    const noop = (() => {}) as unknown as IslandEventHandle<T>["emit"] & IslandEventHandle<T>;
     noop.emit = noop;
     noop.cleanup = () => {};
     return noop;
@@ -473,6 +473,7 @@ export interface PartialGroup {
  * ```
  */
 export function createPartialGroup(): PartialGroup {
+  // React ComponentType variance requires `any` for heterogeneous component storage
   const partials = new Map<string, CompiledPartial<any>>();
 
   return {

@@ -2,7 +2,7 @@
  * DNA-002: Dependency Injection Pattern Tests
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, mock, beforeEach } from "bun:test";
 import {
   createDefaultDeps,
   createMockDeps,
@@ -60,7 +60,7 @@ describe("DNA-002: Dependency Injection", () => {
     });
 
     it("should allow overriding specific deps", () => {
-      const mockQuery = vi.fn().mockResolvedValue([{ id: 1 }]);
+      const mockQuery = mock().mockResolvedValue([{ id: 1 }]);
       const deps = createMockDeps({
         db: {
           query: mockQuery,
@@ -103,10 +103,10 @@ describe("DNA-002: Dependency Injection", () => {
 
     it("should allow setting custom deps", () => {
       const customLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
+        debug: mock(),
+        info: mock(),
+        warn: mock(),
+        error: mock(),
       };
 
       globalDeps.set({ logger: customLogger });
@@ -143,7 +143,7 @@ describe("DNA-002: Dependency Injection", () => {
     });
 
     it("should allow accessing db from context", async () => {
-      const mockQuery = vi.fn().mockResolvedValue([{ id: 1, name: "Test" }]);
+      const mockQuery = mock().mockResolvedValue([{ id: 1, name: "Test" }]);
       const deps = createMockDeps({
         db: {
           query: mockQuery,
@@ -163,10 +163,10 @@ describe("DNA-002: Dependency Injection", () => {
   describe("ManduFilling with deps", () => {
     it("should pass deps to handler context", async () => {
       const mockLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
+        debug: mock(),
+        info: mock(),
+        warn: mock(),
+        error: mock(),
       };
 
       const filling = new ManduFilling()

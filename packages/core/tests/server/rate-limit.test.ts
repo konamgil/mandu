@@ -13,10 +13,10 @@ describe("Server Rate Limit", () => {
   let registry: ServerRegistry;
 
   const testManifest: RoutesManifest = {
-    version: "1.0.0",
+    version: 1,
     routes: [
-      { id: "api/limited", pattern: "/api/limited", kind: "api", methods: ["GET"] },
-      { id: "api/other", pattern: "/api/other", kind: "api", methods: ["GET"] },
+      { id: "api/limited", pattern: "/api/limited", kind: "api", module: ".mandu/generated/server/api-limited.ts", methods: ["GET"] },
+      { id: "api/other", pattern: "/api/other", kind: "api", module: ".mandu/generated/server/api-other.ts", methods: ["GET"] },
     ],
   };
 

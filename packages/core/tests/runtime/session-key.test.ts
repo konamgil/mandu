@@ -2,7 +2,7 @@
  * DNA-004: Session Key Tests
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import {
   buildSessionKey,
   buildCacheKey,

@@ -62,7 +62,7 @@ describe("logger", () => {
 
       log.onError(ctx, error);
 
-      expect(ctx.get("__mandu_logger_error")).toBe(error);
+      expect(ctx.get<Error>("__mandu_logger_error")).toBe(error);
     });
 
     test("afterHandle은 응답을 저장하고 반환", () => {
@@ -72,7 +72,7 @@ describe("logger", () => {
 
       const result = log.afterHandle(ctx, response);
 
-      expect(ctx.get("__mandu_logger_response")).toBe(response);
+      expect(ctx.get<Response>("__mandu_logger_response")).toBe(response);
       expect(result).toBe(response);
     });
   });
@@ -147,7 +147,7 @@ describe("logger", () => {
 
       log.onRequest(ctx);
 
-      expect(ctx.get("__mandu_logger_request_id")).toBe("custom-POST-123");
+      expect(ctx.get<string>("__mandu_logger_request_id")).toBe("custom-POST-123");
     });
   });
 

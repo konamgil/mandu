@@ -5,7 +5,7 @@
  */
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import type { McpToolPlugin } from "@mandujs/core";
+import type { McpToolPlugin } from "@mandujs/core/plugins";
 
 /**
  * MCP SDK Tool을 McpToolPlugin으로 변환
@@ -25,8 +25,8 @@ export function toolToPlugin(
   return {
     name: definition.name,
     description: definition.description ?? "",
-    inputSchema: definition.inputSchema as Record<string, unknown>,
-    execute: handler,
+    inputSchema: definition.inputSchema as unknown as Record<string, unknown>,
+    execute: handler as (input: unknown) => Promise<unknown>,
   };
 }
 
@@ -37,7 +37,7 @@ export function pluginToTool(plugin: McpToolPlugin): Tool {
   return {
     name: plugin.name,
     description: plugin.description,
-    inputSchema: plugin.inputSchema,
+    inputSchema: plugin.inputSchema as Tool["inputSchema"],
   };
 }
 

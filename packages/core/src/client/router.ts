@@ -421,7 +421,7 @@ export function cleanupRouter(): void {
 
   window.removeEventListener("popstate", handlePopState);
   document.removeEventListener("click", handleLinkClick);
-  listeners.clear();
+  listeners.current.clear();
   initialized = false;
 }
 

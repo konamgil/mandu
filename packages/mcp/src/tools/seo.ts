@@ -247,10 +247,10 @@ export function seoTools(projectRoot: string) {
             jsonLd = createOrganizationJsonLd(data as Parameters<typeof createOrganizationJsonLd>[0]);
             break;
           case "Breadcrumb":
-            jsonLd = createBreadcrumbJsonLd(data as Array<{ name: string; url: string }>);
+            jsonLd = createBreadcrumbJsonLd(data as unknown as Array<{ name: string; url: string }>);
             break;
           case "FAQ":
-            jsonLd = createFAQJsonLd(data as Array<{ question: string; answer: string }>);
+            jsonLd = createFAQJsonLd(data as unknown as Array<{ question: string; answer: string }>);
             break;
           case "Product":
             jsonLd = createProductJsonLd(data as Parameters<typeof createProductJsonLd>[0]);

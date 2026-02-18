@@ -95,7 +95,7 @@ export type ContractClientMethod<
  * Contract client interface
  */
 export type ContractClient<T extends ContractSchema> = {
-  [M in Extract<keyof T["request"], ContractMethod>]: ContractClientMethod<
+  [M in ContractMethod as M extends keyof T["request"] ? M : never]: ContractClientMethod<
     T["request"][M] extends MethodRequestSchema ? T["request"][M] : undefined,
     T["response"]
   >;
@@ -264,7 +264,7 @@ export function createClient<T extends ContractSchema>(
  */
 export async function contractFetch<
   T extends ContractSchema,
-  M extends Extract<keyof T["request"], ContractMethod>,
+  M extends ContractMethod & keyof T["request"],
 >(
   _contract: T,
   method: M,

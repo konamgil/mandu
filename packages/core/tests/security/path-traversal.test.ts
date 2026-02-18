@@ -21,7 +21,7 @@ describe("Security - Path Traversal", () => {
   const TEST_DIR = path.join(import.meta.dir, "__fixtures__", "security");
 
   const testManifest: RoutesManifest = {
-    version: "1.0.0",
+    version: 1,
     routes: [],
   };
 

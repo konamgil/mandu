@@ -5,7 +5,7 @@
  */
 
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { watchConfig, hasConfigChanged, type ManduConfig } from "@mandujs/core";
+import { watchConfig, hasConfigChanged, getChangedSections, type ManduConfig } from "@mandujs/core";
 import { mcpToolRegistry } from "../registry/mcp-tool-registry.js";
 
 /**
@@ -75,7 +75,7 @@ export async function startMcpConfigWatcher(
             logger: "mandu-config",
             data: {
               type: "config_reload",
-              changedSections: event.changedSections,
+              changedSections: getChangedSections(event.previous, event.current),
               path: event.path,
             },
           });
@@ -86,7 +86,7 @@ export async function startMcpConfigWatcher(
 
       // MCP 관련 설정 변경 확인
       if (event.previous && event.current) {
-        if (hasConfigChanged(event.previous, event.current, "mcp")) {
+        if (needsToolReregistration(event.previous, event.current)) {
           // MCP 설정 변경 시 도구 재초기화 등 필요한 작업
           if (server) {
             try {

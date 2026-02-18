@@ -118,12 +118,12 @@ export function resolveSEOSync(staticMetadata: Metadata): SEOResult {
       resolvedTitle = { absolute: staticMetadata.title, template: null }
     } else if ('absolute' in staticMetadata.title) {
       resolvedTitle = {
-        absolute: staticMetadata.title.absolute,
+        absolute: staticMetadata.title.absolute ?? '',
         template: staticMetadata.title.template ?? null,
       }
     } else if ('default' in staticMetadata.title) {
       resolvedTitle = {
-        absolute: staticMetadata.title.default,
+        absolute: staticMetadata.title.default ?? '',
         template: staticMetadata.title.template ?? null,
       }
     }

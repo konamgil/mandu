@@ -15,10 +15,10 @@ import {
 import type { RoutesManifest } from "../../src/spec/schema";
 
 const baseManifest: RoutesManifest = {
-  version: "1.0.0",
+  version: 1,
   routes: [
-    { id: "api/health", pattern: "/api/health", kind: "api", methods: ["GET"] },
-    { id: "api/echo", pattern: "/api/echo", kind: "api", methods: ["GET", "POST"] },
+    { id: "api/health", pattern: "/api/health", kind: "api", module: ".mandu/generated/server/api-health.ts", methods: ["GET"] },
+    { id: "api/echo", pattern: "/api/echo", kind: "api", module: ".mandu/generated/server/api-echo.ts", methods: ["GET", "POST"] },
   ],
 };
 

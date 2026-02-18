@@ -6,8 +6,9 @@ import {
   needsHydration,
   getRouteHydration,
   type BundleManifest,
-  type HydrationStrategy,
+  type SpecHydrationStrategy,
   type HydrationPriority,
+  type HydrationConfig,
 } from "@mandujs/core";
 import { getProjectPaths, readJsonFile, writeJsonFile } from "../utils/project.js";
 import path from "path";
@@ -238,7 +239,7 @@ export function hydrationTools(projectRoot: string) {
     mandu_set_hydration: async (args: Record<string, unknown>) => {
       const { routeId, strategy, priority, preload } = args as {
         routeId: string;
-        strategy?: HydrationStrategy;
+        strategy?: SpecHydrationStrategy;
         priority?: HydrationPriority;
         preload?: boolean;
       };
@@ -263,7 +264,7 @@ export function hydrationTools(projectRoot: string) {
       }
 
       // Update hydration config
-      const currentHydration = route.hydration || {};
+      const currentHydration: Partial<HydrationConfig> = route.hydration || {};
       const newHydration = {
         strategy: strategy || currentHydration.strategy || "island",
         priority: priority || currentHydration.priority || "visible",
@@ -297,7 +298,7 @@ export function hydrationTools(projectRoot: string) {
     mandu_add_client_slot: async (args: Record<string, unknown>) => {
       const { routeId, strategy = "island", priority = "visible" } = args as {
         routeId: string;
-        strategy?: HydrationStrategy;
+        strategy?: SpecHydrationStrategy;
         priority?: HydrationPriority;
       };
 
@@ -349,7 +350,7 @@ export function hydrationTools(projectRoot: string) {
         ...route,
         clientModule: clientModulePath,
         hydration: {
-          strategy: strategy as HydrationStrategy,
+          strategy: strategy as SpecHydrationStrategy,
           priority: priority as HydrationPriority,
           preload: false,
         },

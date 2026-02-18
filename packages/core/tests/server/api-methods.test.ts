@@ -18,18 +18,20 @@ describe("Server API Methods", () => {
   let registry: ServerRegistry;
 
   const testManifest: RoutesManifest = {
-    version: "1.0.0",
+    version: 1,
     routes: [
       {
         id: "api/users",
         pattern: "/api/users",
         kind: "api",
+        module: ".mandu/generated/server/api-users.ts",
         methods: ["GET", "POST"],
       },
       {
         id: "api/users/[id]",
         pattern: "/api/users/:id",
         kind: "api",
+        module: ".mandu/generated/server/api-users-id.ts",
         methods: ["GET", "PUT", "DELETE"],
       },
     ],

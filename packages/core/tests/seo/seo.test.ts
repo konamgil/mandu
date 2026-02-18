@@ -888,14 +888,14 @@ describe('SEO Module', () => {
 
     it('should convert layout entries to metadata items', () => {
       const entries: LayoutMetadataEntry[] = [
-        { path: 'app/layout.tsx', metadata: { title: { template: '%s | Site' } } },
+        { path: 'app/layout.tsx', metadata: { title: { default: '', template: '%s | Site' } } },
         { path: 'app/blog/page.tsx', generateMetadata: async ({ params }) => ({ title: params.slug }) },
       ]
 
       const items = layoutEntriesToMetadataItems(entries)
 
       expect(items.length).toBe(2)
-      expect(items[0]).toEqual({ title: { template: '%s | Site' } })
+      expect(items[0]).toEqual({ title: { default: '', template: '%s | Site' } })
       expect(typeof items[1]).toBe('function')
     })
 

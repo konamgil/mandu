@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/ate",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "description": "Mandu ATE (Automation Test Engine) - extract/generate/run/report/heal/impact in one package",
   "type": "module",
   "sideEffects": false,

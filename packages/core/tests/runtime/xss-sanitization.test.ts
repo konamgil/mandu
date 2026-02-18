@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import React from "react";
 import { renderToHTML } from "../../src/runtime/ssr";
 import { generateDeferredDataScript, renderStreamingResponse } from "../../src/runtime/streaming-ssr";
@@ -35,7 +35,7 @@ describe("XSS sanitization in SSR/runtime output", () => {
       title: 'bad </title><script>alert(1)</script>',
       lang: 'ko\" onmouseover=\"alert(2)',
       cssPath: '/app.css\" onerror=\"alert(3)',
-      hydration: { strategy: "island", priority: "visible" },
+      hydration: { strategy: "island", priority: "visible", preload: false },
       routeId: 'route\" onmouseover=\"alert(1)',
       bundleManifest: manifest,
       enableClientRouter: true,
@@ -63,7 +63,7 @@ describe("XSS sanitization in SSR/runtime output", () => {
     const res = await renderStreamingResponse(React.createElement("div", null, "stream"), {
       title: 'stream </title><script>alert(10)</script>',
       routeId: 'route\" onmouseover=\"alert(1)',
-      hydration: { strategy: "island", priority: "visible" },
+      hydration: { strategy: "island", priority: "visible", preload: false },
       bundleManifest: manifest,
       criticalData: {
         xss: '</script><script>alert(11)</script>',
