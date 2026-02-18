@@ -83,7 +83,7 @@ import { Button } from "@/client/shared/ui/button";
 
 ```bash
 bun install     # 최초 설치
-bun run dev     # 개발 서버 (http://localhost:4000)
+bun run dev     # 개발 서버 (http://localhost:3333)
 bun run build   # 프로덕션 빌드
 bun run guard   # 아키텍처 검증
 ```

@@ -95,6 +95,8 @@ registerCommand({
       theme: ctx.options.theme === "true",
       minimal: ctx.options.minimal === "true",
       withCi: ctx.options["with-ci"] === "true",
+      yes: ctx.options.yes === "true",
+      noInstall: ctx.options["no-install"] === "true",
     });
   },
 });

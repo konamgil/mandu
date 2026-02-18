@@ -20,7 +20,7 @@ ${theme.heading("🥟 Mandu CLI")} ${theme.muted(`v${VERSION}`)} - Agent-Native 
 ${theme.heading("Usage:")} ${theme.command("bunx mandu")} ${theme.option("<command>")} [options]
 
 Commands:
-  init                    새 프로젝트 생성 (Tailwind + shadcn/ui 기본 포함)
+  init                    새 프로젝트 생성 (대화형 / --yes로 비대화형)
   check                   FS Routes + Guard 통합 검사
   routes generate         FS Routes 스캔 및 매니페스트 생성
   routes list             현재 라우트 목록 출력
@@ -76,6 +76,8 @@ Options:
   --theme             init 시 다크모드 테마 시스템 추가
   --minimal           init 시 CSS/UI 없이 최소 템플릿 생성 (--css none --ui none)
   --with-ci           init 시 GitHub Actions CI/CD 워크플로우 포함 (ATE E2E 테스트)
+  --yes, -y             init 시 대화형 프롬프트 건너뛰기 (기존 비대화형 동작)
+  --no-install          init 시 패키지 설치 건너뛰기
   --file <path>       spec-upsert spec 파일/monitor 로그 파일 경로
   --watch             build/guard arch 파일 감시 모드
   --output <path>     routes/openapi/doctor/contract/guard 출력 경로
@@ -173,6 +175,7 @@ export function parseArgs(args: string[]): { command: string; options: Record<st
     q: "quiet",
     v: "verify",
     d: "diff",
+    y: "yes",
   };
 
   for (let i = 0; i < args.length; i++) {

@@ -1,6 +1,9 @@
 import path from "path";
 import fs from "fs/promises";
+import { createInterface } from "readline/promises";
 import { CLI_ERROR_CODES, printCLIError } from "../errors";
+import { startSpinner, runSteps } from "../terminal/progress";
+import { theme } from "../terminal/theme";
 import {
   generateLockfile,
   writeLockfile,
@@ -18,6 +21,8 @@ export interface InitOptions {
   theme?: boolean;
   minimal?: boolean;
   withCi?: boolean;
+  yes?: boolean;
+  noInstall?: boolean;
 }
 
 const ALLOWED_TEMPLATES = ["default", "realtime-chat"] as const;
@@ -199,9 +204,78 @@ async function resolvePackageVersions(): Promise<{ coreVersion: string; cliVersi
   };
 }
 
+interface InteractiveAnswers {
+  name: string;
+  template: AllowedTemplate;
+  install: boolean;
+}
+
+async function runInteractivePrompts(defaults: {
+  name: string;
+  template: string;
+}): Promise<InteractiveAnswers> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  console.log(`\n${theme.heading("🥟 Mandu Init")}\n`);
+
+  // 1. Project name
+  const nameInput = await rl.question(
+    `  프로젝트 이름 ${theme.muted(`(${defaults.name})`)} : `
+  );
+  const name = nameInput.trim() || defaults.name;
+
+  // 2. Template selection
+  console.log(`\n  템플릿 선택:`);
+  for (let i = 0; i < ALLOWED_TEMPLATES.length; i++) {
+    const t = ALLOWED_TEMPLATES[i];
+    const label = t === "default" ? "default (권장)" : t;
+    console.log(`    ${theme.accent(`${i + 1})`)} ${label}`);
+  }
+  const templateInput = await rl.question(
+    `\n  번호 입력 ${theme.muted("(1)")} : `
+  );
+  const templateIndex = parseInt(templateInput.trim(), 10) - 1;
+  const template: AllowedTemplate =
+    templateIndex >= 0 && templateIndex < ALLOWED_TEMPLATES.length
+      ? ALLOWED_TEMPLATES[templateIndex]
+      : (resolveTemplateName(defaults.template) as AllowedTemplate) ?? "default";
+
+  // 3. Install dependencies?
+  const installInput = await rl.question(
+    `\n  의존성 설치 (bun install)? ${theme.muted("(Y/n)")} : `
+  );
+  const install = installInput.trim().toLowerCase() !== "n";
+
+  rl.close();
+  console.log();
+
+  return { name, template, install };
+}
+
 export async function init(options: InitOptions = {}): Promise<boolean> {
-  const projectName = options.name || "my-mandu-app";
-  const requestedTemplate = options.template || "default";
+  const isInteractive = process.stdin.isTTY && !options.yes;
+
+  let projectName: string;
+  let requestedTemplate: string;
+  let shouldInstall: boolean;
+
+  if (isInteractive) {
+    const answers = await runInteractivePrompts({
+      name: options.name || "my-mandu-app",
+      template: options.template || "default",
+    });
+    projectName = answers.name;
+    requestedTemplate = answers.template;
+    shouldInstall = options.noInstall ? false : answers.install;
+  } else {
+    projectName = options.name || "my-mandu-app";
+    requestedTemplate = options.template || "default";
+    shouldInstall = !options.noInstall;
+  }
+
   const template = resolveTemplateName(requestedTemplate);
   const targetDir = path.resolve(process.cwd(), projectName);
 
@@ -214,19 +288,19 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   // Handle minimal flag (shortcut for --css none --ui none)
   const css: CSSFramework = options.minimal ? "none" : (options.css || "tailwind");
   const ui: UILibrary = options.minimal ? "none" : (options.ui || "shadcn");
-  const theme = options.theme || false;
+  const themeEnabled = options.theme || false;
   const withCi = options.withCi || false;
 
-  console.log(`🥟 Mandu Init`);
-  console.log(`📁 프로젝트: ${projectName}`);
-  console.log(`📦 템플릿: ${template}`);
-  console.log(`🎨 CSS: ${css}${css !== "none" ? " (Tailwind CSS)" : ""}`);
-  console.log(`🧩 UI: ${ui}${ui !== "none" ? " (shadcn/ui)" : ""}`);
-  if (theme) {
-    console.log(`🌙 테마: Dark mode 지원`);
+  console.log(`${theme.heading("🥟 Mandu Init")}`);
+  console.log(`${theme.info("📁")} 프로젝트: ${theme.accent(projectName)}`);
+  console.log(`${theme.info("📦")} 템플릿: ${theme.accent(template)}`);
+  console.log(`${theme.info("🎨")} CSS: ${css}${css !== "none" ? " (Tailwind CSS)" : ""}`);
+  console.log(`${theme.info("🧩")} UI: ${ui}${ui !== "none" ? " (shadcn/ui)" : ""}`);
+  if (themeEnabled) {
+    console.log(`${theme.info("🌙")} 테마: Dark mode 지원`);
   }
   if (withCi) {
-    console.log(`🔄 CI/CD: GitHub Actions 워크플로우 포함`);
+    console.log(`${theme.info("🔄")} CI/CD: GitHub Actions 워크플로우 포함`);
   }
   console.log();
 
@@ -251,64 +325,119 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     return false;
   }
 
-  console.log(`📋 템플릿 복사 중...`);
-
   const { coreVersion, cliVersion } = await resolvePackageVersions();
 
   const copyOptions: CopyOptions = {
     projectName,
     css,
     ui,
-    theme,
+    theme: themeEnabled,
     coreVersion,
     cliVersion,
   };
 
+  // Run structured steps with progress
+  let mcpResult: McpConfigResult;
+  let lockfileResult: LockfileResult;
+
   try {
-    await copyDir(templateDir, targetDir, copyOptions);
+    await runSteps([
+      {
+        label: "디렉토리 생성",
+        fn: async () => {
+          await fs.mkdir(targetDir, { recursive: true });
+          await fs.mkdir(path.join(targetDir, ".mandu/client"), { recursive: true });
+        },
+      },
+      {
+        label: "템플릿 복사",
+        fn: () => copyDir(templateDir, targetDir, copyOptions),
+      },
+      {
+        label: "설정 파일 생성",
+        fn: async () => {
+          if (withCi) {
+            await setupCiWorkflows(targetDir);
+          }
+          if (css === "none") {
+            await createMinimalLayout(targetDir, projectName);
+          }
+          if (ui === "none") {
+            await createMinimalPage(targetDir);
+          }
+          if (css === "none" || ui === "none") {
+            await updatePackageJson(targetDir, css, ui);
+          }
+        },
+      },
+      {
+        label: "MCP 설정",
+        fn: async () => {
+          mcpResult = await setupMcpConfig(targetDir);
+        },
+      },
+      {
+        label: "Lockfile 생성",
+        fn: async () => {
+          lockfileResult = await setupLockfile(targetDir);
+        },
+      },
+    ]);
   } catch (error) {
-    console.error(`❌ 템플릿 복사 실패:`, error);
+    console.error(`\n${theme.error("❌")} 프로젝트 생성 실패:`, error);
     return false;
   }
 
-  // Create .mandu directory for build output
-  await fs.mkdir(path.join(targetDir, ".mandu/client"), { recursive: true });
-
-  // Setup CI/CD workflows if requested
-  if (withCi) {
-    await setupCiWorkflows(targetDir);
+  // Validate project files
+  const requiredFiles = ["app/page.tsx", "package.json", "tsconfig.json"];
+  const missingFiles: string[] = [];
+  for (const file of requiredFiles) {
+    try {
+      await fs.access(path.join(targetDir, file));
+    } catch {
+      missingFiles.push(file);
+    }
+  }
+  if (missingFiles.length > 0) {
+    console.log(`\n${theme.warn("⚠")} 누락된 파일: ${missingFiles.join(", ")}`);
   }
 
-  // Create minimal layout.tsx if css=none (without globals.css import)
-  if (css === "none") {
-    await createMinimalLayout(targetDir, projectName);
+  // Auto install dependencies
+  if (shouldInstall) {
+    const stopSpinner = startSpinner("패키지 설치 중 (bun install)...");
+    try {
+      const proc = Bun.spawn(["bun", "install"], {
+        cwd: targetDir,
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      const exitCode = await proc.exited;
+      if (exitCode === 0) {
+        stopSpinner("패키지 설치 완료");
+      } else {
+        stopSpinner();
+        console.log(`${theme.warn("⚠")} 패키지 설치 실패 (exit code: ${exitCode})`);
+        console.log(`   ${theme.muted("프로젝트 디렉토리에서 직접 'bun install'을 실행해주세요.")}`);
+      }
+    } catch {
+      stopSpinner();
+      console.log(`${theme.warn("⚠")} 패키지 설치를 건너뛰었습니다.`);
+      console.log(`   ${theme.muted("프로젝트 디렉토리에서 직접 'bun install'을 실행해주세요.")}`);
+    }
   }
 
-  // Create minimal page.tsx if ui=none (without UI components)
-  if (ui === "none") {
-    await createMinimalPage(targetDir);
+  // Success message
+  console.log(`\n${theme.success("✅")} ${theme.heading("프로젝트 생성 완료!")}\n`);
+  console.log(`📍 위치: ${theme.path(targetDir)}`);
+  console.log(`\n${theme.heading("🚀 시작하기:")}`);
+  console.log(`   ${theme.command(`cd ${projectName}`)}`);
+  if (!shouldInstall) {
+    console.log(`   ${theme.command("bun install")}`);
   }
-
-  // Update package.json to remove unused dependencies
-  if (css === "none" || ui === "none") {
-    await updatePackageJson(targetDir, css, ui);
-  }
-
-  // Setup .mcp.json for AI agent integration
-  const mcpResult = await setupMcpConfig(targetDir);
-
-  // Generate initial lockfile for config integrity
-  const lockfileResult = await setupLockfile(targetDir);
-
-  console.log(`\n✅ 프로젝트 생성 완료!\n`);
-  console.log(`📍 위치: ${targetDir}`);
-  console.log(`\n🚀 시작하기:`);
-  console.log(`   cd ${projectName}`);
-  console.log(`   bun install`);
-  console.log(`   bun run dev`);
+  console.log(`   ${theme.command("bun run dev")}`);
   console.log(`\n💡 CLI 실행 참고 (환경별):`);
-  console.log(`   bun run dev        # 권장 (로컬 스크립트)`);
-  console.log(`   bunx mandu dev     # PATH에 mandu가 없을 때 대안`);
+  console.log(`   ${theme.command("bun run dev")}        ${theme.muted("# 권장 (로컬 스크립트)")}`);
+  console.log(`   ${theme.command("bunx mandu dev")}     ${theme.muted("# PATH에 mandu가 없을 때 대안")}`);
   console.log(`\n📂 파일 구조:`);
   console.log(`   app/layout.tsx    → 루트 레이아웃`);
   console.log(`   app/page.tsx      → http://localhost:3000/`);
@@ -331,15 +460,15 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
 
   // MCP 설정 안내
   console.log(`\n🤖 AI 에이전트 통합:`);
-  logMcpConfigStatus(".mcp.json", mcpResult.mcpJson, "Claude Code 자동 연결");
-  logMcpConfigStatus(".claude.json", mcpResult.claudeJson, "Claude MCP 로컬 범위");
+  logMcpConfigStatus(".mcp.json", mcpResult!.mcpJson, "Claude Code 자동 연결");
+  logMcpConfigStatus(".claude.json", mcpResult!.claudeJson, "Claude MCP 로컬 범위");
   console.log(`   AGENTS.md → 에이전트 가이드 (Bun 사용 명시)`);
 
   // Lockfile 안내
   console.log(`\n🔒 설정 무결성:`);
-  if (lockfileResult.success) {
+  if (lockfileResult!.success) {
     console.log(`   ${LOCKFILE_PATH} 생성됨`);
-    console.log(`   해시: ${lockfileResult.hash}`);
+    console.log(`   해시: ${lockfileResult!.hash}`);
   } else {
     console.log(`   Lockfile 생성 건너뜀 (설정 없음)`);
   }
@@ -347,9 +476,12 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   return true;
 }
 
-async function createMinimalLayout(targetDir: string, projectName: string): Promise<void> {
+async function createMinimalLayout(targetDir: string, _projectName: string): Promise<void> {
   const layoutContent = `/**
  * Root Layout (Minimal)
+ *
+ * - html/head/body 태그는 Mandu SSR이 자동으로 생성합니다
+ * - 여기서는 body 내부의 공통 래퍼만 정의합니다
  */
 
 interface RootLayoutProps {
@@ -358,16 +490,9 @@ interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="ko">
-      <head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>${projectName}</title>
-      </head>
-      <body>
-        {children}
-      </body>
-    </html>
+    <div className="min-h-screen">
+      {children}
+    </div>
   );
 }
 `;
