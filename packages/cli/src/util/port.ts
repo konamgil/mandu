@@ -1,7 +1,7 @@
 import { createServer } from "net";
 
 const DEFAULT_MAX_ATTEMPTS = 10;
-// Windows TIME_WAIT 상태에서 같은 포트를 재시도하는 최대 횟수 (#125)
+// Max retries for the same port in Windows TIME_WAIT state (#125)
 const TIME_WAIT_RETRY_ATTEMPTS = 3;
 const TIME_WAIT_RETRY_DELAY_MS = 1000;
 
@@ -37,9 +37,9 @@ async function isPortAvailable(port: number, hostname?: string): Promise<boolean
 }
 
 /**
- * Windows TIME_WAIT 상태를 고려한 포트 가용성 체크 (#125)
- * EADDRINUSE이지만 TIME_WAIT 중인 포트는 잠시 후 사용 가능해질 수 있음
- * → 같은 포트를 지정 횟수만큼 재시도 후 다음 포트로 이동
+ * Port availability check considering Windows TIME_WAIT state (#125)
+ * Ports in TIME_WAIT may report EADDRINUSE but become available shortly after
+ * Retries the same port a specified number of times before moving to next
  */
 async function isPortAvailableWithRetry(
   port: number,
@@ -81,7 +81,7 @@ export async function resolveAvailablePort(
       continue;
     }
 
-    // Windows에서는 최초 포트(attempt=0)에 한해 TIME_WAIT 재시도 적용
+    // On Windows, apply TIME_WAIT retry only for the first port (attempt=0)
     const checkFn = (isWindows && attempt === 0)
       ? (port: number) => isPortAvailableWithRetry(port, options.hostname)
       : (port: number) => isPortAvailable(port, options.hostname);

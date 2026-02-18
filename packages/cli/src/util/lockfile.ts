@@ -29,23 +29,23 @@ export const LOCKFILE_GUIDE_LINES = {
 /**
  * Returns formatted lockfile guidance lines for display
  *
- * @returns Array of guidance messages with Korean labels
+ * @returns Array of guidance messages
  *
  * @example
  * ```typescript
  * const lines = getLockfileGuidanceLines();
  * lines.forEach(line => console.log(`   ↳ ${line}`));
  * // Output:
- * //    ↳ lock 갱신: mandu lock  (or bunx mandu lock)
- * //    ↳ 변경 확인: mandu lock --diff  (or bunx mandu lock --diff)
- * //    ↳ 안정 실행: mandu lock && mandu dev --watch  (or bun run dev:safe)
+ * //    ↳ Update lock: mandu lock  (or bunx mandu lock)
+ * //    ↳ Diff check: mandu lock --diff  (or bunx mandu lock --diff)
+ * //    ↳ Safe start: mandu lock && mandu dev --watch  (or bun run dev:safe)
  * ```
  */
 export function getLockfileGuidanceLines(): string[] {
   return [
-    `lock 갱신: ${LOCKFILE_GUIDE_LINES.update}`,
-    `변경 확인: ${LOCKFILE_GUIDE_LINES.diff}`,
-    `안정 실행: ${LOCKFILE_GUIDE_LINES.safeDev}`,
+    `Update lock: ${LOCKFILE_GUIDE_LINES.update}`,
+    `Diff check: ${LOCKFILE_GUIDE_LINES.diff}`,
+    `Safe start: ${LOCKFILE_GUIDE_LINES.safeDev}`,
   ];
 }
 
@@ -64,7 +64,7 @@ export async function validateRuntimeLockfile(config: Record<string, unknown>, r
     mcpConfig = await readMcpConfig(rootDir);
   } catch (error) {
     console.warn(
-      `⚠️  MCP 설정 로드 실패: ${error instanceof Error ? error.message : String(error)}`
+      `⚠️  Failed to load MCP config: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 
@@ -90,8 +90,8 @@ export function handleBlockedLockfile(action: "pass" | "warn" | "error" | "block
   if (action !== "block") return;
 
   const guidance = getLockfileGuidanceLines();
-  console.error("🛑 서버 시작 차단: Lockfile 불일치");
-  console.error("   설정이 변경되었습니다. 의도한 변경이라면 아래를 실행하세요:");
+  console.error("🛑 Server start blocked: Lockfile mismatch");
+  console.error("   Config has changed. If this is intentional, run:");
   console.error(`   ↳ ${guidance[0]}`);
   console.error(`   ↳ ${guidance[1]}`);
   if (lockResult) {
@@ -121,8 +121,8 @@ export function printRuntimeLockfileStatus(
       console.log(`   ↳ ${line}`);
     }
   } else if (lockfile && lockResult?.valid) {
-    console.log(`🔒 설정 무결성 확인됨 (${lockResult.currentHash?.slice(0, 8)})`);
+    console.log(`🔒 Config integrity verified (${lockResult.currentHash?.slice(0, 8)})`);
   } else if (!lockfile) {
-    console.log(`💡 Lockfile 없음 - '${LOCKFILE_COMMANDS.update}'으로 생성 권장`);
+    console.log(`💡 No lockfile found - run '${LOCKFILE_COMMANDS.update}' to generate`);
   }
 }

@@ -1,8 +1,8 @@
 /**
- * mandu start - 프로덕션 서버 실행
+ * mandu start - Production server
  *
- * dev.ts에서 개발 전용 기능(HMR, 파일 감시, Guard)을 제거한 프로덕션 버전.
- * 반드시 mandu build 이후에 실행해야 합니다.
+ * Production version of dev.ts without dev-only features (HMR, file watching, Guard).
+ * Must be run after mandu build.
  */
 import {
   startServer,
@@ -37,23 +37,23 @@ export async function start(options: StartOptions = {}): Promise<void> {
     process.exit(1);
   }
 
-  // 빌드 결과물 확인
+  // Check build artifacts
   const manifestJsonPath = path.join(rootDir, ".mandu/manifest.json");
   if (!fs.existsSync(manifestJsonPath)) {
-    console.error("❌ 빌드 결과물이 없습니다. 먼저 'mandu build'를 실행하세요.");
+    console.error("❌ No build artifacts found. Run 'mandu build' first.");
     process.exit(1);
   }
 
-  // 번들 매니페스트 로드
+  // Load bundle manifest
   let bundleManifest: BundleManifest | undefined;
   try {
     const raw = fs.readFileSync(manifestJsonPath, "utf-8");
     bundleManifest = JSON.parse(raw);
   } catch {
-    console.warn("⚠️  번들 매니페스트 파싱 실패. Island hydration이 비활성됩니다.");
+    console.warn("⚠️  Failed to parse bundle manifest. Island hydration will be disabled.");
   }
 
-  // Lockfile 검증 (strict: block 정책)
+  // Lockfile validation (strict: block policy)
   const { lockfile, lockResult, action, bypassed } = await validateRuntimeLockfile(config, rootDir);
   handleBlockedLockfile(action, lockResult);
 
@@ -61,21 +61,21 @@ export async function start(options: StartOptions = {}): Promise<void> {
 
   console.log(`🥟 Mandu Production Server`);
 
-  // Lockfile 상태 출력
+  // Print lockfile status
   printRuntimeLockfileStatus(action, bypassed, lockfile, lockResult);
 
-  // .env 파일 로드 (production 모드)
+  // Load .env files (production mode)
   const envResult = await loadEnv({
     rootDir,
     env: "production",
   });
 
   if (envResult.loaded.length > 0) {
-    console.log(`🔐 환경 변수 로드: ${envResult.loaded.join(", ")}`);
+    console.log(`🔐 Env loaded: ${envResult.loaded.join(", ")}`);
   }
 
-  // 라우트 스캔
-  console.log(`📂 라우트 스캔 중...`);
+  // Scan routes
+  console.log(`📂 Scanning routes...`);
   let manifest: RoutesManifest;
 
   try {
@@ -87,14 +87,14 @@ export async function start(options: StartOptions = {}): Promise<void> {
       process.exit(1);
     }
 
-    console.log(`✅ ${manifest.routes.length}개 라우트 발견\n`);
+    console.log(`✅ ${manifest.routes.length} route(s) found\n`);
   } catch (error) {
     printCLIError(CLI_ERROR_CODES.DEV_MANIFEST_NOT_FOUND);
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   }
 
-  // 핸들러 등록 (표준 import — 캐시 무효화 없음)
+  // Register handlers (standard import — no cache invalidation)
   const registeredLayouts = new Set<string>();
   const productionImport = async (modulePath: string) => {
     const url = Bun.pathToFileURL(modulePath);
@@ -107,7 +107,7 @@ export async function start(options: StartOptions = {}): Promise<void> {
   });
   console.log("");
 
-  // 포트 결정
+  // Determine port
   const envPort = process.env.PORT ? Number(process.env.PORT) : undefined;
   const desiredPort =
     options.port ??
@@ -124,12 +124,12 @@ export async function start(options: StartOptions = {}): Promise<void> {
     console.warn(`⚠️  Port ${desiredPort} is in use. Using ${port} instead.`);
   }
 
-  // CSS 경로 결정 (빌드된 CSS 파일 존재 시 주입)
+  // Determine CSS path (inject when built CSS file exists)
   const cssFilePath = path.join(rootDir, ".mandu", "client", "globals.css");
   const hasCss = fs.existsSync(cssFilePath);
   const cssPath: string | false = hasCss ? "/.mandu/client/globals.css" : false;
 
-  // 메인 서버 시작 (프로덕션 모드)
+  // Start main server (production mode)
   const server = startServer(manifest, {
     port,
     hostname: serverConfig.hostname,
@@ -147,7 +147,7 @@ export async function start(options: StartOptions = {}): Promise<void> {
 
   // Graceful shutdown
   const cleanup = () => {
-    console.log("\n🛑 서버 종료 중...");
+    console.log("\n🛑 Shutting down server...");
     server.stop();
     process.exit(0);
   };

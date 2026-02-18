@@ -9,15 +9,15 @@ export async function changeCommit(): Promise<boolean> {
   try {
     const result = await commitChange(rootDir);
 
-    console.log(`✅ 변경 확정됨`);
+    console.log(`✅ Change committed`);
     console.log(`   ID: ${result.changeId}`);
     if (result.message) {
-      console.log(`   메시지: ${result.message}`);
+      console.log(`   Message: ${result.message}`);
     }
 
     return true;
   } catch (error) {
-    console.error(`❌ 커밋 실패: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`❌ Commit failed: ${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
 }

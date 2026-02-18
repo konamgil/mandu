@@ -10,15 +10,15 @@ export async function changePrune(options: ChangePruneOptions = {}): Promise<boo
   const keepCount = options.keep ?? DEFAULT_HISTORY_CONFIG.maxSnapshots;
 
   console.log(`🥟 Mandu Change Prune`);
-  console.log(`   유지할 스냅샷: ${keepCount}개\n`);
+  console.log(`   Snapshots to keep: ${keepCount}\n`);
 
   try {
     const deletedIds = await pruneHistory(rootDir, keepCount);
 
     if (deletedIds.length === 0) {
-      console.log(`✅ 정리할 스냅샷이 없습니다`);
+      console.log(`✅ No snapshots to prune`);
     } else {
-      console.log(`🗑️  삭제된 스냅샷: ${deletedIds.length}개`);
+      console.log(`🗑️  Deleted snapshots: ${deletedIds.length}`);
       for (const id of deletedIds) {
         console.log(`   - ${id}`);
       }
@@ -26,7 +26,7 @@ export async function changePrune(options: ChangePruneOptions = {}): Promise<boo
 
     return true;
   } catch (error) {
-    console.error(`❌ 정리 실패: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`❌ Prune failed: ${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
 }

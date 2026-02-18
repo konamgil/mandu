@@ -36,7 +36,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<boolean> {
   const rootDir = getRootDir();
 
   console.log(`🩺 Mandu Doctor`);
-  console.log(`📄 Spec 파일: ${specPath}`);
+  console.log(`📄 Spec file: ${specPath}`);
 
   // Initialize Brain
   const brainEnabled = await initializeBrain();
@@ -44,9 +44,9 @@ export async function doctor(options: DoctorOptions = {}): Promise<boolean> {
   const llmAvailable = await brain.isLLMAvailable();
 
   if (brainEnabled) {
-    console.log(`🧠 Brain: ${llmAvailable ? "LLM 활성화" : "템플릿 모드"}`);
+    console.log(`🧠 Brain: ${llmAvailable ? "LLM enabled" : "template mode"}`);
   } else {
-    console.log(`🧠 Brain: 비활성화`);
+    console.log(`🧠 Brain: disabled`);
   }
   console.log();
 
@@ -54,26 +54,26 @@ export async function doctor(options: DoctorOptions = {}): Promise<boolean> {
   const result = await loadManifest(specPath);
 
   if (!result.success || !result.data) {
-    console.error("❌ Spec 로드 실패:");
+    console.error("❌ Failed to load spec:");
     result.errors?.forEach((e) => console.error(`  - ${e}`));
     return false;
   }
 
-  console.log(`✅ Spec 로드 완료`);
-  console.log(`🔍 Guard 검사 중...\n`);
+  console.log(`✅ Spec loaded`);
+  console.log(`🔍 Running guard check...\n`);
 
   // Run guard check
   const checkResult = await runGuardCheck(result.data, rootDir);
 
   if (checkResult.passed) {
-    console.log(`✅ Guard 통과 - 위반 사항이 없습니다.`);
+    console.log(`✅ Guard passed - no violations found.`);
     console.log();
-    console.log(`💡 다음 단계: bunx mandu dev`);
+    console.log(`💡 Next step: bunx mandu dev`);
     return true;
   }
 
   console.log(
-    `⚠️  ${checkResult.violations.length}개 위반 발견 - 분석 중...\n`
+    `⚠️  ${checkResult.violations.length} violation(s) found - analyzing...\n`
   );
 
   // Analyze violations

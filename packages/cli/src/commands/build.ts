@@ -1,8 +1,8 @@
 /**
- * mandu build - 클라이언트 번들 빌드
+ * mandu build - Client bundle build
  *
- * Hydration이 필요한 Island들을 번들링합니다.
- * Tailwind v4 프로젝트는 CSS도 함께 빌드합니다.
+ * Bundles Islands that require hydration.
+ * Also builds CSS for Tailwind v4 projects.
  */
 
 import { buildClientBundles, printBundleStats, validateAndReport, isTailwindProject, buildCSS, type RoutesManifest } from "@mandujs/core";
@@ -11,13 +11,13 @@ import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";
 
 export interface BuildOptions {
-  /** 코드 압축 (기본: production에서 true) */
+  /** Code minification (default: true in production) */
   minify?: boolean;
-  /** 소스맵 생성 */
+  /** Generate source maps */
   sourcemap?: boolean;
-  /** 감시 모드 */
+  /** Watch mode */
   watch?: boolean;
-  /** 출력 디렉토리 */
+  /** Output directory */
   outDir?: string;
 }
 
@@ -32,39 +32,39 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   }
   const buildConfig = config.build ?? {};
 
-  // 1. 라우트 매니페스트 로드 (FS Routes 우선)
+  // 1. Load route manifest (FS Routes first)
   let manifest: Awaited<ReturnType<typeof resolveManifest>>["manifest"];
   try {
     const resolved = await resolveManifest(cwd, { fsRoutes: config.fsRoutes });
     manifest = resolved.manifest;
-    console.log(`✅ 라우트 로드 완료 (${resolved.source}): ${manifest.routes.length}개 라우트`);
+    console.log(`✅ Routes loaded (${resolved.source}): ${manifest.routes.length} route(s)`);
   } catch (error) {
-    console.error("❌ 라우트 로드 실패:");
+    console.error("❌ Failed to load routes:");
     console.error(`   ${error instanceof Error ? error.message : error}`);
     return false;
   }
 
-  // 2. Tailwind CSS 빌드 (Island 여부와 무관하게 먼저 실행)
+  // 2. Tailwind CSS build (runs first regardless of Island presence)
   const hasTailwind = await isTailwindProject(cwd);
   const resolvedMinify = options.minify ?? buildConfig.minify ?? true;
 
   if (hasTailwind) {
-    console.log(`\n🎨 Tailwind CSS v4 빌드 중...`);
+    console.log(`\n🎨 Building Tailwind CSS v4...`);
     const cssResult = await buildCSS({
       rootDir: cwd,
       minify: resolvedMinify,
     });
 
     if (!cssResult.success) {
-      console.error(`\n❌ CSS 빌드 실패: ${cssResult.error}`);
+      console.error(`\n❌ CSS build failed: ${cssResult.error}`);
       return false;
     }
 
-    console.log(`   ✅ CSS 빌드 완료 (${cssResult.buildTime?.toFixed(0)}ms)`);
-    console.log(`   출력: ${cssResult.outputPath}`);
+    console.log(`   ✅ CSS build complete (${cssResult.buildTime?.toFixed(0)}ms)`);
+    console.log(`   Output: ${cssResult.outputPath}`);
   }
 
-  // 3. Hydration이 필요한 라우트 확인
+  // 3. Check routes that require hydration
   const hydratedRoutes = manifest.routes.filter(
     (route) =>
       route.kind === "page" &&
@@ -73,24 +73,24 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   );
 
   if (hydratedRoutes.length === 0) {
-    console.log("\n📭 Hydration이 필요한 라우트가 없습니다.");
-    console.log("   (clientModule이 없거나 hydration.strategy: none)");
+    console.log("\n📭 No routes require hydration.");
+    console.log("   (no clientModule or hydration.strategy: none)");
 
-    // CSS만 빌드된 경우도 성공으로 처리
+    // Treat as success even if only CSS was built
     if (hasTailwind) {
-      console.log(`\n✅ CSS 빌드 완료`);
+      console.log(`\n✅ CSS build complete`);
       console.log(`   CSS: .mandu/client/globals.css`);
     }
     return true;
   }
 
-  console.log(`\n🏝️  ${hydratedRoutes.length}개 Island 빌드 중...`);
+  console.log(`\n🏝️  Building ${hydratedRoutes.length} Island(s)...`);
   for (const route of hydratedRoutes) {
     const hydration = route.hydration || { strategy: "island", priority: "visible" };
     console.log(`   - ${route.id} (${hydration.strategy}, ${hydration.priority || "visible"})`);
   }
 
-  // 4. 번들 빌드
+  // 4. Bundle build
   const startTime = performance.now();
   const resolvedBuildOptions: BuildOptions = {
     minify: options.minify ?? buildConfig.minify,
@@ -99,26 +99,26 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   };
   const result = await buildClientBundles(manifest, cwd, resolvedBuildOptions);
 
-  // 5. 결과 출력
+  // 5. Print results
   console.log("");
   printBundleStats(result);
 
   if (!result.success) {
-    console.error("\n❌ 빌드 실패");
+    console.error("\n❌ Build failed");
     return false;
   }
 
   const elapsed = (performance.now() - startTime).toFixed(0);
-  console.log(`\n✅ 빌드 완료 (${elapsed}ms)`);
-  console.log(`   출력: .mandu/client/`);
+  console.log(`\n✅ Build complete (${elapsed}ms)`);
+  console.log(`   Output: .mandu/client/`);
   if (hasTailwind) {
     console.log(`   CSS: .mandu/client/globals.css`);
   }
 
-  // 6. 감시 모드
+  // 6. Watch mode
   if (options.watch) {
-    console.log("\n👀 파일 감시 모드...");
-    console.log("   Ctrl+C로 종료\n");
+    console.log("\n👀 Watch mode...");
+    console.log("   Press Ctrl+C to stop\n");
 
     await watchAndRebuild(cwd, resolvedBuildOptions, { fsRoutes: config.fsRoutes });
   }
@@ -127,18 +127,18 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
 }
 
 /**
- * 파일 감시 및 재빌드
- * FS Routes 프로젝트: app/ 디렉토리의 island 파일 감시
+ * Watch files and rebuild
+ * FS Routes project: watches island files in app/ directory
  *
- * 파일 변경 시마다 resolveManifest를 재호출하여 새로 추가/삭제된
- * 라우트가 번들에 반영되도록 합니다.
+ * Re-invokes resolveManifest on each file change so that newly
+ * added/deleted routes are reflected in the bundle.
  */
 async function watchAndRebuild(
   rootDir: string,
   options: BuildOptions,
   resolveOptions: Parameters<typeof resolveManifest>[1] = {}
 ): Promise<void> {
-  // FS Routes 프로젝트는 app/ 디렉토리를, 구버전은 spec/slots/ 감시
+  // FS Routes projects watch app/, legacy projects watch spec/slots/
   const fsRoutesDir = path.join(rootDir, "app");
   const slotsDir = path.join(rootDir, "spec", "slots");
 
@@ -155,12 +155,12 @@ async function watchAndRebuild(
       watchDir = slotsDir;
       watchMode = "slots";
     } catch {
-      console.warn(`⚠️  감시할 디렉토리가 없습니다 (app/ 또는 spec/slots/)`);
+      console.warn(`⚠️  No directory to watch (app/ or spec/slots/)`);
       return;
     }
   }
 
-  console.log(`👀 감시 중: ${watchDir}`);
+  console.log(`👀 Watching: ${watchDir}`);
 
   const { watch } = await import("fs");
 
@@ -169,26 +169,26 @@ async function watchAndRebuild(
 
     const normalizedFilename = filename.replace(/\\/g, "/");
 
-    // FS Routes: island 파일 변경 감지
+    // FS Routes: detect island file changes
     if (watchMode === "fs-routes") {
       const isIslandFile =
         normalizedFilename.endsWith(".island.tsx") ||
         normalizedFilename.endsWith(".island.ts") ||
         normalizedFilename.endsWith(".island.jsx") ||
         normalizedFilename.endsWith(".island.js");
-      // 루트 레벨(page.tsx) 및 중첩 경로(/nested/page.tsx) 모두 감지, .js/.jsx 포함
+      // Detect root level (page.tsx) and nested paths (/nested/page.tsx), including .js/.jsx
       const isPageFile = /(?:^|\/)page\.[jt]sx?$/.test(normalizedFilename);
 
       if (!isIslandFile && !isPageFile) return;
     } else {
-      // Slots: .client.ts 파일만 감시
+      // Slots: watch only .client.ts files
       if (!normalizedFilename.endsWith(".client.ts")) return;
     }
 
-    console.log(`\n🔄 변경 감지: ${normalizedFilename}`);
+    console.log(`\n🔄 Change detected: ${normalizedFilename}`);
 
     try {
-      // 파일 추가/삭제 반영을 위해 매 재빌드마다 매니페스트 재조회
+      // Re-resolve manifest on each rebuild to reflect added/deleted files
       const { manifest: freshManifest } = await resolveManifest(rootDir, resolveOptions);
 
       const result = await buildClientBundles(freshManifest, rootDir, {
@@ -198,25 +198,25 @@ async function watchAndRebuild(
       });
 
       if (result.success) {
-        console.log(`✅ 재빌드 완료`);
+        console.log(`✅ Rebuild complete`);
       } else {
-        console.error(`❌ 재빌드 실패`);
+        console.error(`❌ Rebuild failed`);
         for (const error of result.errors) {
           console.error(`   ${error}`);
         }
       }
     } catch (error) {
-      console.error(`❌ 재빌드 오류: ${error}`);
+      console.error(`❌ Rebuild error: ${error}`);
     }
   });
 
-  // 종료 시 정리
+  // Cleanup on exit
   process.on("SIGINT", () => {
-    console.log("\n\n👋 빌드 감시 종료");
+    console.log("\n\n👋 Build watch stopped");
     watcher.close();
     process.exit(0);
   });
 
-  // 무한 대기
+  // Wait indefinitely
   await new Promise(() => {});
 }

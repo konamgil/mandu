@@ -48,17 +48,17 @@ function createMethodDispatcher(module: RouteModule, routeId: string) {
 }
 
 export interface RegisterHandlersOptions {
-  /** 모듈 import 함수 (dev: importFresh, start: 표준 import) */
+  /** Module import function (dev: importFresh, start: standard import) */
   importFn: (modulePath: string) => Promise<any>;
-  /** 이미 등록된 layout 경로 추적용 Set */
+  /** Set for tracking already registered layout paths */
   registeredLayouts: Set<string>;
-  /** 리로드 시 layout 캐시 클리어 */
+  /** Clear layout cache on reload */
   isReload?: boolean;
 }
 
 /**
- * 매니페스트 라우트를 서버 핸들러로 등록
- * dev.ts와 start.ts에서 공유
+ * Register manifest routes as server handlers
+ * Shared between dev.ts and start.ts
  */
 export async function registerManifestHandlers(
   manifest: RoutesManifest,
@@ -78,9 +78,9 @@ export async function registerManifestHandlers(
         const module = await importFn(modulePath);
         let handler = module.default || module.handler || module;
 
-        // 1) ManduFilling 인스턴스
+        // 1) ManduFilling instance
         if (handler && typeof handler.handle === "function") {
-          console.log(`  🔄 ManduFilling 래핑: ${route.id}`);
+          console.log(`  🔄 ManduFilling wrapped: ${route.id}`);
           const filling = handler;
           handler = async (req: Request, params?: Record<string, string>) => {
             return filling.handle(req, params);
@@ -92,21 +92,21 @@ export async function registerManifestHandlers(
         }
 
         if (typeof handler !== "function") {
-          console.warn(`  ⚠️ API 핸들러 변환 실패: ${route.id} (type: ${typeof handler})`);
+          console.warn(`  ⚠️ API handler conversion failed: ${route.id} (type: ${typeof handler})`);
           continue;
         }
 
         registerApiHandler(route.id, handler);
         console.log(`  📡 API: ${route.pattern} -> ${route.id}`);
       } catch (error) {
-        console.error(`  ❌ API 핸들러 로드 실패: ${route.id}`, error);
+        console.error(`  ❌ Failed to load API handler: ${route.id}`, error);
       }
     } else if (route.kind === "page" && route.componentModule) {
       const componentPath = path.resolve(rootDir, route.componentModule);
       const isIsland = needsHydration(route);
       const hasLayout = route.layoutChain && route.layoutChain.length > 0;
 
-      // Layout 로더 등록
+      // Register layout loaders
       if (route.layoutChain) {
         for (const layoutPath of route.layoutChain) {
           if (!registeredLayouts.has(layoutPath)) {
@@ -120,7 +120,7 @@ export async function registerManifestHandlers(
         }
       }
 
-      // slotModule이 있으면 PageHandler 사용 (filling.loader 지원)
+      // Use PageHandler if slotModule exists (filling.loader support)
       if (route.slotModule) {
         registerPageHandler(route.id, async () => {
           const module = await importFn(componentPath);

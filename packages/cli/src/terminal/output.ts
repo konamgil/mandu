@@ -1,54 +1,54 @@
 /**
  * DNA-014: Adaptive Output Format (JSON/Pretty/Plain)
  *
- * 환경에 따라 출력 형식을 자동 결정
- * - TTY: Pretty (색상 + 포맷팅)
- * - CI/pipe/agent: JSON (자동 처리/에이전트 친화)
- * - --json 플래그: JSON
- * - MANDU_OUTPUT 환경변수: 강제 지정
+ * Automatically determines output format based on environment
+ * - TTY: Pretty (colors + formatting)
+ * - CI/pipe/agent: JSON (machine/agent-friendly)
+ * - --json flag: JSON
+ * - MANDU_OUTPUT env var: forced override
  */
 
 import { theme, isRich, stripAnsi } from "./theme.js";
 
 /**
- * 출력 모드
+ * Output mode
  */
 export type OutputMode = "json" | "pretty" | "plain";
 
 /**
- * 출력 옵션
+ * Output options
  */
 export interface OutputOptions {
-  /** JSON 출력 강제 */
+  /** Force JSON output */
   json?: boolean;
-  /** Plain 텍스트 강제 */
+  /** Force plain text */
   plain?: boolean;
 }
 
 /**
- * 출력 모드 결정
+ * Determine output mode
  *
- * 우선순위:
- * 1. --json 플래그 → "json"
- * 2. --plain 플래그 → "plain"
- * 3. MANDU_OUTPUT 환경변수 → 지정된 값
- * 4. 에이전트 환경 → "json"
- * 5. !TTY (파이프), CI → "json"
- * 6. 기본값 → "pretty"
+ * Priority:
+ * 1. --json flag -> "json"
+ * 2. --plain flag -> "plain"
+ * 3. MANDU_OUTPUT env var -> specified value
+ * 4. Agent environment -> "json"
+ * 5. !TTY (pipe), CI -> "json"
+ * 6. Default -> "pretty"
  */
 export function getOutputMode(opts: OutputOptions = {}): OutputMode {
-  // 플래그 우선
+  // Flags take priority
   if (opts.json) return "json";
   if (opts.plain) return "plain";
 
-  // 환경변수 체크
+  // Check environment variable
   const envOutput = process.env.MANDU_OUTPUT?.toLowerCase();
   if (envOutput === "json") return "json";
   if (envOutput === "plain") return "plain";
   if (envOutput === "pretty") return "pretty";
   if (envOutput === "agent") return "json";
 
-  // 에이전트 환경이면 JSON
+  // Agent environment uses JSON
   const agentSignals = [
     "MANDU_AGENT",
     "CODEX_AGENT",
@@ -63,17 +63,17 @@ export function getOutputMode(opts: OutputOptions = {}): OutputMode {
     }
   }
 
-  // CI 환경이면 JSON
+  // CI environment uses JSON
   if (process.env.CI) return "json";
 
-  // TTY가 아니면 JSON
+  // Non-TTY uses JSON
   if (!process.stdout.isTTY) return "json";
 
   return "pretty";
 }
 
 /**
- * 출력 모드에 따른 포맷팅 컨텍스트
+ * Formatting context based on output mode
  */
 export interface FormatContext {
   mode: OutputMode;
@@ -81,7 +81,7 @@ export interface FormatContext {
 }
 
 /**
- * 포맷팅 컨텍스트 생성
+ * Create formatting context
  */
 export function createFormatContext(opts: OutputOptions = {}): FormatContext {
   const mode = getOutputMode(opts);
@@ -92,7 +92,7 @@ export function createFormatContext(opts: OutputOptions = {}): FormatContext {
 }
 
 /**
- * 데이터를 모드에 맞게 포맷팅
+ * Format data according to output mode
  */
 export function formatOutput<T>(
   data: T,
@@ -114,14 +114,14 @@ export function formatOutput<T>(
     if (formatters.plain) {
       return formatters.plain(data);
     }
-    // Pretty 포맷터에서 ANSI 코드 제거
+    // Strip ANSI codes from pretty formatter
     if (formatters.pretty) {
       return stripAnsi(formatters.pretty(data, false));
     }
     return String(data);
   }
 
-  // Pretty 모드
+  // Pretty mode
   if (formatters.pretty) {
     return formatters.pretty(data, rich);
   }
@@ -130,7 +130,7 @@ export function formatOutput<T>(
 }
 
 /**
- * 에러 출력 포맷팅
+ * Error output formatting
  */
 export interface ErrorOutput {
   type: "error";
@@ -141,7 +141,7 @@ export interface ErrorOutput {
 }
 
 /**
- * 에러를 모드에 맞게 포맷팅
+ * Format error according to output mode
  */
 export function formatError(
   error: Error | string,
@@ -170,7 +170,7 @@ export function formatError(
 
   const lines: string[] = [];
 
-  // 에러 메시지
+  // Error message
   if (options.code) {
     lines.push(
       rich
@@ -182,7 +182,7 @@ export function formatError(
   }
   lines.push(rich ? `   ${message}` : `   ${message}`);
 
-  // 힌트
+  // Hint
   if (options.hint) {
     lines.push("");
     lines.push(rich ? theme.muted(`💡 ${options.hint}`) : `Hint: ${options.hint}`);
@@ -192,7 +192,7 @@ export function formatError(
 }
 
 /**
- * 성공 메시지 포맷팅
+ * Format success message
  */
 export function formatSuccess(
   message: string,
@@ -213,7 +213,7 @@ export function formatSuccess(
 }
 
 /**
- * 경고 메시지 포맷팅
+ * Format warning message
  */
 export function formatWarning(
   message: string,
@@ -234,7 +234,7 @@ export function formatWarning(
 }
 
 /**
- * 정보 메시지 포맷팅
+ * Format info message
  */
 export function formatInfo(
   message: string,
@@ -255,7 +255,7 @@ export function formatInfo(
 }
 
 /**
- * 리스트 출력 포맷팅
+ * Format list output
  */
 export function formatList<T>(
   items: T[],

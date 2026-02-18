@@ -1,17 +1,17 @@
 /**
  * DNA-010: Command Registry Pattern
  *
- * 선언적 명령어 등록 시스템
- * - 각 명령어를 독립적으로 정의
- * - 레이지 로딩으로 시작 시간 최적화
- * - 서브커맨드 자동 라우팅
+ * Declarative command registration system
+ * - Each command defined independently
+ * - Lazy loading for startup time optimization
+ * - Automatic subcommand routing
  */
 
 import type { CLI_ERROR_CODES } from "../errors";
 import type { CSSFramework, UILibrary } from "./init";
 
 /**
- * 명령어 실행 컨텍스트
+ * Command execution context
  */
 export interface CommandContext<TOptions extends Record<string, unknown> = Record<string, string>> {
   args: string[];
@@ -19,18 +19,18 @@ export interface CommandContext<TOptions extends Record<string, unknown> = Recor
 }
 
 /**
- * 명령어 등록 정의
+ * Command registration definition
  */
 export interface CommandRegistration {
-  /** 명령어 ID (예: "dev", "build", "guard") */
+  /** Command ID (e.g., "dev", "build", "guard") */
   id: string;
-  /** 명령어 설명 */
+  /** Command description */
   description: string;
-  /** 서브커맨드 목록 (예: guard의 "arch", "legacy") */
+  /** Subcommand list (e.g., "arch", "legacy" for guard) */
   subcommands?: string[];
-  /** 기본 서브커맨드 (서브커맨드 없이 호출 시) */
+  /** Default subcommand (when invoked without subcommand) */
   defaultSubcommand?: string;
-  /** 명령어 실행 */
+  /** Command execution */
   run: (ctx: CommandContext) => Promise<boolean>;
 }
 
@@ -53,38 +53,38 @@ export type CommandHandlers<TMap extends Record<string, Record<string, unknown>>
 };
 
 /**
- * 명령어 레지스트리
+ * Command registry
  */
 export const commandRegistry = new Map<string, CommandRegistration>();
 
 /**
- * 명령어 등록
+ * Register a command
  */
 export function registerCommand(registration: CommandRegistration): void {
   commandRegistry.set(registration.id, registration);
 }
 
 /**
- * 명령어 조회
+ * Look up a command
  */
 export function getCommand(id: string): CommandRegistration | undefined {
   return commandRegistry.get(id);
 }
 
 /**
- * 모든 명령어 ID 목록
+ * List all command IDs
  */
 export function getAllCommands(): string[] {
   return Array.from(commandRegistry.keys());
 }
 
 // ============================================================================
-// 명령어 등록 (레이지 로딩)
+// Command registration (lazy loading)
 // ============================================================================
 
 registerCommand({
   id: "init",
-  description: "새 프로젝트 생성 (Tailwind + shadcn/ui 기본 포함)",
+  description: "Create a new project (Tailwind + shadcn/ui included by default)",
   async run(ctx) {
     const { init } = await import("./init");
     return init({
@@ -103,7 +103,7 @@ registerCommand({
 
 registerCommand({
   id: "dev",
-  description: "개발 서버 실행 (FS Routes + Guard 기본)",
+  description: "Start dev server (FS Routes + Guard enabled by default)",
   async run() {
     const { dev } = await import("./dev");
     await dev();
@@ -113,7 +113,7 @@ registerCommand({
 
 registerCommand({
   id: "build",
-  description: "클라이언트 번들 빌드 (Hydration)",
+  description: "Build client bundles (hydration)",
   async run(ctx) {
     const { build } = await import("./build");
     return build({ watch: ctx.options.watch === "true" });
@@ -122,7 +122,7 @@ registerCommand({
 
 registerCommand({
   id: "start",
-  description: "프로덕션 서버 실행 (build 후)",
+  description: "Start production server (after build)",
   async run() {
     const { start } = await import("./start");
     await start();
@@ -132,7 +132,7 @@ registerCommand({
 
 registerCommand({
   id: "check",
-  description: "FS Routes + Guard 통합 검사",
+  description: "Integrated FS Routes + Guard check",
   async run() {
     const { check } = await import("./check");
     return check();
@@ -141,7 +141,7 @@ registerCommand({
 
 registerCommand({
   id: "guard",
-  description: "아키텍처 위반 검사",
+  description: "Architecture violation check",
   subcommands: ["arch", "legacy", "spec"],
   defaultSubcommand: "arch",
   async run(ctx) {
@@ -165,10 +165,10 @@ registerCommand({
       }
       default:
         if (hasSubCommand) {
-          // 알 수 없는 서브커맨드는 main.ts에서 처리
+          // Unknown subcommands handled by main.ts
           return false;
         }
-        // 기본값: architecture guard
+        // Default: architecture guard
         const { guardArch } = await import("./guard-arch");
         return guardArch(guardOptions);
     }
@@ -177,7 +177,7 @@ registerCommand({
 
 registerCommand({
   id: "routes",
-  description: "FS Routes 관리",
+  description: "FS Routes management",
   subcommands: ["generate", "list", "watch"],
   defaultSubcommand: "list",
   async run(ctx) {
@@ -198,7 +198,7 @@ registerCommand({
         return routesWatch(routesOptions);
       default:
         if (subCommand && !subCommand.startsWith("--")) {
-          return false; // 알 수 없는 서브커맨드
+          return false; // Unknown subcommand
         }
         return routesList({ verbose: routesOptions.verbose });
     }
@@ -207,7 +207,7 @@ registerCommand({
 
 registerCommand({
   id: "contract",
-  description: "Contract-First API 개발",
+  description: "Contract-First API development",
   subcommands: ["create", "validate", "build", "diff"],
   async run(ctx) {
     const subCommand = ctx.args[1];
@@ -243,7 +243,7 @@ registerCommand({
 
 registerCommand({
   id: "openapi",
-  description: "OpenAPI 스펙 생성",
+  description: "Generate OpenAPI spec",
   subcommands: ["generate", "serve"],
   async run(ctx) {
     const subCommand = ctx.args[1];
@@ -266,7 +266,7 @@ registerCommand({
 
 registerCommand({
   id: "change",
-  description: "변경 트랜잭션 관리",
+  description: "Change transaction management",
   subcommands: ["begin", "commit", "rollback", "status", "list", "prune"],
   async run(ctx) {
     const subCommand = ctx.args[1];
@@ -302,7 +302,7 @@ registerCommand({
 
 registerCommand({
   id: "brain",
-  description: "Brain (sLLM) 관리",
+  description: "Brain (sLLM) management",
   subcommands: ["setup", "status"],
   async run(ctx) {
     const subCommand = ctx.args[1];
@@ -325,7 +325,7 @@ registerCommand({
 
 registerCommand({
   id: "doctor",
-  description: "Guard 실패 분석 + 패치 제안",
+  description: "Analyze Guard failures + suggest patches",
   async run(ctx) {
     const { doctor } = await import("./doctor");
     return doctor({
@@ -337,7 +337,7 @@ registerCommand({
 
 registerCommand({
   id: "watch",
-  description: "실시간 파일 감시",
+  description: "Real-time file watching",
   async run(ctx) {
     const { watch } = await import("./watch");
     return watch({
@@ -363,7 +363,7 @@ registerCommand({
 
 registerCommand({
   id: "lock",
-  description: "Lockfile 관리",
+  description: "Lockfile management",
   async run(ctx) {
     const { runLockCommand } = await import("./lock");
     return runLockCommand(ctx.args.slice(1));
@@ -376,7 +376,7 @@ registerCommand({
 
 registerCommand({
   id: "add",
-  description: "프로젝트에 기능 추가",
+  description: "Add features to project",
   subcommands: ["test"],
   async run(ctx) {
     const sub = ctx.args[1];
@@ -388,7 +388,7 @@ registerCommand({
 
 registerCommand({
   id: "test:auto",
-  description: "ATE 자동 E2E 생성/실행",
+  description: "ATE auto E2E generation/execution",
   async run(ctx) {
     const { testAuto } = await import("./test-auto");
     return testAuto({
@@ -401,7 +401,7 @@ registerCommand({
 
 registerCommand({
   id: "test:heal",
-  description: "ATE healing 제안 생성(자동 커밋 금지)",
+  description: "Generate ATE healing suggestions (no auto-commit)",
   async run() {
     const { testHeal } = await import("./test-heal");
     return testHeal();
@@ -409,10 +409,10 @@ registerCommand({
 });
 
 
-// 레거시 명령어 (DEPRECATED)
+// Legacy commands (DEPRECATED)
 registerCommand({
   id: "spec-upsert",
-  description: "[DEPRECATED] Spec 파일 검증 및 lock 갱신 → routes generate 사용",
+  description: "[DEPRECATED] Spec file validation and lock update -> use routes generate",
   async run(ctx) {
     const { specUpsert } = await import("./spec-upsert");
     return specUpsert({ file: ctx.options.file });
@@ -421,7 +421,7 @@ registerCommand({
 
 registerCommand({
   id: "generate",
-  description: "코드 생성 (FS Routes + Resources)",
+  description: "Code generation (FS Routes + Resources)",
   subcommands: ["resource"],
   async run(ctx) {
     const subCommand = ctx.args[1];

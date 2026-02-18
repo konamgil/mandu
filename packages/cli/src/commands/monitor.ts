@@ -48,7 +48,7 @@ function parseDuration(value?: string): number | undefined {
 
 function formatTime(ts?: string): string {
   const date = ts ? new Date(ts) : new Date();
-  return date.toLocaleTimeString("ko-KR", { hour12: false });
+  return date.toLocaleTimeString("en-US", { hour12: false });
 }
 
 function formatEventForConsole(event: MonitorEvent): string {
@@ -267,7 +267,7 @@ export async function monitor(options: MonitorOptions = {}): Promise<boolean> {
   const filePath = await resolveLogFile(rootDir, output, options.file);
 
   if (!filePath) {
-    console.error("❌ activity log 파일을 찾을 수 없습니다. (.mandu/activity.log 또는 activity.jsonl)");
+    console.error("❌ Activity log file not found (.mandu/activity.log or activity.jsonl)");
     return false;
   }
 
@@ -276,7 +276,7 @@ export async function monitor(options: MonitorOptions = {}): Promise<boolean> {
 
   if (options.summary) {
     if (!isJson) {
-      console.error("⚠️  summary는 JSON 로그(activity.jsonl)에서만 가능합니다.");
+      console.error("⚠️  Summary is only available for JSON logs (activity.jsonl)");
     } else {
       const windowMs = parseDuration(options.since) ?? 5 * 60 * 1000;
       const summary = await readSummary(filePath, windowMs);

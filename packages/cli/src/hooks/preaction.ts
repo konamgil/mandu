@@ -1,54 +1,54 @@
 /**
  * DNA-016: Pre-Action Hooks
  *
- * 명령어 실행 전 공통 작업 수행
- * - 프로세스 타이틀 설정
- * - 조건부 배너 표시
- * - Verbose 모드 설정
- * - 설정 로드
+ * Common tasks before command execution
+ * - Set process title
+ * - Conditional banner display
+ * - Verbose mode configuration
+ * - Config loading
  */
 
 import { shouldShowBanner, renderMiniBanner } from "../terminal/banner.js";
 import { loadManduConfig, type ManduConfig } from "@mandujs/core";
 
 /**
- * Pre-Action 컨텍스트
+ * Pre-Action context
  */
 export interface PreActionContext {
-  /** 현재 명령어 */
+  /** Current command */
   command: string;
-  /** 서브커맨드 */
+  /** Subcommand */
   subcommand?: string;
-  /** 명령어 옵션 */
+  /** Command options */
   options: Record<string, string>;
-  /** 로드된 설정 */
+  /** Loaded config */
   config?: ManduConfig;
-  /** verbose 모드 여부 */
+  /** Whether verbose mode is enabled */
   verbose: boolean;
-  /** 작업 디렉토리 */
+  /** Working directory */
   cwd: string;
 }
 
 /**
- * Pre-Action 훅 타입
+ * Pre-Action hook type
  */
 export type PreActionHook = (ctx: PreActionContext) => void | Promise<void>;
 
 /**
- * Pre-Action 훅 레지스트리
+ * Pre-Action hook registry
  */
 class PreActionRegistry {
   private hooks: PreActionHook[] = [];
 
   /**
-   * 훅 등록
+   * Register hook
    */
   register(hook: PreActionHook): void {
     this.hooks.push(hook);
   }
 
   /**
-   * 훅 제거
+   * Unregister hook
    */
   unregister(hook: PreActionHook): boolean {
     const index = this.hooks.indexOf(hook);
@@ -60,7 +60,7 @@ class PreActionRegistry {
   }
 
   /**
-   * 모든 훅 실행
+   * Run all hooks
    */
   async runAll(ctx: PreActionContext): Promise<void> {
     for (const hook of this.hooks) {
@@ -69,14 +69,14 @@ class PreActionRegistry {
   }
 
   /**
-   * 훅 초기화
+   * Clear all hooks
    */
   clear(): void {
     this.hooks = [];
   }
 
   /**
-   * 등록된 훅 수
+   * Number of registered hooks
    */
   get size(): number {
     return this.hooks.length;
@@ -84,12 +84,12 @@ class PreActionRegistry {
 }
 
 /**
- * 전역 Pre-Action 훅 레지스트리
+ * Global Pre-Action hook registry
  */
 export const preActionRegistry = new PreActionRegistry();
 
 /**
- * 설정 로드가 필요없는 명령어
+ * Commands that don't need config loading
  */
 const SKIP_CONFIG_COMMANDS = new Set([
   "init",
@@ -99,7 +99,7 @@ const SKIP_CONFIG_COMMANDS = new Set([
 ]);
 
 /**
- * 배너 표시가 필요없는 명령어
+ * Commands that don't need banner display
  */
 const SKIP_BANNER_COMMANDS = new Set([
   "completion",
@@ -107,26 +107,26 @@ const SKIP_BANNER_COMMANDS = new Set([
 ]);
 
 /**
- * verbose 전역 상태
+ * Verbose global state
  */
 let globalVerbose = false;
 
 /**
- * verbose 모드 설정
+ * Set verbose mode
  */
 export function setVerbose(value: boolean): void {
   globalVerbose = value;
 }
 
 /**
- * verbose 모드 확인
+ * Check verbose mode
  */
 export function isVerbose(): boolean {
   return globalVerbose;
 }
 
 /**
- * 프로세스 타이틀 설정
+ * Set process title
  */
 export function setProcessTitle(command: string, subcommand?: string): void {
   const title = subcommand
@@ -139,7 +139,7 @@ export function setProcessTitle(command: string, subcommand?: string): void {
 }
 
 /**
- * 기본 Pre-Action 실행
+ * Run default Pre-Action
  *
  * @example
  * ```ts
@@ -148,8 +148,8 @@ export function setProcessTitle(command: string, subcommand?: string): void {
  *   options: { port: "3000" },
  * });
  *
- * // ctx.config 에서 로드된 설정 사용
- * // ctx.verbose 로 verbose 모드 확인
+ * // Use loaded config from ctx.config
+ * // Check verbose mode via ctx.verbose
  * ```
  */
 export async function runPreAction(params: {
@@ -167,14 +167,14 @@ export async function runPreAction(params: {
     version,
   } = params;
 
-  // 1. verbose 모드 확인
+  // 1. Check verbose mode
   const verbose = options.verbose === "true" || process.env.MANDU_VERBOSE === "true";
   setVerbose(verbose);
 
-  // 2. 프로세스 타이틀 설정
+  // 2. Set process title
   setProcessTitle(command, subcommand);
 
-  // 3. 조건부 배너 표시
+  // 3. Conditional banner display
   const showBanner =
     !SKIP_BANNER_COMMANDS.has(command) &&
     !isTruthyEnv("MANDU_HIDE_BANNER") &&
@@ -185,20 +185,20 @@ export async function runPreAction(params: {
     console.log();
   }
 
-  // 4. 설정 로드 (필요한 명령어만)
+  // 4. Load config (only for commands that need it)
   let config: ManduConfig | undefined;
   if (!SKIP_CONFIG_COMMANDS.has(command)) {
     try {
       config = await loadManduConfig(cwd);
     } catch {
-      // 설정 로드 실패 시 무시 (옵션 설정만 사용)
+      // Ignore config load failure (use option defaults only)
       if (verbose) {
         console.warn("[mandu] Config load failed, using defaults");
       }
     }
   }
 
-  // Pre-Action 컨텍스트 생성
+  // Create Pre-Action context
   const ctx: PreActionContext = {
     command,
     subcommand,
@@ -208,14 +208,14 @@ export async function runPreAction(params: {
     cwd,
   };
 
-  // 5. 등록된 훅 실행
+  // 5. Run registered hooks
   await preActionRegistry.runAll(ctx);
 
   return ctx;
 }
 
 /**
- * 환경변수가 truthy인지 확인
+ * Check if environment variable is truthy
  */
 function isTruthyEnv(key: string): boolean {
   const value = process.env[key];
@@ -224,7 +224,7 @@ function isTruthyEnv(key: string): boolean {
 }
 
 /**
- * Pre-Action 훅 등록 헬퍼
+ * Pre-Action hook registration helper
  *
  * @example
  * ```ts
@@ -241,10 +241,10 @@ export function registerPreActionHook(hook: PreActionHook): () => void {
 }
 
 /**
- * 기본 훅들 등록
+ * Register default hooks
  */
 export function registerDefaultHooks(): void {
-  // 예: 개발 모드에서 추가 정보 표시
+  // Example: show extra info in dev mode
   registerPreActionHook((ctx) => {
     if (ctx.verbose && ctx.config) {
       console.log(`[mandu] Config loaded from ${ctx.cwd}`);

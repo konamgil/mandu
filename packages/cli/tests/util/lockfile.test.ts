@@ -24,11 +24,11 @@ describe("lockfile util guidance", () => {
     expect(lines[2]).toContain("bun run dev:safe");
   });
 
-  it("maintains consistent Korean labels", () => {
+  it("maintains consistent English labels", () => {
     const lines = getLockfileGuidanceLines();
 
-    expect(lines[0]).toStartWith("lock 갱신:");
-    expect(lines[1]).toStartWith("변경 확인:");
-    expect(lines[2]).toStartWith("안정 실행:");
+    expect(lines[0]).toStartWith("Update lock:");
+    expect(lines[1]).toStartWith("Diff check:");
+    expect(lines[2]).toStartWith("Safe start:");
   });
 });

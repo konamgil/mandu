@@ -1,15 +1,15 @@
 /**
  * mandu lock - Lockfile Management Command
  *
- * 설정 무결성을 위한 lockfile 생성, 검증, 비교
+ * Lockfile generation, verification, and comparison for config integrity
  *
  * @see docs/plans/08_ont-run_adoption_plan.md
  *
- * 사용법:
- *   mandu lock              # lockfile 생성/갱신
- *   mandu lock --verify     # lockfile 검증
- *   mandu lock --diff       # 변경사항 표시
- *   mandu lock --show-secrets  # 민감정보 출력 허용
+ * Usage:
+ *   mandu lock              # generate/update lockfile
+ *   mandu lock --verify     # verify lockfile
+ *   mandu lock --diff       # show changes
+ *   mandu lock --show-secrets  # allow sensitive data output
  */
 
 import {
@@ -35,32 +35,32 @@ import {
 import { resolveFromCwd } from "../util/fs";
 
 // ============================================
-// CLI 옵션 타입
+// CLI option types
 // ============================================
 
 export interface LockOptions {
-  /** lockfile 검증만 수행 */
+  /** Verify lockfile only */
   verify?: boolean;
-  /** 변경사항 표시 */
+  /** Show changes */
   diff?: boolean;
-  /** 민감정보 출력 허용 */
+  /** Allow sensitive data output */
   showSecrets?: boolean;
-  /** 강제 모드 지정 */
+  /** Force mode override */
   mode?: LockfileMode;
-  /** 스냅샷 포함 */
+  /** Include snapshot */
   includeSnapshot?: boolean;
-  /** 조용한 출력 */
+  /** Quiet output */
   quiet?: boolean;
-  /** JSON 출력 */
+  /** JSON output */
   json?: boolean;
 }
 
 // ============================================
-// 메인 명령어
+// Main command
 // ============================================
 
 /**
- * mandu lock 명령 실행
+ * Execute mandu lock command
  */
 export async function lock(options: LockOptions = {}): Promise<boolean> {
   const rootDir = resolveFromCwd(".");
@@ -74,16 +74,16 @@ export async function lock(options: LockOptions = {}): Promise<boolean> {
     json = false,
   } = options;
 
-  // 설정 로드
+  // Load config
   const config = await validateAndReport(rootDir);
   if (!config) {
     if (!json) {
-      console.error("❌ mandu.config 로드 실패");
+      console.error("❌ Failed to load mandu.config");
     }
     return false;
   }
 
-  // MCP 설정 로드 (.mcp.json)
+  // Load MCP config (.mcp.json)
   let mcpConfig: Record<string, unknown> | null = null;
   try {
     mcpConfig = await readMcpConfig(rootDir);
@@ -92,7 +92,7 @@ export async function lock(options: LockOptions = {}): Promise<boolean> {
     if (json) {
       console.log(JSON.stringify({ success: false, error: message }));
     } else {
-      console.error(`❌ .mcp.json 로드 실패: ${message}`);
+      console.error(`❌ Failed to load .mcp.json: ${message}`);
     }
     return false;
   }
@@ -103,17 +103,17 @@ export async function lock(options: LockOptions = {}): Promise<boolean> {
     }
   };
 
-  // --verify: 검증만 수행
+  // --verify: verify only
   if (verify) {
     return await verifyLockfile(rootDir, config, mcpConfig, { mode, quiet, json });
   }
 
-  // --diff: 변경사항 표시
+  // --diff: show changes
   if (diff) {
     return await showDiff(rootDir, config, mcpConfig, { showSecrets, quiet, json });
   }
 
-  // 기본: lockfile 생성/갱신
+  // Default: create/update lockfile
   return await createOrUpdateLockfile(rootDir, config, {
     includeSnapshot,
     quiet,
@@ -123,11 +123,11 @@ export async function lock(options: LockOptions = {}): Promise<boolean> {
 }
 
 // ============================================
-// 서브 명령어
+// Subcommands
 // ============================================
 
 /**
- * lockfile 생성 또는 갱신
+ * Create or update lockfile
  */
 async function createOrUpdateLockfile(
   rootDir: string,
@@ -140,7 +140,7 @@ async function createOrUpdateLockfile(
     const existingLockfile = await readLockfile(rootDir);
     const isUpdate = existingLockfile !== null;
 
-    // lockfile 생성
+    // Generate lockfile
     const lockfile = generateLockfile(
       config,
       {
@@ -150,7 +150,7 @@ async function createOrUpdateLockfile(
       mcpConfig
     );
 
-    // 쓰기
+    // Write
     await writeLockfile(rootDir, lockfile);
 
     if (json) {
@@ -164,13 +164,13 @@ async function createOrUpdateLockfile(
       );
     } else if (!quiet) {
       if (isUpdate) {
-        console.log("✅ Lockfile 갱신 완료");
+        console.log("✅ Lockfile updated");
       } else {
-        console.log("✅ Lockfile 생성 완료");
+        console.log("✅ Lockfile created");
       }
-      console.log(`   경로: ${LOCKFILE_PATH}`);
-      console.log(`   해시: ${lockfile.configHash}`);
-      console.log(`   시각: ${lockfile.generatedAt}`);
+      console.log(`   Path: ${LOCKFILE_PATH}`);
+      console.log(`   Hash: ${lockfile.configHash}`);
+      console.log(`   Time: ${lockfile.generatedAt}`);
     }
 
     return true;
@@ -183,14 +183,14 @@ async function createOrUpdateLockfile(
         })
       );
     } else {
-      console.error("❌ Lockfile 생성 실패:", error);
+      console.error("❌ Lockfile generation failed:", error);
     }
     return false;
   }
 }
 
 /**
- * lockfile 검증
+ * Verify lockfile
  */
 async function verifyLockfile(
   rootDir: string,
@@ -208,17 +208,17 @@ async function verifyLockfile(
         JSON.stringify({
           success: false,
           error: "LOCKFILE_NOT_FOUND",
-          message: "Lockfile이 존재하지 않습니다. 'mandu lock'으로 생성하세요.",
+          message: "Lockfile not found. Run 'mandu lock' to generate one.",
         })
       );
     } else {
-      console.error("❌ Lockfile이 존재하지 않습니다.");
-      console.error("   'mandu lock' 명령으로 생성하세요.");
+      console.error("❌ Lockfile not found.");
+      console.error("   Run 'mandu lock' to generate one.");
     }
     return false;
   }
 
-  // 정책 기반 검증
+  // Policy-based verification
   const resolvedMode = mode ?? detectMode();
   const { result, action, bypassed } = validateWithPolicy(
     config,
@@ -245,19 +245,19 @@ async function verifyLockfile(
 
   if (!quiet) {
     console.log(formatPolicyAction(action, bypassed));
-    console.log(`   모드: ${resolvedMode}`);
+    console.log(`   Mode: ${resolvedMode}`);
 
     if (result) {
       console.log(formatValidationResult(result));
     }
   }
 
-  // action이 pass나 warn이면 성공으로 간주 (CI에서는 다르게 처리 가능)
+  // Treat pass or warn as success (CI may handle differently)
   return action === "pass" || action === "warn";
 }
 
 /**
- * 변경사항 표시
+ * Show changes
  */
 async function showDiff(
   rootDir: string,
@@ -278,27 +278,27 @@ async function showDiff(
         })
       );
     } else {
-      console.error("❌ Lockfile이 존재하지 않습니다.");
-      console.error("   'mandu lock' 명령으로 생성하세요.");
+      console.error("❌ Lockfile not found.");
+      console.error("   Run 'mandu lock' to generate one.");
     }
     return false;
   }
 
-  // 스냅샷이 없으면 전체 설정을 변경사항으로 표시
+  // If no snapshot, show entire config as changes
   if (!lockfile.snapshot) {
     if (json) {
       console.log(
         JSON.stringify({
           success: true,
           warning: "SNAPSHOT_MISSING",
-          message: "스냅샷이 없어 전체 설정을 변경사항으로 표시",
+          message: "No snapshot found, showing entire config as changes",
           hasChanges: true,
         })
       );
     } else {
-      console.log("⚠️  Lockfile에 스냅샷이 없습니다.");
-      console.log("   전체 설정을 변경사항으로 표시합니다.");
-      console.log("   정확한 diff를 보려면: mandu lock --include-snapshot\n");
+      console.log("⚠️  Lockfile has no snapshot.");
+      console.log("   Showing entire config as changes.");
+      console.log("   For accurate diff: mandu lock --include-snapshot\n");
     }
 
     // Show entire config as additions
@@ -309,7 +309,7 @@ async function showDiff(
     return true;
   }
 
-  // diff 계산
+  // Calculate diff
   const { mcpServers } = resolveMcpSources(config, mcpConfig);
   const configForDiff = mcpServers ? { ...config, mcpServers } : config;
   const diff = diffConfig(lockfile.snapshot.config, configForDiff);
@@ -334,10 +334,10 @@ async function showDiff(
           showSecrets,
         })
       );
-      console.log(`\n요약: ${summarizeDiff(diff)}`);
+      console.log(`\nSummary: ${summarizeDiff(diff)}`);
     } else {
-      console.log("✅ 변경사항 없음");
-      console.log(`   현재 설정이 lockfile과 일치합니다.`);
+      console.log("✅ No changes");
+      console.log(`   Current config matches lockfile.`);
     }
   }
 
@@ -345,11 +345,11 @@ async function showDiff(
 }
 
 // ============================================
-// CLI 진입점 (main.ts에서 호출)
+// CLI entry point (called from main.ts)
 // ============================================
 
 /**
- * CLI 인자 파싱 및 실행
+ * Parse CLI arguments and execute
  */
 export async function runLockCommand(args: string[]): Promise<boolean> {
   const options: LockOptions = {};
@@ -409,31 +409,31 @@ export async function runLockCommand(args: string[]): Promise<boolean> {
 }
 
 // ============================================
-// 도움말
+// Help
 // ============================================
 
 export const lockHelp = `
-mandu lock - Lockfile 관리
+mandu lock - Lockfile management
 
-사용법:
-  mandu lock                    lockfile 생성/갱신
-  mandu lock --verify           lockfile 검증
-  mandu lock --diff             변경사항 표시
+Usage:
+  mandu lock                    Generate/update lockfile
+  mandu lock --verify           Verify lockfile
+  mandu lock --diff             Show changes
 
-옵션:
-  --verify, -v          lockfile 검증만 수행
-  --diff, -d            lockfile과 현재 설정 비교
-  --show-secrets        민감정보 출력 허용 (기본: 마스킹)
-  --include-snapshot    설정 스냅샷 포함 (diff 기능에 필요)
-  --mode=<mode>         검증 모드 지정 (development|build|ci|production)
-  --quiet, -q           조용한 출력
-  --json                JSON 형식 출력
+Options:
+  --verify, -v          Verify lockfile only
+  --diff, -d            Compare lockfile with current config
+  --show-secrets        Allow sensitive data output (default: masked)
+  --include-snapshot    Include config snapshot (required for diff)
+  --mode=<mode>         Set verification mode (development|build|ci|production)
+  --quiet, -q           Quiet output
+  --json                JSON output
 
-예시:
-  mandu lock                         # lockfile 생성
-  mandu lock --verify                # 검증
-  mandu lock --diff --show-secrets   # 민감정보 포함 diff
+Examples:
+  mandu lock                         # Generate lockfile
+  mandu lock --verify                # Verify
+  mandu lock --diff --show-secrets   # Diff with sensitive data
 
-환경변수:
-  MANDU_LOCK_BYPASS=1   lockfile 검증 우회 (긴급 상황용)
+Environment variables:
+  MANDU_LOCK_BYPASS=1   Bypass lockfile verification (emergency use)
 `;

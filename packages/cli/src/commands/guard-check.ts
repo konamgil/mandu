@@ -20,29 +20,29 @@ export async function guardCheck(options: GuardCheckOptions = {}): Promise<boole
   const rootDir = getRootDir();
 
   console.log(`🥟 Mandu Guard (Legacy Spec)`);
-  console.log(`📄 Spec 파일: ${specPath}`);
+  console.log(`📄 Spec file: ${specPath}`);
   console.log(`🔧 Auto-correct: ${autoCorrect ? "ON" : "OFF"}\n`);
 
   const result = await loadManifest(specPath);
 
   if (!result.success || !result.data) {
-    console.error("❌ Spec 로드 실패:");
+    console.error("❌ Failed to load spec:");
     result.errors?.forEach((e) => console.error(`  - ${e}`));
     return false;
   }
 
-  console.log(`✅ Spec 로드 완료`);
-  console.log(`🔍 Guard 검사 중...\n`);
+  console.log(`✅ Spec loaded`);
+  console.log(`🔍 Running guard check...\n`);
 
   let checkResult = await runGuardCheck(result.data, rootDir);
 
-  // Auto-correct 시도
+  // Attempt auto-correct
   if (!checkResult.passed && autoCorrect) {
     const autoCorrectableCount = checkResult.violations.filter(isAutoCorrectableViolation).length;
 
     if (autoCorrectableCount > 0) {
-      console.log(`⚠️  ${checkResult.violations.length}개 위반 감지 (자동 수정 가능: ${autoCorrectableCount}개)`);
-      console.log(`🔄 Auto-correct 실행 중...\n`);
+      console.log(`⚠️  ${checkResult.violations.length} violation(s) detected (auto-correctable: ${autoCorrectableCount})`);
+      console.log(`🔄 Running auto-correct...\n`);
 
       const autoCorrectResult = await runAutoCorrect(
         checkResult.violations,
@@ -50,46 +50,46 @@ export async function guardCheck(options: GuardCheckOptions = {}): Promise<boole
         rootDir
       );
 
-      // 수행된 단계 출력
+      // Print completed steps
       for (const step of autoCorrectResult.steps) {
         const icon = step.success ? "✅" : "❌";
         console.log(`  ${icon} [${step.action}] ${step.message}`);
       }
 
       if (autoCorrectResult.fixed) {
-        console.log(`\n✅ Auto-correct 완료 (${autoCorrectResult.retriedCount}회 재시도)`);
+        console.log(`\n✅ Auto-correct complete (${autoCorrectResult.retriedCount} retries)`);
         if (autoCorrectResult.changeId) {
-          console.log(`   트랜잭션: ${autoCorrectResult.changeId} (커밋됨)`);
+          console.log(`   Transaction: ${autoCorrectResult.changeId} (committed)`);
         }
 
-        // 최종 Guard 재검사
+        // Final guard re-check
         checkResult = await runGuardCheck(result.data, rootDir);
       } else if (autoCorrectResult.rolledBack) {
-        console.log(`\n⚠️  Auto-correct 실패 - 롤백됨`);
+        console.log(`\n⚠️  Auto-correct failed - rolled back`);
         if (autoCorrectResult.changeId) {
-          console.log(`   트랜잭션: ${autoCorrectResult.changeId} (롤백됨)`);
+          console.log(`   Transaction: ${autoCorrectResult.changeId} (rolled back)`);
         }
-        console.log(`   원래 상태로 복원되었습니다.`);
+        console.log(`   Restored to original state.`);
 
         const manualViolations = autoCorrectResult.remainingViolations.filter(
           (v) => !isAutoCorrectableViolation(v)
         );
 
         if (manualViolations.length > 0) {
-          console.log(`\n⚠️  수동 수정이 필요한 위반:`);
+          console.log(`\n⚠️  Violations requiring manual fix:`);
           for (const v of manualViolations) {
             console.log(`  - [${v.ruleId}] ${v.file}`);
             console.log(`    💡 ${v.suggestion}`);
           }
         }
 
-        // 남은 위반으로 업데이트
+        // Update with remaining violations
         checkResult = {
           passed: false,
           violations: autoCorrectResult.remainingViolations,
         };
       } else {
-        console.log(`\n⚠️  일부 위반은 수동 수정이 필요합니다:`);
+        console.log(`\n⚠️  Some violations require manual fix:`);
 
         const manualViolations = autoCorrectResult.remainingViolations.filter(
           (v) => !isAutoCorrectableViolation(v)
@@ -100,7 +100,7 @@ export async function guardCheck(options: GuardCheckOptions = {}): Promise<boole
           console.log(`    💡 ${v.suggestion}`);
         }
 
-        // 남은 위반으로 업데이트
+        // Update with remaining violations
         checkResult = {
           passed: autoCorrectResult.remainingViolations.length === 0,
           violations: autoCorrectResult.remainingViolations,
@@ -116,15 +116,15 @@ export async function guardCheck(options: GuardCheckOptions = {}): Promise<boole
 
   const reportPath = resolveFromCwd("mandu-report.json");
   await writeReport(report, reportPath);
-  console.log(`📋 Report 저장: ${reportPath}`);
+  console.log(`📋 Report saved: ${reportPath}`);
 
   if (!checkResult.passed) {
-    console.log(`\n❌ Guard 실패: ${checkResult.violations.length}개 위반 발견`);
+    console.log(`\n❌ Guard failed: ${checkResult.violations.length} violation(s) found`);
     return false;
   }
 
-  console.log(`\n✅ Guard 통과`);
-  console.log(`💡 다음 단계: bunx mandu dev`);
+  console.log(`\n✅ Guard passed`);
+  console.log(`💡 Next step: bunx mandu dev`);
 
   return true;
 }

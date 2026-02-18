@@ -15,19 +15,19 @@ export async function changeBegin(options: ChangeBeginOptions = {}): Promise<boo
       message: options.message,
     });
 
-    console.log(`✅ 트랜잭션 시작됨`);
+    console.log(`✅ Transaction started`);
     console.log(`   ID: ${change.id}`);
-    console.log(`   스냅샷: ${change.snapshotId}`);
+    console.log(`   Snapshot: ${change.snapshotId}`);
     if (change.message) {
-      console.log(`   메시지: ${change.message}`);
+      console.log(`   Message: ${change.message}`);
     }
-    console.log(`\n💡 변경 작업 후 다음 명령을 실행하세요:`);
-    console.log(`   확정: bunx mandu change commit`);
-    console.log(`   롤백: bunx mandu change rollback`);
+    console.log(`\n💡 After making changes, run:`);
+    console.log(`   Commit: bunx mandu change commit`);
+    console.log(`   Rollback: bunx mandu change rollback`);
 
     return true;
   } catch (error) {
-    console.error(`❌ 트랜잭션 시작 실패: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`❌ Failed to start transaction: ${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
 }

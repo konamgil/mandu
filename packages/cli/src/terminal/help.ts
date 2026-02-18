@@ -1,80 +1,80 @@
 /**
  * DNA-015: Semantic Help System
  *
- * 시맨틱 도움말 포맷팅
- * - 예제 기반 도움말
- * - 테마 적용 출력
- * - 섹션별 구조화
+ * Semantic help formatting
+ * - Example-based help
+ * - Themed output
+ * - Section-based structure
  */
 
 import { theme, colorize, isRich } from "./theme.js";
 
 /**
- * 도움말 예제 타입
- * [명령어, 설명]
+ * Help example type
+ * [command, description]
  */
 export type HelpExample = readonly [command: string, description: string];
 
 /**
- * 명령어 옵션 정의
+ * Command option definition
  */
 export interface HelpOption {
-  /** 플래그 (예: "--port", "-p, --port") */
+  /** Flag (e.g., "--port", "-p, --port") */
   flags: string;
-  /** 설명 */
+  /** Description */
   description: string;
-  /** 기본값 */
+  /** Default value */
   default?: string;
-  /** 필수 여부 */
+  /** Whether required */
   required?: boolean;
 }
 
 /**
- * 서브커맨드 정의
+ * Subcommand definition
  */
 export interface HelpSubcommand {
-  /** 서브커맨드 이름 */
+  /** Subcommand name */
   name: string;
-  /** 설명 */
+  /** Description */
   description: string;
-  /** 별칭 */
+  /** Aliases */
   aliases?: string[];
 }
 
 /**
- * 도움말 섹션
+ * Help section
  */
 export interface HelpSection {
-  /** 섹션 제목 */
+  /** Section title */
   title: string;
-  /** 섹션 내용 */
+  /** Section content */
   content: string;
 }
 
 /**
- * 도움말 정의
+ * Help definition
  */
 export interface HelpDefinition {
-  /** 명령어 이름 */
+  /** Command name */
   name: string;
-  /** 짧은 설명 */
+  /** Short description */
   description: string;
-  /** 사용법 */
+  /** Usage */
   usage?: string;
-  /** 옵션 목록 */
+  /** Option list */
   options?: HelpOption[];
-  /** 서브커맨드 목록 */
+  /** Subcommand list */
   subcommands?: HelpSubcommand[];
-  /** 예제 목록 */
+  /** Example list */
   examples?: HelpExample[];
-  /** 추가 섹션 */
+  /** Additional sections */
   sections?: HelpSection[];
-  /** 참조 링크 */
+  /** Reference links */
   seeAlso?: string[];
 }
 
 /**
- * 예제 포맷팅
+ * Format example
  *
  * @example
  * ```ts
@@ -92,7 +92,7 @@ export function formatHelpExample(command: string, description: string): string 
 }
 
 /**
- * 예제 그룹 포맷팅
+ * Format example group
  *
  * @example
  * ```ts
@@ -116,7 +116,7 @@ export function formatHelpExampleGroup(
 }
 
 /**
- * 옵션 포맷팅
+ * Format option
  */
 export function formatHelpOption(option: HelpOption): string {
   const rich = isRich();
@@ -132,13 +132,13 @@ export function formatHelpOption(option: HelpOption): string {
     desc += rich ? ` ${theme.warn("[required]")}` : " [required]";
   }
 
-  // 플래그와 설명 정렬
+  // Align flags and description
   const padding = Math.max(0, 24 - option.flags.length);
   return `  ${flags}${" ".repeat(padding)}${desc}`;
 }
 
 /**
- * 서브커맨드 포맷팅
+ * Format subcommand
  */
 export function formatHelpSubcommand(subcommand: HelpSubcommand): string {
   const rich = isRich();
@@ -156,7 +156,7 @@ export function formatHelpSubcommand(subcommand: HelpSubcommand): string {
 }
 
 /**
- * 섹션 제목 포맷팅
+ * Format section title
  */
 export function formatSectionTitle(title: string): string {
   const rich = isRich();
@@ -164,25 +164,25 @@ export function formatSectionTitle(title: string): string {
 }
 
 /**
- * 전체 도움말 렌더링
+ * Render full help
  */
 export function renderHelp(def: HelpDefinition): string {
   const lines: string[] = [];
   const rich = isRich();
 
-  // 헤더
+  // Header
   const name = rich ? theme.accent(def.name) : def.name;
   lines.push(`${name} - ${def.description}`);
   lines.push("");
 
-  // 사용법
+  // Usage
   if (def.usage) {
     lines.push(formatSectionTitle("Usage:"));
     lines.push(`  ${def.usage}`);
     lines.push("");
   }
 
-  // 서브커맨드
+  // Subcommands
   if (def.subcommands && def.subcommands.length > 0) {
     lines.push(formatSectionTitle("Commands:"));
     for (const sub of def.subcommands) {
@@ -191,7 +191,7 @@ export function renderHelp(def: HelpDefinition): string {
     lines.push("");
   }
 
-  // 옵션
+  // Options
   if (def.options && def.options.length > 0) {
     lines.push(formatSectionTitle("Options:"));
     for (const opt of def.options) {
@@ -200,13 +200,13 @@ export function renderHelp(def: HelpDefinition): string {
     lines.push("");
   }
 
-  // 예제
+  // Examples
   if (def.examples && def.examples.length > 0) {
     lines.push(formatHelpExampleGroup("Examples:", def.examples));
     lines.push("");
   }
 
-  // 추가 섹션
+  // Additional sections
   if (def.sections) {
     for (const section of def.sections) {
       lines.push(formatSectionTitle(section.title));
@@ -215,7 +215,7 @@ export function renderHelp(def: HelpDefinition): string {
     }
   }
 
-  // 참조
+  // See also
   if (def.seeAlso && def.seeAlso.length > 0) {
     lines.push(formatSectionTitle("See Also:"));
     for (const ref of def.seeAlso) {
@@ -228,7 +228,7 @@ export function renderHelp(def: HelpDefinition): string {
 }
 
 /**
- * Mandu CLI 기본 도움말 정의
+ * Mandu CLI default help definition
  */
 export const MANDU_HELP: HelpDefinition = {
   name: "mandu",
@@ -272,7 +272,7 @@ export const MANDU_HELP: HelpDefinition = {
 };
 
 /**
- * 명령어별 도움말 렌더링
+ * Render command-specific help
  */
 export function renderCommandHelp(
   commandName: string,
@@ -286,7 +286,7 @@ export function renderCommandHelp(
 }
 
 /**
- * 간단한 사용법 힌트
+ * Format usage hint
  */
 export function formatUsageHint(command: string, hint: string): string {
   const rich = isRich();
@@ -296,7 +296,7 @@ export function formatUsageHint(command: string, hint: string): string {
 }
 
 /**
- * 에러 후 도움말 힌트
+ * Format error hint with help command
  */
 export function formatErrorHint(errorMessage: string, helpCommand: string): string {
   const rich = isRich();

@@ -48,7 +48,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     process.exit(1);
   }
 
-  // Lockfile 검증 (설정 무결성)
+  // Lockfile validation (config integrity)
   const { lockfile, lockResult, action, bypassed } = await validateRuntimeLockfile(config, rootDir);
   handleBlockedLockfile(action, lockResult);
 
@@ -59,21 +59,21 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   console.log(`🥟 Mandu Dev Server`);
 
-  // Lockfile 상태 출력
+  // Print lockfile status
   printRuntimeLockfileStatus(action, bypassed, lockfile, lockResult);
 
-  // .env 파일 로드
+  // Load .env files
   const envResult = await loadEnv({
     rootDir,
     env: "development",
   });
 
   if (envResult.loaded.length > 0) {
-    console.log(`🔐 환경 변수 로드: ${envResult.loaded.join(", ")}`);
+    console.log(`🔐 Env loaded: ${envResult.loaded.join(", ")}`);
   }
 
-  // 라우트 스캔 (FS Routes 우선, 없으면 spec manifest)
-  console.log(`📂 라우트 스캔 중...`);
+  // Scan routes (FS Routes first, fallback to spec manifest)
+  console.log(`📂 Scanning routes...`);
   let manifest: RoutesManifest;
   let enableFsRoutes = false;
 
@@ -84,7 +84,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
     if (manifest.routes.length === 0) {
       printCLIError(CLI_ERROR_CODES.DEV_NO_ROUTES);
-      console.log("💡 app/ 폴더에 page.tsx 파일을 생성하세요:");
+      console.log("💡 Create a page.tsx file in the app/ directory:");
       console.log("");
       console.log("  app/page.tsx        → /");
       console.log("  app/blog/page.tsx   → /blog");
@@ -93,7 +93,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       process.exit(1);
     }
 
-    console.log(`✅ ${manifest.routes.length}개 라우트 발견\n`);
+    console.log(`✅ ${manifest.routes.length} route(s) found\n`);
   } catch (error) {
     printCLIError(CLI_ERROR_CODES.DEV_MANIFEST_NOT_FOUND);
     console.error(error instanceof Error ? error.message : error);
@@ -163,10 +163,10 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     }
   }
 
-  // Layout 경로 추적 (중복 등록 방지)
+  // Track layout paths (prevent duplicate registration)
   const registeredLayouts = new Set<string>();
 
-  // 핸들러 등록 함수 (공유 유틸 사용)
+  // Handler registration function (uses shared utility)
   const registerHandlers = async (m: RoutesManifest, isReload = false) => {
     await registerManifestHandlers(m, rootDir, {
       importFn: importFresh,
@@ -175,7 +175,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     });
   };
 
-  // 초기 핸들러 등록
+  // Register initial handlers
   await registerHandlers(manifest);
   console.log("");
 
@@ -202,12 +202,12 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     console.warn(`    HMR WebSocket: ws://localhost:${port + HMR_OFFSET}`);
   }
 
-  // HMR 서버 시작 (클라이언트 슬롯이 있는 경우)
+  // Start HMR server (when client slots exist)
   let hmrServer: ReturnType<typeof createHMRServer> | null = null;
   let devBundler: Awaited<ReturnType<typeof startDevBundler>> | null = null;
   let cssWatcher: CSSWatcher | null = null;
 
-  // CSS 빌드 시작 (Tailwind v4 감지 시에만)
+  // Start CSS build (only when Tailwind v4 detected)
   const hasTailwind = await isTailwindProject(rootDir);
   if (hasTailwind) {
     cssWatcher = await startCSSWatch({
@@ -215,7 +215,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       watch: true,
       onBuild: (result) => {
         if (result.success && hmrServer) {
-          // cssWatcher.serverPath 사용 (경로 일관성)
+          // Use cssWatcher.serverPath for path consistency
           hmrServer.broadcast({
             type: "css-update",
             data: {
@@ -239,11 +239,11 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   }
 
   if (!hasIslands) {
-    // Island 없어도 DevTools 번들은 빌드 (dev 모드에서 _devtools.js 필요)
+    // Build DevTools bundle even without Islands (_devtools.js needed in dev mode)
     await buildClientBundles(manifest, rootDir, { minify: false });
   }
 
-  // Dev 번들러 콜백 (named 함수로 추출 — 재시작 시 재사용)
+  // Dev bundler callbacks (extracted as named functions for restart reuse)
   const handleRebuild = (result: { routeId: string; success: boolean; error?: string }) => {
     if (result.success) {
       if (result.routeId === "*") {
@@ -272,10 +272,10 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     });
   };
 
-  // SSR 파일 변경 콜백 (page.tsx, layout.tsx → 서버 핸들러 재등록 + 브라우저 리로드)
+  // SSR file change callback (page.tsx, layout.tsx -> re-register server handlers + browser reload)
   const handleSSRChange = async (filePath: string) => {
     const timestamp = new Date().toLocaleTimeString();
-    console.log(`\n🔄 [${timestamp}] SSR 변경 감지 → 핸들러 재등록`);
+    console.log(`\n🔄 [${timestamp}] SSR change detected -> re-registering handlers`);
     clearDefaultRegistry();
     registeredLayouts.clear();
     await registerHandlers(manifest, true);
@@ -283,14 +283,14 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       type: "reload",
       data: { timestamp: Date.now() },
     });
-    console.log(`   ✅ SSR 갱신 완료 — 브라우저 리로드`);
+    console.log(`   ✅ SSR refresh complete — browser reload`);
   };
 
   if (hasIslands && hmrEnabled) {
-    // HMR 서버 시작
+    // Start HMR server
     hmrServer = createHMRServer(port);
 
-    // Dev 번들러 시작 (파일 감시)
+    // Start dev bundler (file watching)
     devBundler = await startDevBundler({
       rootDir,
       manifest,
@@ -300,20 +300,20 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       onSSRChange: handleSSRChange,
     });
 
-    // 재시작 핸들러 등록
+    // Register restart handler
     hmrServer.setRestartHandler(async () => {
-      // 1. 레지스트리 초기화
+      // 1. Clear registry
       clearDefaultRegistry();
       registeredLayouts.clear();
 
-      // 2. 라우트 재스캔
+      // 2. Rescan routes
       const resolved = await resolveManifest(rootDir, { fsRoutes: config.fsRoutes });
       manifest = resolved.manifest;
 
-      // 3. 핸들러 재등록 (importFresh)
+      // 3. Re-register handlers (importFresh)
       await registerHandlers(manifest, true);
 
-      // 4. Dev 번들러 재시작
+      // 4. Restart dev bundler
       devBundler?.close();
       devBundler = await startDevBundler({
         rootDir,
@@ -324,7 +324,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
         onSSRChange: handleSSRChange,
       });
 
-      // 5. 브라우저 전체 리로드
+      // 5. Full browser reload
       hmrServer?.broadcast({
         type: "reload",
         data: { timestamp: Date.now() },
@@ -334,7 +334,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     });
   }
 
-  // 메인 서버 시작
+  // Start main server
   const server = startServer(manifest, {
     port,
     hostname: serverConfig.hostname,
@@ -345,7 +345,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     cors: serverConfig.cors,
     streaming: serverConfig.streaming,
     rateLimit: serverConfig.rateLimit,
-    // Tailwind 감지 시에만 CSS 링크 주입
+    // Inject CSS link only when Tailwind detected
     cssPath: hasTailwind ? cssWatcher?.serverPath : false,
   });
 
@@ -359,23 +359,23 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     }
   }
 
-  // FS Routes 실시간 감시
+  // FS Routes real-time watching
   const routesWatcher = await watchFSRoutes(rootDir, {
     onChange: async (result) => {
       const timestamp = new Date().toLocaleTimeString();
-      console.log(`\n🔄 [${timestamp}] 라우트 변경 감지`);
+      console.log(`\n🔄 [${timestamp}] Route change detected`);
 
-      // 레지스트리 클리어 (layout 캐시 포함)
+      // Clear registry (including layout cache)
       clearDefaultRegistry();
 
-      // 새 매니페스트로 서버 업데이트
+      // Update server with new manifest
       manifest = result.manifest;
-      console.log(`   📋 라우트: ${manifest.routes.length}개`);
+      console.log(`   📋 Routes: ${manifest.routes.length}`);
 
-      // 라우트 재등록 (isReload = true)
+      // Re-register routes (isReload = true)
       await registerHandlers(manifest, true);
 
-      // HMR 브로드캐스트 (전체 리로드)
+      // HMR broadcast (full reload)
       if (hmrServer) {
         hmrServer.broadcast({
           type: "reload",
@@ -385,13 +385,13 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     },
   });
 
-  // Architecture Guard 실시간 감시 (선택적)
+  // Architecture Guard real-time watch (optional)
   let archGuardWatcher: ReturnType<typeof createGuardWatcher> | null = null;
   let guardFailed = false;
 
-  // 정리 함수
+  // Cleanup function
   const cleanup = () => {
-    console.log("\n🛑 서버 종료 중...");
+    console.log("\n🛑 Shutting down server...");
     server.stop();
     devBundler?.close();
     hmrServer?.close();
@@ -411,7 +411,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   };
 
   if (guardConfig) {
-    console.log(`🛡️  Architecture Guard 활성화 (${guardPreset})`);
+    console.log(`🛡️  Architecture Guard enabled (${guardPreset})`);
 
     archGuardWatcher = createGuardWatcher({
       config: guardConfig,
@@ -419,7 +419,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       onViolation: stopOnGuardError,
       onFileAnalyzed: (analysis, violations) => {
         if (violations.length > 0) {
-          // HMR 에러로 브로드캐스트
+          // Broadcast as HMR error
           hmrServer?.broadcast({
             type: "guard-violation",
             data: {

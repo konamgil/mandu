@@ -1,57 +1,57 @@
 /**
  * DNA-012: Multi-fallback Progress
  *
- * 다단계 폴백 프로그레스 시스템
- * - TTY: 스피너 (ora) → 라인 → 로그
- * - Non-TTY: 로그만
- * - withProgress() 패턴으로 자동 정리
+ * Multi-level fallback progress system
+ * - TTY: Spinner (ora) -> Line -> Log
+ * - Non-TTY: Log only
+ * - Auto-cleanup via withProgress() pattern
  */
 
 import { theme } from "./theme.js";
 
 /**
- * 프로그레스 옵션
+ * Progress options
  */
 export interface ProgressOptions {
-  /** 레이블 */
+  /** Label */
   label: string;
-  /** 전체 단계 수 (기본: 100) */
+  /** Total steps (default: 100) */
   total?: number;
-  /** 출력 스트림 (기본: stderr) */
+  /** Output stream (default: stderr) */
   stream?: NodeJS.WriteStream;
-  /** 폴백 모드 */
+  /** Fallback mode */
   fallback?: "spinner" | "line" | "log" | "none";
-  /** 성공 메시지 */
+  /** Success message */
   successMessage?: string;
-  /** 실패 메시지 */
+  /** Failure message */
   failMessage?: string;
 }
 
 /**
- * 프로그레스 리포터
+ * Progress reporter
  */
 export interface ProgressReporter {
-  /** 레이블 변경 */
+  /** Change label */
   setLabel: (label: string) => void;
-  /** 퍼센트 설정 (0-100) */
+  /** Set percent (0-100) */
   setPercent: (percent: number) => void;
-  /** 진행 (delta 만큼 증가) */
+  /** Advance (increment by delta) */
   tick: (delta?: number) => void;
-  /** 성공 완료 */
+  /** Complete with success */
   done: (message?: string) => void;
-  /** 실패 완료 */
+  /** Complete with failure */
   fail: (message?: string) => void;
-  /** 현재 퍼센트 */
+  /** Current percent */
   getPercent: () => number;
 }
 
 /**
- * 스피너 문자
+ * Spinner frames
  */
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 /**
- * 간단한 스피너 구현 (ora 대체)
+ * Simple spinner implementation (ora replacement)
  */
 function createSpinner(stream: NodeJS.WriteStream) {
   let frameIndex = 0;
@@ -95,7 +95,7 @@ function createSpinner(stream: NodeJS.WriteStream) {
 }
 
 /**
- * 프로그레스 바 렌더링
+ * Render progress bar
  */
 function renderProgressBar(percent: number, width: number = 20): string {
   const filled = Math.round((percent / 100) * width);
@@ -105,7 +105,7 @@ function renderProgressBar(percent: number, width: number = 20): string {
 }
 
 /**
- * CLI 프로그레스 생성
+ * Create CLI progress
  *
  * @example
  * ```ts
@@ -137,7 +137,7 @@ export function createCliProgress(options: ProgressOptions): ProgressReporter {
   let label = initialLabel;
   let completed = 0;
 
-  // TTY: 스피너 사용 (stdout이 pipe여도 stderr TTY면 동작)
+  // TTY: use spinner (works if stderr is TTY even when stdout is piped)
   const spinner = isTty && fallback === "spinner" ? createSpinner(stream) : null;
 
   if (spinner) {
@@ -156,7 +156,7 @@ export function createCliProgress(options: ProgressOptions): ProgressReporter {
     } else if (isTty && fallback === "line") {
       stream.write(`\r${text}`);
     }
-    // "log" 모드는 상태 변경 시마다 로그하지 않음
+    // "log" mode does not log on every state change
   };
 
   return {
@@ -206,9 +206,9 @@ export function createCliProgress(options: ProgressOptions): ProgressReporter {
 }
 
 /**
- * 프로그레스 컨텍스트 패턴
+ * Progress context pattern
  *
- * 작업 완료 후 자동으로 프로그레스 정리
+ * Automatically cleans up progress after work completes
  *
  * @example
  * ```ts
@@ -247,7 +247,7 @@ export async function withProgress<T>(
 }
 
 /**
- * 단순 스피너 (진행률 없음)
+ * Simple spinner (no progress percentage)
  *
  * @example
  * ```ts
@@ -282,7 +282,7 @@ export function startSpinner(
 }
 
 /**
- * 다중 단계 프로그레스
+ * Multi-step progress
  *
  * @example
  * ```ts

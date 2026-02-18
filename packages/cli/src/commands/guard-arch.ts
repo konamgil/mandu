@@ -1,7 +1,7 @@
 /**
  * mandu guard arch - Architecture Guard Command
  *
- * 실시간 아키텍처 감시 및 일회성 검사
+ * Real-time architecture monitoring and one-off checks
  */
 
 import {
@@ -29,27 +29,27 @@ import { resolveOutputFormat, type OutputFormat } from "../util/output";
 import path from "path";
 
 export interface GuardArchOptions {
-  /** 프리셋 이름 */
+  /** Preset name */
   preset?: GuardPreset;
-  /** 실시간 감시 모드 */
+  /** Real-time watch mode */
   watch?: boolean;
-  /** CI 모드 (에러 시 exit 1) */
+  /** CI mode (exit 1 on error) */
   ci?: boolean;
-  /** 출력 형식: console, agent, json */
+  /** Output format: console, agent, json */
   format?: OutputFormat;
-  /** 조용히 (요약만 출력) */
+  /** Quiet mode (summary only) */
   quiet?: boolean;
-  /** 소스 디렉토리 */
+  /** Source directory */
   srcDir?: string;
-  /** 프리셋 목록 출력 */
+  /** List available presets */
   listPresets?: boolean;
-  /** 리포트 파일 출력 */
+  /** Report output file */
   output?: string;
-  /** 리포트 형식: json, markdown, html */
+  /** Report format: json, markdown, html */
   reportFormat?: "json" | "markdown" | "html";
-  /** 통계 저장 (트렌드 분석용) */
+  /** Save statistics (for trend analysis) */
   saveStats?: boolean;
-  /** 트렌드 분석 표시 */
+  /** Show trend analysis */
   showTrend?: boolean;
 }
 
@@ -78,7 +78,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
   const resolvedFormat = resolveOutputFormat(format);
   const enableFsRoutes = await isDirectory(path.resolve(rootDir, "app"));
 
-  // 프리셋 목록 출력
+  // List presets
   if (showPresets) {
     console.log("");
     console.log("🛡️  Mandu Guard - Available Presets");
@@ -114,7 +114,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     console.log("");
   }
 
-  // Guard 설정
+  // Guard config
   const guardConfig: GuardConfig = {
     preset,
     srcDir,
@@ -159,7 +159,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
       : undefined,
   };
 
-  // 실시간 감시 모드
+  // Real-time watch mode
   if (watch) {
     if (resolvedFormat === "console") {
       console.log("👁️  Watching for architecture violations...");
@@ -170,7 +170,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
       config: guardConfig,
       rootDir,
       onViolation: (violation) => {
-        // 실시간 위반 출력은 watcher 내부에서 처리됨
+        // Real-time violation output is handled inside watcher
       },
       onFileAnalyzed: (analysis, violations) => {
         if (resolvedFormat === "console" && violations.length > 0 && !quiet) {
@@ -182,7 +182,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
 
     watcher.start();
 
-    // Ctrl+C 핸들링
+    // Handle Ctrl+C
     process.on("SIGINT", () => {
       if (resolvedFormat === "console") {
         console.log("\n🛑 Guard stopped");
@@ -191,11 +191,11 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
       process.exit(0);
     });
 
-    // 계속 실행
+    // Keep running
     return new Promise(() => {});
   }
 
-  // 일회성 검사 모드
+  // One-off check mode
   if (resolvedFormat === "console" && !quiet) {
     console.log("🔍 Scanning for architecture violations...\n");
   }
@@ -203,7 +203,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
   const report = await checkDirectory(guardConfig, rootDir);
   const presetDef = getPreset(preset);
 
-  // 출력 형식에 따른 리포트 출력
+  // Print report based on output format
   switch (resolvedFormat) {
     case "json":
       console.log(formatReportAsAgentJSON(report, preset));
@@ -216,7 +216,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     case "console":
     default:
       if (quiet) {
-        // 요약만 출력
+        // Summary only
         console.log(`Files analyzed: ${report.filesAnalyzed}`);
         console.log(`Violations: ${report.totalViolations}`);
         console.log(`  Errors: ${report.bySeverity.error}`);
@@ -228,14 +228,14 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
       break;
   }
 
-  // 통계 저장
+  // Save statistics
   if (saveStats) {
     const scanRecord = createScanRecord(report, preset);
     await addScanRecord(rootDir, scanRecord);
     console.log("📊 Statistics saved to .mandu/guard-stats.json");
   }
 
-  // 트렌드 분석
+  // Trend analysis
   let trend = null;
   let layerStats = null;
 
@@ -260,7 +260,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     }
   }
 
-  // 리포트 파일 출력
+  // Write report file
   if (output) {
     let reportContent: string;
 
@@ -281,7 +281,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     console.log(`\n📄 Report saved to ${output}`);
   }
 
-  // CI 모드에서 에러가 있으면 실패
+  // Fail in CI mode when errors exist
   const hasErrors = report.bySeverity.error > 0;
   const hasWarnings = report.bySeverity.warn > 0;
 

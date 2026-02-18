@@ -1,57 +1,57 @@
 /**
  * DNA-011: ANSI-aware Table Rendering
  *
- * 터미널 테이블 렌더링
- * - ANSI 색상 코드 인식 (너비 계산에서 제외)
- * - 유니코드 박스 문자 지원
- * - 반응형 너비 조정 (flex 컬럼)
+ * Terminal table rendering
+ * - ANSI color code aware (excluded from width calculation)
+ * - Unicode box character support
+ * - Responsive width adjustment (flex columns)
  */
 
 import { stripAnsi } from "./theme.js";
 
 /**
- * 테이블 컬럼 정의
+ * Table column definition
  */
 export interface TableColumn {
-  /** 데이터 키 */
+  /** Data key */
   key: string;
-  /** 헤더 텍스트 */
+  /** Header text */
   header: string;
-  /** 정렬 (기본: left) */
+  /** Alignment (default: left) */
   align?: "left" | "right" | "center";
-  /** 최소 너비 */
+  /** Minimum width */
   minWidth?: number;
-  /** 최대 너비 */
+  /** Maximum width */
   maxWidth?: number;
-  /** 반응형 너비 조정 대상 */
+  /** Responsive width adjustment target */
   flex?: boolean;
 }
 
 /**
- * 테두리 스타일
+ * Border style
  */
 export type BorderStyle = "unicode" | "ascii" | "none";
 
 /**
- * 테이블 렌더링 옵션
+ * Table rendering options
  */
 export interface RenderTableOptions {
-  /** 컬럼 정의 */
+  /** Column definitions */
   columns: TableColumn[];
-  /** 데이터 행 */
+  /** Data rows */
   rows: Record<string, unknown>[];
-  /** 테두리 스타일 (기본: unicode) */
+  /** Border style (default: unicode) */
   border?: BorderStyle;
-  /** 최대 테이블 너비 */
+  /** Maximum table width */
   maxWidth?: number;
-  /** 헤더 표시 여부 (기본: true) */
+  /** Whether to show header (default: true) */
   showHeader?: boolean;
-  /** 컴팩트 모드 (패딩 최소화) */
+  /** Compact mode (minimize padding) */
   compact?: boolean;
 }
 
 /**
- * 박스 그리기 문자
+ * Box drawing characters
  */
 interface BoxChars {
   tl: string; // top-left
@@ -96,14 +96,14 @@ const ASCII_BOX: BoxChars = {
 };
 
 /**
- * ANSI 코드를 제외한 실제 표시 너비 계산
+ * Calculate actual display width excluding ANSI codes
  */
 function displayWidth(str: string): number {
   return stripAnsi(str).length;
 }
 
 /**
- * 문자열 패딩 (ANSI 인식)
+ * String padding (ANSI-aware)
  */
 function padString(
   str: string,
@@ -130,13 +130,13 @@ function padString(
 }
 
 /**
- * 문자열 트렁케이션 (ANSI 인식)
+ * String truncation (ANSI-aware)
  */
 function truncateWithAnsi(str: string, maxWidth: number): string {
   const plain = stripAnsi(str);
   if (plain.length <= maxWidth) return str;
 
-  // ANSI 코드 위치 추적
+  // Track ANSI code positions
   const ansiRegex = /\x1b\[[0-9;]*m/g;
   const ansiCodes: { index: number; code: string }[] = [];
   let match;
@@ -144,14 +144,14 @@ function truncateWithAnsi(str: string, maxWidth: number): string {
     ansiCodes.push({ index: match.index, code: match[0] });
   }
 
-  // plain text 기준으로 트렁케이션
+  // Truncate based on plain text
   const truncatedPlain = plain.slice(0, maxWidth - 1) + "…";
 
-  // ANSI 코드가 없으면 그대로 반환
+  // Return as-is if no ANSI codes
   if (ansiCodes.length === 0) return truncatedPlain;
 
-  // ANSI 코드 재삽입 (복잡하므로 단순화)
-  // 첫 번째와 마지막 ANSI 코드만 보존
+  // Re-insert ANSI codes (simplified)
+  // Preserve only first and last ANSI codes
   const firstCode = ansiCodes[0]?.code || "";
   const resetCode = "\x1b[0m";
 
@@ -163,7 +163,7 @@ function truncateWithAnsi(str: string, maxWidth: number): string {
 }
 
 /**
- * 컬럼 너비 계산
+ * Calculate column widths
  */
 function calculateWidths(
   columns: TableColumn[],
@@ -174,7 +174,7 @@ function calculateWidths(
 ): number[] {
   const padding = compact ? 1 : 2;
 
-  // 각 컬럼의 초기 너비 계산
+  // Calculate initial width for each column
   const widths = columns.map((col) => {
     const headerWidth = displayWidth(col.header);
     const maxCellWidth = Math.max(
@@ -191,9 +191,9 @@ function calculateWidths(
     return width;
   });
 
-  // 최대 너비 제약 처리
+  // Handle max width constraint
   if (maxWidth) {
-    const borderWidth = border === "none" ? 0 : columns.length + 1; // 세로선 개수
+    const borderWidth = border === "none" ? 0 : columns.length + 1; // number of vertical lines
     const totalWidth = widths.reduce((a, b) => a + b, 0) + borderWidth;
 
     if (totalWidth > maxWidth) {
@@ -203,7 +203,7 @@ function calculateWidths(
         .filter((i) => i >= 0);
 
       if (flexIndices.length > 0) {
-        // flex 컬럼에서 균등 축소
+        // Shrink evenly across flex columns
         const shrinkPerColumn = Math.ceil(overflow / flexIndices.length);
         for (const idx of flexIndices) {
           const minW = columns[idx].minWidth ?? 5;
@@ -217,7 +217,7 @@ function calculateWidths(
 }
 
 /**
- * 테이블 렌더링
+ * Render table
  *
  * @example
  * ```ts
@@ -258,7 +258,7 @@ export function renderTable(options: RenderTableOptions): string {
   const box = border === "unicode" ? UNICODE_BOX : ASCII_BOX;
   const lines: string[] = [];
 
-  // 수평선 생성
+  // Create horizontal line
   const createLine = (
     left: string,
     mid: string,
@@ -269,18 +269,18 @@ export function renderTable(options: RenderTableOptions): string {
     return left + segments.join(mid) + right;
   };
 
-  // 데이터 행 생성
+  // Create data row
   const createRow = (data: Record<string, unknown>): string => {
     const cells = columns.map((col, i) => {
       let value = String(data[col.key] ?? "");
       const width = widths[i];
 
-      // 트렁케이션
+      // Truncation
       if (displayWidth(value) > width - (compact ? 1 : 2)) {
         value = truncateWithAnsi(value, width - (compact ? 1 : 2));
       }
 
-      // 패딩
+      // Padding
       const padded = padString(value, width - (compact ? 0 : 1), col.align);
       return compact ? padded : " " + padded;
     });
@@ -291,12 +291,12 @@ export function renderTable(options: RenderTableOptions): string {
     return box.v + cells.join(box.v) + box.v;
   };
 
-  // 상단 테두리
+  // Top border
   if (border !== "none") {
     lines.push(createLine(box.tl, box.t, box.tr, box.h));
   }
 
-  // 헤더
+  // Header
   if (showHeader) {
     const headerRow: Record<string, unknown> = {};
     for (const col of columns) {
@@ -304,18 +304,18 @@ export function renderTable(options: RenderTableOptions): string {
     }
     lines.push(createRow(headerRow));
 
-    // 헤더 구분선
+    // Header separator
     if (border !== "none") {
       lines.push(createLine(box.ml, box.m, box.mr, box.h));
     }
   }
 
-  // 데이터 행
+  // Data rows
   for (const row of rows) {
     lines.push(createRow(row));
   }
 
-  // 하단 테두리
+  // Bottom border
   if (border !== "none") {
     lines.push(createLine(box.bl, box.b, box.br, box.h));
   }
@@ -324,7 +324,7 @@ export function renderTable(options: RenderTableOptions): string {
 }
 
 /**
- * 간단한 리스트 테이블 (키-값 쌍)
+ * Simple list table (key-value pairs)
  *
  * @example
  * ```ts

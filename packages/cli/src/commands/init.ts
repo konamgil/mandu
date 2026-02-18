@@ -173,28 +173,28 @@ function getTemplatesDir(): string {
 }
 
 /**
- * CLI/Core 패키지 버전을 런타임에 읽어서 ^major.minor.0 형태로 반환
- * 템플릿 package.json의 {{CORE_VERSION}}, {{CLI_VERSION}} 치환에 사용
+ * Reads CLI/Core package versions at runtime and returns them as ^major.minor.0
+ * Used to replace {{CORE_VERSION}}, {{CLI_VERSION}} in template package.json
  */
 async function resolvePackageVersions(): Promise<{ coreVersion: string; cliVersion: string }> {
   const cliPkgPath = path.resolve(import.meta.dir, "../../package.json");
   const cliPkg = JSON.parse(await fs.readFile(cliPkgPath, "utf-8"));
   const cliVersion = cliPkg.version ?? "0.0.0";
 
-  // core는 CLI의 node_modules 또는 workspace에서 읽기
-  let coreVersion = cliVersion; // fallback: CLI 버전과 동일
+  // Read core from CLI's node_modules or workspace
+  let coreVersion = cliVersion; // fallback: same as CLI version
   try {
     const corePkgPath = require.resolve("@mandujs/core/package.json", { paths: [path.resolve(import.meta.dir, "../..")] });
     const corePkg = JSON.parse(await fs.readFile(corePkgPath, "utf-8"));
     coreVersion = corePkg.version ?? coreVersion;
   } catch {
-    // workspace 환경: 직접 경로로 시도
+    // workspace environment: try direct path
     try {
       const workspacePath = path.resolve(import.meta.dir, "../../../core/package.json");
       const corePkg = JSON.parse(await fs.readFile(workspacePath, "utf-8"));
       coreVersion = corePkg.version ?? coreVersion;
     } catch {
-      // fallback 유지
+      // keep fallback
     }
   }
 
@@ -223,19 +223,19 @@ async function runInteractivePrompts(defaults: {
 
   // 1. Project name
   const nameInput = await rl.question(
-    `  프로젝트 이름 ${theme.muted(`(${defaults.name})`)} : `
+    `  Project name ${theme.muted(`(${defaults.name})`)} : `
   );
   const name = nameInput.trim() || defaults.name;
 
   // 2. Template selection
-  console.log(`\n  템플릿 선택:`);
+  console.log(`\n  Select template:`);
   for (let i = 0; i < ALLOWED_TEMPLATES.length; i++) {
     const t = ALLOWED_TEMPLATES[i];
-    const label = t === "default" ? "default (권장)" : t;
+    const label = t === "default" ? "default (recommended)" : t;
     console.log(`    ${theme.accent(`${i + 1})`)} ${label}`);
   }
   const templateInput = await rl.question(
-    `\n  번호 입력 ${theme.muted("(1)")} : `
+    `\n  Enter number ${theme.muted("(1)")} : `
   );
   const templateIndex = parseInt(templateInput.trim(), 10) - 1;
   const template: AllowedTemplate =
@@ -245,7 +245,7 @@ async function runInteractivePrompts(defaults: {
 
   // 3. Install dependencies?
   const installInput = await rl.question(
-    `\n  의존성 설치 (bun install)? ${theme.muted("(Y/n)")} : `
+    `\n  Install dependencies (bun install)? ${theme.muted("(Y/n)")} : `
   );
   const install = installInput.trim().toLowerCase() !== "n";
 
@@ -281,7 +281,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
 
   if (!template) {
     printCLIError(CLI_ERROR_CODES.INIT_TEMPLATE_NOT_FOUND, { template: requestedTemplate });
-    console.error(`   사용 가능한 템플릿: ${ALLOWED_TEMPLATES.join(", ")}`);
+    console.error(`   Available templates: ${ALLOWED_TEMPLATES.join(", ")}`);
     return false;
   }
 
@@ -292,15 +292,15 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   const withCi = options.withCi || false;
 
   console.log(`${theme.heading("🥟 Mandu Init")}`);
-  console.log(`${theme.info("📁")} 프로젝트: ${theme.accent(projectName)}`);
-  console.log(`${theme.info("📦")} 템플릿: ${theme.accent(template)}`);
+  console.log(`${theme.info("📁")} Project: ${theme.accent(projectName)}`);
+  console.log(`${theme.info("📦")} Template: ${theme.accent(template)}`);
   console.log(`${theme.info("🎨")} CSS: ${css}${css !== "none" ? " (Tailwind CSS)" : ""}`);
   console.log(`${theme.info("🧩")} UI: ${ui}${ui !== "none" ? " (shadcn/ui)" : ""}`);
   if (themeEnabled) {
-    console.log(`${theme.info("🌙")} 테마: Dark mode 지원`);
+    console.log(`${theme.info("🌙")} Theme: Dark mode enabled`);
   }
   if (withCi) {
-    console.log(`${theme.info("🔄")} CI/CD: GitHub Actions 워크플로우 포함`);
+    console.log(`${theme.info("🔄")} CI/CD: GitHub Actions workflows included`);
   }
   console.log();
 
@@ -321,7 +321,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     await fs.access(templateDir);
   } catch {
     printCLIError(CLI_ERROR_CODES.INIT_TEMPLATE_NOT_FOUND, { template });
-    console.error(`   사용 가능한 템플릿: ${ALLOWED_TEMPLATES.join(", ")}`);
+    console.error(`   Available templates: ${ALLOWED_TEMPLATES.join(", ")}`);
     return false;
   }
 
@@ -343,18 +343,18 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   try {
     await runSteps([
       {
-        label: "디렉토리 생성",
+        label: "Creating directory",
         fn: async () => {
           await fs.mkdir(targetDir, { recursive: true });
           await fs.mkdir(path.join(targetDir, ".mandu/client"), { recursive: true });
         },
       },
       {
-        label: "템플릿 복사",
+        label: "Copying template",
         fn: () => copyDir(templateDir, targetDir, copyOptions),
       },
       {
-        label: "설정 파일 생성",
+        label: "Generating config files",
         fn: async () => {
           if (withCi) {
             await setupCiWorkflows(targetDir);
@@ -371,20 +371,20 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
         },
       },
       {
-        label: "MCP 설정",
+        label: "MCP configuration",
         fn: async () => {
           mcpResult = await setupMcpConfig(targetDir);
         },
       },
       {
-        label: "Lockfile 생성",
+        label: "Generating lockfile",
         fn: async () => {
           lockfileResult = await setupLockfile(targetDir);
         },
       },
     ]);
   } catch (error) {
-    console.error(`\n${theme.error("❌")} 프로젝트 생성 실패:`, error);
+    console.error(`\n${theme.error("❌")} Project creation failed:`, error);
     return false;
   }
 
@@ -399,12 +399,12 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     }
   }
   if (missingFiles.length > 0) {
-    console.log(`\n${theme.warn("⚠")} 누락된 파일: ${missingFiles.join(", ")}`);
+    console.log(`\n${theme.warn("⚠")} Missing files: ${missingFiles.join(", ")}`);
   }
 
   // Auto install dependencies
   if (shouldInstall) {
-    const stopSpinner = startSpinner("패키지 설치 중 (bun install)...");
+    const stopSpinner = startSpinner("Installing packages (bun install)...");
     try {
       const proc = Bun.spawn(["bun", "install"], {
         cwd: targetDir,
@@ -413,65 +413,65 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
       });
       const exitCode = await proc.exited;
       if (exitCode === 0) {
-        stopSpinner("패키지 설치 완료");
+        stopSpinner("Packages installed");
       } else {
         stopSpinner();
-        console.log(`${theme.warn("⚠")} 패키지 설치 실패 (exit code: ${exitCode})`);
-        console.log(`   ${theme.muted("프로젝트 디렉토리에서 직접 'bun install'을 실행해주세요.")}`);
+        console.log(`${theme.warn("⚠")} Package installation failed (exit code: ${exitCode})`);
+        console.log(`   ${theme.muted("Run 'bun install' manually in the project directory.")}`);
       }
     } catch {
       stopSpinner();
-      console.log(`${theme.warn("⚠")} 패키지 설치를 건너뛰었습니다.`);
-      console.log(`   ${theme.muted("프로젝트 디렉토리에서 직접 'bun install'을 실행해주세요.")}`);
+      console.log(`${theme.warn("⚠")} Package installation skipped`);
+      console.log(`   ${theme.muted("Run 'bun install' manually in the project directory.")}`);
     }
   }
 
   // Success message
-  console.log(`\n${theme.success("✅")} ${theme.heading("프로젝트 생성 완료!")}\n`);
-  console.log(`📍 위치: ${theme.path(targetDir)}`);
-  console.log(`\n${theme.heading("🚀 시작하기:")}`);
+  console.log(`\n${theme.success("✅")} ${theme.heading("Project created!")}\n`);
+  console.log(`📍 Location: ${theme.path(targetDir)}`);
+  console.log(`\n${theme.heading("🚀 Getting started:")}`);
   console.log(`   ${theme.command(`cd ${projectName}`)}`);
   if (!shouldInstall) {
     console.log(`   ${theme.command("bun install")}`);
   }
   console.log(`   ${theme.command("bun run dev")}`);
-  console.log(`\n💡 CLI 실행 참고 (환경별):`);
-  console.log(`   ${theme.command("bun run dev")}        ${theme.muted("# 권장 (로컬 스크립트)")}`);
-  console.log(`   ${theme.command("bunx mandu dev")}     ${theme.muted("# PATH에 mandu가 없을 때 대안")}`);
-  console.log(`\n📂 파일 구조:`);
-  console.log(`   app/layout.tsx    → 루트 레이아웃`);
+  console.log(`\n💡 CLI execution reference:`);
+  console.log(`   ${theme.command("bun run dev")}        ${theme.muted("# recommended (local script)")}`);
+  console.log(`   ${theme.command("bunx mandu dev")}     ${theme.muted("# alternative if mandu is not in PATH")}`);
+  console.log(`\n📂 File structure:`);
+  console.log(`   app/layout.tsx    → Root layout`);
   console.log(`   app/page.tsx      → http://localhost:3000/`);
   console.log(`   app/api/*/route.ts → API endpoints`);
-  console.log(`   src/client/*      → 클라이언트 레이어`);
-  console.log(`   src/server/*      → 서버 레이어`);
-  console.log(`   src/shared/contracts → 계약 (client-safe)`);
-  console.log(`   src/shared/types     → 공용 타입`);
-  console.log(`   src/shared/utils/client → 클라이언트 safe 유틸`);
-  console.log(`   src/shared/utils/server → 서버 전용 유틸`);
-  console.log(`   src/shared/schema    → 서버 전용 스키마`);
-  console.log(`   src/shared/env       → 서버 전용 환경`);
+  console.log(`   src/client/*      → Client layer`);
+  console.log(`   src/server/*      → Server layer`);
+  console.log(`   src/shared/contracts → Contracts (client-safe)`);
+  console.log(`   src/shared/types     → Shared types`);
+  console.log(`   src/shared/utils/client → Client-safe utils`);
+  console.log(`   src/shared/utils/server → Server-only utils`);
+  console.log(`   src/shared/schema    → Server-only schemas`);
+  console.log(`   src/shared/env       → Server-only env`);
   if (css !== "none") {
-    console.log(`   app/globals.css   → 전역 CSS (Tailwind v4)`);
+    console.log(`   app/globals.css   → Global CSS (Tailwind v4)`);
   }
   if (ui !== "none") {
-    console.log(`   src/client/shared/ui/ → UI 컴포넌트 (shadcn)`);
-    console.log(`   src/client/shared/lib/utils.ts → 유틸리티 (cn 함수)`);
+    console.log(`   src/client/shared/ui/ → UI components (shadcn)`);
+    console.log(`   src/client/shared/lib/utils.ts → Utilities (cn function)`);
   }
 
-  // MCP 설정 안내
-  console.log(`\n🤖 AI 에이전트 통합:`);
-  logMcpConfigStatus(".mcp.json", mcpResult!.mcpJson, "Claude Code 자동 연결");
-  logMcpConfigStatus(".claude.json", mcpResult!.claudeJson, "Claude MCP 로컬 범위");
-  logMcpConfigStatus(".gemini/settings.json", mcpResult!.geminiJson, "Gemini CLI 자동 연결");
-  console.log(`   AGENTS.md → 에이전트 가이드 (Bun 사용 명시)`);
+  // MCP config info
+  console.log(`\n🤖 AI agent integration:`);
+  logMcpConfigStatus(".mcp.json", mcpResult!.mcpJson, "Claude Code auto-connect");
+  logMcpConfigStatus(".claude.json", mcpResult!.claudeJson, "Claude MCP local scope");
+  logMcpConfigStatus(".gemini/settings.json", mcpResult!.geminiJson, "Gemini CLI auto-connect");
+  console.log(`   AGENTS.md → Agent guide (specifies Bun usage)`);
 
-  // Lockfile 안내
-  console.log(`\n🔒 설정 무결성:`);
+  // Lockfile info
+  console.log(`\n🔒 Config integrity:`);
   if (lockfileResult!.success) {
-    console.log(`   ${LOCKFILE_PATH} 생성됨`);
-    console.log(`   해시: ${lockfileResult!.hash}`);
+    console.log(`   ${LOCKFILE_PATH} created`);
+    console.log(`   Hash: ${lockfileResult!.hash}`);
   } else {
-    console.log(`   Lockfile 생성 건너뜀 (설정 없음)`);
+    console.log(`   Lockfile generation skipped (no config)`);
   }
 
   return true;
@@ -481,8 +481,8 @@ async function createMinimalLayout(targetDir: string, _projectName: string): Pro
   const layoutContent = `/**
  * Root Layout (Minimal)
  *
- * - html/head/body 태그는 Mandu SSR이 자동으로 생성합니다
- * - 여기서는 body 내부의 공통 래퍼만 정의합니다
+ * - html/head/body tags are auto-generated by Mandu SSR
+ * - Only define the common body wrapper here
  */
 
 interface RootLayoutProps {
@@ -593,37 +593,37 @@ function logMcpConfigStatus(
   createdNote?: string
 ): void {
   if (result.status === "created") {
-    console.log(`   ${label} 생성됨${createdNote ? ` (${createdNote})` : ""}`);
+    console.log(`   ${label} created${createdNote ? ` (${createdNote})` : ""}`);
     return;
   }
 
   if (result.status === "updated") {
-    console.log(`   ${label}에 mandu 서버 추가/업데이트됨`);
+    console.log(`   ${label} mandu server added/updated`);
     return;
   }
 
   if (result.status === "unchanged") {
-    console.log(`   ${label} 이미 최신`);
+    console.log(`   ${label} already up to date`);
     return;
   }
 
   if (result.status === "backed-up") {
-    console.log(`   ${label} 파싱 실패 → 백업 후 새로 생성됨`);
+    console.log(`   ${label} parse failed → backed up and recreated`);
     if (result.backupPath) {
-      console.log(`   백업: ${result.backupPath}`);
+      console.log(`   Backup: ${result.backupPath}`);
     }
     return;
   }
 
   if (result.status === "error") {
-    console.log(`   ${label} 설정 실패: ${result.error}`);
+    console.log(`   ${label} setup failed: ${result.error}`);
   }
 }
 
 /**
- * .mcp.json / .claude.json / .gemini/settings.json 설정 (AI 에이전트 통합)
- * - 파일 없으면 새로 생성
- * - 파일 있으면 mandu 서버만 추가/업데이트 (다른 설정 유지)
+ * Configure .mcp.json / .claude.json / .gemini/settings.json (AI agent integration)
+ * - Creates new file if not present
+ * - Adds/updates only the mandu server entry if file exists (preserves other settings)
  */
 interface SetupMcpConfigOptions {
   maxBackupSuffixAttempts?: number;
@@ -730,7 +730,7 @@ async function setupMcpConfig(
   const mcpJson = await updateMcpFile(mcpPath);
   const claudeJson = await updateMcpFile(claudePath);
 
-  // Gemini CLI: .gemini/settings.json (프로젝트 스코프)
+  // Gemini CLI: .gemini/settings.json (project scope)
   await fs.mkdir(geminiDir, { recursive: true });
   const geminiJson = await updateMcpFile(geminiPath);
 
@@ -744,11 +744,11 @@ interface LockfileResult {
 }
 
 /**
- * 초기 Lockfile 생성 (설정 무결성)
+ * Generate initial lockfile (config integrity)
  */
 async function setupLockfile(targetDir: string): Promise<LockfileResult> {
   try {
-    // 초기 설정 (기본값)
+    // Initial config (defaults)
     const initialConfig = {
       name: path.basename(targetDir),
       version: "0.1.0",
@@ -775,7 +775,7 @@ async function setupLockfile(targetDir: string): Promise<LockfileResult> {
 }
 
 /**
- * CI/CD 워크플로우 파일 생성 (.github/workflows)
+ * Generate CI/CD workflow files (.github/workflows)
  */
 async function setupCiWorkflows(targetDir: string): Promise<void> {
   const workflowsDir = path.join(targetDir, ".github/workflows");
@@ -803,7 +803,7 @@ async function setupCiWorkflows(targetDir: string): Promise<void> {
     const analyzeImpactContent = await fs.readFile(analyzeImpactSrc, "utf-8");
     await fs.writeFile(analyzeImpactDest, analyzeImpactContent);
   } catch (error) {
-    console.warn(`⚠️  CI/CD 워크플로우 설정 경고:`, error);
-    // CI 설정 실패는 프로젝트 생성을 중단하지 않음
+    console.warn(`⚠️  CI/CD workflow setup warning:`, error);
+    // CI setup failure does not abort project creation
   }
 }

@@ -1,7 +1,7 @@
 /**
  * mandu check - Workflow Check Command
  *
- * FS Routes + Architecture Guard + Legacy Guard 통합 검사
+ * Integrated check: FS Routes + Architecture Guard + Legacy Guard
  */
 
 import {
@@ -104,7 +104,7 @@ export async function check(): Promise<boolean> {
     log("🥟 Mandu Check\n");
   }
 
-  // 1) FS Routes 검사
+  // 1) FS Routes check
   let routesSummary: { enabled: boolean; count: number; warnings: string[] } = {
     enabled: false,
     count: 0,
@@ -123,13 +123,13 @@ export async function check(): Promise<boolean> {
         routesSummary.warnings = result.warnings;
 
         if (quiet) {
-          print(`✅ FS Routes: ${routesSummary.count}개`);
+          print(`✅ FS Routes: ${routesSummary.count}`);
         } else {
-          log(`✅ FS Routes: ${routesSummary.count}개`);
+          log(`✅ FS Routes: ${routesSummary.count}`);
         }
         if (routesSummary.warnings.length > 0) {
           if (!quiet) {
-            log("⚠️  경고:");
+            log("⚠️  Warnings:");
           }
           for (const warning of routesSummary.warnings) {
             if (!quiet) {
@@ -151,18 +151,18 @@ export async function check(): Promise<boolean> {
         error instanceof Error ? error.message : String(error)
       );
       if (format === "console") {
-        console.error("❌ FS Routes 검사 실패:", error);
+        console.error("❌ FS Routes check failed:", error);
       }
     }
   } else {
     if (quiet) {
-      print("ℹ️  app/ 폴더 없음 - FS Routes 검사 스킵");
+      print("ℹ️  No app/ directory - skipping FS Routes check");
     } else {
-      log("ℹ️  app/ 폴더 없음 - FS Routes 검사 스킵\n");
+      log("ℹ️  No app/ directory - skipping FS Routes check\n");
     }
   }
 
-  // 2) Architecture Guard 검사
+  // 2) Architecture Guard check
   const archGuardConfig: GuardConfig = {
     preset,
     srcDir: guardConfigFromFile.srcDir ?? "src",
@@ -215,13 +215,13 @@ export async function check(): Promise<boolean> {
   if (format === "console") {
     const presetDef = getPreset(preset);
     if (quiet) {
-      print(`📊 Architecture: ${report.totalViolations}개 위반 (Errors: ${report.bySeverity.error})`);
+      print(`📊 Architecture: ${report.totalViolations} violation(s) (Errors: ${report.bySeverity.error})`);
     } else {
       printReport(report, presetDef.hierarchy);
     }
   }
 
-  // 3) Legacy Guard 검사 (spec 파일이 있을 때만)
+  // 3) Legacy Guard check (only when spec file exists)
   let legacySummary: {
     enabled: boolean;
     passed: boolean;
@@ -241,11 +241,11 @@ export async function check(): Promise<boolean> {
     const manifestResult = await loadManifest(specPath);
     if (!manifestResult.success || !manifestResult.data) {
       legacySummary.passed = false;
-      legacySummary.errors = manifestResult.errors ?? ["Spec 로드 실패"];
+      legacySummary.errors = manifestResult.errors ?? ["Failed to load spec"];
       success = false;
 
       if (format === "console") {
-        console.error("❌ Spec 로드 실패:");
+        console.error("❌ Failed to load spec:");
         manifestResult.errors?.forEach((e) => console.error(`  - ${e}`));
       }
     } else {
@@ -256,10 +256,10 @@ export async function check(): Promise<boolean> {
       legacySummary.nextAction = legacyResult.nextAction;
 
       if (format === "console" && legacyResult.autoHealed) {
-        log("✅ Legacy spec drift 자동 복구 완료");
+        log("✅ Legacy spec drift auto-healed");
       }
       if (format === "console" && legacyResult.nextAction) {
-        log("💡 Legacy guard 위반이 남아 있습니다. `mandu guard legacy`로 상세 점검/복구를 진행하세요.");
+        log("💡 Legacy guard violations remain. Run `mandu guard legacy` for detailed inspection/repair.");
       }
 
       if (strictWarnings && legacyResult.violations > 0) {
@@ -271,7 +271,7 @@ export async function check(): Promise<boolean> {
       if (format === "console") {
         const legacyReport = buildGuardReport(legacyResult.checkResult);
         if (quiet) {
-          print(`📊 Legacy Guard: ${legacySummary.violations}개 위반`);
+          print(`📊 Legacy Guard: ${legacySummary.violations} violation(s)`);
         } else {
           printReportSummary(legacyReport);
         }
@@ -279,13 +279,13 @@ export async function check(): Promise<boolean> {
     }
   } else {
     if (quiet) {
-      print("ℹ️  .mandu/routes.manifest.json 없음 - Guard 스킵");
+      print("ℹ️  No .mandu/routes.manifest.json - skipping Guard");
     } else {
-      log("ℹ️  .mandu/routes.manifest.json 없음 - Guard 스킵");
+      log("ℹ️  No .mandu/routes.manifest.json - skipping Guard");
     }
   }
 
-  // 4) Config Integrity 검사 (Lockfile)
+  // 4) Config Integrity check (Lockfile)
   const configGuardResult = await guardConfig(rootDir, config);
 
   if (configGuardResult.action === "error" || configGuardResult.action === "block") {
@@ -298,18 +298,18 @@ export async function check(): Promise<boolean> {
     }
     if (quiet) {
       if (configGuardResult.lockfileValid) {
-        print(`✅ Config: 무결성 확인됨 (${configGuardResult.currentHash?.slice(0, 8) ?? "N/A"})`);
+        print(`✅ Config: integrity verified (${configGuardResult.currentHash?.slice(0, 8) ?? "N/A"})`);
       } else if (!configGuardResult.lockfileExists) {
-        print(`💡 Config: Lockfile 없음`);
+        print(`💡 Config: no lockfile`);
       } else {
-        print(`❌ Config: 무결성 실패`);
+        print(`❌ Config: integrity check failed`);
       }
     } else {
       log(formatConfigGuardResult(configGuardResult));
     }
   }
 
-  // 5) 통합 헬스 점수
+  // 5) Combined health score
   const healthScore = calculateHealthScore(
     report.totalViolations,
     report.bySeverity.error,

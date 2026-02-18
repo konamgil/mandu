@@ -1,6 +1,6 @@
 /**
  * Mandu CLI - Contract Commands
- * Contract 생성 및 검증 명령어
+ * Contract creation and validation commands
  */
 
 import {

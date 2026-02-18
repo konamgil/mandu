@@ -1,6 +1,6 @@
 /**
  * Mandu CLI - OpenAPI Commands
- * OpenAPI 스펙 생성 명령어
+ * OpenAPI spec generation commands
  */
 
 import { generateOpenAPIDocument, openAPIToJSON, validateAndReport } from "@mandujs/core";
@@ -75,7 +75,7 @@ export async function openAPIGenerate(options: OpenAPIGenerateOptions = {}): Pro
 
   console.log(`\n📄 Generating OpenAPI specification...\n`);
 
-  // Load manifest (FS Routes 우선)
+  // Load manifest (FS Routes first)
   let manifest: Awaited<ReturnType<typeof resolveManifest>>["manifest"];
   try {
     const config = await validateAndReport(rootDir);

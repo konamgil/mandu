@@ -1,7 +1,7 @@
 /**
  * DNA-016: CLI Hooks
  *
- * 명령어 라이프사이클 훅
+ * Command lifecycle hooks
  */
 
 export {

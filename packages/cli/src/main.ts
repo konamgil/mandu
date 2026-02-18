@@ -3,9 +3,9 @@
 /**
  * Mandu CLI - Agent-Native Fullstack Framework
  *
- * DNA-010: Command Registry Pattern 적용
- * - 선언적 명령어 등록
- * - 레이지 로딩으로 시작 시간 최적화
+ * DNA-010: Command Registry Pattern
+ * - Declarative command registration
+ * - Lazy loading for optimized startup time
  */
 
 import { commandRegistry, getCommand, type CommandContext } from "./commands/registry";
@@ -20,108 +20,108 @@ ${theme.heading("🥟 Mandu CLI")} ${theme.muted(`v${VERSION}`)} - Agent-Native 
 ${theme.heading("Usage:")} ${theme.command("bunx mandu")} ${theme.option("<command>")} [options]
 
 Commands:
-  init                    새 프로젝트 생성 (대화형 / --yes로 비대화형)
-  check                   FS Routes + Guard 통합 검사
-  routes generate         FS Routes 스캔 및 매니페스트 생성
-  routes list             현재 라우트 목록 출력
-  routes watch            실시간 라우트 감시
-  dev                     개발 서버 실행 (FS Routes + Guard 기본)
-  build                   클라이언트 번들 빌드 (Hydration)
-  start                   프로덕션 서버 실행 (build 후)
-  guard                   아키텍처 위반 검사 (기본)
-  guard arch              아키텍처 위반 검사 (FSD/Clean/Hexagonal)
-  guard legacy            레거시 Spec Guard 검사
-  generate                FS Routes + Resources 코드 생성
-  generate resource       리소스 생성 (Interactive 또는 Flag 기반)
-  spec-upsert             Spec 파일 검증 및 lock 갱신 (레거시)
+  init                    Create new project (interactive / non-interactive with --yes)
+  check                   FS Routes + Guard integrated check
+  routes generate         Scan FS Routes and generate manifest
+  routes list             List current routes
+  routes watch            Watch routes in real-time
+  dev                     Start development server (FS Routes + Guard enabled)
+  build                   Build client bundles (Hydration)
+  start                   Start production server (after build)
+  guard                   Architecture violation check (default)
+  guard arch              Architecture violation check (FSD/Clean/Hexagonal)
+  guard legacy            Legacy Spec Guard check
+  generate                Generate code from FS Routes + Resources
+  generate resource       Generate resource (interactive or flag-based)
+  spec-upsert             Validate spec file and update lock (legacy)
 
-  doctor            Guard 실패 분석 + 패치 제안 (Brain)
-  watch             실시간 파일 감시 - 경고만 (Brain)
-  monitor           MCP Activity Monitor 로그 스트림
+  doctor            Analyze Guard failures + suggest patches (Brain)
+  watch             Watch files in real-time - warnings only (Brain)
+  monitor           MCP Activity Monitor log stream
 
-  brain setup       sLLM 설정 (선택)
-  brain status      Brain 상태 확인
+  brain setup       Configure sLLM (optional)
+  brain status      Check Brain status
 
-  contract create <routeId>  라우트에 대한 Contract 생성
-  contract validate          Contract-Slot 일관성 검증
-  contract build             Contract 레지스트리 생성
-  contract diff              Contract 변경사항 비교
+  contract create <routeId>  Create Contract for a route
+  contract validate          Validate Contract-Slot consistency
+  contract build             Build Contract registry
+  contract diff              Compare Contract changes
 
-  openapi generate           OpenAPI 3.0 스펙 생성
-  openapi serve              Swagger UI 로컬 서버 실행
+  openapi generate           Generate OpenAPI 3.0 spec
+  openapi serve              Start Swagger UI local server
 
-  change begin      변경 트랜잭션 시작 (스냅샷 생성)
-  change commit     변경 확정
-  change rollback   스냅샷으로 복원
-  change status     현재 트랜잭션 상태
-  change list       변경 이력 조회
-  change prune      오래된 스냅샷 정리
+  change begin      Start change transaction (create snapshot)
+  change commit     Commit changes
+  change rollback   Restore from snapshot
+  change status     Show current transaction status
+  change list       List change history
+  change prune      Clean up old snapshots
 
-  lock              Lockfile 생성/갱신
-  lock --verify     Lockfile 검증 (설정 무결성 확인)
-  lock --diff       Lockfile과 현재 설정 비교
+  lock              Create/update lockfile
+  lock --verify     Verify lockfile (check config integrity)
+  lock --diff       Compare lockfile with current config
 
-  add test          ATE 설치 + Playwright 브라우저 준비
+  add test          Install ATE + prepare Playwright browsers
   test:auto         ATE extract→generate→run→report
-  test:auto --ci    CI 모드(headless/아티팩트 강화)
-  test:auto --impact  변경 파일 기반 subset 실행
-  test:auto --base-url <url>  대상 서버 baseURL 지정 (기본: http://localhost:3333)
-  test:heal         최근 실패 기반 healing 제안 생성(자동 커밋 금지)
+  test:auto --ci    CI mode (headless/enhanced artifacts)
+  test:auto --impact  Run subset based on changed files
+  test:auto --base-url <url>  Set target server baseURL (default: http://localhost:3333)
+  test:heal         Generate healing suggestions from recent failures (no auto-commit)
 
 Options:
-  --name <name>       init 시 프로젝트 이름 (기본: my-mandu-app)
-  --template <name>   init 템플릿: default, realtime-chat (기본: default)
-  --css <framework>   init 시 CSS 프레임워크: tailwind, panda, none (기본: tailwind)
-  --ui <library>      init 시 UI 라이브러리: shadcn, ark, none (기본: shadcn)
-  --theme             init 시 다크모드 테마 시스템 추가
-  --minimal           init 시 CSS/UI 없이 최소 템플릿 생성 (--css none --ui none)
-  --with-ci           init 시 GitHub Actions CI/CD 워크플로우 포함 (ATE E2E 테스트)
-  --yes, -y             init 시 대화형 프롬프트 건너뛰기 (기존 비대화형 동작)
-  --no-install          init 시 패키지 설치 건너뛰기
-  --file <path>       spec-upsert spec 파일/monitor 로그 파일 경로
-  --watch             build/guard arch 파일 감시 모드
-  --output <path>     routes/openapi/doctor/contract/guard 출력 경로
-  --verbose           routes list/watch, contract validate, brain status 상세 출력
-  --from <path>       contract diff 기준 레지스트리 경로
-  --to <path>         contract diff 대상 레지스트리 경로
-  --json              contract diff 결과 JSON 출력
+  --name <name>       Project name for init (default: my-mandu-app)
+  --template <name>   init template: default, realtime-chat (default: default)
+  --css <framework>   CSS framework for init: tailwind, panda, none (default: tailwind)
+  --ui <library>      UI library for init: shadcn, ark, none (default: shadcn)
+  --theme             Add dark mode theme system on init
+  --minimal           Create minimal template without CSS/UI on init (--css none --ui none)
+  --with-ci           Include GitHub Actions CI/CD workflow on init (ATE E2E tests)
+  --yes, -y             Skip interactive prompts on init (non-interactive mode)
+  --no-install          Skip package installation on init
+  --file <path>       spec-upsert spec file / monitor log file path
+  --watch             File watch mode for build/guard arch
+  --output <path>     Output path for routes/openapi/doctor/contract/guard
+  --verbose           Verbose output for routes list/watch, contract validate, brain status
+  --from <path>       Base registry path for contract diff
+  --to <path>         Target registry path for contract diff
+  --json              JSON output for contract diff
   --title <title>     openapi generate title
   --version <ver>     openapi generate version
-  --summary           monitor 요약 출력 (JSON 로그에서만)
-  --since <duration>  monitor 요약 기간 (예: 5m, 30s, 1h)
-  --follow <bool>     monitor follow 모드 (기본: true)
-  --message <msg>     change begin 시 설명 메시지
-  --id <id>           change rollback 시 특정 변경 ID
-  --keep <n>          change prune 시 유지할 스냅샷 수 (기본: 5)
-  --verify, -v        lock 시 lockfile 검증만 수행
-  --diff, -d          lock 시 lockfile과 현재 설정 비교
-  --show-secrets      lock diff 시 민감정보 출력 허용
-  --include-snapshot  lock 시 설정 스냅샷 포함 (diff 기능에 필요)
-  --mode <mode>       lock verify 시 모드 (development|build|ci|production)
-  --no-llm            doctor에서 LLM 사용 안 함 (템플릿 모드)
-  --status            watch 상태만 출력
+  --summary           Summary output for monitor (JSON logs only)
+  --since <duration>  Summary period for monitor (e.g., 5m, 30s, 1h)
+  --follow <bool>     Follow mode for monitor (default: true)
+  --message <msg>     Description message for change begin
+  --id <id>           Specific change ID for change rollback
+  --keep <n>          Number of snapshots to keep for change prune (default: 5)
+  --verify, -v        Verify lockfile only
+  --diff, -d          Compare lockfile with current config
+  --show-secrets      Allow sensitive data in lock diff output
+  --include-snapshot  Include config snapshot in lock (required for diff)
+  --mode <mode>       Mode for lock verify (development|build|ci|production)
+  --no-llm            Disable LLM in doctor (template mode)
+  --status            Show watch status only
   --debounce <ms>     watch debounce (ms)
-  --model <name>      brain setup 시 모델 이름 (기본: llama3.2)
-  --url <url>         brain setup 시 Ollama URL
-  --skip-check        brain setup 시 모델/서버 체크 건너뜀
-  --fields <fields>   generate resource 시 필드 정의 (예: name:string,email:email)
-  --timestamps        generate resource 시 createdAt/updatedAt 자동 추가
-  --methods <methods> generate resource 시 HTTP 메서드 (예: GET,POST,PUT,DELETE)
-  --force             generate/generate resource 시 기존 슬롯 덮어쓰기
-  --help, -h          도움말 표시
+  --model <name>      Model name for brain setup (default: llama3.2)
+  --url <url>         Ollama URL for brain setup
+  --skip-check        Skip model/server check on brain setup
+  --fields <fields>   Field definitions for generate resource (e.g., name:string,email:email)
+  --timestamps        Auto-add createdAt/updatedAt for generate resource
+  --methods <methods> HTTP methods for generate resource (e.g., GET,POST,PUT,DELETE)
+  --force             Overwrite existing slots for generate/generate resource
+  --help, -h          Show help
 
 Notes:
-  - 출력 포맷은 환경에 따라 자동 결정됩니다 (TTY/CI/MANDU_OUTPUT).
-  - doctor 출력은 .json이면 JSON, 그 외는 markdown으로 저장됩니다.
-  - guard arch 리포트는 .json/.html/.md 확장자를 자동 추론합니다.
-  - 포트는 PORT 환경변수 또는 mandu.config의 server.port로 설정합니다.
-  - 포트 충돌 시 다음 사용 가능한 포트로 자동 변경됩니다.
+  - Output format is auto-detected based on environment (TTY/CI/MANDU_OUTPUT).
+  - Doctor output is saved as JSON for .json extension, markdown otherwise.
+  - Guard arch report auto-detects format from .json/.html/.md extension.
+  - Port is set via PORT env variable or mandu.config server.port.
+  - On port conflict, automatically switches to the next available port.
 
 Examples:
-  bunx mandu init --name my-app                        # Tailwind + shadcn/ui 기본
-  bunx mandu init --name my-app --with-ci              # CI/CD 워크플로우 포함
-  bunx mandu init --name chat-app --template realtime-chat  # 실시간 채팅 스타터 템플릿
-  bunx mandu init my-app --minimal                     # CSS/UI 없이 최소 템플릿
+  bunx mandu init --name my-app                        # Tailwind + shadcn/ui default
+  bunx mandu init --name my-app --with-ci              # Include CI/CD workflow
+  bunx mandu init --name chat-app --template realtime-chat  # Realtime chat starter template
+  bunx mandu init my-app --minimal                     # Minimal template without CSS/UI
   bunx mandu dev
   bunx mandu build --watch
   bunx mandu guard
@@ -139,19 +139,19 @@ Examples:
   bunx mandu doctor --output reports/doctor.json
   bunx mandu brain setup --model codellama
   bunx mandu change begin --message "Add new route"
-  bunx mandu lock                          # Lockfile 생성/갱신
-  bunx mandu lock --verify                 # 설정 무결성 검증
-  bunx mandu lock --diff --show-secrets    # 변경사항 상세 비교
-  bunx mandu generate resource             # Interactive 리소스 생성
+  bunx mandu lock                          # Create/update lockfile
+  bunx mandu lock --verify                 # Verify config integrity
+  bunx mandu lock --diff --show-secrets    # Detailed change comparison
+  bunx mandu generate resource             # Interactive resource generation
   bunx mandu generate resource user --fields name:string,email:email --timestamps
   bunx mandu generate resource product --fields name:string,price:number --methods GET,POST,PUT
-  bunx mandu generate                      # FS Routes + Resources 코드 생성
-  bunx mandu generate --force              # 기존 슬롯 덮어쓰기
+  bunx mandu generate                      # Generate code from FS Routes + Resources
+  bunx mandu generate --force              # Overwrite existing slots
 
-FS Routes Workflow (권장):
-  1. init → 2. app/ 폴더에 page.tsx 생성 → 3. dev → 4. build → 5. start
+FS Routes Workflow (recommended):
+  1. init → 2. Create page.tsx in app/ folder → 3. dev → 4. build → 5. start
 
-Resource-Centric Workflow (새로운 방식):
+Resource-Centric Workflow (new approach):
   1. init → 2. generate resource → 3. Edit slot → 4. generate → 5. dev
 
 Legacy Workflow:
@@ -161,11 +161,11 @@ Contract-first Workflow:
   1. contract create → 2. Edit contract → 3. generate → 4. Edit slot → 5. contract validate
 
 Brain (sLLM) Workflow:
-  1. brain setup → 2. doctor (분석) → 3. watch (감시)
+  1. brain setup → 2. doctor (analyze) → 3. watch (monitor)
 `;
 
 /**
- * 인자 파싱
+ * Parse arguments
  */
 export function parseArgs(args: string[]): { command: string; options: Record<string, string> } {
   const options: Record<string, string> = {};
@@ -181,7 +181,7 @@ export function parseArgs(args: string[]): { command: string; options: Record<st
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    // 플래그 처리
+    // Handle flags
     if (arg.startsWith("--")) {
       const key = arg.slice(2);
       const value = args[i + 1] && !args[i + 1].startsWith("--") ? args[++i] : "true";
@@ -197,10 +197,10 @@ export function parseArgs(args: string[]): { command: string; options: Record<st
         }
       }
     } else if (!command) {
-      // 첫 번째 비플래그 인자가 명령어
+      // First non-flag argument is the command
       command = arg;
     } else if (!options._positional) {
-      // 두 번째 비플래그 인자가 positional
+      // Second non-flag argument is positional
       options._positional = arg;
     }
   }
@@ -209,23 +209,23 @@ export function parseArgs(args: string[]): { command: string; options: Record<st
 }
 
 /**
- * 메인 함수
+ * Main function
  */
 export async function main(args = process.argv.slice(2)): Promise<void> {
   const { command, options } = parseArgs(args);
 
-  // 도움말 처리
+  // Handle help
   if (options.help || command === "help" || !command) {
     console.log(HELP_TEXT);
     process.exit(0);
   }
 
-  // 히어로 배너 표시
+  // Show hero banner
   if (shouldShowBanner(args)) {
     await renderHeroBanner(VERSION);
   }
 
-  // DNA-010: 레지스트리에서 명령어 조회
+  // DNA-010: Look up command from registry
   const registration = getCommand(command);
 
   if (!registration) {
@@ -234,24 +234,24 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     process.exit(1);
   }
 
-  // 명령어 실행 컨텍스트
+  // Command execution context
   const ctx: CommandContext = { args, options };
 
-  // 명령어 실행
+  // Execute command
   const success = await registration.run(ctx);
 
-  // 서브커맨드 에러 처리
+  // Handle subcommand errors
   if (!success) {
     const subCommand = args[1];
     if (registration.subcommands && subCommand && !subCommand.startsWith("--")) {
-      // 알 수 없는 서브커맨드
+      // Unknown subcommand
       printCLIError(CLI_ERROR_CODES.UNKNOWN_SUBCOMMAND, {
         command,
         subcommand: subCommand,
       });
       console.log(`\nUsage: bunx mandu ${command} <${registration.subcommands.join("|")}>`);
     } else if (registration.subcommands) {
-      // 서브커맨드 필요
+      // Subcommand required
       printCLIError(CLI_ERROR_CODES.MISSING_ARGUMENT, {
         argument: "subcommand",
       });

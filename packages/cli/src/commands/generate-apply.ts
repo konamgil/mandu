@@ -52,7 +52,7 @@ export async function generateApply(options?: { force?: boolean }): Promise<bool
   const manifestPath = resolveFromCwd(".mandu/routes.manifest.json");
 
   console.log(`🥟 Mandu Generate`);
-  console.log(`📄 FS Routes + Resources 코드 생성\n`);
+  console.log(`📄 FS Routes + Resources code generation\n`);
 
   // ============================================
   // 1. Generate FS Routes artifacts
@@ -60,17 +60,17 @@ export async function generateApply(options?: { force?: boolean }): Promise<bool
 
   // Regenerate manifest from FS Routes
   const fsResult = await generateManifest(rootDir);
-  console.log(`✅ 매니페스트 생성 완료 (${fsResult.fsRoutesCount}개 라우트)`);
+  console.log(`✅ Manifest generated (${fsResult.fsRoutesCount} routes)`);
 
   const result = await loadManifest(manifestPath);
 
   if (!result.success || !result.data) {
-    console.error("❌ 매니페스트 로드 실패:");
+    console.error("❌ Failed to load manifest:");
     result.errors?.forEach((e) => console.error(`  - ${e}`));
     return false;
   }
 
-  console.log(`🔄 FS Routes 코드 생성 중...\n`);
+  console.log(`🔄 Generating FS Routes code...\n`);
 
   const generateResult = await generateRoutes(result.data, rootDir);
 
@@ -79,34 +79,34 @@ export async function generateApply(options?: { force?: boolean }): Promise<bool
 
   const reportPath = resolveFromCwd("mandu-report.json");
   await writeReport(report, reportPath);
-  console.log(`📋 Report 저장: ${reportPath}`);
+  console.log(`📋 Report saved: ${reportPath}`);
 
   if (!generateResult.success) {
-    console.log(`\n❌ FS Routes generate 실패`);
+    console.log(`\n❌ FS Routes generate failed`);
     return false;
   }
 
-  console.log(`\n✅ FS Routes generate 완료`);
+  console.log(`\n✅ FS Routes generate complete`);
 
   // ============================================
   // 2. Generate Resource artifacts
   // ============================================
 
-  console.log(`\n🔍 리소스 스키마 검색 중...\n`);
+  console.log(`\n🔍 Searching for resource schemas...\n`);
 
   const schemaPaths = await discoverResourceSchemas(rootDir);
 
   if (schemaPaths.length === 0) {
-    console.log(`📋 리소스 스키마 없음 (spec/resources/*.resource.ts)`);
-    console.log(`💡 리소스 생성: bunx mandu generate resource`);
+    console.log(`📋 No resource schemas found (spec/resources/*.resource.ts)`);
+    console.log(`💡 Create a resource: bunx mandu generate resource`);
   } else {
-    console.log(`📋 ${schemaPaths.length}개 리소스 스키마 발견`);
+    console.log(`📋 ${schemaPaths.length} resource schema(s) found`);
     schemaPaths.forEach((p) =>
       console.log(`   - ${path.relative(rootDir, p)}`)
     );
 
     try {
-      console.log(`\n🔄 리소스 아티팩트 생성 중...\n`);
+      console.log(`\n🔄 Generating resource artifacts...\n`);
 
       const resources = await parseResourceSchemas(schemaPaths);
       const resourceResult = await generateResourcesArtifacts(resources, {
@@ -117,14 +117,14 @@ export async function generateApply(options?: { force?: boolean }): Promise<bool
       logGeneratorResult(resourceResult);
 
       if (!resourceResult.success) {
-        console.log(`\n❌ 리소스 generate 실패`);
+        console.log(`\n❌ Resource generate failed`);
         return false;
       }
 
-      console.log(`\n✅ 리소스 generate 완료`);
+      console.log(`\n✅ Resource generate complete`);
     } catch (error) {
       console.error(
-        `\n❌ 리소스 generate 오류: ${
+        `\n❌ Resource generate error: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
@@ -136,8 +136,8 @@ export async function generateApply(options?: { force?: boolean }): Promise<bool
   // Final Summary
   // ============================================
 
-  console.log(`\n✅ generate 완료`);
-  console.log(`💡 다음 단계: bunx mandu guard`);
+  console.log(`\n✅ Generate complete`);
+  console.log(`💡 Next step: bunx mandu guard`);
 
   return true;
 }
