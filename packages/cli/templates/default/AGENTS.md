@@ -101,6 +101,19 @@ bun run build   # 프로덕션 빌드
 bun run guard   # 아키텍처 검증
 ```
 
+## AI 에이전트 MCP 설정
+
+이 프로젝트는 `@mandujs/mcp` MCP 서버를 통해 AI 에이전트와 통합됩니다.
+`mandu init` 시 자동으로 설정 파일이 생성됩니다:
+
+| 에이전트 | 설정 파일 | 비고 |
+|----------|-----------|------|
+| Claude Code | `.mcp.json` | 자동 연결 |
+| Claude Desktop | `.claude.json` | 로컬 범위 |
+| Gemini CLI | `.gemini/settings.json` | 자동 연결 |
+
+MCP 서버가 제공하는 도구: `mandu_negotiate`, `mandu_generate_scaffold`, `mandu_guard` 등
+
 ## 기술 스택
 
 - **Runtime**: Bun 1.x
