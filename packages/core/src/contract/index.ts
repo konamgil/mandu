@@ -204,8 +204,5 @@ export const ManduContract = {
   fetch: contractFetch,
 } as const;
 
-/**
- * Alias for backward compatibility within contract module
- * 외부에서는 메인 index.ts의 Mandu를 사용하세요
- */
-export const Mandu = ManduContract;
+// Note: The unified `Mandu` namespace is defined in the main index.ts.
+// ManduContract is available for direct import from this module.

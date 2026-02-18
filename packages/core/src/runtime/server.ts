@@ -1,5 +1,5 @@
 import type { Server } from "bun";
-import type { RoutesManifest } from "../spec/schema";
+import type { RoutesManifest, HydrationConfig } from "../spec/schema";
 import type { BundleManifest } from "../bundler/types";
 import type { ManduFilling } from "../filling/filling";
 import { ManduContext } from "../filling/context";
@@ -304,7 +304,7 @@ export interface ServerOptions {
 }
 
 export interface ManduServer {
-  server: Server;
+  server: Server<undefined>;
   router: Router;
   /** 이 서버 인스턴스의 레지스트리 */
   registry: ServerRegistry;
@@ -659,7 +659,7 @@ async function wrapWithLayouts(
   for (let i = layouts.length - 1; i >= 0; i--) {
     const Layout = layouts[i];
     if (Layout) {
-      wrapped = React.createElement(Layout, { params }, wrapped);
+      wrapped = React.createElement(Layout, { params, children: wrapped });
     }
   }
 
@@ -916,14 +916,14 @@ async function loadPageData(
   if (loader) {
     try {
       const module = await loader();
-      const exported = module.default;
+      const exported: unknown = module.default;
       const component = typeof exported === "function"
-        ? exported
-        : exported?.component ?? exported;
-      registry.registerRouteComponent(route.id, component);
+        ? (exported as RouteComponent)
+        : (exported as any)?.component ?? exported;
+      registry.registerRouteComponent(route.id, component as RouteComponent);
 
       // filling이 있으면 loader 실행
-      const filling = typeof exported === "object" ? exported?.filling : null;
+      const filling = typeof exported === "object" && exported !== null ? (exported as any)?.filling : null;
       if (filling?.hasLoader?.()) {
         const ctx = new ManduContext(req, params);
         loaderData = await filling.executeLoader(ctx);
@@ -948,7 +948,7 @@ async function loadPageData(
  * SSR 렌더링 (Streaming/Non-streaming)
  */
 async function renderPageSSR(
-  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: unknown },
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig },
   params: Record<string, string>,
   loaderData: unknown,
   url: string,
@@ -1041,7 +1041,7 @@ async function renderPageSSR(
 async function handlePageRoute(
   req: Request,
   url: URL,
-  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: unknown },
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig },
   params: Record<string, string>,
   registry: ServerRegistry
 ): Promise<Result<Response>> {
@@ -1084,7 +1084,7 @@ async function handleRequestInternal(
 
   // 0. CORS Preflight 요청 처리
   if (settings.cors && isPreflightRequest(req)) {
-    const corsOptions = settings.cors === true ? {} : settings.cors;
+    const corsOptions: CorsOptions = typeof settings.cors === 'object' ? settings.cors : {};
     return ok(handlePreflightRequest(req, corsOptions));
   }
 
@@ -1092,7 +1092,7 @@ async function handleRequestInternal(
   const staticResponse = await serveStaticFile(pathname, settings);
   if (staticResponse) {
     if (settings.cors && isCorsRequest(req)) {
-      const corsOptions = settings.cors === true ? {} : settings.cors;
+      const corsOptions: CorsOptions = typeof settings.cors === 'object' ? settings.cors : {};
       return ok(applyCorsToResponse(staticResponse, req, corsOptions));
     }
     return ok(staticResponse);
@@ -1158,7 +1158,7 @@ function startBunServerWithFallback(options: {
   port: number;
   hostname?: string;
   fetch: (req: Request) => Promise<Response>;
-}): { server: Server; port: number; attempts: number } {
+}): { server: Server<undefined>; port: number; attempts: number } {
   const { port: startPort, hostname, fetch } = options;
   let lastError: unknown = null;
 

@@ -11,6 +11,7 @@
 import { spawn, type Subprocess } from "bun";
 import path from "path";
 import fs from "fs/promises";
+import { watch as fsWatch, type FSWatcher } from "fs";
 
 // ========== Types ==========
 
@@ -223,12 +224,12 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
 
   // 출력 파일 워처로 빌드 완료 감지 (stdout 패턴보다 신뢰성 높음, #111)
   // Tailwind CLI stdout 출력 형식은 버전마다 달라질 수 있으므로 파일 변경으로 감지
-  let fsWatcher: ReturnType<typeof fs.watch> | null = null;
+  let fsWatcher: FSWatcher | null = null;
   let lastMtime = 0;
 
   const startFileWatcher = () => {
     try {
-      fsWatcher = fs.watch(outputPath, () => {
+      fsWatcher = fsWatch(outputPath, () => {
         // 연속 이벤트 중복 방지 (50ms 이내 재발생 무시)
         const now = Date.now();
         if (now - lastMtime < 50) return;

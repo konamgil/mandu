@@ -25,7 +25,7 @@ export interface HashOptions {
   exclude?: string[];
 }
 
-export interface NormalizeOptions {
+export interface HashNormalizeOptions {
   /** 제외할 키 패턴 */
   exclude?: string[];
   /** Date를 ISO 문자열로 변환 (기본값: true) */
@@ -59,7 +59,7 @@ export interface NormalizeOptions {
  */
 export function normalizeForHash(
   value: unknown,
-  options: NormalizeOptions = {},
+  options: HashNormalizeOptions = {},
   seen: WeakSet<object> = new WeakSet()
 ): unknown {
   const {

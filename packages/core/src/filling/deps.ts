@@ -171,7 +171,7 @@ export function createMockDeps(overrides: Partial<FillingDeps> = {}): FillingDep
       set: asyncNoop,
       delete: asyncNoop,
     },
-    fetch: async () => new Response(),
+    fetch: (async () => new Response()) as typeof fetch,
     logger: {
       debug: noop,
       info: noop,

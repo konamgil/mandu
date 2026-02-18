@@ -24,7 +24,7 @@ export type {
   GuardPresetPlugin,
   GuardRule,
   GuardRuleContext,
-  GuardViolation,
+  PluginGuardViolation,
   LayerDefinition,
   ImportInfo,
   ExportInfo,

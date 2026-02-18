@@ -13,7 +13,7 @@ import { readJsonFile } from "../utils/bun";
 function strictWithWarnings<T extends z.ZodRawShape>(
   schema: z.ZodObject<T>,
   schemaName: string
-): z.ZodObject<T> {
+): z.ZodEffects<z.ZodObject<T>> {
   return schema.superRefine((data, ctx) => {
     if (typeof data !== "object" || data === null) return;
 

@@ -24,11 +24,19 @@ export * from "./devtools";
 export * from "./paths";
 export * from "./resource";
 
+// ── Resolve export * ambiguities (TS2308) ──
+// When the same name is exported from multiple submodules via `export *`,
+// TypeScript considers them ambiguous. Explicit re-exports resolve this.
+export { formatViolation } from "./guard";
+export { type HttpMethod } from "./filling";
+export { type GuardViolation } from "./guard";
+export { type Severity } from "./guard";
+
 // Consolidated Mandu namespace
 import { ManduFilling, ManduContext, ManduFillingFactory, createSSEConnection } from "./filling";
 import { createContract, defineHandler, defineRoute, createClient, contractFetch, createClientContract, querySchema, bodySchema, apiError } from "./contract";
 import { defineContract, generateAllFromContract, generateOpenAPISpec } from "./contract/define";
-import { island, isIsland, type IslandComponent, type HydrationStrategy } from "./island";
+import { island, isIsland, type IslandComponent, type IslandHydrationStrategy } from "./island";
 import { intent, isIntent, getIntentDocs, generateOpenAPIFromIntent } from "./intent";
 import { initializeHook, reportError, ManduDevTools, getStateManager } from "./devtools";
 import type { ContractDefinition, ContractInstance, ContractSchema } from "./contract";

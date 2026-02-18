@@ -69,9 +69,11 @@ export function renderOpenGraph(metadata: ResolvedMetadata): string {
   // Images
   if (openGraph.images) {
     for (const image of openGraph.images) {
-      tags.push(og('image', urlToString(image.url)))
+      const imageUrl = urlToString(image.url)
+      if (imageUrl) tags.push(og('image', imageUrl))
       if (image.secureUrl) {
-        tags.push(og('image:secure_url', urlToString(image.secureUrl)))
+        const secureUrl = urlToString(image.secureUrl)
+        if (secureUrl) tags.push(og('image:secure_url', secureUrl))
       }
       if (image.type) {
         tags.push(og('image:type', image.type))
@@ -91,9 +93,11 @@ export function renderOpenGraph(metadata: ResolvedMetadata): string {
   // Videos
   if (openGraph.videos) {
     for (const video of openGraph.videos) {
-      tags.push(og('video', urlToString(video.url)))
+      const videoUrl = urlToString(video.url)
+      if (videoUrl) tags.push(og('video', videoUrl))
       if (video.secureUrl) {
-        tags.push(og('video:secure_url', urlToString(video.secureUrl)))
+        const secureUrl = urlToString(video.secureUrl)
+        if (secureUrl) tags.push(og('video:secure_url', secureUrl))
       }
       if (video.type) {
         tags.push(og('video:type', video.type))
@@ -110,9 +114,11 @@ export function renderOpenGraph(metadata: ResolvedMetadata): string {
   // Audio
   if (openGraph.audio) {
     for (const audio of openGraph.audio) {
-      tags.push(og('audio', urlToString(audio.url)))
+      const audioUrl = urlToString(audio.url)
+      if (audioUrl) tags.push(og('audio', audioUrl))
       if (audio.secureUrl) {
-        tags.push(og('audio:secure_url', urlToString(audio.secureUrl)))
+        const secureUrl = urlToString(audio.secureUrl)
+        if (secureUrl) tags.push(og('audio:secure_url', secureUrl))
       }
       if (audio.type) {
         tags.push(og('audio:type', audio.type))

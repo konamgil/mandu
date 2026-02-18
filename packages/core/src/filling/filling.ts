@@ -361,7 +361,7 @@ export class ManduFilling<TLoaderData = unknown> {
       if (error instanceof ValidationError) {
         return ctx.json({ errorType: "LOGIC_ERROR", code: ErrorCode.SLOT_VALIDATION_ERROR, message: "Validation failed", summary: "입력 검증 실패 - 요청 데이터 확인 필요", fix: { file: routeContext ? `spec/slots/${routeContext.routeId}.slot.ts` : "spec/slots/", suggestion: "요청 데이터가 스키마와 일치하는지 확인하세요" }, route: routeContext, errors: error.errors, timestamp: new Date().toISOString() }, 400);
       }
-      const classifier = new ErrorClassifier(null, routeContext);
+      const classifier = new ErrorClassifier(null, routeContext ? { id: routeContext.routeId, pattern: routeContext.pattern } : undefined);
       const manduError = classifier.classify(error);
       console.error(`[Mandu] ${manduError.errorType}:`, manduError.message);
       const response = formatErrorResponse(manduError, { isDev: process.env.NODE_ENV !== "production" });

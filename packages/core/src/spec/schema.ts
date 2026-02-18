@@ -2,8 +2,8 @@ import { z } from "zod";
 
 // ========== Hydration 설정 ==========
 
-export const HydrationStrategy = z.enum(["none", "island", "full", "progressive"]);
-export type HydrationStrategy = z.infer<typeof HydrationStrategy>;
+export const SpecHydrationStrategy = z.enum(["none", "island", "full", "progressive"]);
+export type SpecHydrationStrategy = z.infer<typeof SpecHydrationStrategy>;
 
 export const HydrationPriority = z.enum(["immediate", "visible", "idle", "interaction"]);
 export type HydrationPriority = z.infer<typeof HydrationPriority>;
@@ -16,7 +16,7 @@ export const HydrationConfig = z.object({
    * - full: 전체 페이지 hydrate
    * - progressive: 점진적 hydrate
    */
-  strategy: HydrationStrategy,
+  strategy: SpecHydrationStrategy,
 
   /**
    * Hydration 우선순위
@@ -56,8 +56,8 @@ export type LoaderConfig = z.infer<typeof LoaderConfig>;
 export const RouteKind = z.enum(["page", "api"]);
 export type RouteKind = z.infer<typeof RouteKind>;
 
-export const HttpMethod = z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]);
-export type HttpMethod = z.infer<typeof HttpMethod>;
+export const SpecHttpMethod = z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]);
+export type SpecHttpMethod = z.infer<typeof SpecHttpMethod>;
 
 export const RouteSpec = z
   .object({
@@ -66,7 +66,7 @@ export const RouteSpec = z
     kind: RouteKind,
 
     // HTTP 메서드 (API용)
-    methods: z.array(HttpMethod).optional(),
+    methods: z.array(SpecHttpMethod).optional(),
 
     // 서버 모듈 (generated route handler)
     module: z.string().min(1, "module 경로는 필수입니다"),

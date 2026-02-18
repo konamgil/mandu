@@ -7,7 +7,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { NormalizedError, DevToolsConfig, IslandSnapshot, NetworkRequest, GuardViolation } from '../../types';
+import type { NormalizedError, DevToolsConfig, IslandSnapshot, NetworkRequest, DevToolsGuardViolation } from '../../types';
 import { generateCSSVariables, testIds, zIndex } from '../../design-tokens';
 import { getStateManager, type KitchenState } from '../state-manager';
 import { getOrCreateHook } from '../../hook';
@@ -241,7 +241,7 @@ function KitchenApp({ config }: KitchenAppProps): React.ReactElement | null {
   }, []);
 
   const handleClearGuard = useCallback(() => {
-    getStateManager().clearGuardViolations();
+    getStateManager().clearDevToolsGuardViolations();
   }, []);
 
   const handleRestart = useCallback(async () => {

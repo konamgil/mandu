@@ -68,14 +68,15 @@ export function renderTwitter(metadata: ResolvedMetadata): string {
   if (tw.images) {
     for (let i = 0; i < tw.images.length; i++) {
       const image = tw.images[i]
+      const imageUrl = urlToString(image.url)
       if (i === 0) {
-        tags.push(twitter('image', urlToString(image.url)))
+        if (imageUrl) tags.push(twitter('image', imageUrl))
         if (image.alt) {
           tags.push(twitter('image:alt', image.alt))
         }
       } else {
         // Multiple images (for galleries)
-        tags.push(twitter(`image${i}`, urlToString(image.url)))
+        if (imageUrl) tags.push(twitter(`image${i}`, imageUrl))
         if (image.alt) {
           tags.push(twitter(`image${i}:alt`, image.alt))
         }

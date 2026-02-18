@@ -146,7 +146,7 @@ export function normalizeSchema<T extends ZodTypeAny>(
     return schema;
   }
 
-  return applyNormalizeMode(schema, opts.mode) as T;
+  return applyNormalizeMode(schema, opts.mode) as unknown as T;
 }
 
 /**

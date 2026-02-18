@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo } from 'react';
-import type { GuardViolation } from '../../../types';
+import type { DevToolsGuardViolation } from '../../../types';
 import { colors, typography, spacing, borderRadius, animation } from '../../../design-tokens';
 
 // ============================================================================
@@ -130,7 +130,7 @@ const severityStyles: Record<string, { border: string; bg: string; color: string
 // ============================================================================
 
 export interface GuardPanelProps {
-  violations: GuardViolation[];
+  violations: DevToolsGuardViolation[];
   onClear: () => void;
 }
 
@@ -141,7 +141,7 @@ export interface GuardPanelProps {
 export function GuardPanel({ violations, onClear }: GuardPanelProps): React.ReactElement {
   // Group by rule
   const groupedByRule = useMemo(() => {
-    const groups = new Map<string, GuardViolation[]>();
+    const groups = new Map<string, DevToolsGuardViolation[]>();
     for (const v of violations) {
       const existing = groups.get(v.ruleId) ?? [];
       groups.set(v.ruleId, [...existing, v]);

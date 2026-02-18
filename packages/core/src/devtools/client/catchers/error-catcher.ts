@@ -5,7 +5,7 @@
  * 전역 에러를 캐치하여 DevTools로 전달
  */
 
-import type { NormalizedError, ErrorType, Severity } from '../../types';
+import type { NormalizedError, ErrorType, DevToolsSeverity } from '../../types';
 import { getOrCreateHook } from '../../hook';
 import { createErrorEvent } from '../../protocol';
 
@@ -69,7 +69,7 @@ function normalizeError(
   return {
     id: generateErrorId(),
     type,
-    severity: determineSeverity(type, error),
+    severity: determineDevToolsSeverity(type, error),
     message: isError ? error.message : String(error),
     stack: isError ? error.stack : undefined,
     timestamp: Date.now(),
@@ -78,7 +78,7 @@ function normalizeError(
   };
 }
 
-function determineSeverity(type: ErrorType, _error: unknown): Severity {
+function determineDevToolsSeverity(type: ErrorType, _error: unknown): DevToolsSeverity {
   switch (type) {
     case 'runtime':
     case 'unhandled':

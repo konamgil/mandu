@@ -8,7 +8,7 @@ import type {
   NormalizedError,
   IslandSnapshot,
   NetworkRequest,
-  GuardViolation,
+  DevToolsGuardViolation,
 } from './types';
 
 // ============================================================================
@@ -33,7 +33,7 @@ export type KitchenEvents =
   | KitchenEvent<'network:error', { id: string; error: string }>
 
   // Guard events
-  | KitchenEvent<'guard:violation', GuardViolation>
+  | KitchenEvent<'guard:violation', DevToolsGuardViolation>
   | KitchenEvent<'guard:clear', { ruleId?: string }>
 
   // HMR events
@@ -144,8 +144,8 @@ export function createNetworkResponseEvent(
   };
 }
 
-export function createGuardViolationEvent(
-  violation: Omit<GuardViolation, 'id' | 'timestamp'>
+export function createDevToolsGuardViolationEvent(
+  violation: Omit<DevToolsGuardViolation, 'id' | 'timestamp'>
 ): KitchenEvents {
   return {
     type: 'guard:violation',
