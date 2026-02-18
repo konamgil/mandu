@@ -510,15 +510,13 @@ ${JSON.stringify(this.config.folders, null, 2)}
 짧고 명확하게 답변하세요 (3줄 이내).`;
 
     try {
-      const result = await brain.complete([
-        { role: "user", content: prompt },
-      ]);
+      const result = await brain.generate(prompt);
 
       // 응답에서 경로 추출 시도
-      const pathMatch = result.content.match(/(?:spec\/|\.mandu\/|app\/|src\/|packages\/)[^\s,)]+/);
+      const pathMatch = result.match(/(?:spec\/|\.mandu\/|app\/|src\/|packages\/)[^\s,)]+/);
 
       return {
-        suggestion: result.content,
+        suggestion: result,
         recommendedPath: pathMatch?.[0],
       };
     } catch {

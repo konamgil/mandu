@@ -57,7 +57,7 @@ interface ErrorBoundaryState {
  * </LoadingBoundary>
  * ```
  */
-export function LoadingBoundary({ fallback, children }: LoadingBoundaryProps): JSX.Element {
+export function LoadingBoundary({ fallback, children }: LoadingBoundaryProps): React.ReactElement {
   return <Suspense fallback={fallback}>{children}</Suspense>;
 }
 
@@ -127,7 +127,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 /**
  * 기본 로딩 컴포넌트
  */
-export function DefaultLoading(): JSX.Element {
+export function DefaultLoading(): React.ReactElement {
   return (
     <div
       style={{
@@ -146,7 +146,7 @@ export function DefaultLoading(): JSX.Element {
 /**
  * 기본 에러 컴포넌트
  */
-export function DefaultError({ error, resetError }: ErrorFallbackProps): JSX.Element {
+export function DefaultError({ error, resetError }: ErrorFallbackProps): React.ReactElement {
   return (
     <div
       style={{
@@ -220,7 +220,7 @@ export function PageBoundary({
   errorComponent,
   children,
   onError,
-}: PageBoundaryProps): JSX.Element {
+}: PageBoundaryProps): React.ReactElement {
   const LoadingFallback = loadingComponent ?? <DefaultLoading />;
   const ErrorFallback = errorComponent ?? DefaultError;
 

@@ -21,7 +21,7 @@ import { loadManduConfig } from "../config";
 /**
  * 매니페스트 생성 결과
  */
-export interface GenerateResult {
+export interface FSGenerateResult {
   /** 생성된 매니페스트 */
   manifest: RoutesManifest;
 
@@ -176,7 +176,7 @@ async function resolveScannerConfig(
 export async function generateManifest(
   rootDir: string,
   options: GenerateOptions = {}
-): Promise<GenerateResult> {
+): Promise<FSGenerateResult> {
   const scannerConfig = await resolveScannerConfig(rootDir, options.scanner);
 
   // FS Routes 스캔
@@ -215,7 +215,7 @@ export async function generateManifest(
 /**
  * 라우트 변경 콜백
  */
-export type RouteChangeCallback = (result: GenerateResult) => void | Promise<void>;
+export type RouteChangeCallback = (result: FSGenerateResult) => void | Promise<void>;
 
 /**
  * FS Routes 감시자 인터페이스
@@ -225,7 +225,7 @@ export interface FSRoutesWatcher {
   close(): void;
 
   /** 수동 재스캔 */
-  rescan(): Promise<GenerateResult>;
+  rescan(): Promise<FSGenerateResult>;
 }
 
 /**
@@ -281,7 +281,7 @@ export async function watchFSRoutes(
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const triggerRescan = async (): Promise<GenerateResult> => {
+  const triggerRescan = async (): Promise<FSGenerateResult> => {
     const result = await generateManifest(rootDir, generateOptions);
     if (onChange) {
       await onChange(result);

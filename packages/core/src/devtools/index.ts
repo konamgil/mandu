@@ -16,11 +16,11 @@ export type {
 
   // Error
   ErrorType,
-  Severity,
+  DevToolsSeverity,
   NormalizedError,
 
   // Island
-  HydrationStrategy,
+  DevToolsHydrationStrategy,
   IslandStatus,
   IslandSnapshot,
 
@@ -29,7 +29,7 @@ export type {
   NetworkBodyPolicy,
 
   // Guard
-  GuardViolation,
+  DevToolsGuardViolation,
 
   // AI Context
   CodeContextInfo,
@@ -170,7 +170,7 @@ export {
   createIslandHydrateEndEvent,
   createNetworkRequestEvent,
   createNetworkResponseEvent,
-  createGuardViolationEvent,
+  createDevToolsGuardViolationEvent,
   createHmrUpdateEvent,
   createHmrErrorEvent,
 
@@ -199,12 +199,12 @@ export {
 // ============================================================================
 
 import { getOrCreateHook } from './hook';
-import type { NormalizedError, GuardViolation } from './types';
+import type { NormalizedError, DevToolsGuardViolation } from './types';
 import {
   createErrorEvent,
   createHmrUpdateEvent,
   createHmrErrorEvent,
-  createGuardViolationEvent,
+  createDevToolsGuardViolationEvent,
 } from './protocol';
 
 /**
@@ -261,10 +261,10 @@ export function notifyHmrError(message: string, stack?: string): void {
  * Guard 위반 리포트 (간편 API)
  */
 export function reportGuardViolation(
-  violation: Omit<GuardViolation, 'id' | 'timestamp'>
+  violation: Omit<DevToolsGuardViolation, 'id' | 'timestamp'>
 ): void {
   const hook = getOrCreateHook();
-  hook.emit(createGuardViolationEvent(violation));
+  hook.emit(createDevToolsGuardViolationEvent(violation));
 }
 
 // ============================================================================

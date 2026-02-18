@@ -69,7 +69,7 @@ export {
 export { FSScanner, createFSScanner, scanRoutes } from "./fs-scanner";
 
 // Generator
-export type { GenerateResult, GenerateOptions, RouteChangeCallback, FSRoutesWatcher } from "./fs-routes";
+export type { FSGenerateResult, GenerateOptions, RouteChangeCallback, FSRoutesWatcher } from "./fs-routes";
 
 export {
   fsRouteToRouteSpec,

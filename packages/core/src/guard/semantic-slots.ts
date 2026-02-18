@@ -144,7 +144,7 @@ export interface ConstraintViolation {
 /**
  * 슬롯 검증 결과
  */
-export interface SlotValidationResult {
+export interface SemanticSlotValidationResult {
   /** 유효 여부 */
   valid: boolean;
 
@@ -461,7 +461,7 @@ export async function validateSlotConstraints(
   filePath: string,
   constraints: SlotConstraints,
   rootDir?: string
-): Promise<SlotValidationResult> {
+): Promise<SemanticSlotValidationResult> {
   const violations: ConstraintViolation[] = [];
   const suggestions: string[] = [];
 
@@ -727,9 +727,9 @@ export async function validateSlots(
   totalSlots: number;
   validSlots: number;
   invalidSlots: number;
-  results: SlotValidationResult[];
+  results: SemanticSlotValidationResult[];
 }> {
-  const results: SlotValidationResult[] = [];
+  const results: SemanticSlotValidationResult[] = [];
 
   for (const filePath of slotFiles) {
     // 파일에서 메타데이터 추출 시도

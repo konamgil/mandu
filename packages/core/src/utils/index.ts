@@ -14,7 +14,7 @@ export {
   isHashable,
   getHashInfo,
   type HashOptions,
-  type NormalizeOptions,
+  type HashNormalizeOptions,
 } from "./hasher.js";
 
 // Diff

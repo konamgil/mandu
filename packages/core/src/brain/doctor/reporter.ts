@@ -50,7 +50,7 @@ function color(text: string, colorCode: string): string {
 /**
  * Format a violation for terminal output
  */
-export function formatViolation(violation: GuardViolation): string {
+export function formatDoctorViolation(violation: GuardViolation): string {
   const lines: string[] = [];
 
   const severity = violation.severity || "error";
@@ -137,7 +137,7 @@ export function printDoctorReport(analysis: DoctorAnalysis): void {
     console.log();
 
     for (const violation of violations) {
-      console.log(formatViolation(violation));
+      console.log(formatDoctorViolation(violation));
       console.log();
     }
   }

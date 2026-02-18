@@ -174,7 +174,7 @@ export interface GuardRule {
   name: string;
   description?: string;
   severity: "error" | "warn" | "off";
-  check: (context: GuardRuleContext) => GuardViolation[];
+  check: (context: GuardRuleContext) => PluginGuardViolation[];
 }
 
 /**
@@ -211,7 +211,7 @@ export interface ExportInfo {
 /**
  * Guard 위반
  */
-export interface GuardViolation {
+export interface PluginGuardViolation {
   ruleId: string;
   message: string;
   severity: "error" | "warn";

@@ -6,7 +6,7 @@
  * @module router/fs-types
  */
 
-import type { RouteKind, HydrationConfig, HttpMethod } from "../spec/schema";
+import type { RouteKind, HydrationConfig, SpecHttpMethod } from "../spec/schema";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Segment Types
@@ -93,7 +93,7 @@ export interface FSRouteConfig {
   kind: RouteKind;
 
   /** HTTP 메서드 (API 라우트용) */
-  methods?: HttpMethod[];
+  methods?: SpecHttpMethod[];
 
   /** 페이지 컴포넌트 모듈 경로 */
   componentModule?: string;

@@ -272,7 +272,7 @@ export {
   type SlotMetadata,
   type CustomRule,
   type ConstraintViolation,
-  type SlotValidationResult,
+  type SemanticSlotValidationResult,
 } from "./semantic-slots";
 
 // ═══════════════════════════════════════════════════════════════════════════

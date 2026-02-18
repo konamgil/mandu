@@ -212,7 +212,9 @@ export function renderIcons(metadata: ResolvedMetadata): string {
 
   // icon
   for (const icon of icons.icon) {
-    const attrs = [`rel="icon"`, `href="${escapeHtml(urlToString(icon.url))}"`]
+    const iconUrl = urlToString(icon.url)
+    if (!iconUrl) continue
+    const attrs = [`rel="icon"`, `href="${escapeHtml(iconUrl)}"`]
     if (icon.type) attrs.push(`type="${escapeHtml(icon.type)}"`)
     if (icon.sizes) attrs.push(`sizes="${escapeHtml(icon.sizes)}"`)
     tags.push(`<link ${attrs.join(' ')} />`)
@@ -220,19 +222,25 @@ export function renderIcons(metadata: ResolvedMetadata): string {
 
   // apple-touch-icon
   for (const icon of icons.apple) {
-    const attrs = [`rel="apple-touch-icon"`, `href="${escapeHtml(urlToString(icon.url))}"`]
+    const iconUrl = urlToString(icon.url)
+    if (!iconUrl) continue
+    const attrs = [`rel="apple-touch-icon"`, `href="${escapeHtml(iconUrl)}"`]
     if (icon.sizes) attrs.push(`sizes="${escapeHtml(icon.sizes)}"`)
     tags.push(`<link ${attrs.join(' ')} />`)
   }
 
   // shortcut icon
   for (const icon of icons.shortcut) {
-    tags.push(`<link rel="shortcut icon" href="${escapeHtml(urlToString(icon.url))}" />`)
+    const iconUrl = urlToString(icon.url)
+    if (!iconUrl) continue
+    tags.push(`<link rel="shortcut icon" href="${escapeHtml(iconUrl)}" />`)
   }
 
   // other icons
   for (const icon of icons.other) {
-    const attrs = [`href="${escapeHtml(urlToString(icon.url))}"`]
+    const iconUrl = urlToString(icon.url)
+    if (!iconUrl) continue
+    const attrs = [`href="${escapeHtml(iconUrl)}"`]
     if (icon.rel) attrs.push(`rel="${escapeHtml(icon.rel)}"`)
     if (icon.type) attrs.push(`type="${escapeHtml(icon.type)}"`)
     if (icon.sizes) attrs.push(`sizes="${escapeHtml(icon.sizes)}"`)

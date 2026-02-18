@@ -184,7 +184,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   // CSS 링크 태그 생성
   // - cssPath가 string이면 해당 경로 사용
   // - cssPath가 false 또는 undefined이면 링크 미삽입 (404 방지)
-  const cssLinkTag = cssPath && cssPath !== false
+  const cssLinkTag = cssPath
     ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
 

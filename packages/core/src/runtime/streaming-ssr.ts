@@ -378,7 +378,7 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   // CSS 링크 태그 생성
   // - cssPath가 string이면 해당 경로 사용
   // - cssPath가 false 또는 undefined이면 링크 미삽입 (404 방지)
-  const cssLinkTag = cssPath && cssPath !== false
+  const cssLinkTag = cssPath
     ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
 
@@ -748,7 +748,7 @@ export async function renderToStream(
 
   async function readWithTimeout(): Promise<ReadableStreamReadResult<Uint8Array> | null> {
     if (!deadline) {
-      return reader.read();
+      return reader.read() as Promise<ReadableStreamReadResult<Uint8Array>>;
     }
 
     const remaining = deadline - Date.now();
@@ -763,8 +763,8 @@ export async function renderToStream(
 
     const readPromise = reader
       .read()
-      .then((result) => ({ kind: "read" as const, result }))
-      .catch((error) => ({ kind: "error" as const, error }));
+      .then((result) => ({ kind: "read" as const, result: result as ReadableStreamReadResult<Uint8Array> }))
+      .catch((error: unknown) => ({ kind: "error" as const, error }));
 
     const result = await Promise.race([readPromise, timeoutPromise]);
 

@@ -157,8 +157,8 @@ export class FileWatcher {
       this.processFileEvent("delete", filePath);
     });
 
-    this.chokidarWatcher.on("error", (error) => {
-      console.error(`[Watch] Error:`, error.message);
+    this.chokidarWatcher.on("error", (error: unknown) => {
+      console.error(`[Watch] Error:`, error instanceof Error ? error.message : String(error));
     });
 
     this._active = true;

@@ -126,19 +126,19 @@ export function isContract<T extends ContractDefinition>(
 
 /** Contract에서 Input 타입 추출 */
 export type ContractInput<
-  C extends Contract<any>,
+  C extends ContractMeta<ContractDefinition>,
   K extends keyof C['__endpoints']
 > = C['__endpoints'][K]['input'] extends ZodType<infer T> ? T : never;
 
 /** Contract에서 Output 타입 추출 */
 export type ContractOutput<
-  C extends Contract<any>,
+  C extends ContractMeta<ContractDefinition>,
   K extends keyof C['__endpoints']
 > = C['__endpoints'][K]['output'] extends ZodType<infer T> ? T : never;
 
 /** Contract에서 Params 타입 추출 */
 export type ContractParams<
-  C extends Contract<any>,
+  C extends ContractMeta<ContractDefinition>,
   K extends keyof C['__endpoints']
 > = C['__endpoints'][K]['params'] extends ZodType<infer T> ? T : never;
 

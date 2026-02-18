@@ -10,7 +10,7 @@ import type {
   NormalizedError,
   IslandSnapshot,
   NetworkRequest,
-  GuardViolation,
+  DevToolsGuardViolation,
   DevToolsConfig,
   ManduState,
 } from '../types';
@@ -30,7 +30,7 @@ export interface KitchenState {
   errors: NormalizedError[];
   islands: Map<string, IslandSnapshot>;
   networkRequests: Map<string, NetworkRequest>;
-  guardViolations: GuardViolation[];
+  guardViolations: DevToolsGuardViolation[];
 
   // Mandu Character State
   manduState: ManduState;
@@ -78,7 +78,7 @@ export class KitchenStateManager {
   private listeners: Set<StateListener> = new Set();
   private maxErrors = 100;
   private maxNetworkRequests = 200;
-  private maxGuardViolations = 50;
+  private maxDevToolsGuardViolations = 50;
 
   constructor(config?: Partial<DevToolsConfig>) {
     this.state = createInitialState(config);
@@ -104,7 +104,7 @@ export class KitchenStateManager {
     return Array.from(this.state.networkRequests.values());
   }
 
-  getGuardViolations(): GuardViolation[] {
+  getDevToolsGuardViolations(): DevToolsGuardViolation[] {
     return [...this.state.guardViolations];
   }
 
@@ -304,11 +304,11 @@ export class KitchenStateManager {
   // Guard Actions
   // --------------------------------------------------------------------------
 
-  addGuardViolation(violation: GuardViolation): void {
+  addDevToolsGuardViolation(violation: DevToolsGuardViolation): void {
     const guardViolations = [violation, ...this.state.guardViolations];
 
     // 최대 개수 제한
-    if (guardViolations.length > this.maxGuardViolations) {
+    if (guardViolations.length > this.maxDevToolsGuardViolations) {
       guardViolations.pop();
     }
 
@@ -321,7 +321,7 @@ export class KitchenStateManager {
     this.setState({ guardViolations, manduState });
   }
 
-  clearGuardViolations(ruleId?: string): void {
+  clearDevToolsGuardViolations(ruleId?: string): void {
     if (ruleId) {
       const guardViolations = this.state.guardViolations.filter(
         (v) => v.ruleId !== ruleId
@@ -395,11 +395,11 @@ export class KitchenStateManager {
         break;
 
       case 'guard:violation':
-        this.addGuardViolation(event.data as GuardViolation);
+        this.addDevToolsGuardViolation(event.data as DevToolsGuardViolation);
         break;
 
       case 'guard:clear':
-        this.clearGuardViolations((event.data as { ruleId?: string }).ruleId);
+        this.clearDevToolsGuardViolations((event.data as { ruleId?: string }).ruleId);
         break;
 
       case 'hmr:update':

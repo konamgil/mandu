@@ -11,6 +11,9 @@ import { hexagonalPreset, HEXAGONAL_HIERARCHY } from "./hexagonal";
 import { atomicPreset, ATOMIC_HIERARCHY } from "./atomic";
 import { cqrsPreset, CQRS_HIERARCHY } from "./cqrs";
 
+// Re-export types
+export type { GuardPreset, PresetDefinition } from "../types";
+
 // Re-export
 export { fsdPreset, FSD_HIERARCHY } from "./fsd";
 export { cleanPreset, CLEAN_HIERARCHY } from "./clean";

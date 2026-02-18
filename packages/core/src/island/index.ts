@@ -20,7 +20,7 @@ import { z } from 'zod';
 // ============================================================================
 
 /** 하이드레이션 타이밍 */
-export type HydrationStrategy =
+export type IslandHydrationStrategy =
   | 'load'      // 페이지 로드 즉시
   | 'idle'      // requestIdleCallback
   | 'visible'   // IntersectionObserver
@@ -30,7 +30,7 @@ export type HydrationStrategy =
 /** Island 옵션 */
 export interface IslandOptions<P = unknown> {
   /** 하이드레이션 전략 */
-  hydrate: HydrationStrategy;
+  hydrate: IslandHydrationStrategy;
   /** 미디어 쿼리 (hydrate: 'media' 일 때) */
   media?: string;
   /** SSR 폴백 컴포넌트 */
@@ -44,7 +44,7 @@ export interface IslandOptions<P = unknown> {
 /** Island 컴포넌트 메타데이터 */
 export interface IslandMeta {
   __island: true;
-  __hydrate: HydrationStrategy;
+  __hydrate: IslandHydrationStrategy;
   __media?: string;
   __fallback?: ReactNode;
   __name: string;
@@ -95,7 +95,7 @@ export function getAllIslands(): Map<string, IslandComponent<any>> {
  * });
  */
 export function island<P extends Record<string, unknown>>(
-  strategy: HydrationStrategy,
+  strategy: IslandHydrationStrategy,
   Component: ComponentType<P>
 ): IslandComponent<P>;
 
@@ -105,7 +105,7 @@ export function island<P extends Record<string, unknown>>(
 ): IslandComponent<P>;
 
 export function island<P extends Record<string, unknown>>(
-  strategyOrOptions: HydrationStrategy | IslandOptions<P>,
+  strategyOrOptions: IslandHydrationStrategy | IslandOptions<P>,
   Component: ComponentType<P>
 ): IslandComponent<P> {
   const options: IslandOptions<P> = typeof strategyOrOptions === 'string'
@@ -194,7 +194,7 @@ export function deserializeIslandProps(json: string): Record<string, unknown> {
 export interface IslandPlaceholderProps {
   name: string;
   props: Record<string, unknown>;
-  hydrate: HydrationStrategy;
+  hydrate: IslandHydrationStrategy;
   media?: string;
   fallback?: ReactNode;
 }

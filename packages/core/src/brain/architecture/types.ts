@@ -39,7 +39,7 @@ export interface ImportRule {
 /**
  * 레이어 의존성 규칙
  */
-export interface LayerRule {
+export interface ArchLayerRule {
   /** 레이어 이름 */
   name: string;
   /** 레이어에 속하는 폴더 패턴 */
@@ -73,17 +73,17 @@ export interface ArchitectureConfig {
   /** Import 규칙 */
   imports?: ImportRule[];
   /** 레이어 규칙 */
-  layers?: LayerRule[];
+  layers?: ArchLayerRule[];
   /** 네이밍 규칙 */
   naming?: NamingRule[];
   /** 커스텀 규칙 */
-  custom?: CustomRule[];
+  custom?: ArchCustomRule[];
 }
 
 /**
  * 커스텀 규칙
  */
-export interface CustomRule {
+export interface ArchCustomRule {
   /** 규칙 ID */
   id: string;
   /** 규칙 설명 */

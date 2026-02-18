@@ -18,12 +18,12 @@ export interface KitchenEvent<T extends string = string, D = unknown> {
 // ============================================================================
 
 export type ErrorType = 'runtime' | 'unhandled' | 'react' | 'network' | 'hmr' | 'guard';
-export type Severity = 'critical' | 'error' | 'warning' | 'info';
+export type DevToolsSeverity = 'critical' | 'error' | 'warning' | 'info';
 
 export interface NormalizedError {
   id: string;
   type: ErrorType;
-  severity: Severity;
+  severity: DevToolsSeverity;
   message: string;
   stack?: string;
   source?: string;
@@ -39,13 +39,13 @@ export interface NormalizedError {
 // Island Types
 // ============================================================================
 
-export type HydrationStrategy = 'load' | 'idle' | 'visible' | 'media' | 'never';
+export type DevToolsHydrationStrategy = 'load' | 'idle' | 'visible' | 'media' | 'never';
 export type IslandStatus = 'ssr' | 'pending' | 'hydrating' | 'hydrated' | 'error';
 
 export interface IslandSnapshot {
   id: string;
   name: string;
-  strategy: HydrationStrategy;
+  strategy: DevToolsHydrationStrategy;
   status: IslandStatus;
   ssrRenderTime?: number;
   hydrateStartTime?: number;
@@ -89,7 +89,7 @@ export interface NetworkBodyPolicy {
 // Guard Types
 // ============================================================================
 
-export interface GuardViolation {
+export interface DevToolsGuardViolation {
   id: string;
   ruleId: string;
   ruleName: string;

@@ -30,7 +30,7 @@ export {
 } from "./patcher";
 
 export {
-  formatViolation,
+  formatDoctorViolation,
   formatPatch,
   printDoctorReport,
   generateJsonReport,

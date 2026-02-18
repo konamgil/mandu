@@ -119,12 +119,12 @@ export function resolveSEOSync(staticMetadata: Metadata): SEOResult {
     } else if ('absolute' in staticMetadata.title) {
       resolvedTitle = {
         absolute: staticMetadata.title.absolute,
-        template: staticMetadata.title.template || null,
+        template: staticMetadata.title.template ?? null,
       }
     } else if ('default' in staticMetadata.title) {
       resolvedTitle = {
         absolute: staticMetadata.title.default,
-        template: staticMetadata.title.template || null,
+        template: staticMetadata.title.template ?? null,
       }
     }
   }
