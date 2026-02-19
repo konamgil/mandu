@@ -28,6 +28,7 @@ import {
   isCorsRequest,
 } from "./cors";
 import { validateImportPath } from "./security";
+import { KITCHEN_PREFIX, KitchenHandler } from "../kitchen/kitchen-handler";
 
 export interface RateLimitOptions {
   windowMs?: number;
@@ -301,6 +302,10 @@ export interface ServerOptions {
    * - 테스트나 멀티앱 시나리오에서 createServerRegistry()로 생성한 인스턴스 전달
    */
   registry?: ServerRegistry;
+  /**
+   * Guard config for Kitchen dev dashboard (dev mode only)
+   */
+  guardConfig?: import("../guard/types").GuardConfig | null;
 }
 
 export interface ManduServer {
@@ -413,6 +418,8 @@ export class ServerRegistry {
   readonly errorLoaders: Map<string, ErrorLoader> = new Map();
   createAppFn: CreateAppFn | null = null;
   rateLimiter: MemoryRateLimiter | null = null;
+  /** Kitchen dev dashboard handler (dev mode only) */
+  kitchen: KitchenHandler | null = null;
   settings: ServerRegistrySettings = {
     isDev: false,
     rootDir: process.cwd(),
@@ -1114,7 +1121,13 @@ async function handleRequestInternal(
     return ok(staticResponse);
   }
 
-  // 2. 라우트 매칭
+  // 2. Kitchen dev dashboard (dev mode only)
+  if (settings.isDev && pathname.startsWith(KITCHEN_PREFIX) && registry.kitchen) {
+    const kitchenResponse = await registry.kitchen.handle(req, pathname);
+    if (kitchenResponse) return ok(kitchenResponse);
+  }
+
+  // 3. 라우트 매칭
   const match = router.match(pathname);
   if (!match) {
     return err(createNotFoundResponse(pathname));
@@ -1230,6 +1243,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     rateLimit = false,
     cssPath: cssPathOption,
     registry = defaultRegistry,
+    guardConfig = null,
   } = options;
 
   // cssPath 처리:
@@ -1267,6 +1281,13 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   };
 
   registry.rateLimiter = rateLimitOptions ? new MemoryRateLimiter() : null;
+
+  // Kitchen dev dashboard (dev mode only)
+  if (isDev) {
+    const kitchen = new KitchenHandler({ rootDir, manifest, guardConfig });
+    kitchen.start();
+    registry.kitchen = kitchen;
+  }
 
   const router = new Router(manifest.routes);
 
@@ -1308,6 +1329,9 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     if (streaming) {
       console.log(`🌊 Streaming SSR enabled`);
     }
+    if (registry.kitchen) {
+      console.log(`🍳 Kitchen dashboard at http://${hostname}:${actualPort}/__kitchen`);
+    }
   } else {
     console.log(`🥟 Mandu server running at http://${hostname}:${actualPort}`);
     if (streaming) {
@@ -1319,7 +1343,10 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     server,
     router,
     registry,
-    stop: () => server.stop(),
+    stop: () => {
+      registry.kitchen?.stop();
+      server.stop();
+    },
   };
 }
 
