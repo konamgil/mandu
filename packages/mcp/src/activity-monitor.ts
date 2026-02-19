@@ -281,7 +281,10 @@ export class ActivityMonitor {
     this.projectRoot = projectRoot;
     const userConfig = loadMonitorConfig(projectRoot);
     this.config = mergeConfig(DEFAULT_CONFIG, userConfig);
-    this.outputFormat = resolveOutputFormat(this.config.output);
+    // When openTerminal is enabled, force pretty format for human-readable terminal output
+    this.outputFormat = this.config.openTerminal
+      ? "pretty"
+      : resolveOutputFormat(this.config.output);
   }
 
   start(): void {
@@ -327,9 +330,7 @@ export class ActivityMonitor {
       );
     }
 
-    const openTerminal =
-      this.config.openTerminal && this.outputFormat === "pretty";
-    if (openTerminal) {
+    if (this.config.openTerminal) {
       this.openTerminal();
     }
   }
