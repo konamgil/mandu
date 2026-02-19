@@ -347,6 +347,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     rateLimit: serverConfig.rateLimit,
     // Inject CSS link only when Tailwind detected
     cssPath: hasTailwind ? cssWatcher?.serverPath : false,
+    guardConfig,
   });
 
   const actualPort = server.server.port ?? port;
