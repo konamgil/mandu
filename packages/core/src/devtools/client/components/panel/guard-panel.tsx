@@ -3,7 +3,7 @@
  * @version 1.0.3
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import type { DevToolsGuardViolation } from '../../../types';
 import { colors, typography, spacing, borderRadius, animation } from '../../../design-tokens';
 
@@ -139,6 +139,31 @@ export interface GuardPanelProps {
 // ============================================================================
 
 export function GuardPanel({ violations, onClear }: GuardPanelProps): React.ReactElement {
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<{ total: number; errors: number; warnings: number } | null>(null);
+
+  const handleScan = useCallback(async () => {
+    setScanning(true);
+    setScanResult(null);
+    try {
+      const res = await fetch('/__kitchen/api/guard/scan', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.report) {
+          setScanResult({
+            total: data.report.totalViolations,
+            errors: data.report.bySeverity?.error ?? 0,
+            warnings: data.report.bySeverity?.warn ?? data.report.bySeverity?.warning ?? 0,
+          });
+        }
+      }
+    } catch {
+      // Kitchen API not available (non-dev or older version)
+    } finally {
+      setScanning(false);
+    }
+  }, []);
+
   // Group by rule
   const groupedByRule = useMemo(() => {
     const groups = new Map<string, DevToolsGuardViolation[]>();
@@ -158,6 +183,26 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
             아키텍처 위반이 없어요!<br />
             코드가 규칙을 잘 따르고 있어요.
           </p>
+          <button
+            style={{
+              ...styles.clearButton,
+              padding: `${spacing.sm} ${spacing.md}`,
+              marginTop: spacing.sm,
+              opacity: scanning ? 0.5 : 1,
+            }}
+            onClick={handleScan}
+            disabled={scanning}
+          >
+            {scanning ? '스캔 중...' : '🔍 전체 스캔'}
+          </button>
+          {scanResult && (
+            <p style={{ marginTop: spacing.sm, fontSize: typography.fontSize.xs }}>
+              스캔 결과: {scanResult.total === 0
+                ? '위반 없음 ✅'
+                : `${scanResult.total}개 위반 (에러 ${scanResult.errors}, 경고 ${scanResult.warnings})`
+              }
+            </p>
+          )}
         </div>
       </div>
     );
@@ -170,9 +215,18 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
         <span style={{ fontSize: typography.fontSize.sm, color: colors.text.secondary }}>
           {violations.length}개의 위반 ({groupedByRule.size}개 규칙)
         </span>
-        <button style={styles.clearButton} onClick={onClear}>
-          모두 지우기
-        </button>
+        <div style={{ display: 'flex', gap: spacing.xs }}>
+          <button
+            style={{ ...styles.clearButton, opacity: scanning ? 0.5 : 1 }}
+            onClick={handleScan}
+            disabled={scanning}
+          >
+            {scanning ? '스캔 중...' : '🔍 스캔'}
+          </button>
+          <button style={styles.clearButton} onClick={onClear}>
+            모두 지우기
+          </button>
+        </div>
       </div>
 
       {/* Violation List */}

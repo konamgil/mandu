@@ -187,6 +187,7 @@ export function PanelContainer({
   const [hoveredTab, setHoveredTab] = useState<TabId | null>(null);
   const [isCloseHovered, setIsCloseHovered] = useState(false);
   const [isRestartHovered, setIsRestartHovered] = useState(false);
+  const [isExpandHovered, setIsExpandHovered] = useState(false);
 
   const getTabBadgeCount = useCallback((tabId: TabId): number => {
     switch (tabId) {
@@ -246,6 +247,22 @@ export function PanelContainer({
               🔄
             </button>
           )}
+          <button
+            style={{
+              ...styles.restartButton,
+              ...(isExpandHovered ? {
+                color: colors.brand.accent,
+                backgroundColor: `${colors.brand.accent}18`,
+              } : {}),
+            }}
+            onClick={() => window.open('/__kitchen', '_blank')}
+            onMouseEnter={() => setIsExpandHovered(true)}
+            onMouseLeave={() => setIsExpandHovered(false)}
+            aria-label="풀 페이지로 열기"
+            title="풀 페이지로 열기"
+          >
+            🔲
+          </button>
           <button
             style={{
               ...styles.closeButton,

@@ -27,13 +27,13 @@ export function renderKitchenHTML(): string {
   </header>
 
   <nav class="tabs">
-    <button class="tab active" data-panel="activity">Activity</button>
-    <button class="tab" data-panel="routes">Routes</button>
+    <button class="tab" data-panel="activity">Activity</button>
+    <button class="tab active" data-panel="routes">Routes</button>
     <button class="tab" data-panel="guard">Guard</button>
   </nav>
 
   <main class="panels">
-    <section id="panel-activity" class="panel active">
+    <section id="panel-activity" class="panel">
       <div class="panel-header">
         <h2>Activity Stream</h2>
         <button id="clear-activity" class="btn-sm">Clear</button>
@@ -43,7 +43,7 @@ export function renderKitchenHTML(): string {
       </div>
     </section>
 
-    <section id="panel-routes" class="panel">
+    <section id="panel-routes" class="panel active">
       <div class="panel-header">
         <h2>Routes</h2>
         <div id="routes-summary" class="summary"></div>
@@ -64,6 +64,8 @@ export function renderKitchenHTML(): string {
       </div>
     </section>
   </main>
+
+  <div id="debug-bar" class="debug-bar"></div>
 
   <script>${JS}</script>
 </body>
@@ -351,53 +353,117 @@ const CSS = /* css */ `
   .violation-sev.error { background: #3b1111; color: #ef4444; }
   .violation-sev.warning { background: #3b2f11; color: #eab308; }
   .violation-sev.info { background: #112840; color: #3b82f6; }
+
+  .debug-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 4px 12px;
+    background: #1a1a2e;
+    border-top: 1px solid #27272a;
+    font-size: 11px;
+    font-family: monospace;
+    color: #71717a;
+    max-height: 60px;
+    overflow-y: auto;
+  }
+
+  .debug-bar .err { color: #ef4444; }
+  .debug-bar .ok { color: #22c55e; }
 `;
 
 // ─── JavaScript ──────────────────────────────────
 
 const JS = /* js */ `
 (function() {
+  var dbg = document.getElementById('debug-bar');
+  function log(msg, cls) {
+    if (!dbg) return;
+    var s = document.createElement('span');
+    s.className = cls || '';
+    s.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg + '  ';
+    dbg.appendChild(s);
+    dbg.scrollTop = dbg.scrollHeight;
+    console.log('[Kitchen]', msg);
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(String(str)));
+    return d.innerHTML;
+  }
+
+  try { log('JS loaded', 'ok'); } catch(e) {}
+
   // Tab switching
-  document.querySelectorAll('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+  var tabs = document.querySelectorAll('.tab');
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].addEventListener('click', function() {
+      var all = document.querySelectorAll('.tab');
+      var panels = document.querySelectorAll('.panel');
+      for (var j = 0; j < all.length; j++) all[j].classList.remove('active');
+      for (var j = 0; j < panels.length; j++) panels[j].classList.remove('active');
+      this.classList.add('active');
+      var p = document.getElementById('panel-' + this.getAttribute('data-panel'));
+      if (p) p.classList.add('active');
     });
-  });
+  }
 
   // ─── SSE Activity Stream ─────────────────────
-  const statusDot = document.getElementById('sse-status');
-  const statusLabel = document.getElementById('sse-label');
-  const activityList = document.getElementById('activity-list');
-  let activityCount = 0;
-  const MAX_ITEMS = 200;
+  var statusDot = document.getElementById('sse-status');
+  var statusLabel = document.getElementById('sse-label');
+  var activityList = document.getElementById('activity-list');
+  var activityCount = 0;
+  var MAX_ITEMS = 200;
+  var sseRetryCount = 0;
 
   function connectSSE() {
     statusDot.className = 'status-dot connecting';
     statusLabel.textContent = 'Connecting...';
+    log('SSE connecting...');
 
-    const es = new EventSource('/__kitchen/sse/activity');
+    var es;
+    try {
+      es = new EventSource('/__kitchen/sse/activity');
+    } catch(e) {
+      log('SSE EventSource failed: ' + e.message, 'err');
+      statusDot.className = 'status-dot disconnected';
+      statusLabel.textContent = 'Failed';
+      return;
+    }
 
-    es.onopen = () => {
+    es.onopen = function() {
       statusDot.className = 'status-dot connected';
       statusLabel.textContent = 'Connected';
+      sseRetryCount = 0;
+      log('SSE connected', 'ok');
     };
 
-    es.onmessage = (e) => {
+    es.onmessage = function(e) {
       try {
-        const data = JSON.parse(e.data);
-        if (data.type === 'heartbeat' || data.type === 'connected') return;
+        var data = JSON.parse(e.data);
+        if (data.type === 'connected') {
+          log('SSE welcome: ' + data.clientId, 'ok');
+          return;
+        }
+        if (data.type === 'heartbeat') return;
         appendActivity(data);
-      } catch {}
+      } catch(err) {
+        log('SSE parse error: ' + err.message, 'err');
+      }
     };
 
-    es.onerror = () => {
+    es.onerror = function(evt) {
+      log('SSE error (readyState=' + es.readyState + ')', 'err');
       statusDot.className = 'status-dot disconnected';
       statusLabel.textContent = 'Disconnected';
       es.close();
-      setTimeout(connectSSE, 3000);
+      sseRetryCount++;
+      var delay = Math.min(3000 * sseRetryCount, 15000);
+      log('SSE retry in ' + (delay/1000) + 's');
+      setTimeout(connectSSE, delay);
     };
   }
 
@@ -407,28 +473,27 @@ const JS = /* js */ `
     }
     activityCount++;
 
-    const item = document.createElement('div');
+    var item = document.createElement('div');
     item.className = 'activity-item';
 
-    const ts = data.ts || data.timestamp || new Date().toISOString();
-    const time = new Date(ts).toLocaleTimeString();
-    const tool = data.tool || data.type || 'event';
-    const detail = data.description || data.message || data.resource || JSON.stringify(data).slice(0, 120);
+    var ts = data.ts || data.timestamp || new Date().toISOString();
+    var time = new Date(ts).toLocaleTimeString();
+    var tool = data.tool || data.type || 'event';
+    var detail = data.description || data.message || data.resource || JSON.stringify(data).substring(0, 120);
 
     item.innerHTML =
-      '<span class="activity-time">' + time + '</span>' +
+      '<span class="activity-time">' + escapeHtml(time) + '</span>' +
       '<span class="activity-tool">' + escapeHtml(tool) + '</span>' +
       '<span class="activity-detail">' + escapeHtml(detail) + '</span>';
 
-    activityList.prepend(item);
+    activityList.insertBefore(item, activityList.firstChild);
 
-    // Trim old items
     while (activityList.children.length > MAX_ITEMS) {
       activityList.removeChild(activityList.lastChild);
     }
   }
 
-  document.getElementById('clear-activity').addEventListener('click', () => {
+  document.getElementById('clear-activity').addEventListener('click', function() {
     activityList.innerHTML = '<div class="empty-state">Waiting for MCP activity...</div>';
     activityCount = 0;
   });
@@ -436,21 +501,37 @@ const JS = /* js */ `
   connectSSE();
 
   // ─── Routes ──────────────────────────────────
-  async function loadRoutes() {
-    try {
-      const res = await fetch('/__kitchen/api/routes');
-      const data = await res.json();
-      renderRoutes(data);
-    } catch (err) {
+  function loadRoutes() {
+    log('Fetching routes...');
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/__kitchen/api/routes', true);
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          log('Routes loaded: ' + data.summary.total + ' routes', 'ok');
+          renderRoutes(data);
+        } catch(e) {
+          log('Routes parse error: ' + e.message, 'err');
+        }
+      } else {
+        log('Routes HTTP ' + xhr.status, 'err');
+        document.getElementById('routes-list').innerHTML =
+          '<div class="empty-state">Failed to load routes (HTTP ' + xhr.status + ')</div>';
+      }
+    };
+    xhr.onerror = function() {
+      log('Routes network error', 'err');
       document.getElementById('routes-list').innerHTML =
-        '<div class="empty-state">Failed to load routes.</div>';
-    }
+        '<div class="empty-state">Network error loading routes.</div>';
+    };
+    xhr.send();
   }
 
   function renderRoutes(data) {
-    const summaryEl = document.getElementById('routes-summary');
-    const listEl = document.getElementById('routes-list');
-    const s = data.summary;
+    var summaryEl = document.getElementById('routes-summary');
+    var listEl = document.getElementById('routes-list');
+    var s = data.summary;
 
     summaryEl.innerHTML =
       '<span class="summary-item"><span class="summary-count">' + s.total + '</span> total</span>' +
@@ -463,50 +544,81 @@ const JS = /* js */ `
       return;
     }
 
-    listEl.innerHTML = data.routes.map(function(r) {
+    var html = '';
+    for (var i = 0; i < data.routes.length; i++) {
+      var r = data.routes[i];
       var badges = '';
       if (r.hasSlot) badges += '<span class="badge">slot</span>';
       if (r.hasContract) badges += '<span class="badge">contract</span>';
       if (r.hasClient) badges += '<span class="badge">island</span>';
       if (r.hasLayout) badges += '<span class="badge">layout</span>';
-      if (r.hydration && r.hydration !== 'none') badges += '<span class="badge">' + r.hydration + '</span>';
+      if (r.hydration && r.hydration !== 'none') badges += '<span class="badge">' + escapeHtml(r.hydration) + '</span>';
 
-      return '<div class="route-item">' +
+      html += '<div class="route-item">' +
         '<span class="route-kind ' + r.kind + '">' + r.kind + '</span>' +
         '<span class="route-pattern">' + escapeHtml(r.pattern) + '</span>' +
         '<span class="route-badges">' + badges + '</span>' +
         '</div>';
-    }).join('');
+    }
+    listEl.innerHTML = html;
   }
 
   loadRoutes();
 
   // ─── Guard ───────────────────────────────────
-  const scanBtn = document.getElementById('scan-guard');
-  const guardStatusEl = document.getElementById('guard-status');
-  const guardListEl = document.getElementById('guard-list');
+  var scanBtn = document.getElementById('scan-guard');
+  var guardStatusEl = document.getElementById('guard-status');
+  var guardListEl = document.getElementById('guard-list');
 
-  async function loadGuardStatus() {
-    try {
-      const res = await fetch('/__kitchen/api/guard');
-      const data = await res.json();
-      renderGuardData(data);
-    } catch {}
+  function loadGuardStatus() {
+    log('Fetching guard status...');
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/__kitchen/api/guard', true);
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          log('Guard: ' + (data.enabled ? 'enabled (' + data.preset + ')' : 'disabled'), 'ok');
+          renderGuardData(data);
+        } catch(e) {
+          log('Guard parse error: ' + e.message, 'err');
+        }
+      }
+    };
+    xhr.onerror = function() { log('Guard network error', 'err'); };
+    xhr.send();
   }
 
-  scanBtn.addEventListener('click', async () => {
+  scanBtn.addEventListener('click', function() {
     scanBtn.disabled = true;
     scanBtn.textContent = 'Scanning...';
-    try {
-      const res = await fetch('/__kitchen/api/guard/scan', { method: 'POST' });
-      const data = await res.json();
-      renderGuardData(data);
-    } catch (err) {
-      guardStatusEl.textContent = 'Scan failed.';
-    } finally {
+    log('Guard scan started...');
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/__kitchen/api/guard/scan', true);
+    xhr.onload = function() {
       scanBtn.disabled = false;
       scanBtn.textContent = 'Scan';
-    }
+      if (xhr.status === 200) {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          log('Guard scan done: ' + (data.report ? data.report.totalViolations + ' violations' : 'no report'), 'ok');
+          renderGuardData(data);
+        } catch(e) {
+          log('Guard scan parse error: ' + e.message, 'err');
+        }
+      } else {
+        log('Guard scan HTTP ' + xhr.status, 'err');
+        guardStatusEl.textContent = 'Scan failed.';
+      }
+    };
+    xhr.onerror = function() {
+      scanBtn.disabled = false;
+      scanBtn.textContent = 'Scan';
+      log('Guard scan network error', 'err');
+      guardStatusEl.textContent = 'Scan failed.';
+    };
+    xhr.send();
   });
 
   function renderGuardData(data) {
@@ -536,25 +648,24 @@ const JS = /* js */ `
       return;
     }
 
-    guardListEl.innerHTML = summaryHtml + r.violations.slice(0, 100).map(function(v) {
-      return '<div class="violation-item">' +
+    var violHtml = '';
+    var list = r.violations.length > 100 ? r.violations.slice(0, 100) : r.violations;
+    for (var i = 0; i < list.length; i++) {
+      var v = list[i];
+      violHtml += '<div class="violation-item">' +
         '<div class="violation-file">' +
           '<span class="violation-sev ' + v.severity + '">' + v.severity + '</span>' +
           escapeHtml(v.filePath) + ':' + v.line +
         '</div>' +
         '<div class="violation-msg">' +
-          escapeHtml(v.fromLayer) + ' → ' + escapeHtml(v.toLayer) + ': ' + escapeHtml(v.ruleDescription) +
+          escapeHtml(v.fromLayer) + ' &rarr; ' + escapeHtml(v.toLayer) + ': ' + escapeHtml(v.ruleDescription) +
         '</div>' +
         '</div>';
-    }).join('');
+    }
+    guardListEl.innerHTML = summaryHtml + violHtml;
   }
 
   loadGuardStatus();
 
-  // ─── Helpers ─────────────────────────────────
-  function escapeHtml(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
 })();
 `;
