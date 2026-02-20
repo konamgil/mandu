@@ -10,6 +10,7 @@ Quick links to project docs:
 - `docs/guides/03_mandu_coding_agent_prompt_template.md` — Coding agent prompt template
 - `docs/guides/05_realtime_chat_starter.md` — Official realtime chat starter template guide
 - `docs/guides/06_realtime_chat_demo_validation_loop.md` — Demo-first framework validation loop
+- `docs/skills/README.md` — Curated engineering skill packs (TypeScript Ultimate)
 - `docs/specs/04_mandu_hydration_system.md` — Hydration system spec
 - `docs/specs/05_fs_routes_system.md` — FS Routes system spec
 - `docs/specs/06_mandu_guard.md` — Mandu Guard architecture spec
