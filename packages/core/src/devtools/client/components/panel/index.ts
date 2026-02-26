@@ -30,3 +30,16 @@ export {
   GuardPanel,
   type GuardPanelProps,
 } from './guard-panel';
+
+export {
+  PreviewPanel,
+  type PreviewPanelProps,
+} from './preview-panel';
+
+export {
+  DiffViewer,
+  type DiffViewerProps,
+  type FileDiff,
+  type DiffHunk,
+  type DiffLine,
+} from './diff-viewer';

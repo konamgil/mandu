@@ -11,7 +11,7 @@ import type { KitchenState } from '../../state-manager';
 // Types
 // ============================================================================
 
-export type TabId = 'errors' | 'islands' | 'network' | 'guard';
+export type TabId = 'errors' | 'islands' | 'network' | 'guard' | 'preview';
 
 export interface TabDefinition {
   id: TabId;
@@ -39,6 +39,7 @@ export const TABS: TabDefinition[] = [
   { id: 'islands', label: 'Islands', icon: '🏝️', testId: testIds.tabIslands },
   { id: 'network', label: 'Network', icon: '📡', testId: testIds.tabNetwork },
   { id: 'guard', label: 'Guard', icon: '🛡️', testId: testIds.tabGuard },
+  { id: 'preview', label: 'Preview', icon: '📝', testId: testIds.tabPreview },
 ];
 
 // ============================================================================
@@ -197,6 +198,8 @@ export function PanelContainer({
         return Array.from(state.islands.values()).filter(i => i.status === 'error').length;
       case 'guard':
         return state.guardViolations.length;
+      case 'preview':
+        return state.recentChanges?.length ?? 0;
       default:
         return 0;
     }

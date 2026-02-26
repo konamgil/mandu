@@ -13,6 +13,8 @@ import type {
   DevToolsGuardViolation,
   DevToolsConfig,
   ManduState,
+  RecentChange,
+  GuardDecision,
 } from '../types';
 import { DEFAULT_CONFIG } from '../protocol';
 
@@ -23,7 +25,7 @@ import { DEFAULT_CONFIG } from '../protocol';
 export interface KitchenState {
   // UI State
   isOpen: boolean;
-  activeTab: 'errors' | 'islands' | 'network' | 'guard';
+  activeTab: 'errors' | 'islands' | 'network' | 'guard' | 'preview';
   overlayError: NormalizedError | null;
 
   // Data State
@@ -31,6 +33,8 @@ export interface KitchenState {
   islands: Map<string, IslandSnapshot>;
   networkRequests: Map<string, NetworkRequest>;
   guardViolations: DevToolsGuardViolation[];
+  recentChanges: RecentChange[];
+  guardDecisions: GuardDecision[];
 
   // Mandu Character State
   manduState: ManduState;
@@ -59,6 +63,8 @@ function createInitialState(config?: Partial<DevToolsConfig>): KitchenState {
     islands: new Map(),
     networkRequests: new Map(),
     guardViolations: [],
+    recentChanges: [],
+    guardDecisions: [],
 
     manduState: 'normal',
 
@@ -333,6 +339,39 @@ export class KitchenStateManager {
   }
 
   // --------------------------------------------------------------------------
+  // Preview Actions
+  // --------------------------------------------------------------------------
+
+  addRecentChange(change: RecentChange): void {
+    const recentChanges = [change, ...this.state.recentChanges];
+    if (recentChanges.length > 50) {
+      recentChanges.pop();
+    }
+    this.setState({ recentChanges });
+  }
+
+  clearRecentChanges(): void {
+    this.setState({ recentChanges: [] });
+  }
+
+  // --------------------------------------------------------------------------
+  // Guard Decision Actions
+  // --------------------------------------------------------------------------
+
+  addGuardDecision(decision: GuardDecision): void {
+    const guardDecisions = [
+      decision,
+      ...this.state.guardDecisions.filter((d) => d.violationKey !== decision.violationKey),
+    ];
+    this.setState({ guardDecisions });
+  }
+
+  removeGuardDecision(id: string): void {
+    const guardDecisions = this.state.guardDecisions.filter((d) => d.id !== id);
+    this.setState({ guardDecisions });
+  }
+
+  // --------------------------------------------------------------------------
   // HMR Actions
   // --------------------------------------------------------------------------
 
@@ -413,6 +452,24 @@ export class KitchenStateManager {
       case 'hmr:disconnected':
         this.setHmrConnected(false);
         break;
+
+      case 'kitchen:file-change': {
+        const changeData = event.data as { file: string; changeType?: string; timestamp?: number };
+        this.addRecentChange({
+          filePath: changeData.file,
+          timestamp: changeData.timestamp ?? Date.now(),
+          type: (changeData.changeType as 'add' | 'change' | 'delete') ?? 'change',
+          additions: 0,
+          deletions: 0,
+        });
+        break;
+      }
+
+      case 'kitchen:guard-decision': {
+        const decisionData = event.data as GuardDecision;
+        this.addGuardDecision(decisionData);
+        break;
+      }
 
       case 'devtools:toggle':
         this.toggle();

@@ -109,6 +109,32 @@ export interface DevToolsGuardViolation {
 }
 
 // ============================================================================
+// Preview Types
+// ============================================================================
+
+export interface RecentChange {
+  filePath: string;
+  timestamp: number;
+  type: 'add' | 'change' | 'delete';
+  additions: number;
+  deletions: number;
+}
+
+// ============================================================================
+// Guard Decision Types
+// ============================================================================
+
+export interface GuardDecision {
+  id: string;
+  violationKey: string;  // "${ruleId}::${filePath}"
+  action: 'approve' | 'reject';
+  ruleId: string;
+  filePath: string;
+  reason?: string;
+  decidedAt: string;
+}
+
+// ============================================================================
 // AI Context Types
 // ============================================================================
 

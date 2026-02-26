@@ -26,7 +26,7 @@ export function createApp(context: AppContext): ReactElement {
       </div>
     );
   }
-
+  
   return <Component params={context.params} />;
 }
 

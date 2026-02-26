@@ -30,6 +30,8 @@ export function renderKitchenHTML(): string {
     <button class="tab" data-panel="activity">Activity</button>
     <button class="tab active" data-panel="routes">Routes</button>
     <button class="tab" data-panel="guard">Guard</button>
+    <button class="tab" data-panel="preview">Preview</button>
+    <button class="tab" data-panel="contracts">Contracts</button>
   </nav>
 
   <main class="panels">
@@ -61,6 +63,50 @@ export function renderKitchenHTML(): string {
       <div id="guard-status" class="guard-status"></div>
       <div id="guard-list" class="violations-list">
         <div class="empty-state">Click "Scan" to check architecture rules.</div>
+      </div>
+    </section>
+
+    <section id="panel-preview" class="panel">
+      <div class="panel-header">
+        <h2>Preview</h2>
+        <button id="refresh-changes" class="btn-sm">Refresh</button>
+      </div>
+      <div id="preview-list" class="preview-list">
+        <div class="empty-state">Loading file changes...</div>
+      </div>
+      <div id="preview-diff" class="preview-diff" style="display:none;"></div>
+    </section>
+
+    <section id="panel-contracts" class="panel">
+      <div class="panel-header">
+        <h2>Contracts</h2>
+        <div style="display:flex;gap:4px;">
+          <button id="export-openapi-json" class="btn-sm">Export JSON</button>
+          <button id="export-openapi-yaml" class="btn-sm">Export YAML</button>
+        </div>
+      </div>
+      <div class="contracts-layout">
+        <div id="contracts-list" class="contracts-list">
+          <div class="empty-state">Loading contracts...</div>
+        </div>
+        <div id="contracts-detail" class="contracts-detail">
+          <div id="contract-schema" class="contract-schema"></div>
+          <div id="contract-playground" class="contract-playground">
+            <h3>Validate</h3>
+            <div class="playground-controls">
+              <select id="validate-method" class="select-sm">
+                <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+              </select>
+              <button id="validate-btn" class="btn-sm">Validate</button>
+            </div>
+            <div class="playground-inputs">
+              <label>Query <textarea id="validate-query" rows="2" placeholder='{"key":"value"}'></textarea></label>
+              <label>Body <textarea id="validate-body" rows="3" placeholder='{"key":"value"}'></textarea></label>
+              <label>Params <textarea id="validate-params" rows="2" placeholder='{"id":"1"}'></textarea></label>
+            </div>
+            <div id="validate-result" class="validate-result"></div>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -353,6 +399,114 @@ const CSS = /* css */ `
   .violation-sev.error { background: #3b1111; color: #ef4444; }
   .violation-sev.warning { background: #3b2f11; color: #eab308; }
   .violation-sev.info { background: #112840; color: #3b82f6; }
+
+  /* Preview */
+  .preview-list { max-height: 40vh; overflow-y: auto; }
+  .preview-diff { max-height: 50vh; overflow-y: auto; padding: 8px; }
+
+  .change-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #1e1e22;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .change-item:hover { background: #27272a; }
+  .change-icon { flex-shrink: 0; }
+  .change-path {
+    font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+    color: #e4e4e7;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .change-status {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .change-status.added { background: #1a3c34; color: #4ade80; }
+  .change-status.modified { background: #1e3a5f; color: #60a5fa; }
+  .change-status.deleted { background: #3b1111; color: #ef4444; }
+  .change-status.untracked { background: #3b2f11; color: #eab308; }
+  .change-status.renamed { background: #2a1a3c; color: #a78bfa; }
+
+  .diff-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: #18181b; border-radius: 6px 6px 0 0;
+    border-bottom: 1px solid #27272a;
+  }
+  .diff-file { font-family: monospace; color: #a78bfa; font-size: 13px; }
+  .diff-stats { font-size: 12px; }
+  .diff-add { color: #4ade80; margin-right: 8px; }
+  .diff-del { color: #ef4444; }
+  .diff-hunk-header { padding: 4px 12px; background: #112840; color: #3b82f6; font-size: 12px; font-family: monospace; }
+  .diff-line { display: flex; font-family: monospace; font-size: 12px; line-height: 20px; }
+  .diff-line-num { width: 40px; text-align: right; padding: 0 4px; color: #52525b; user-select: none; flex-shrink: 0; }
+  .diff-line-content { flex: 1; padding: 0 8px; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+  .diff-line.add { background: rgba(74,222,128,0.08); }
+  .diff-line.add .diff-line-content::before { content: '+'; color: #4ade80; }
+  .diff-line.remove { background: rgba(239,68,68,0.08); }
+  .diff-line.remove .diff-line-content::before { content: '-'; color: #ef4444; }
+  .diff-line.context .diff-line-content::before { content: ' '; }
+
+  /* Contracts */
+  .contracts-layout { display: flex; gap: 12px; height: calc(100vh - 180px); }
+  .contracts-list { width: 300px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid #27272a; padding-right: 12px; }
+  .contracts-detail { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+
+  .contract-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-bottom: 1px solid #1e1e22;
+    cursor: pointer; transition: background 0.15s; font-size: 13px;
+  }
+  .contract-item:hover { background: #27272a; }
+  .contract-item.selected { background: #27272a; border-left: 2px solid #a78bfa; }
+
+  .method-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    flex-shrink: 0; min-width: 36px; text-align: center;
+  }
+  .method-badge.get { background: #1a3c34; color: #4ade80; }
+  .method-badge.post { background: #1e3a5f; color: #60a5fa; }
+  .method-badge.put { background: #3b2f11; color: #eab308; }
+  .method-badge.patch { background: #2a1a3c; color: #a78bfa; }
+  .method-badge.delete { background: #3b1111; color: #ef4444; }
+
+  .contract-pattern { font-family: monospace; color: #e4e4e7; }
+
+  .contract-schema {
+    background: #18181b; border-radius: 8px; padding: 12px;
+    font-family: monospace; font-size: 12px; white-space: pre-wrap;
+    max-height: 40vh; overflow-y: auto;
+  }
+
+  .contract-playground { background: #18181b; border-radius: 8px; padding: 12px; }
+  .contract-playground h3 { font-size: 14px; margin-bottom: 8px; }
+
+  .playground-controls { display: flex; gap: 8px; margin-bottom: 8px; }
+  .select-sm {
+    padding: 4px 8px; background: #27272a; border: 1px solid #3f3f46;
+    border-radius: 6px; color: #e4e4e7; font-size: 12px;
+  }
+  .playground-inputs { display: flex; flex-direction: column; gap: 6px; }
+  .playground-inputs label { font-size: 11px; color: #71717a; display: flex; flex-direction: column; gap: 2px; }
+  .playground-inputs textarea {
+    background: #27272a; border: 1px solid #3f3f46; border-radius: 4px;
+    color: #e4e4e7; font-family: monospace; font-size: 12px; padding: 6px;
+    resize: vertical;
+  }
+  .validate-result { margin-top: 8px; padding: 8px; border-radius: 4px; font-size: 12px; font-family: monospace; }
+  .validate-result.success { background: #1a3c34; color: #4ade80; }
+  .validate-result.error { background: #3b1111; color: #ef4444; }
 
   .debug-bar {
     position: fixed;
@@ -666,6 +820,239 @@ const JS = /* js */ `
   }
 
   loadGuardStatus();
+
+  // ─── Preview ──────────────────────────────────
+  var previewListEl = document.getElementById('preview-list');
+  var previewDiffEl = document.getElementById('preview-diff');
+  var refreshChangesBtn = document.getElementById('refresh-changes');
+
+  function loadFileChanges() {
+    log('Fetching file changes...');
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/__kitchen/api/file/changes', true);
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          log('Changes loaded: ' + data.changes.length, 'ok');
+          renderFileChanges(data.changes);
+        } catch(e) {
+          log('Changes parse error: ' + e.message, 'err');
+        }
+      }
+    };
+    xhr.onerror = function() { log('Changes network error', 'err'); };
+    xhr.send();
+  }
+
+  function renderFileChanges(changes) {
+    if (!changes.length) {
+      previewListEl.innerHTML = '<div class="empty-state">No file changes detected.</div>';
+      return;
+    }
+    var html = '';
+    var icons = { added: '+', modified: '~', deleted: '-', untracked: '?', renamed: 'R' };
+    for (var i = 0; i < changes.length; i++) {
+      var c = changes[i];
+      html += '<div class="change-item" data-path="' + escapeHtml(c.filePath) + '">' +
+        '<span class="change-icon">' + (icons[c.status] || '?') + '</span>' +
+        '<span class="change-path">' + escapeHtml(c.filePath) + '</span>' +
+        '<span class="change-status ' + c.status + '">' + c.status + '</span>' +
+        '</div>';
+    }
+    previewListEl.innerHTML = html;
+
+    // Attach click handlers
+    var items = previewListEl.querySelectorAll('.change-item');
+    for (var j = 0; j < items.length; j++) {
+      items[j].addEventListener('click', function() {
+        var p = this.getAttribute('data-path');
+        loadFileDiff(p);
+      });
+    }
+  }
+
+  function loadFileDiff(filePath) {
+    log('Fetching diff for ' + filePath);
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/__kitchen/api/file/diff?path=' + encodeURIComponent(filePath), true);
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        try {
+          var diff = JSON.parse(xhr.responseText);
+          renderDiff(diff);
+        } catch(e) {
+          log('Diff parse error: ' + e.message, 'err');
+        }
+      }
+    };
+    xhr.onerror = function() { log('Diff network error', 'err'); };
+    xhr.send();
+  }
+
+  function renderDiff(diff) {
+    if (!diff.hunks || !diff.hunks.length) {
+      previewDiffEl.innerHTML = '<div class="empty-state">No diff available.</div>';
+      previewDiffEl.style.display = 'block';
+      return;
+    }
+    var html = '<div class="diff-header">' +
+      '<span class="diff-file">' + escapeHtml(diff.filePath) + '</span>' +
+      '<span class="diff-stats"><span class="diff-add">+' + diff.additions + '</span><span class="diff-del">-' + diff.deletions + '</span></span>' +
+      '<button class="btn-sm" onclick="document.getElementById(\'preview-diff\').style.display=\'none\'">Close</button>' +
+      '</div>';
+    for (var h = 0; h < diff.hunks.length; h++) {
+      var hunk = diff.hunks[h];
+      html += '<div class="diff-hunk-header">' + escapeHtml(hunk.header) + '</div>';
+      for (var l = 0; l < hunk.lines.length; l++) {
+        var line = hunk.lines[l];
+        var cls = line.type === 'add' ? 'add' : line.type === 'remove' ? 'remove' : 'context';
+        html += '<div class="diff-line ' + cls + '">' +
+          '<span class="diff-line-num">' + (line.oldLine || '') + '</span>' +
+          '<span class="diff-line-num">' + (line.newLine || '') + '</span>' +
+          '<span class="diff-line-content">' + escapeHtml(line.content) + '</span>' +
+          '</div>';
+      }
+    }
+    previewDiffEl.innerHTML = html;
+    previewDiffEl.style.display = 'block';
+  }
+
+  refreshChangesBtn.addEventListener('click', loadFileChanges);
+  loadFileChanges();
+
+  // ─── Contracts ─────────────────────────────────
+  var contractsListEl = document.getElementById('contracts-list');
+  var contractSchemaEl = document.getElementById('contract-schema');
+  var validateBtn = document.getElementById('validate-btn');
+  var validateResultEl = document.getElementById('validate-result');
+  var exportJsonBtn = document.getElementById('export-openapi-json');
+  var exportYamlBtn = document.getElementById('export-openapi-yaml');
+  var selectedContractId = null;
+
+  function loadContracts() {
+    log('Fetching contracts...');
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/__kitchen/api/contracts', true);
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          log('Contracts loaded: ' + data.contracts.length, 'ok');
+          renderContractsList(data.contracts);
+        } catch(e) {
+          log('Contracts parse error: ' + e.message, 'err');
+          contractsListEl.innerHTML = '<div class="empty-state">Failed to parse contracts.</div>';
+        }
+      } else if (xhr.status === 404) {
+        contractsListEl.innerHTML = '<div class="empty-state">Contracts API not available.</div>';
+      }
+    };
+    xhr.onerror = function() {
+      log('Contracts network error', 'err');
+      contractsListEl.innerHTML = '<div class="empty-state">Network error.</div>';
+    };
+    xhr.send();
+  }
+
+  function renderContractsList(contracts) {
+    if (!contracts.length) {
+      contractsListEl.innerHTML = '<div class="empty-state">No contracts found.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < contracts.length; i++) {
+      var c = contracts[i];
+      var methods = (c.methods || []).map(function(m) {
+        return '<span class="method-badge ' + m.toLowerCase() + '">' + m + '</span>';
+      }).join('');
+      html += '<div class="contract-item" data-id="' + escapeHtml(c.id) + '">' +
+        methods +
+        '<span class="contract-pattern">' + escapeHtml(c.pattern) + '</span>' +
+        '</div>';
+    }
+    contractsListEl.innerHTML = html;
+
+    var items = contractsListEl.querySelectorAll('.contract-item');
+    for (var j = 0; j < items.length; j++) {
+      items[j].addEventListener('click', function() {
+        var id = this.getAttribute('data-id');
+        selectedContractId = id;
+        var all = contractsListEl.querySelectorAll('.contract-item');
+        for (var k = 0; k < all.length; k++) all[k].classList.remove('selected');
+        this.classList.add('selected');
+        loadContractDetail(id);
+      });
+    }
+  }
+
+  function loadContractDetail(id) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/__kitchen/api/contracts/' + encodeURIComponent(id), true);
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          contractSchemaEl.textContent = JSON.stringify(data, null, 2);
+        } catch(e) {
+          contractSchemaEl.textContent = 'Parse error';
+        }
+      }
+    };
+    xhr.send();
+  }
+
+  validateBtn.addEventListener('click', function() {
+    if (!selectedContractId) {
+      validateResultEl.className = 'validate-result error';
+      validateResultEl.textContent = 'Select a contract first.';
+      return;
+    }
+    var method = document.getElementById('validate-method').value;
+    var input = {};
+    try {
+      var q = document.getElementById('validate-query').value.trim();
+      var b = document.getElementById('validate-body').value.trim();
+      var p = document.getElementById('validate-params').value.trim();
+      if (q) input.query = JSON.parse(q);
+      if (b) input.body = JSON.parse(b);
+      if (p) input.params = JSON.parse(p);
+    } catch(e) {
+      validateResultEl.className = 'validate-result error';
+      validateResultEl.textContent = 'Invalid JSON: ' + e.message;
+      return;
+    }
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/__kitchen/api/contracts/validate', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onload = function() {
+      try {
+        var result = JSON.parse(xhr.responseText);
+        if (result.valid) {
+          validateResultEl.className = 'validate-result success';
+          validateResultEl.textContent = 'Validation passed!';
+        } else {
+          validateResultEl.className = 'validate-result error';
+          validateResultEl.textContent = JSON.stringify(result.errors || result, null, 2);
+        }
+      } catch(e) {
+        validateResultEl.className = 'validate-result error';
+        validateResultEl.textContent = 'Response parse error';
+      }
+    };
+    xhr.send(JSON.stringify({ contractId: selectedContractId, method: method, input: input }));
+  });
+
+  exportJsonBtn.addEventListener('click', function() {
+    window.open('/__kitchen/api/contracts/openapi', '_blank');
+  });
+
+  exportYamlBtn.addEventListener('click', function() {
+    window.open('/__kitchen/api/contracts/openapi.yaml', '_blank');
+  });
+
+  loadContracts();
 
 })();
 `;

@@ -19,6 +19,7 @@ import {
   IslandsPanel,
   NetworkPanel,
   GuardPanel,
+  PreviewPanel,
   type TabId,
 } from './panel';
 
@@ -244,6 +245,10 @@ function KitchenApp({ config }: KitchenAppProps): React.ReactElement | null {
     getStateManager().clearDevToolsGuardViolations();
   }, []);
 
+  const handleClearRecentChanges = useCallback(() => {
+    getStateManager().clearRecentChanges();
+  }, []);
+
   const handleRestart = useCallback(async () => {
     try {
       // 1. Service Worker 해제
@@ -331,6 +336,13 @@ function KitchenApp({ config }: KitchenAppProps): React.ReactElement | null {
           <GuardPanel
             violations={state.guardViolations}
             onClear={handleClearGuard}
+          />
+        );
+      case 'preview':
+        return (
+          <PreviewPanel
+            recentChanges={state.recentChanges}
+            onClearChanges={handleClearRecentChanges}
           />
         );
       default:
