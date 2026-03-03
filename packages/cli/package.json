@@ -24,7 +24,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/konamgil/mandu.git"
+    "url": "git+https://github.com/konamgil/mandu.git",
+    "directory": "packages/cli"
   },
   "author": "konamgil",
   "license": "MPL-2.0",

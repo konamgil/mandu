@@ -3,6 +3,7 @@
  * Mandu Publish Script
  *
  * workspace:* 의존성을 실제 버전으로 직접 치환한 뒤 bun publish 실행.
+ * npm 배포 후 GITHUB_TOKEN이 있으면 GitHub Packages에도 dual publish.
  * 배포 후 원래 workspace:* 로 복원합니다.
  *
  * Usage:
@@ -11,7 +12,7 @@
  */
 
 import { $ } from "bun";
-import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile, unlink } from "fs/promises";
 import { join } from "path";
 import { execSync } from "child_process";
 
@@ -19,6 +20,9 @@ const PACKAGES = ["packages/core", "packages/cli", "packages/mcp"];
 const ROOT = join(import.meta.dir, "..");
 const isDryRun = process.argv.includes("--dry-run");
 const skipCheck = process.argv.includes("--skip-check");
+
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GPR_REGISTRY = "https://npm.pkg.github.com";
 
 // Pre-publish check
 if (!skipCheck) {
@@ -102,8 +106,45 @@ async function restorePackageJson(pkgPath: string, original: string): Promise<vo
   await writeFile(join(pkgPath, "package.json"), original);
 }
 
+/**
+ * GitHub Packages(GPR)에 배포
+ * 임시 .npmrc를 패키지 디렉토리에 생성 후 배포, 완료 후 삭제
+ */
+async function publishToGPR(pkgPath: string, pkgName: string): Promise<void> {
+  const npmrcPath = join(pkgPath, ".npmrc");
+  const npmrcContent = [
+    `@mandujs:registry=${GPR_REGISTRY}`,
+    `//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}`,
+    "",
+  ].join("\n");
+
+  try {
+    await writeFile(npmrcPath, npmrcContent);
+
+    if (isDryRun) {
+      console.log(`   📦 GPR dry-run: would publish ${pkgName} to ${GPR_REGISTRY}`);
+    } else {
+      await $`cd ${pkgPath} && bun publish --access public`.text();
+      console.log(`   ✅ GPR published successfully`);
+    }
+  } finally {
+    // 항상 임시 .npmrc 삭제
+    try {
+      await unlink(npmrcPath);
+    } catch {
+      // .npmrc가 없으면 무시
+    }
+  }
+}
+
 async function main() {
   console.log(isDryRun ? "🔍 Dry run mode\n" : "🚀 Publishing packages\n");
+
+  if (GITHUB_TOKEN) {
+    console.log("🔑 GITHUB_TOKEN detected — dual publish (npm + GitHub Packages)\n");
+  } else {
+    console.log("ℹ️  No GITHUB_TOKEN — npm only (set GITHUB_TOKEN to enable GitHub Packages)\n");
+  }
 
   const versionMap = buildVersionMap();
   const versions = await versionMap;
@@ -136,13 +177,24 @@ async function main() {
     }
 
     try {
+      // 1) npm 배포
       if (isDryRun) {
         const result = await $`cd ${pkgPath} && bun publish --dry-run`.text();
         console.log(result);
       } else {
         const result = await $`cd ${pkgPath} && bun publish --access public`.text();
-        console.log(`   ✅ Published successfully`);
+        console.log(`   ✅ Published to npm`);
         console.log(result);
+      }
+
+      // 2) GitHub Packages 배포
+      if (GITHUB_TOKEN) {
+        try {
+          await publishToGPR(pkgPath, pkgJson.name);
+        } catch (gprErr) {
+          console.warn(`   ⚠️  GPR publish failed for ${pkgJson.name} (npm publish succeeded)`);
+          console.warn(`   ${gprErr}`);
+        }
       }
     } catch (err) {
       console.error(`   ❌ Failed to publish ${pkgJson.name}`);
