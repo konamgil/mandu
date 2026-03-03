@@ -24,7 +24,7 @@ dist/
 Thumbs.db
 
 # Bun
-bun.lock
+bun.lockb
 
 # Generated (in user projects, not templates)
 # apps/*/generated/
