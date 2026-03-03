@@ -3,7 +3,7 @@
  * @version 1.0.3
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import type { DevToolsGuardViolation } from '../../../types';
 import { colors, typography, spacing, borderRadius, animation } from '../../../design-tokens';
 
@@ -129,6 +129,11 @@ const severityStyles: Record<string, { border: string; bg: string; color: string
 // Props
 // ============================================================================
 
+export interface GuardDecisionState {
+  violationKey: string;
+  action: 'approve' | 'reject';
+}
+
 export interface GuardPanelProps {
   violations: DevToolsGuardViolation[];
   onClear: () => void;
@@ -139,6 +144,53 @@ export interface GuardPanelProps {
 // ============================================================================
 
 export function GuardPanel({ violations, onClear }: GuardPanelProps): React.ReactElement {
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<{ total: number; errors: number; warnings: number } | null>(null);
+  const [decisions, setDecisions] = useState<Map<string, 'approve' | 'reject'>>(new Map());
+  const [showApproved, setShowApproved] = useState(false);
+
+  const handleDecision = useCallback(async (ruleId: string, filePath: string, action: 'approve' | 'reject') => {
+    try {
+      const endpoint = action === 'approve' ? '/__kitchen/api/guard/approve' : '/__kitchen/api/guard/reject';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruleId, filePath }),
+      });
+      if (res.ok) {
+        setDecisions(prev => {
+          const next = new Map(prev);
+          next.set(`${ruleId}::${filePath}`, action);
+          return next;
+        });
+      }
+    } catch {
+      // Kitchen API not available
+    }
+  }, []);
+
+  const handleScan = useCallback(async () => {
+    setScanning(true);
+    setScanResult(null);
+    try {
+      const res = await fetch('/__kitchen/api/guard/scan', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.report) {
+          setScanResult({
+            total: data.report.totalViolations,
+            errors: data.report.bySeverity?.error ?? 0,
+            warnings: data.report.bySeverity?.warn ?? data.report.bySeverity?.warning ?? 0,
+          });
+        }
+      }
+    } catch {
+      // Kitchen API not available (non-dev or older version)
+    } finally {
+      setScanning(false);
+    }
+  }, []);
+
   // Group by rule
   const groupedByRule = useMemo(() => {
     const groups = new Map<string, DevToolsGuardViolation[]>();
@@ -158,6 +210,26 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
             아키텍처 위반이 없어요!<br />
             코드가 규칙을 잘 따르고 있어요.
           </p>
+          <button
+            style={{
+              ...styles.clearButton,
+              padding: `${spacing.sm} ${spacing.md}`,
+              marginTop: spacing.sm,
+              opacity: scanning ? 0.5 : 1,
+            }}
+            onClick={handleScan}
+            disabled={scanning}
+          >
+            {scanning ? '스캔 중...' : '🔍 전체 스캔'}
+          </button>
+          {scanResult && (
+            <p style={{ marginTop: spacing.sm, fontSize: typography.fontSize.xs }}>
+              스캔 결과: {scanResult.total === 0
+                ? '위반 없음 ✅'
+                : `${scanResult.total}개 위반 (에러 ${scanResult.errors}, 경고 ${scanResult.warnings})`
+              }
+            </p>
+          )}
         </div>
       </div>
     );
@@ -170,15 +242,35 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
         <span style={{ fontSize: typography.fontSize.sm, color: colors.text.secondary }}>
           {violations.length}개의 위반 ({groupedByRule.size}개 규칙)
         </span>
-        <button style={styles.clearButton} onClick={onClear}>
-          모두 지우기
-        </button>
+        <div style={{ display: 'flex', gap: spacing.xs }}>
+          <button
+            style={styles.clearButton}
+            onClick={() => setShowApproved(!showApproved)}
+          >
+            {showApproved ? '승인 숨기기' : '승인 보기'}
+          </button>
+          <button
+            style={{ ...styles.clearButton, opacity: scanning ? 0.5 : 1 }}
+            onClick={handleScan}
+            disabled={scanning}
+          >
+            {scanning ? '스캔 중...' : '🔍 스캔'}
+          </button>
+          <button style={styles.clearButton} onClick={onClear}>
+            모두 지우기
+          </button>
+        </div>
       </div>
 
       {/* Violation List */}
       <div style={styles.list}>
         {violations.map((violation) => {
           const severity = severityStyles[violation.severity] ?? severityStyles.warning;
+          const decisionKey = `${violation.ruleId}::${violation.source.file}`;
+          const decision = decisions.get(decisionKey);
+          const isApproved = decision === 'approve';
+
+          if (isApproved && !showApproved) return null;
 
           return (
             <div
@@ -186,6 +278,7 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
               style={{
                 ...styles.violationItem,
                 borderLeftColor: severity.border,
+                opacity: isApproved ? 0.5 : 1,
               }}
             >
               <div style={styles.violationHeader}>
@@ -208,6 +301,43 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
                   >
                     {violation.ruleName}
                   </span>
+                  {isApproved && (
+                    <span
+                      style={{
+                        ...styles.badge,
+                        backgroundColor: `${colors.semantic.success}20`,
+                        color: colors.semantic.success,
+                      }}
+                    >
+                      Approved
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    style={{
+                      ...styles.clearButton,
+                      fontSize: typography.fontSize.xs,
+                      padding: '2px 6px',
+                      backgroundColor: isApproved ? `${colors.semantic.success}20` : colors.background.light,
+                      color: isApproved ? colors.semantic.success : colors.text.secondary,
+                    }}
+                    onClick={() => handleDecision(violation.ruleId, violation.source.file, 'approve')}
+                  >
+                    ✅
+                  </button>
+                  <button
+                    style={{
+                      ...styles.clearButton,
+                      fontSize: typography.fontSize.xs,
+                      padding: '2px 6px',
+                      backgroundColor: decision === 'reject' ? `${colors.semantic.error}20` : colors.background.light,
+                      color: decision === 'reject' ? colors.semantic.error : colors.text.secondary,
+                    }}
+                    onClick={() => handleDecision(violation.ruleId, violation.source.file, 'reject')}
+                  >
+                    ❌
+                  </button>
                 </div>
               </div>
 

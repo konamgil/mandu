@@ -11,7 +11,7 @@ import type { KitchenState } from '../../state-manager';
 // Types
 // ============================================================================
 
-export type TabId = 'errors' | 'islands' | 'network' | 'guard';
+export type TabId = 'errors' | 'islands' | 'network' | 'guard' | 'preview';
 
 export interface TabDefinition {
   id: TabId;
@@ -39,6 +39,7 @@ export const TABS: TabDefinition[] = [
   { id: 'islands', label: 'Islands', icon: '🏝️', testId: testIds.tabIslands },
   { id: 'network', label: 'Network', icon: '📡', testId: testIds.tabNetwork },
   { id: 'guard', label: 'Guard', icon: '🛡️', testId: testIds.tabGuard },
+  { id: 'preview', label: 'Preview', icon: '📝', testId: testIds.tabPreview },
 ];
 
 // ============================================================================
@@ -187,6 +188,7 @@ export function PanelContainer({
   const [hoveredTab, setHoveredTab] = useState<TabId | null>(null);
   const [isCloseHovered, setIsCloseHovered] = useState(false);
   const [isRestartHovered, setIsRestartHovered] = useState(false);
+  const [isExpandHovered, setIsExpandHovered] = useState(false);
 
   const getTabBadgeCount = useCallback((tabId: TabId): number => {
     switch (tabId) {
@@ -196,6 +198,8 @@ export function PanelContainer({
         return Array.from(state.islands.values()).filter(i => i.status === 'error').length;
       case 'guard':
         return state.guardViolations.length;
+      case 'preview':
+        return state.recentChanges?.length ?? 0;
       default:
         return 0;
     }
@@ -246,6 +250,22 @@ export function PanelContainer({
               🔄
             </button>
           )}
+          <button
+            style={{
+              ...styles.restartButton,
+              ...(isExpandHovered ? {
+                color: colors.brand.accent,
+                backgroundColor: `${colors.brand.accent}18`,
+              } : {}),
+            }}
+            onClick={() => window.open('/__kitchen', '_blank')}
+            onMouseEnter={() => setIsExpandHovered(true)}
+            onMouseLeave={() => setIsExpandHovered(false)}
+            aria-label="풀 페이지로 열기"
+            title="풀 페이지로 열기"
+          >
+            🔲
+          </button>
           <button
             style={{
               ...styles.closeButton,

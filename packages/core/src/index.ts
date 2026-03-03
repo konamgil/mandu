@@ -24,6 +24,7 @@ export * from "./devtools";
 export * from "./paths";
 export * from "./resource";
 export * from "./types";
+export * from "./kitchen";
 
 // ── Resolve export * ambiguities (TS2308) ──
 // When the same name is exported from multiple submodules via `export *`,

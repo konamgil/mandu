@@ -244,8 +244,20 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   }
 
   // Dev bundler callbacks (extracted as named functions for restart reuse)
-  const handleRebuild = (result: { routeId: string; success: boolean; error?: string }) => {
+  const handleRebuild = (result: { routeId: string; success: boolean; error?: string; file?: string }) => {
     if (result.success) {
+      // Broadcast file change for Kitchen Preview
+      if (result.file) {
+        hmrServer?.broadcast({
+          type: "kitchen:file-change",
+          data: {
+            file: result.file,
+            changeType: "change",
+            timestamp: Date.now(),
+          },
+        });
+      }
+
       if (result.routeId === "*") {
         hmrServer?.broadcast({
           type: "reload",
@@ -279,6 +291,17 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     clearDefaultRegistry();
     registeredLayouts.clear();
     await registerHandlers(manifest, true);
+
+    // Broadcast file change for Kitchen Preview
+    hmrServer?.broadcast({
+      type: "kitchen:file-change",
+      data: {
+        file: filePath,
+        changeType: "change",
+        timestamp: Date.now(),
+      },
+    });
+
     hmrServer?.broadcast({
       type: "reload",
       data: { timestamp: Date.now() },
@@ -347,6 +370,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     rateLimit: serverConfig.rateLimit,
     // Inject CSS link only when Tailwind detected
     cssPath: hasTailwind ? cssWatcher?.serverPath : false,
+    guardConfig,
   });
 
   const actualPort = server.server.port ?? port;

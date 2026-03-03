@@ -54,7 +54,7 @@ async function main() {
   console.log("");
 
   const server = startServer(result.data, {
-    port: Number(process.env.PORT) || 3000,
+    port: Number(process.env.PORT) || 3333,
   });
 
   process.on("SIGINT", () => {

@@ -380,7 +380,17 @@ export interface HMRServer {
 }
 
 export interface HMRMessage {
-  type: "connected" | "reload" | "island-update" | "layout-update" | "css-update" | "error" | "ping" | "guard-violation";
+  type:
+    | "connected"
+    | "reload"
+    | "island-update"
+    | "layout-update"
+    | "css-update"
+    | "error"
+    | "ping"
+    | "guard-violation"
+    | "kitchen:file-change"
+    | "kitchen:guard-decision";
   data?: {
     routeId?: string;
     layoutPath?: string;
@@ -389,6 +399,9 @@ export interface HMRMessage {
     timestamp?: number;
     file?: string;
     violations?: Array<{ line: number; message: string }>;
+    changeType?: "add" | "change" | "delete";
+    action?: "approve" | "reject";
+    ruleId?: string;
   };
 }
 
@@ -625,6 +638,37 @@ export function generateHMRClientScript(port: number): string {
       case 'error':
         console.error('[Mandu HMR] Build error:', message.data?.message);
         showErrorOverlay(message.data?.message);
+        break;
+
+      case 'guard-violation':
+        console.warn('[Mandu HMR] Guard violation:', message.data?.file);
+        if (window.__MANDU_DEVTOOLS_HOOK__) {
+          window.__MANDU_DEVTOOLS_HOOK__.emit({
+            type: 'guard:violation',
+            timestamp: Date.now(),
+            data: message.data
+          });
+        }
+        break;
+
+      case 'kitchen:file-change':
+        if (window.__MANDU_DEVTOOLS_HOOK__) {
+          window.__MANDU_DEVTOOLS_HOOK__.emit({
+            type: 'kitchen:file-change',
+            timestamp: Date.now(),
+            data: message.data
+          });
+        }
+        break;
+
+      case 'kitchen:guard-decision':
+        if (window.__MANDU_DEVTOOLS_HOOK__) {
+          window.__MANDU_DEVTOOLS_HOOK__.emit({
+            type: 'kitchen:guard-decision',
+            timestamp: Date.now(),
+            data: message.data
+          });
+        }
         break;
 
       case 'pong':

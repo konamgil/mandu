@@ -256,6 +256,7 @@ export const testIds = {
   tabIslands: 'mk-tab-islands',
   tabNetwork: 'mk-tab-network',
   tabGuard: 'mk-tab-guard',
+  tabPreview: 'mk-tab-preview',
   errorList: 'mk-error-list',
   mandu: 'mk-mandu',
   restartButton: 'mk-restart-button',

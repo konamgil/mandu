@@ -21,13 +21,13 @@ describe("Example Tests", () => {
 
   describe("Test Helpers", () => {
     it("should create test request", () => {
-      const req = createTestRequest("http://localhost:3000/api/test", {
+      const req = createTestRequest("http://localhost:3333/api/test", {
         method: "POST",
         body: { name: "test" },
       });
 
       expect(req.method).toBe("POST");
-      expect(req.url).toBe("http://localhost:3000/api/test");
+      expect(req.url).toBe("http://localhost:3333/api/test");
     });
 
     it("should parse JSON response", async () => {
@@ -47,7 +47,7 @@ describe("Example Tests", () => {
 //
 // describe("API: GET /api/health", () => {
 //   it("should return 200 with status ok", async () => {
-//     const req = createTestRequest("http://localhost:3000/api/health");
+//     const req = createTestRequest("http://localhost:3333/api/health");
 //     const response = handler(req, {});
 //
 //     assertStatus(response, 200);
