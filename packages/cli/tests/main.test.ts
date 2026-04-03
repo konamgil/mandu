@@ -45,4 +45,18 @@ describe("CLI main lifecycle", () => {
 
     expect(exitSpy).not.toHaveBeenCalled();
   });
+
+  it("exits after a successful one-shot command when requested", async () => {
+    getCommandMock.mockReturnValue({
+      exitOnSuccess: true,
+      run: vi.fn().mockResolvedValue(true),
+    });
+
+    const { main } = await import("../src/main");
+    await expect(main(["build"]))
+      .rejects
+      .toThrow("process.exit:0");
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
 });

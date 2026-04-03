@@ -1,5 +1,11 @@
 # Migration Guide: To Resource-Centric Architecture
 
+> Status: `draft`
+>
+> This migration guide targets projects moving from a legacy manifest workflow to the resource-centric add-on workflow.
+> It is still incomplete and should not be treated as Mandu's primary onboarding path.
+> Start from `docs/README.md` and the `official` docs first.
+
 <!-- TODO: Add migration overview after implementation -->
 
 This guide helps you migrate existing Mandu projects from manifest-first to resource-first architecture.

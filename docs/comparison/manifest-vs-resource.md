@@ -1,5 +1,11 @@
 # Comparison: Manifest vs Resource
 
+> Status: `draft`
+>
+> This document compares a legacy manifest workflow with a resource-centric add-on workflow.
+> It is incomplete and not part of Mandu's official onboarding path yet.
+> Start from `docs/README.md` and the `official` docs first.
+
 <!-- TODO: Add overview after Phase 1 implementation -->
 
 This guide compares the traditional manifest-first approach with the new resource-centric architecture.

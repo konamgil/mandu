@@ -1,5 +1,11 @@
 # Resource Troubleshooting Guide
 
+> Status: `draft`
+>
+> This troubleshooting guide is for the resource-centric add-on workflow.
+> It is still being completed and is not part of Mandu's default onboarding path.
+> Start from `docs/README.md` and the `official` docs first.
+
 <!-- TODO: Add common issues discovered during Phase 5 testing -->
 
 This guide helps you resolve common issues when working with Mandu resources.

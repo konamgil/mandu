@@ -1,5 +1,11 @@
 # Resource Workflow Tutorial
 
+> Status: `draft`
+>
+> This tutorial covers the resource-centric add-on workflow.
+> It is not Mandu's default onboarding path and may continue to change while the workflow is being refined.
+> Start from `docs/README.md` and the `official` docs first.
+
 This step-by-step tutorial teaches you how to use Mandu's Resource-Centric Architecture. You'll create a `user` resource, customize it, and use it in your application.
 
 **What you'll learn:**

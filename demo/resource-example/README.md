@@ -1,5 +1,11 @@
 # Resource Example Demo
 
+> Status: `experimental`
+>
+> This example documents Mandu's resource-centric add-on workflow.
+> It is not an official reference app yet, and parts of this document are still marked TODO.
+> Use `demo/todo-list-mandu` first if you want the current official demo path.
+
 <!-- TODO: Add overview after Phase 1-3 implementation -->
 
 A comprehensive example demonstrating Mandu's resource-centric architecture with a multi-resource blog application.
@@ -60,7 +66,7 @@ bunx mandu generate scaffold comment
 bun run dev
 ```
 
-Visit `http://localhost:3000`
+Visit `http://localhost:3333`
 
 ---
 

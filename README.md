@@ -56,7 +56,9 @@ bunx @mandujs/cli init my-chat-app --template realtime-chat
 bun run dev
 ```
 
-Your app is now running at `http://localhost:3000`
+The generated app maps `bun run dev` to `mandu dev`.
+
+Your app is now running at `http://localhost:3333`
 
 ### 3. Create Your First Page
 
@@ -83,7 +85,7 @@ export function GET() {
 }
 ```
 
-Now visit `http://localhost:3000/api/hello`
+Now visit `http://localhost:3333/api/hello`
 
 ### 5. Build for Production
 
@@ -153,7 +155,7 @@ export default function About() {
 }
 ```
 
-Visit `http://localhost:3000/about`
+Visit `http://localhost:3333/about`
 
 #### Add a Dynamic Route
 
@@ -170,7 +172,7 @@ export default function UserProfile({ params }: { params: { id: string } }) {
 }
 ```
 
-Visit `http://localhost:3000/users/123`
+Visit `http://localhost:3333/users/123`
 
 #### Add an API with Multiple Methods
 
@@ -227,8 +229,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 |---------|--------------|
 | `bunx @mandujs/cli init my-app` | Create a new project called "my-app" |
 | `bun install` | Install all dependencies |
-| `bun run dev` | Start development server at http://localhost:3000 |
-| `bun run build` | Build for production |
+| `bun run dev` | Start development server at http://localhost:3333 |
+| `bun run build` | Build for production (`mandu build`) |
 | `bun run test` | Run tests |
 
 #### More CLI Commands
@@ -270,7 +272,7 @@ bunx mandu test:auto
 | Problem | Solution |
 |---------|----------|
 | `command not found: bun` | Install Bun: `curl -fsSL https://bun.sh/install \| bash` |
-| Port 3000 already in use | Stop other servers or use `PORT=3001 bun run dev` |
+| Port 3333 already in use | Stop other servers or use `PORT=3334 bun run dev` |
 | Changes not reflecting | Restart dev server with `bun run dev` |
 | TypeScript errors | Run `bun install` to ensure types are installed |
 
@@ -380,7 +382,7 @@ For guard-only overrides, `.mandu/guard.json` is also supported.
 // mandu.config.ts
 export default {
   server: {
-    port: 3000,
+    port: 3333,
     hostname: "localhost",
     cors: false,
     streaming: false,
@@ -691,7 +693,7 @@ mandu.ate.apply_heal       // Apply heal diffs safely (with backup)
   "tool": "mandu.ate.auto_pipeline",
   "arguments": {
     "repoRoot": "/path/to/project",
-    "baseURL": "http://localhost:3000",
+    "baseURL": "http://localhost:3333",
     "oracleLevel": "L1",
     "useImpactAnalysis": true,
     "autoHeal": true

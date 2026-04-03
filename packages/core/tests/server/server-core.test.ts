@@ -128,14 +128,13 @@ describe("정적 파일 보안 (Path Traversal 방지)", () => {
     }
   });
 
-  it("/../ 패턴 path traversal 요청을 차단한다", async () => {
+  it("정적 파일 경로 탈출(backslash 포함)은 403을 반환한다", async () => {
     server = startServer(baseManifest, { port: 0, registry });
     const port = server.server.port;
 
-    const res = await fetch(`http://localhost:${port}/.mandu/client/../../../etc/passwd`);
+    const res = await fetch(`http://localhost:${port}/.mandu/client/..%5C..%5C..%5Cetc/passwd`);
 
-    // 403 또는 404로 차단
-    expect([403, 404]).toContain(res.status);
+    expect(res.status).toBe(403);
   });
 
   it("null byte 공격을 차단한다", async () => {
@@ -145,7 +144,16 @@ describe("정적 파일 보안 (Path Traversal 방지)", () => {
     // URL 인코딩된 null byte
     const res = await fetch(`http://localhost:${port}/.mandu/client/file%00.js`);
 
-    expect([400, 404]).toContain(res.status);
+    expect(res.status).toBe(400);
+  });
+
+  it("잘못된 URL 인코딩은 400을 반환한다", async () => {
+    server = startServer(baseManifest, { port: 0, registry });
+    const port = server.server.port;
+
+    const res = await fetch(`http://localhost:${port}/.mandu/client/%E0%A4%A`);
+
+    expect(res.status).toBe(400);
   });
 
   it("존재하지 않는 정적 파일에 404를 반환한다", async () => {
@@ -209,12 +217,10 @@ describe("ServerRegistry 격리성", () => {
     const before = await fetch(`http://localhost:${port}/api/health`);
     expect(before.status).toBe(200);
 
-    // 클리어 후 핸들러 없음
-    // TODO: 이상적으로는 404를 반환해야 하지만, 현재 서버는 핸들러 없을 때 500 반환
-    //       서버 구현 개선 시 expect(after.status).toBe(404)로 강화 필요
+    // 클리어 후 핸들러 없음 -> runtime misconfiguration
     registry.clear();
     const after = await fetch(`http://localhost:${port}/api/health`);
-    expect([404, 500]).toContain(after.status);
+    expect(after.status).toBe(500);
   });
 });
 

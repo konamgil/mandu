@@ -694,6 +694,22 @@ function createDefaultAppFactory(registry: ServerRegistry) {
 
 // ========== Static File Serving ==========
 
+interface StaticFileResult {
+  handled: boolean;
+  response?: Response;
+}
+
+function createStaticErrorResponse(status: 400 | 403 | 404 | 500): Response {
+  const body = {
+    400: "Bad Request",
+    403: "Forbidden",
+    404: "Not Found",
+    500: "Internal Server Error",
+  }[status];
+
+  return new Response(body, { status });
+}
+
 /**
  * 경로가 허용된 디렉토리 내에 있는지 검증
  * Path traversal 공격 방지
@@ -735,16 +751,11 @@ async function isPathSafe(filePath: string, allowedDir: string): Promise<boolean
  *
  * 보안: Path traversal 공격 방지를 위해 모든 경로를 검증합니다.
  */
-async function serveStaticFile(pathname: string, settings: ServerRegistrySettings): Promise<Response | null> {
+async function serveStaticFile(pathname: string, settings: ServerRegistrySettings): Promise<StaticFileResult> {
   let filePath: string | null = null;
   let isBundleFile = false;
   let allowedBaseDir: string;
   let relativePath: string;
-
-  // Path traversal 시도 조기 차단 (정규화 전 raw 체크)
-  if (pathname.includes("..")) {
-    return null;
-  }
 
   // 1. 클라이언트 번들 파일 (/.mandu/client/*)
   if (pathname.startsWith("/.mandu/client/")) {
@@ -769,7 +780,7 @@ async function serveStaticFile(pathname: string, settings: ServerRegistrySetting
     relativePath = path.basename(pathname);
     allowedBaseDir = path.join(settings.rootDir, settings.publicDir);
   } else {
-    return null; // 정적 파일이 아님
+    return { handled: false }; // 정적 파일이 아님
   }
 
   // URL 디코딩 (실패 시 차단)
@@ -777,30 +788,29 @@ async function serveStaticFile(pathname: string, settings: ServerRegistrySetting
   try {
     decodedPath = decodeURIComponent(relativePath);
   } catch {
-    return null;
+    return { handled: true, response: createStaticErrorResponse(400) };
   }
 
   // 정규화 + Null byte 방지
   const normalizedPath = path.posix.normalize(decodedPath);
   if (normalizedPath.includes("\0")) {
     console.warn(`[Mandu Security] Null byte attack detected: ${pathname}`);
-    return null;
+    return { handled: true, response: createStaticErrorResponse(400) };
+  }
+
+  const normalizedSegments = normalizedPath.split("/");
+  if (normalizedSegments.some((segment) => segment === "..")) {
+    return { handled: true, response: createStaticErrorResponse(403) };
   }
 
   // 선행 슬래시 제거 → path.join이 base를 무시하지 않도록 보장
   const safeRelativePath = normalizedPath.replace(/^\/+/, "");
-
-  // 상대 경로 탈출 차단
-  if (safeRelativePath.startsWith("..")) {
-    return null;
-  }
-
   filePath = path.join(allowedBaseDir, safeRelativePath);
 
   // 최종 경로 검증: 허용된 디렉토리 내에 있는지 확인
   if (!(await isPathSafe(filePath, allowedBaseDir!))) {
     console.warn(`[Mandu Security] Path traversal attempt blocked: ${pathname}`);
-    return null;
+    return { handled: true, response: createStaticErrorResponse(403) };
   }
 
   try {
@@ -808,7 +818,7 @@ async function serveStaticFile(pathname: string, settings: ServerRegistrySetting
     const exists = await file.exists();
 
     if (!exists) {
-      return null; // 파일 없음 - 라우트 매칭으로 넘김
+      return { handled: true, response: createStaticErrorResponse(404) };
     }
 
     const mimeType = getMimeType(filePath);
@@ -826,14 +836,17 @@ async function serveStaticFile(pathname: string, settings: ServerRegistrySetting
       cacheControl = "public, max-age=86400";
     }
 
-    return new Response(file, {
-      headers: {
-        "Content-Type": mimeType,
-        "Cache-Control": cacheControl,
-      },
-    });
+    return {
+      handled: true,
+      response: new Response(file, {
+        headers: {
+          "Content-Type": mimeType,
+          "Cache-Control": cacheControl,
+        },
+      }),
+    };
   } catch {
-    return null; // 파일 읽기 실패 - 라우트 매칭으로 넘김
+    return { handled: true, response: createStaticErrorResponse(500) };
   }
 }
 
@@ -1112,8 +1125,9 @@ async function handleRequestInternal(
   }
 
   // 1. 정적 파일 서빙 시도 (최우선)
-  const staticResponse = await serveStaticFile(pathname, settings);
-  if (staticResponse) {
+  const staticFileResult = await serveStaticFile(pathname, settings);
+  if (staticFileResult.handled) {
+    const staticResponse = staticFileResult.response!;
     if (settings.cors && isCorsRequest(req)) {
       const corsOptions: CorsOptions = typeof settings.cors === 'object' ? settings.cors : {};
       return ok(applyCorsToResponse(staticResponse, req, corsOptions));

@@ -147,17 +147,19 @@ Examples:
   bunx mandu generate                      # Generate code from FS Routes + Resources
   bunx mandu generate --force              # Overwrite existing slots
 
-FS Routes Workflow (recommended):
-  1. init → 2. Create page.tsx in app/ folder → 3. dev → 4. build → 5. start
+Official Workflow (recommended):
+  Start here if you're new to Mandu.
+  1. init → 2. Create app/page.tsx → 3. dev → 4. build → 5. start
 
-Resource-Centric Workflow (new approach):
-  1. init → 2. generate resource → 3. Edit slot → 4. generate → 5. dev
+Advanced / Add-on Workflows:
+  Resource generation:
+    1. init → 2. generate resource → 3. Edit slot → 4. generate → 5. dev
 
-Contract-first Workflow:
-  1. contract create → 2. Edit contract → 3. generate → 4. Edit slot → 5. contract validate
+  Contract-first:
+    1. contract create → 2. Edit contract → 3. generate → 4. Edit slot → 5. contract validate
 
-Brain (sLLM) Workflow:
-  1. brain setup → 2. doctor (analyze) → 3. watch (monitor)
+  Brain (sLLM):
+    1. brain setup → 2. doctor (analyze) → 3. watch (monitor)
 `;
 
 /**
@@ -254,6 +256,10 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
       console.log(`\nUsage: bunx mandu ${command} <${registration.subcommands.join("|")}>`);
     }
     process.exit(1);
+  }
+
+  if (registration.exitOnSuccess) {
+    process.exit(0);
   }
 
 }

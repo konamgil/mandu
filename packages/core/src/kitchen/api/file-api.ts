@@ -7,6 +7,7 @@
  */
 
 import path from "path";
+import fs from "fs";
 import { parseUnifiedDiff, type FileDiff } from "./diff-parser";
 
 export interface RecentFileChange {
@@ -15,6 +16,8 @@ export interface RecentFileChange {
 }
 
 export class FileAPI {
+  private gitRoot: string | null | undefined;
+
   constructor(private rootDir: string) {}
 
   /**
@@ -79,7 +82,7 @@ export class FileAPI {
     }
 
     try {
-      const diff = await this.getGitDiff(filePath);
+      const diff = await this.getFileDiff(filePath, resolved);
       return Response.json(diff);
     } catch (error) {
       return Response.json(
@@ -115,48 +118,120 @@ export class FileAPI {
     return resolved;
   }
 
-  private async getGitDiff(filePath: string): Promise<FileDiff> {
-    const proc = Bun.spawn(["git", "diff", "--", filePath], {
-      cwd: this.rootDir,
+  private getGitRoot(): string | null {
+    if (this.gitRoot !== undefined) {
+      return this.gitRoot;
+    }
+
+    let current = path.resolve(this.rootDir);
+    while (true) {
+      if (fs.existsSync(path.join(current, ".git"))) {
+        this.gitRoot = current;
+        return current;
+      }
+
+      const parent = path.dirname(current);
+      if (parent === current) {
+        this.gitRoot = null;
+        return null;
+      }
+      current = parent;
+    }
+  }
+
+  private async runGit(args: string[], cwd: string): Promise<string> {
+    const proc = Bun.spawn(["git", ...args], {
+      cwd,
       stdout: "pipe",
       stderr: "pipe",
     });
     const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
 
-    // If no staged/unstaged diff, try diff against HEAD for new files
-    if (!stdout.trim()) {
-      const procNew = Bun.spawn(
-        ["git", "diff", "--no-index", "/dev/null", filePath],
-        {
-          cwd: this.rootDir,
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      );
-      const newStdout = await new Response(procNew.stdout).text();
-      await procNew.exited;
-      return parseUnifiedDiff(newStdout, filePath);
+    if (exitCode !== 0) {
+      throw new Error(stderr || stdout || `git ${args.join(" ")} failed`);
     }
 
-    return parseUnifiedDiff(stdout, filePath);
+    return stdout;
+  }
+
+  private getRepoRelativePath(resolvedPath: string, gitRoot: string): string {
+    return path.relative(gitRoot, resolvedPath).replace(/\\/g, "/");
+  }
+
+  private getProjectRelativePath(repoRelativePath: string, gitRoot: string): string {
+    const absolutePath = path.resolve(gitRoot, repoRelativePath.replace(/\//g, path.sep));
+    return path.relative(this.rootDir, absolutePath).replace(/\\/g, "/");
+  }
+
+  private async getFileDiff(filePath: string, resolvedPath: string): Promise<FileDiff> {
+    const gitRoot = this.getGitRoot();
+    if (!gitRoot) {
+      return this.createSyntheticDiff(filePath, resolvedPath);
+    }
+
+    const repoRelativePath = this.getRepoRelativePath(resolvedPath, gitRoot);
+    const stdout = await this.runGit(["diff", "--", repoRelativePath], gitRoot);
+    if (stdout.trim()) {
+      return parseUnifiedDiff(stdout, filePath);
+    }
+
+    if (!fs.existsSync(resolvedPath)) {
+      return parseUnifiedDiff("", filePath);
+    }
+
+    const status = await this.runGit(["status", "--porcelain", "--", repoRelativePath], gitRoot);
+    if (status.trim().startsWith("??")) {
+      return this.createSyntheticDiff(filePath, resolvedPath);
+    }
+
+    return parseUnifiedDiff("", filePath);
+  }
+
+  private createSyntheticDiff(filePath: string, resolvedPath: string): FileDiff {
+    // Bun.file().text() is async, but synthetic diffs are only used in non-git fallback.
+    // Use fs for synchronous fallback to keep the response fast.
+    const normalized = fs.readFileSync(resolvedPath, "utf-8").replace(/\r\n/g, "\n");
+    if (!normalized) {
+      return parseUnifiedDiff("", filePath);
+    }
+
+    const lines = normalized.split("\n");
+    if (lines.length > 0 && lines[lines.length - 1] === "") {
+      lines.pop();
+    }
+
+    const raw = [
+      "new file mode 100644",
+      `@@ -0,0 +1,${lines.length} @@`,
+      ...lines.map((line) => `+${line}`),
+    ].join("\n");
+
+    return parseUnifiedDiff(raw, filePath);
   }
 
   private async getGitStatus(): Promise<RecentFileChange[]> {
-    const proc = Bun.spawn(["git", "status", "--porcelain"], {
-      cwd: this.rootDir,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
+    const gitRoot = this.getGitRoot();
+    if (!gitRoot) {
+      return [];
+    }
+
+    const repoRelativeRoot = this.getRepoRelativePath(this.rootDir, gitRoot);
+    const args = ["status", "--porcelain"];
+    if (repoRelativeRoot && repoRelativeRoot !== ".") {
+      args.push("--", repoRelativeRoot);
+    }
+
+    const stdout = await this.runGit(args, gitRoot);
 
     const changes: RecentFileChange[] = [];
     for (const line of stdout.split("\n")) {
       if (!line.trim()) continue;
 
       const statusCode = line.substring(0, 2);
-      const filePath = line.substring(3).trim();
+      const gitFilePath = line.substring(3).trim();
+      const filePath = this.getProjectRelativePath(gitFilePath, gitRoot);
 
       changes.push({
         filePath,

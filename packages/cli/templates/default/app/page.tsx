@@ -1,7 +1,7 @@
 /**
  * Home Page
  *
- * Edit this file and see changes at http://localhost:3000
+ * Edit this file and see changes at http://localhost:3333
  */
 
 import { Button } from "@/client/shared/ui/button";

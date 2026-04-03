@@ -59,6 +59,20 @@ describe("FileAPI", () => {
       const res = await api.handleFileDiff(url);
       expect(res.status).toBe(403);
     });
+
+    it("should return a synthetic diff for files outside git repos", async () => {
+      fs.writeFileSync(path.join(tmpDir, "preview.ts"), "const answer = 42;\nconsole.log(answer);\n");
+
+      const url = new URL("http://localhost/__kitchen/api/file/diff?path=preview.ts");
+      const res = await api.handleFileDiff(url);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.filePath).toBe("preview.ts");
+      expect(data.isNew).toBe(true);
+      expect(data.additions).toBe(2);
+      expect(data.hunks).toHaveLength(1);
+    });
   });
 
   describe("handleRecentChanges", () => {
@@ -67,6 +81,16 @@ describe("FileAPI", () => {
       const data = await res.json();
       expect(data).toHaveProperty("changes");
       expect(Array.isArray(data.changes)).toBe(true);
+    });
+
+    it("should return an empty changes array outside git repos", async () => {
+      fs.writeFileSync(path.join(tmpDir, "local.ts"), "const local = true;");
+
+      const res = await api.handleRecentChanges();
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.changes).toEqual([]);
     });
   });
 });

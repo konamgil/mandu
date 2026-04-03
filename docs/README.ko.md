@@ -1,37 +1,86 @@
-# Mandu 문서 모음
+# Mandu 문서 인덱스
 
-프로젝트 문서 링크:
+이 문서 인덱스는 문서를 세 가지 상태로 구분합니다.
 
-- `docs/api/api-reference.ko.md` — 핵심 API 레퍼런스
-- `docs/status.ko.md` — 구현 상태 (완료/부분/미시작)
-- `docs/product/01_mandu_product_brief.md` — 제품 개요
-- `docs/architecture/02_mandu_technical_architecture.md` — 기술 아키텍처 (MVP-0.1)
-- `docs/guides/01_configuration.ko.md` — 설정 가이드
-- `docs/guides/03_mandu_coding_agent_prompt_template.md` — 코딩 에이전트 프롬프트 템플릿
-- `docs/guides/05_realtime_chat_starter.md` — 공식 realtime chat starter 가이드
-- `docs/guides/06_realtime_chat_demo_validation_loop.md` — 데모 우선 검증/성장 루프
-- `docs/guides/lockfile.md` — lock/check 무결성 트러블슈팅
-- `docs/specs/04_mandu_hydration_system.md` — 하이드레이션 시스템
-- `docs/architecture/05_mandu_backend-architecture-guardrails.md` — 백엔드 가드레일
-- `docs/architecture/06_mandu_router_v5_hybrid_trie.md` — Router v5 하이브리드 트라이
-- `docs/plans/06_mandu_dna_master_plan.md` — DNA 마스터 플랜 (코드 기반)
-- `docs/evaluation/MANDU_EVALUATION.ko.md` — 평가 문서 (한국어)
+| 상태 | 의미 | 사용 원칙 |
+|------|------|-----------|
+| `official` | 현재 Mandu 공식 워크플로와 맞는 문서 | 온보딩과 실사용 기준으로 바로 사용 가능 |
+| `draft` | 작성 중이거나, 결정이 아직 고정되지 않았거나, TODO가 남아 있는 문서 | 해당 영역을 의도적으로 탐색할 때만 참고 |
+| `legacy` | 과거 설계, 이전 워크플로, 기록성 문서 | 첫 진입 문서로 사용하지 않음 |
+
+처음 Mandu를 보는 경우에는 앱이 뜰 때까지 `official` 영역만 따라가는 것을 권장합니다.
 
 ---
 
-## 설정
+## 먼저 읽을 문서
 
-Mandu는 `mandu.config.ts`, `mandu.config.js`, `mandu.config.json`을 읽습니다.  
-Guard 전용 설정은 `.mandu/guard.json`도 지원합니다.
+1. `docs/guides/01_configuration.ko.md` - 현재 설정 방식, 런타임 기본값, dev/build 동작
+2. `docs/api/api-reference.ko.md` - 현재 공개 API 레퍼런스
+3. `docs/status.ko.md` - 코드 기준 구현 상태 매트릭스
+4. `docs/plans/14_top_tier_framework_priority_plan.md` - 현재 우선순위 실행 계획
 
-- `mandu dev`, `mandu build` 실행 시 설정을 검증하고 오류를 출력합니다
+---
+
+## Official
+
+- `docs/guides/01_configuration.ko.md` - 공식 설정 가이드
+- `docs/api/api-reference.ko.md` - 공식 API 레퍼런스
+- `docs/status.ko.md` - 현재 구현 상태
+- `docs/product/01_mandu_product_brief.md` - 제품 방향성
+- `docs/architecture/02_mandu_technical_architecture.md` - 현재 기술 아키텍처 개요
+- `docs/architecture/05_mandu_backend-architecture-guardrails.md` - 백엔드 가드레일
+- `docs/specs/05_fs_routes_system.md` - FS Routes 기준 문서
+- `docs/specs/06_mandu_guard.md` - Guard 기준 문서
+- `docs/specs/07_seo_module.md` - SEO 모듈 기준 문서
+- `docs/specs/08_runtime_status_code_policy.md` - 런타임 HTTP 상태 코드 정책
+- `docs/guides/04_prisma.md` - 공식 Prisma 연동 가이드
+- `docs/guides/05_realtime_chat_starter.md` - 공식 realtime starter 가이드
+- `demo/README.md` - 공식 demo 인덱스와 현재 demo 상태
+- `docs/plans/14_top_tier_framework_priority_plan.md` - 현재 top-tier 실행 로드맵
+
+## Draft
+
+- `docs/comparison/manifest-vs-resource.md` - legacy manifest 흐름과 resource 흐름 비교 초안
+- `docs/guides/resource-workflow.md` - 기본 온보딩 경로가 아닌 resource add-on 워크플로 초안
+- `docs/guides/resource-troubleshooting.md` - resource 워크플로 트러블슈팅 초안
+- `docs/migration/to-resources.md` - manifest -> resource 마이그레이션 초안
+- `docs/guides/06_realtime_chat_demo_validation_loop.md` - 내부 데모 우선 검증 루프 문서
+
+## Legacy
+
+- `docs/architecture/01_filesystem_first_architecture.md` - 초기 아키텍처 방향 문서
+- `docs/devtools/MANDU_KITCHEN_SPEC.md` - 과거 Kitchen 설계 문서
+- `docs/devtools/MANDU_KITCHEN_SPEC_2.md` - 과거 Kitchen 설계 반복안
+- `docs/devtools/MANDU_KITCHEN_FINAL_SPEC.md` - 과거 Kitchen 설계 기록
+- `docs/evaluation/MANDU_EVALUATION.ko.md` - 과거 평가 스냅샷
+- `docs/plans/06_mandu_dna_master_plan.md` - 이전 마스터 플랜
+- `docs/plans/07_mandu_improvement_proposals.md` - 이전 개선 제안 모음
+- `docs/plans/07_product_readiness_plan.md` - 이전 제품 준비 계획
+- `docs/plans/08_ont-run_adoption_plan.md` - 이전 도입 계획
+- `docs/plans/09_lockfile_integration_plan.md` - 이전 lockfile 연동 계획
+- `docs/plans/10_RFC-001-guard-to-guide.md` - 과거 RFC
+- `docs/plans/11_openclaw_dna_adoption.md` - 과거 adoption 계획
+- `docs/plans/12_mcp_dna_integration.md` - 과거 MCP 통합 계획
+- `docs/plans/13_devtool_kitchen_plan.md` - 과거 Kitchen 계획
+- `docs/plans/13_devtool_kitchen_dev_spec.md` - 과거 Kitchen 개발 스펙
+- `docs/plans/react19-migration.md` - 과거 마이그레이션 메모
+
+---
+
+## 설정 기본값
+
+Mandu는 `mandu.config.ts`, `mandu.config.js`, `mandu.config.json`을 읽습니다.
+Guard 전용 오버라이드는 `.mandu/guard.json`도 지원합니다.
+
+- `mandu dev`, `mandu build`는 설정을 검증하고 오류를 출력합니다
 - CLI 옵션이 설정값보다 우선합니다
+- 로컬 기본 개발 포트는 `3333`입니다
 
 ```ts
 // mandu.config.ts
 export default {
   server: {
-    port: 3000,
+    port: 3333,
     hostname: "localhost",
     cors: false,
     streaming: false,
@@ -45,45 +94,13 @@ export default {
     minify: true,
     sourcemap: false,
   },
-  guard: {
-    preset: "mandu",
-    srcDir: "src",
-    exclude: ["**/*.test.ts"],
-    realtime: true,
-  },
-  seo: {
-    enabled: true,
-    defaultTitle: "My App",
-    titleTemplate: "%s | My App",
-  },
 };
 ```
 
 ---
 
-## 문서 상태 (업데이트: 2026-02-13)
+## 관리 원칙
 
-| 문서 | 상태 | 비고 |
-|------|------|------|
-| `docs/api/api-reference.md` | 수정 | Client API 추가 (2026-01-30) |
-| `docs/api/api-reference.ko.md` | 수정 | Client API 추가 (2026-01-30) |
-| `docs/product/01_mandu_product_brief.md` | 수정 | MCP/CLI 목록 및 로드맵 노트 갱신 (2026-01-30) |
-| `docs/architecture/02_mandu_technical_architecture.md` | 수정 | 구현 현황/CLI/MCP 도구 반영 (2026-01-30) |
-| `docs/guides/01_configuration.ko.md` | 신규 | 설정 가이드 (2026-02-03) |
-| `docs/guides/03_mandu_coding_agent_prompt_template.md` | 수정 | CLI 명칭/예시 정합성 보강 (2026-02-13) |
-| `docs/guides/05_realtime_chat_starter.md` | 수정 | 스타터 + 데모 우선 검증 흐름 반영 (2026-02-13) |
-| `docs/guides/06_realtime_chat_demo_validation_loop.md` | 신규 | 데모 우선 프레임워크 성장 루프 (2026-02-13) |
-| `docs/guides/lockfile.md` | 수정 | lock/check 무결성 이슈 대응 절차 (2026-02-13) |
-| `docs/specs/04_mandu_hydration_system.md` | 수정 | 구현 현황/MCP 도구 반영 (2026-01-30) |
-| `docs/architecture/05_mandu_backend-architecture-guardrails.md` | 이동 | 2026-01-28 루트에서 이동 |
-| `docs/architecture/06_mandu_router_v5_hybrid_trie.md` | 수정 | 구현 상태 표시 추가 (2026-01-30) |
-| `docs/plans/06_mandu_dna_master_plan.md` | 이동+수정 | 2026-01-28 참조 경로 수정 |
-| `docs/evaluation/MANDU_EVALUATION.ko.md` | 이동 | 2026-01-28 루트에서 이동 |
-| `docs/README.md` | 수정 | 설정 섹션 추가 (2026-02-03) |
-| `docs/README.ko.md` | 수정 | 설정 섹션 추가 (2026-02-03) |
-
-## 삭제/폐기
-
-| 문서 | 상태 | 비고 |
-|------|------|------|
-| `07_mandu_dna_expanded_plan.md` | 삭제 | 2026-01-28 `docs/plans/06_mandu_dna_master_plan.md`에 통합 |
+- 현재 CLI, 템플릿, 데모, 런타임 동작과 맞는 문서만 `official`로 올립니다.
+- TODO가 많거나 워크플로가 흔들리는 문서는 `draft`에 둡니다.
+- 더 이상 공식 진입점이 아닌 워크플로와 과거 계획 문서는 `legacy`에 둡니다.

@@ -26,6 +26,8 @@ export interface CommandRegistration {
   id: string;
   /** Command description */
   description: string;
+  /** Explicitly exit the CLI process after a successful run */
+  exitOnSuccess?: boolean;
   /** Subcommand list (e.g., "arch", "legacy" for guard) */
   subcommands?: string[];
   /** Default subcommand (when invoked without subcommand) */
@@ -97,6 +99,7 @@ registerCommand({
       withCi: ctx.options["with-ci"] === "true",
       yes: ctx.options.yes === "true",
       noInstall: ctx.options["no-install"] === "true",
+      exitOnSuccess: true,
     });
   },
 });
@@ -114,6 +117,7 @@ registerCommand({
 registerCommand({
   id: "build",
   description: "Build client bundles (hydration)",
+  exitOnSuccess: true,
   async run(ctx) {
     const { build } = await import("./build");
     return build({ watch: ctx.options.watch === "true" });

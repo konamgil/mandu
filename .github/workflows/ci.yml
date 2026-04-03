@@ -7,9 +7,13 @@ on:
     branches: [main]
 
 jobs:
-  typecheck:
-    name: Type Check
-    runs-on: ubuntu-latest
+  quality:
+    name: Quality (${{ matrix.os }}, Bun latest)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -17,9 +21,25 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
+      - run: bun run test:core
+      - run: bun run test:cli
+      - run: bun run test:mcp
+      - run: bun run test:ate
 
-  test:
-    name: Test
+  compatibility:
+    name: Compatibility (ubuntu-latest, Bun 1.2.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.0
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test:packages
+
+  official-demo:
+    name: Official Demo (ubuntu-latest, Bun latest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,4 +47,34 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - run: bun test
+      - run: bun run test:demo
+
+  smoke:
+    name: Smoke (ubuntu-latest, Bun latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run test:smoke
+
+  performance-budget:
+    name: Performance Budget (ubuntu-latest, Bun latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run perf:baseline:check
+      - run: bunx playwright install chromium
+      - run: bun run perf:ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-latest
+          path: .perf/latest
+          if-no-files-found: warn

@@ -277,15 +277,14 @@ describe("Server API Methods", () => {
       expect(res.status).toBe(500);
     });
 
-    it("등록되지 않은 핸들러 404 응답", async () => {
+    it("등록되지 않은 핸들러는 500 응답", async () => {
       // 핸들러 등록 없이 서버 시작
       server = startServer(testManifest, { port: 0, registry });
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/api/users`);
 
-      // 핸들러가 없으면 404 또는 500
-      expect([404, 500]).toContain(res.status);
+      expect(res.status).toBe(500);
     });
   });
 });

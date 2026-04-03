@@ -23,6 +23,7 @@ export interface InitOptions {
   withCi?: boolean;
   yes?: boolean;
   noInstall?: boolean;
+  exitOnSuccess?: boolean;
 }
 
 const ALLOWED_TEMPLATES = ["default", "realtime-chat"] as const;
@@ -54,7 +55,7 @@ const UI_FILES = [
   "src/client/shared/ui/card.tsx",
   "src/client/shared/ui/input.tsx",
   "src/client/shared/ui/index.ts",
-  "src/client/shared/lib/utils.ts",
+  "src/shared/utils/client/cn.ts",
 ];
 
 interface CopyOptions {
@@ -440,7 +441,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   console.log(`   ${theme.command("bunx mandu dev")}     ${theme.muted("# alternative if mandu is not in PATH")}`);
   console.log(`\n📂 File structure:`);
   console.log(`   app/layout.tsx    → Root layout`);
-  console.log(`   app/page.tsx      → http://localhost:3000/`);
+  console.log(`   app/page.tsx      → http://localhost:3333/`);
   console.log(`   app/api/*/route.ts → API endpoints`);
   console.log(`   src/client/*      → Client layer`);
   console.log(`   src/server/*      → Server layer`);
@@ -455,7 +456,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
   }
   if (ui !== "none") {
     console.log(`   src/client/shared/ui/ → UI components (shadcn)`);
-    console.log(`   src/client/shared/lib/utils.ts → Utilities (cn function)`);
+    console.log(`   src/shared/utils/client/cn.ts → Utilities (cn function)`);
   }
 
   // MCP config info
@@ -472,6 +473,10 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     console.log(`   Hash: ${lockfileResult!.hash}`);
   } else {
     console.log(`   Lockfile generation skipped (no config)`);
+  }
+
+  if (options.exitOnSuccess) {
+    process.exit(0);
   }
 
   return true;
@@ -504,7 +509,7 @@ async function createMinimalPage(targetDir: string): Promise<void> {
   const pageContent = `/**
  * Home Page (Minimal)
  *
- * Edit this file and see changes at http://localhost:3000
+ * Edit this file and see changes at http://localhost:3333
  */
 
 export default function HomePage() {

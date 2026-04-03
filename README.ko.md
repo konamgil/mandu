@@ -56,7 +56,9 @@ bunx @mandujs/cli init my-chat-app --template realtime-chat
 bun run dev
 ```
 
-앱이 `http://localhost:3000`에서 실행됩니다.
+생성된 앱에서는 `bun run dev`가 `mandu dev`를 실행합니다.
+
+앱이 `http://localhost:3333`에서 실행됩니다.
 
 ### 3. 첫 페이지 만들기
 
@@ -83,7 +85,7 @@ export function GET() {
 }
 ```
 
-이제 `http://localhost:3000/api/hello`에서 확인할 수 있습니다.
+이제 `http://localhost:3333/api/hello`에서 확인할 수 있습니다.
 
 ### 5. 프로덕션 빌드
 
@@ -156,7 +158,7 @@ export default function About() {
 }
 ```
 
-`http://localhost:3000/about` 에서 확인
+`http://localhost:3333/about` 에서 확인
 
 #### 동적 라우트 추가하기
 
@@ -173,7 +175,7 @@ export default function UserProfile({ params }: { params: { id: string } }) {
 }
 ```
 
-`http://localhost:3000/users/123` 에서 확인
+`http://localhost:3333/users/123` 에서 확인
 
 #### 여러 메서드를 가진 API 추가하기
 
@@ -230,8 +232,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 |--------|------|
 | `bunx @mandujs/cli init my-app` | "my-app" 이름으로 새 프로젝트 생성 |
 | `bun install` | 모든 의존성 설치 |
-| `bun run dev` | http://localhost:3000 에서 개발 서버 시작 |
-| `bun run build` | 프로덕션 빌드 |
+| `bun run dev` | http://localhost:3333 에서 개발 서버 시작 |
+| `bun run build` | 프로덕션 빌드 (`mandu build`) |
 | `bun run test` | 테스트 실행 |
 
 #### 추가 CLI 명령어
@@ -269,7 +271,7 @@ bunx mandu guard arch --watch
 | 문제 | 해결 방법 |
 |------|----------|
 | `command not found: bun` | Bun 설치: `curl -fsSL https://bun.sh/install \| bash` |
-| 포트 3000 사용 중 | 다른 서버 중지 또는 `PORT=3001 bun run dev` |
+| 포트 3333 사용 중 | 다른 서버 중지 또는 `PORT=3334 bun run dev` |
 | 변경사항 미반영 | `bun run dev`로 개발 서버 재시작 |
 | TypeScript 에러 | `bun install`로 타입 설치 확인 |
 
@@ -384,8 +386,8 @@ bun run dev
 ### 3. 브라우저에서 확인
 
 ```
-http://localhost:3000      → SSR 페이지
-http://localhost:3000/api/health → API 응답
+http://localhost:3333      → SSR 페이지
+http://localhost:3333/api/health → API 응답
 ```
 
 ---
@@ -865,7 +867,7 @@ bunx mandu dev         # 또는 HMR 포함 개발 서버 실행
 
 ### HMR 기능
 
-- **WebSocket 서버**: 포트 + 1에서 실행 (예: 개발 서버 3000이면 3001)
+- **WebSocket 서버**: 포트 + 1에서 실행 (예: 개발 서버 3333이면 3334)
 - **자동 재연결**: 연결이 끊어지면 자동으로 재연결
 - **에러 오버레이**: 브라우저에서 직접 빌드 에러 표시
 - **파일 감시**: `spec/slots/*.client.ts` 파일 감시
@@ -881,12 +883,12 @@ bunx mandu dev         # 또는 HMR 포함 개발 서버 실행
   📡 API: /api/health -> health
   📄 Page: /counter -> counter 🏝️    ← Island 표시
 
-🔥 HMR server running on ws://localhost:3001
+🔥 HMR server running on ws://localhost:3334
 🔨 Initial client bundle build...
 ✅ Built 1 island
 👀 Watching for client slot changes...
-🥟 Mandu Dev Server running at http://localhost:3000
-🔥 HMR enabled on port 3001
+🥟 Mandu Dev Server running at http://localhost:3333
+🔥 HMR enabled on port 3334
 ```
 
 ---
@@ -927,7 +929,7 @@ Guard 전용 설정은 `.mandu/guard.json`도 지원합니다.
 // mandu.config.ts
 export default {
   server: {
-    port: 3000,
+    port: 3333,
     hostname: "localhost",
     cors: false,
     streaming: false,

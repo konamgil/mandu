@@ -1,5 +1,11 @@
 # Realtime Chat Demo Validation Loop (Demo-First)
 
+> Status: `draft`
+>
+> This is an internal demo-first validation process document.
+> It is useful for framework contributors, but it is not part of Mandu's primary user onboarding path.
+> Start from `docs/README.md` and the `official` docs first.
+
 Mandu framework changes should be validated through the realtime chat demo first, then promoted into framework fixes/features.
 
 ## Why this loop exists

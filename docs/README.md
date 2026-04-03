@@ -1,40 +1,86 @@
 # Mandu Documentation
 
-Quick links to project docs:
+This index uses three document labels:
 
-- `docs/api/api-reference.md` — Core API reference
-- `docs/status.md` — Implementation status (done/partial/not started)
-- `docs/product/01_mandu_product_brief.md` — Product brief
-- `docs/architecture/02_mandu_technical_architecture.md` — Technical architecture (MVP-0.1)
-- `docs/guides/01_configuration.md` — Configuration guide
-- `docs/guides/03_mandu_coding_agent_prompt_template.md` — Coding agent prompt template
-- `docs/guides/05_realtime_chat_starter.md` — Official realtime chat starter template guide
-- `docs/guides/06_realtime_chat_demo_validation_loop.md` — Demo-first framework validation loop
-- `docs/skills/README.md` — Curated engineering skill packs (TypeScript Ultimate)
-- `docs/specs/04_mandu_hydration_system.md` — Hydration system spec
-- `docs/specs/05_fs_routes_system.md` — FS Routes system spec
-- `docs/specs/06_mandu_guard.md` — Mandu Guard architecture spec
-- `docs/specs/07_seo_module.md` — SEO module spec (NEW)
-- `docs/architecture/05_mandu_backend-architecture-guardrails.md` — Backend guardrails
-- `docs/architecture/06_mandu_router_v5_hybrid_trie.md` — Router v5 hybrid trie
-- `docs/plans/06_mandu_dna_master_plan.md` — DNA master plan (code-informed)
-- `docs/evaluation/MANDU_EVALUATION.ko.md` — Evaluation (Korean)
+| Label | Meaning | How to use it |
+|------|---------|---------------|
+| `official` | Current, recommended, and aligned with the active Mandu workflow | Safe for onboarding and day-to-day reference |
+| `draft` | In progress, incomplete, or still moving with active product decisions | Read only when you are intentionally exploring that area |
+| `legacy` | Historical, superseded, or archival design material | Do not use as your first entrypoint |
+
+If you are new to Mandu, stay inside the `official` section until your app is running.
 
 ---
 
-## Configuration
+## Start Here
+
+1. `docs/guides/01_configuration.md` - Current configuration, runtime defaults, and dev/build behavior
+2. `docs/api/api-reference.md` - Current public API surface
+3. `docs/status.md` - Implementation matrix synced to the codebase
+4. `docs/plans/14_top_tier_framework_priority_plan.md` - Current execution priorities for framework quality
+
+---
+
+## Official
+
+- `docs/guides/01_configuration.md` - Canonical configuration guide
+- `docs/api/api-reference.md` - Canonical API reference
+- `docs/status.md` - Current implementation status
+- `docs/product/01_mandu_product_brief.md` - Product direction and framing
+- `docs/architecture/02_mandu_technical_architecture.md` - Current technical architecture overview
+- `docs/architecture/05_mandu_backend-architecture-guardrails.md` - Backend guardrails
+- `docs/specs/05_fs_routes_system.md` - FS Routes reference
+- `docs/specs/06_mandu_guard.md` - Guard architecture reference
+- `docs/specs/07_seo_module.md` - SEO module reference
+- `docs/specs/08_runtime_status_code_policy.md` - Runtime HTTP status code policy
+- `docs/guides/04_prisma.md` - Official Prisma integration guide
+- `docs/guides/05_realtime_chat_starter.md` - Official realtime starter guide
+- `demo/README.md` - Official demo index and current demo status
+- `docs/plans/14_top_tier_framework_priority_plan.md` - Current top-tier roadmap
+
+## Draft
+
+- `docs/comparison/manifest-vs-resource.md` - Incomplete comparison of legacy manifest flow vs resource flow
+- `docs/guides/resource-workflow.md` - Add-on resource workflow tutorial, not the default onboarding path
+- `docs/guides/resource-troubleshooting.md` - In-progress troubleshooting guide for the resource workflow
+- `docs/migration/to-resources.md` - In-progress migration guide from legacy manifests to resources
+- `docs/guides/06_realtime_chat_demo_validation_loop.md` - Internal demo-first validation loop
+
+## Legacy
+
+- `docs/architecture/01_filesystem_first_architecture.md` - Early architecture direction
+- `docs/devtools/MANDU_KITCHEN_SPEC.md` - Historical Kitchen design spec
+- `docs/devtools/MANDU_KITCHEN_SPEC_2.md` - Historical Kitchen design iteration
+- `docs/devtools/MANDU_KITCHEN_FINAL_SPEC.md` - Historical Kitchen design record
+- `docs/evaluation/MANDU_EVALUATION.ko.md` - Historical evaluation snapshot
+- `docs/plans/06_mandu_dna_master_plan.md` - Older master plan
+- `docs/plans/07_mandu_improvement_proposals.md` - Older proposal set
+- `docs/plans/07_product_readiness_plan.md` - Older readiness plan
+- `docs/plans/08_ont-run_adoption_plan.md` - Older adoption plan
+- `docs/plans/09_lockfile_integration_plan.md` - Older integration plan
+- `docs/plans/10_RFC-001-guard-to-guide.md` - Historical RFC
+- `docs/plans/11_openclaw_dna_adoption.md` - Historical adoption plan
+- `docs/plans/12_mcp_dna_integration.md` - Historical MCP integration plan
+- `docs/plans/13_devtool_kitchen_plan.md` - Historical Kitchen plan
+- `docs/plans/13_devtool_kitchen_dev_spec.md` - Historical Kitchen development spec
+- `docs/plans/react19-migration.md` - Historical migration note
+
+---
+
+## Configuration Defaults
 
 Mandu loads configuration from `mandu.config.ts`, `mandu.config.js`, or `mandu.config.json`.
-For guard-only overrides, `.mandu/guard.json` is also supported.
+For Guard-only overrides, `.mandu/guard.json` is also supported.
 
 - `mandu dev` and `mandu build` validate the config and print errors if invalid
 - CLI flags override config values
+- The default local dev server port is `3333`
 
 ```ts
 // mandu.config.ts
 export default {
   server: {
-    port: 3000,
+    port: 3333,
     hostname: "localhost",
     cors: false,
     streaming: false,
@@ -48,49 +94,13 @@ export default {
     minify: true,
     sourcemap: false,
   },
-  guard: {
-    preset: "mandu",
-    srcDir: "src",
-    exclude: ["**/*.test.ts"],
-    realtime: true,
-  },
-  seo: {
-    enabled: true,
-    defaultTitle: "My App",
-    titleTemplate: "%s | My App",
-  },
 };
 ```
 
 ---
 
-## Document Status (Updated 2026-02-13)
+## Maintenance Rule
 
-| Doc | Status | Note |
-|-----|--------|------|
-| `docs/api/api-reference.md` | updated | SEO API 추가 (2026-02-02) |
-| `docs/api/api-reference.ko.md` | updated | Client API 추가 (2026-01-30) |
-| `docs/status.md` | updated | Current implementation matrix synced (2026-02-13) |
-| `docs/specs/07_seo_module.md` | new | SEO 모듈 스펙 (2026-02-02) |
-| `docs/product/01_mandu_product_brief.md` | updated | MCP/CLI 목록 및 로드맵 노트 갱신 (2026-01-30) |
-| `docs/architecture/02_mandu_technical_architecture.md` | updated | 구현 현황/CLI/MCP 도구 반영 (2026-01-30) |
-| `docs/guides/01_configuration.md` | new | Configuration guide (2026-02-03) |
-| `docs/guides/03_mandu_coding_agent_prompt_template.md` | updated | CLI naming aligned (2026-02-13) |
-| `docs/guides/05_realtime_chat_starter.md` | updated | Starter + demo-first validation flow updated (2026-02-13) |
-| `docs/guides/06_realtime_chat_demo_validation_loop.md` | new | Demo-first framework growth loop (2026-02-13) |
-| `docs/guides/lockfile.md` | updated | lock/check integrity troubleshooting (2026-02-13) |
-| `docs/specs/04_mandu_hydration_system.md` | updated | 구현 현황/MCP 도구 반영 (2026-01-30) |
-| `docs/specs/05_fs_routes_system.md` | updated | Config note added (2026-02-03) |
-| `docs/specs/06_mandu_guard.md` | updated | Config example aligned (2026-02-03) |
-| `docs/architecture/05_mandu_backend-architecture-guardrails.md` | moved | Moved from repo root on 2026-01-28 |
-| `docs/architecture/06_mandu_router_v5_hybrid_trie.md` | updated | 구현 상태 표시 추가 (2026-01-30) |
-| `docs/plans/06_mandu_dna_master_plan.md` | moved + updated | References updated on 2026-01-28 |
-| `docs/evaluation/MANDU_EVALUATION.ko.md` | moved | Moved from repo root on 2026-01-28 |
-| `docs/README.md` | updated | Configuration section added (2026-02-03) |
-| `docs/README.ko.md` | updated | 설정 섹션 추가 (2026-02-03) |
-
-## Removed / Deprecated
-
-| Doc | Status | Note |
-|-----|--------|------|
-| `07_mandu_dna_expanded_plan.md` | removed | Merged into `docs/plans/06_mandu_dna_master_plan.md` on 2026-01-28 |
+- Move a document to `official` only when it matches current CLI, templates, demos, and runtime behavior.
+- Keep TODO-heavy or unstable workflow docs in `draft`.
+- Keep superseded workflow docs and old planning artifacts in `legacy`.

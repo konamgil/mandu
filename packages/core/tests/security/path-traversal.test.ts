@@ -107,8 +107,21 @@ describe("Security - Path Traversal", () => {
         `http://localhost:${port}/public/allowed.txt%00.jpg`
       );
 
-      // 404이거나, 성공해도 원본 파일 내용이 아니어야 함
-      expect([200, 404]).toContain(res.status);
+      expect(res.status).toBe(400);
+    });
+
+    it("잘못된 URL 인코딩은 400 응답", async () => {
+      server = startServer(testManifest, {
+        port: 0,
+        rootDir: TEST_DIR,
+        publicDir: "public",
+        registry,
+      });
+      const port = server.server.port;
+
+      const res = await fetch(`http://localhost:${port}/public/%E0%A4%A`);
+
+      expect(res.status).toBe(400);
     });
 
     it("URL 인코딩된 경로 탐색 차단", async () => {
@@ -121,17 +134,14 @@ describe("Security - Path Traversal", () => {
       const port = server.server.port;
 
       const encodedAttacks = [
-        "/public/%2e%2e/secret.txt",
-        "/public/%2e%2e%2f%2e%2e%2fsecret.txt",
-        "/public/..%252f..%252fsecret.txt", // Double encoding
+        { path: "/public/..%5Csecret.txt", expectedStatus: 403 },
+        { path: "/public/%2e%2e%5Csecret.txt", expectedStatus: 403 },
+        { path: "/public/..%252f..%252fsecret.txt", expectedStatus: 404 }, // Double encoding
       ];
 
       for (const attack of encodedAttacks) {
-        const res = await fetch(`http://localhost:${port}${attack}`);
-        if (res.status === 200) {
-          const text = await res.text();
-          expect(text).not.toContain("This is secret");
-        }
+        const res = await fetch(`http://localhost:${port}${attack.path}`);
+        expect(res.status).toBe(attack.expectedStatus);
       }
     });
   });
@@ -161,12 +171,9 @@ describe("Security - Path Traversal", () => {
 
       // 경로 탐색 시도
       const attackRes = await fetch(
-        `http://localhost:${port}/.mandu/client/../../../secret.txt`
+        `http://localhost:${port}/.mandu/client/..%5C..%5Csecret.txt`
       );
-      if (attackRes.status === 200) {
-        const text = await attackRes.text();
-        expect(text).not.toContain("This is secret");
-      }
+      expect(attackRes.status).toBe(403);
     });
   });
 
@@ -186,8 +193,7 @@ describe("Security - Path Traversal", () => {
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/favicon.ico`);
-      // 파일이 있으면 200, 없으면 404
-      expect([200, 404]).toContain(res.status);
+      expect(res.status).toBe(200);
     });
 
     it("robots.txt 정상 서빙", async () => {
@@ -205,7 +211,7 @@ describe("Security - Path Traversal", () => {
       const port = server.server.port;
 
       const res = await fetch(`http://localhost:${port}/robots.txt`);
-      expect([200, 404]).toContain(res.status);
+      expect(res.status).toBe(200);
     });
   });
 });

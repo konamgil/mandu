@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "lastReviewed": "2026-04-03",
+  "metrics": {
+    "ssr_ttfb_p95_ms": {
+      "unit": "ms",
+      "direction": "lower-is-better",
+      "description": "SSR response time from request start to first byte for the primary page route."
+    },
+    "hydration_p95_ms": {
+      "unit": "ms",
+      "direction": "lower-is-better",
+      "description": "Time until all Mandu islands are hydrated on the client."
+    },
+    "initial_js_bundle_kb": {
+      "unit": "kb",
+      "direction": "lower-is-better",
+      "description": "Transferred JavaScript payload needed for the first screen."
+    },
+    "hmr_latency_p95_ms": {
+      "unit": "ms",
+      "direction": "lower-is-better",
+      "description": "Time from a source edit to browser-visible hot update in dev mode."
+    },
+    "route_scan_p95_ms": {
+      "unit": "ms",
+      "direction": "lower-is-better",
+      "description": "Route discovery and manifest generation latency for the active project."
+    },
+    "resource_generation_p95_ms": {
+      "unit": "ms",
+      "direction": "lower-is-better",
+      "description": "Resource generation latency for representative CRUD/resource workloads."
+    }
+  },
+  "scenarios": [
+    {
+      "id": "todo-list-home-dev",
+      "app": "todo-list-mandu",
+      "status": "active",
+      "mode": "dev",
+      "url": "http://localhost:3333/",
+      "runner": "packages/core/benchmark/hydration-benchmark.ts",
+      "measuredMetrics": [
+        "ssr_ttfb_p95_ms",
+        "hydration_p95_ms",
+        "initial_js_bundle_kb"
+      ],
+      "budgets": {
+        "ssr_ttfb_p95_ms": {
+          "budget": 1500,
+          "warningThresholdPct": 10,
+          "baseline": null
+        },
+        "hydration_p95_ms": {
+          "budget": 500,
+          "warningThresholdPct": 10,
+          "baseline": null
+        },
+        "initial_js_bundle_kb": {
+          "budget": 200,
+          "warningThresholdPct": 10,
+          "baseline": null
+        }
+      },
+      "notes": "Current official demo baseline entry. Historical freeze is pending P0-4-7."
+    },
+    {
+      "id": "todo-list-home-prod",
+      "app": "todo-list-mandu",
+      "status": "active",
+      "mode": "prod",
+      "url": "http://localhost:3333/",
+      "runner": "scripts/smoke.ts + packages/core/benchmark/hydration-benchmark.ts",
+      "measuredMetrics": [
+        "ssr_ttfb_p95_ms",
+        "hydration_p95_ms",
+        "initial_js_bundle_kb"
+      ],
+      "budgets": {
+        "ssr_ttfb_p95_ms": {
+          "budget": 1000,
+          "warningThresholdPct": 10,
+          "baseline": null
+        },
+        "hydration_p95_ms": {
+          "budget": 350,
+          "warningThresholdPct": 10,
+          "baseline": null
+        },
+        "initial_js_bundle_kb": {
+          "budget": 150,
+          "warningThresholdPct": 10,
+          "baseline": null
+        }
+      },
+      "notes": "Production-mode budget for the first official reference path."
+    },
+    {
+      "id": "hello-ssr-home",
+      "app": "hello-ssr",
+      "status": "planned",
+      "mode": "prod",
+      "url": "/",
+      "runner": "pending-reference-app",
+      "measuredMetrics": [
+        "ssr_ttfb_p95_ms",
+        "initial_js_bundle_kb"
+      ],
+      "budgets": {
+        "ssr_ttfb_p95_ms": {
+          "budget": 800,
+          "warningThresholdPct": 10,
+          "baseline": null
+        },
+        "initial_js_bundle_kb": {
+          "budget": 120,
+          "warningThresholdPct": 10,
+          "baseline": null
+        }
+      },
+      "notes": "Reserved slot for the future hello-ssr reference app."
+    },
+    {
+      "id": "blog-crud-contract-list",
+      "app": "blog-crud-contract",
+      "status": "planned",
+      "mode": "prod",
+      "url": "/posts",
+      "runner": "pending-reference-app",
+      "measuredMetrics": [
+        "ssr_ttfb_p95_ms",
+        "hydration_p95_ms",
+        "initial_js_bundle_kb",
+        "route_scan_p95_ms"
+      ],
+      "budgets": {
+        "ssr_ttfb_p95_ms": {
+          "budget": 1200,
+          "warningThresholdPct": 10,
+          "baseline": null
+        },
+        "hydration_p95_ms": {
+          "budget": 450,
+          "warningThresholdPct": 10,
+          "baseline": null
+        },
+        "initial_js_bundle_kb": {
+          "budget": 220,
+          "warningThresholdPct": 10,
+          "baseline": null
+        },
+        "route_scan_p95_ms": {
+          "budget": 250,
+          "warningThresholdPct": 15,
+          "baseline": null
+        }
+      },
+      "notes": "Reserved slot for the contract-heavy reference app."
+    },
+    {
+      "id": "dashboard-auth-island-home",
+      "app": "dashboard-auth-island",
+      "status": "planned",
+      "mode": "dev",
+      "url": "/dashboard",
+      "runner": "pending-reference-app",
+      "measuredMetrics": [
+        "hydration_p95_ms",
+        "initial_js_bundle_kb",
+        "hmr_latency_p95_ms"
+      ],
+      "budgets": {
+        "hydration_p95_ms": {
+          "budget": 650,
+          "warningThresholdPct": 10,
+          "baseline": null
+        },
+        "initial_js_bundle_kb": {
+          "budget": 260,
+          "warningThresholdPct": 10,
+          "baseline": null
+        },
+        "hmr_latency_p95_ms": {
+          "budget": 600,
+          "warningThresholdPct": 15,
+          "baseline": null
+        }
+      },
+      "notes": "Reserved slot for the future island-heavy dashboard scenario."
+    }
+  ],
+  "notes": [
+    "Budgets are enforced ceilings. Historical baseline values stay null until the first freeze pass.",
+    "P0-4-1 fixes the metric list, P0-4-3 fixes the storage format, and P0-4-7 fills baseline values.",
+    "Only active scenarios are expected to map to running demos today."
+  ]
+}
