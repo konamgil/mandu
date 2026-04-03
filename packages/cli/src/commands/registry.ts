@@ -408,17 +408,6 @@ registerCommand({
   },
 });
 
-
-// Legacy commands (DEPRECATED)
-registerCommand({
-  id: "spec-upsert",
-  description: "[DEPRECATED] Spec file validation and lock update -> use routes generate",
-  async run(ctx) {
-    const { specUpsert } = await import("./spec-upsert");
-    return specUpsert({ file: ctx.options.file });
-  },
-});
-
 registerCommand({
   id: "generate",
   description: "Code generation (FS Routes + Resources)",

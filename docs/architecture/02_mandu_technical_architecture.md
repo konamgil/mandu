@@ -12,12 +12,13 @@
 ## 1. 아키텍처 개요
 
 ### 1.1 핵심 가설
-- Spec(JSON)이 SSOT이고
-- Generator가 generated를 만든다
-- Guard가 spec/generated 오염을 차단한다
+- **`app/` 파일시스템이 SSOT**이고 (FS-First Routing)
+- `routes.manifest.json`은 `app/`에서 자동 생성되는 **파생 캐시**이다
+- Generator가 manifest를 읽어 generated를 만든다
+- Guard가 아키텍처 오염을 차단한다
 - Bun.serve SSR 라우팅이 동작한다
 
-> **Option D 마이그레이션 노트**: `routes.manifest.json`은 이제 `app/` 디렉토리의 FS Routes로부터 자동 생성되는 아티팩트이다. 생성된 매니페스트는 `.mandu/routes.manifest.json`에 저장된다. Spec은 여전히 SSOT 역할을 하지만, 그 원천(source)은 파일시스템 라우트(`app/`)이다.
+> **FS-First 아키텍처**: `app/` 디렉토리의 파일 구조가 라우트의 단일 원천이다. `routes.manifest.json`은 FSScanner가 `app/`을 스캔하여 자동 생성하는 캐시이며, 직접 편집해도 다음 dev/build 시 덮어쓴다.
 
 ### 1.2 컴포넌트
 - **Core** (`@mandujs/core`): runtime(서버/라우터/SSR), spec 스키마/로드/락/트랜잭션, guard, report, map
@@ -36,8 +37,7 @@
 repo/
   app/                             # FS Routes (라우트 원천)
   .mandu/                          # 생성된 아티팩트 (자동 생성)
-    routes.manifest.json
-    spec.lock.json
+    routes.manifest.json           # 파생 캐시 (FSScanner가 자동 생성)
     history/                       # 스냅샷 히스토리
   spec/
     slots/                         # 슬롯 파일 (비즈니스 레이어)
@@ -57,7 +57,6 @@ repo/
         runtime/ssr.ts
         spec/schema.ts
         spec/load.ts
-        spec/lock.ts
         change/transaction.ts        # 트랜잭션 API ✅
         guard/rules.ts
         guard/check.ts
@@ -66,7 +65,6 @@ repo/
     cli/
       src/
         main.ts
-        commands/spec-upsert.ts
         commands/generate-apply.ts
         commands/guard-check.ts
         commands/dev.ts
@@ -97,7 +95,7 @@ repo/
 
 ---
 
-## 3. SSOT 스펙: routes.manifest.json
+## 3. 라우트 매니페스트 (파생 캐시)
 
 ### 3.1 최소 스키마
 - manifest (`.mandu/routes.manifest.json`): `{ version: number, routes: RouteSpec[] }`
@@ -108,9 +106,9 @@ repo/
   - `module: string` (server handler path)
   - `componentModule?: string` (page일 때 필수)
 
-### 3.2 lock 파일(`.mandu/spec.lock.json`)
-- `routesHash`(sha256), `updatedAt`(ISO)
-- 매니페스트 변경은 `app/` FS Routes 변경 후 자동 반영
+### 3.2 매니페스트 생성 흐름
+- `app/` 파일 변경 → FSScanner 스캔 → `routes.manifest.json` 자동 재생성
+- `spec/slots/{routeId}.slot.ts`, `spec/contracts/{routeId}.contract.ts`는 Route ID 규칙으로 자동 링크
 
 ---
 
@@ -153,16 +151,13 @@ repo/
 
 ## 6. Guard (MVP‑0.1 최소 4개 룰)
 
-1) **Spec hash mismatch 감지**
-- lock과 불일치면 FAIL, “spec-upsert로 변경 반영” 안내
-
-2) **generated 수동 변경 감지**
+1) **generated 수동 변경 감지**
 - `apps/**/generated/**` 변경 감지 시 FAIL, “generate로 재생성” 안내
 
-3) **non-generated → generated 직접 import 금지**
+2) **non-generated → generated 직접 import 금지**
 - 엔트리/일반코드가 generated를 직접 import하면 FAIL
 
-4) **generated에서 금칙 import(fs) 금지**
+3) **generated에서 금칙 import(fs) 금지**
 - 보안/일관성 위해 최소 금칙 적용
 
 > MVP‑0.1에서는 레이어링/복잡한 의존 그래프까지는 하지 않는다.  
@@ -182,7 +177,6 @@ CLI는 report를 파일로 출력하고, 콘솔에 요약을 출력한다.
 
 ## 8. CLI 커맨드(사용자 경험)
 
-- `bunx mandu spec-upsert --file .mandu/routes.manifest.json`
 - `bunx mandu generate`
 - `bunx mandu guard`
 - `bunx mandu build`
@@ -201,7 +195,7 @@ CLI는 report를 파일로 출력하고, 콘솔에 요약을 출력한다.
 ---
 
 ## 10. MVP‑0.1 완료 기준(DoD 7개) ✅
-1) spec-upsert 검증/lock 갱신
+1) FS Routes 스캔/매니페스트 생성
 2) generate 생성
 3) dev 서버 실행
 4) `/` SSR 200
@@ -291,7 +285,7 @@ packages/mcp/
 | URI | 설명 |
 |-----|------|
 | `mandu://spec/manifest` | routes.manifest.json |
-| `mandu://spec/lock` | spec.lock.json |
+| ~~`mandu://spec/lock`~~ | 제거됨 (FS-First 전환) |
 | `mandu://generated/map` | generated.map.json |
 | `mandu://transaction/active` | 활성 트랜잭션 정보 |
 | `mandu://slots/{routeId}` | 라우트 슬롯 내용 |
@@ -327,7 +321,7 @@ packages/mcp/
 
 | 에러 타입 | 설명 | 수정 위치 |
 |-----------|------|-----------|
-| `SPEC_ERROR` | Spec 정의 문제 | `.mandu/routes.manifest.json` |
+| `SPEC_ERROR` | 라우트/스키마 정의 문제 | `app/` 파일 또는 `spec/contracts/` |
 | `LOGIC_ERROR` | 슬롯 로직 문제 | `spec/slots/{routeId}.slot.ts` |
 | `FRAMEWORK_BUG` | 프레임워크 버그 | 이슈 리포트 |
 
@@ -337,7 +331,7 @@ packages/mcp/
 
 1) MVP‑0.1 전체 통과
 2) MCP 서버 설치 및 연결
-3) `mandu_add_route` → `mandu_generate` → 슬롯 로직 작성 워크플로우 동작
+3) `app/` 파일 추가 → `mandu_generate` → 슬롯 로직 작성 워크플로우 동작
 4) `mandu_begin` → 작업 → `mandu_rollback`으로 완전 복원
 5) `mandu_guard_check` 실패 시 수정 가이드 제공
 6) `mandu_analyze_error`로 에러 분류 및 수정 위치 안내

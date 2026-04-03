@@ -772,7 +772,7 @@ export async function runGuardCheck(
   rootDir: string
 ): Promise<GuardCheckResult> {
   const config = await loadManduConfig(rootDir);
-  const lockPath = path.join(rootDir, ".mandu/spec.lock.json");
+  // spec.lock.json is no longer used (removed in FS Routes migration)
   const mapPath = path.join(rootDir, "packages/core/map/generated.map.json");
 
   // ============================================

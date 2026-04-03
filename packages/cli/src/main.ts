@@ -30,10 +30,9 @@ Commands:
   start                   Start production server (after build)
   guard                   Architecture violation check (default)
   guard arch              Architecture violation check (FSD/Clean/Hexagonal)
-  guard legacy            Legacy Spec Guard check
+  guard manifest          Manifest Guard check (generated file integrity)
   generate                Generate code from FS Routes + Resources
   generate resource       Generate resource (interactive or flag-based)
-  spec-upsert             Validate spec file and update lock (legacy)
 
   doctor            Analyze Guard failures + suggest patches (Brain)
   watch             Watch files in real-time - warnings only (Brain)
@@ -78,7 +77,7 @@ Options:
   --with-ci           Include GitHub Actions CI/CD workflow on init (ATE E2E tests)
   --yes, -y             Skip interactive prompts on init (non-interactive mode)
   --no-install          Skip package installation on init
-  --file <path>       spec-upsert spec file / monitor log file path
+  --file <path>       Monitor log file path
   --watch             File watch mode for build/guard arch
   --output <path>     Output path for routes/openapi/doctor/contract/guard
   --verbose           Verbose output for routes list/watch, contract validate, brain status
@@ -153,9 +152,6 @@ FS Routes Workflow (recommended):
 
 Resource-Centric Workflow (new approach):
   1. init → 2. generate resource → 3. Edit slot → 4. generate → 5. dev
-
-Legacy Workflow:
-  1. init → 2. spec-upsert → 3. generate → 4. build → 5. guard → 6. dev
 
 Contract-first Workflow:
   1. contract create → 2. Edit contract → 3. generate → 4. Edit slot → 5. contract validate

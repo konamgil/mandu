@@ -1,7 +1,7 @@
 import { describe, it, expect, mock } from "bun:test";
-import { runLegacyGuardWithAutoHeal } from "../../src/commands/check";
+import { runManifestGuardWithAutoHeal } from "../../src/commands/check";
 
-describe("runLegacyGuardWithAutoHeal", () => {
+describe("runManifestGuardWithAutoHeal", () => {
   it("auto-heals when violations are auto-correctable", async () => {
     const runGuardCheck = mock()
       .mockResolvedValueOnce({
@@ -13,7 +13,7 @@ describe("runLegacyGuardWithAutoHeal", () => {
         violations: [],
       });
 
-    const result = await runLegacyGuardWithAutoHeal({ routes: [] } as unknown as Parameters<typeof runLegacyGuardWithAutoHeal>[0], "/tmp", {
+    const result = await runManifestGuardWithAutoHeal({ routes: [] } as unknown as Parameters<typeof runManifestGuardWithAutoHeal>[0], "/tmp", {
       runGuardCheck,
       runAutoCorrect: mock().mockResolvedValue({ fixed: true }),
       isAutoCorrectableViolation: mock().mockReturnValue(true),
@@ -26,7 +26,7 @@ describe("runLegacyGuardWithAutoHeal", () => {
   });
 
   it("keeps nextAction when violations remain", async () => {
-    const result = await runLegacyGuardWithAutoHeal({ routes: [] } as unknown as Parameters<typeof runLegacyGuardWithAutoHeal>[0], "/tmp", {
+    const result = await runManifestGuardWithAutoHeal({ routes: [] } as unknown as Parameters<typeof runManifestGuardWithAutoHeal>[0], "/tmp", {
       runGuardCheck: mock().mockResolvedValue({
         passed: false,
         violations: [{ ruleId: "manual-fix" }],
@@ -38,6 +38,6 @@ describe("runLegacyGuardWithAutoHeal", () => {
     expect(result.passed).toBe(false);
     expect(result.autoHealed).toBe(false);
     expect(result.violations).toBe(1);
-    expect(result.nextAction).toBe("mandu guard legacy");
+    expect(result.nextAction).toBe("mandu guard");
   });
 });

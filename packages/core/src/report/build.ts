@@ -18,9 +18,6 @@ export function buildGuardReport(checkResult: GuardCheckResult): ManuduReport {
   const nextActions: string[] = [];
 
   if (!checkResult.passed) {
-    const hasHashMismatch = checkResult.violations.some(
-      (v) => v.ruleId === "SPEC_HASH_MISMATCH"
-    );
     const hasManualEdit = checkResult.violations.some(
       (v) => v.ruleId === "GENERATED_MANUAL_EDIT"
     );
@@ -31,9 +28,6 @@ export function buildGuardReport(checkResult: GuardCheckResult): ManuduReport {
       (v) => v.ruleId === "FORBIDDEN_IMPORT_IN_GENERATED"
     );
 
-    if (hasHashMismatch) {
-      nextActions.push("bunx mandu routes generate");
-    }
     if (hasManualEdit) {
       nextActions.push("bunx mandu generate");
     }

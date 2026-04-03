@@ -2,7 +2,6 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   loadManifest,
   validateManifest,
-  writeLock,
   generateManifest,
   GENERATED_RELATIVE_PATHS,
   type RouteSpec,

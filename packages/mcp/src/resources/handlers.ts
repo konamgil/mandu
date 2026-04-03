@@ -4,7 +4,6 @@ import {
   getTransactionStatus,
   getWatcher,
   type GeneratedMap,
-  type SpecLock,
 } from "@mandujs/core";
 import { getProjectPaths, readJsonFile } from "../utils/project.js";
 import {
@@ -24,12 +23,6 @@ export const resourceDefinitions: Resource[] = [
     uri: "mandu://spec/manifest",
     name: "Routes Manifest",
     description: "Current routes.manifest.json content",
-    mimeType: "application/json",
-  },
-  {
-    uri: "mandu://spec/lock",
-    name: "Spec Lock",
-    description: "Current spec.lock.json with hash verification",
     mimeType: "application/json",
   },
   {
@@ -178,22 +171,6 @@ export function resourceHandlers(
         version: result.data.version,
         routeCount: result.data.routes.length,
         routes: result.data.routes,
-      };
-    },
-
-    "mandu://spec/lock": async () => {
-      const lock = await readJsonFile<SpecLock>(paths.lockPath);
-      if (!lock) {
-        return {
-          exists: false,
-          message: "spec.lock.json not found",
-        };
-      }
-
-      return {
-        exists: true,
-        routesHash: lock.routesHash,
-        updatedAt: lock.updatedAt,
       };
     },
 

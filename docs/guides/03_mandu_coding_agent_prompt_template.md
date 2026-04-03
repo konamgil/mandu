@@ -23,7 +23,6 @@
 repo/
   spec/
     routes.manifest.json
-    spec.lock.json
     history/                (optional)
   apps/
     server/
@@ -40,7 +39,6 @@ repo/
         runtime/ssr.ts
         spec/schema.ts
         spec/load.ts
-        spec/lock.ts
         guard/rules.ts
         guard/check.ts
         report/build.ts
@@ -48,7 +46,6 @@ repo/
     cli/
       src/
         main.ts
-        commands/spec-upsert.ts
         commands/generate-apply.ts
         commands/guard-check.ts
         commands/dev.ts
@@ -60,7 +57,7 @@ repo/
   README.md
 
 [최종 완료 기준(DoD) — 반드시 전부 통과]
-1) `bunx mandu spec-upsert --file spec/routes.manifest.json` 로 스펙 등록/검증/lock 갱신이 된다.
+1) app/ 디렉토리에 파일을 생성하면 FS Routes로 자동 등록된다.
 2) `bunx mandu generate` 로 generated 산출물이 생성된다.
 3) `bunx mandu dev` 로 서버가 뜬다(Bun.serve).
 4) `/` 요청 시 SSR HTML이 응답된다(200, `<!doctype html>` 포함).
@@ -102,7 +99,6 @@ Step 1) Spec 스키마/검증(필수)
   - RouteSpec: { id, pattern, kind, module, componentModule? }
   - rules: id unique, pattern startsWith '/', kind=page면 componentModule 필수
 - packages/core/src/spec/load.ts: load+validate+에러포맷
-- packages/core/src/spec/lock.ts: sha256 hash + read/write spec.lock.json
 => 잘못된 스펙이면 사람이 이해 가능한 에러를 출력해야 한다.
 
 Step 2) Minimal SSR
@@ -127,10 +123,9 @@ Step 4) Generator (spec → generated)
 
 Step 5) Guard (MVP‑0.1 4개 룰)
 - rules:
-  1) spec hash mismatch 감지: “spec-upsert로 변경하라”
-  2) apps/**/generated/** 수동 변경 감지: “generate로 재생성하라”
-  3) non-generated에서 generated 직접 import 감지: FAIL
-  4) generated에서 fs import 금지: FAIL
+  1) .mandu/**/generated/** 수동 변경 감지: “generate로 재생성하라”
+  2) non-generated에서 generated 직접 import 감지: FAIL
+  3) generated에서 fs import 금지: FAIL
 - packages/core/src/guard/check.ts + packages/cli/src/commands/guard-check.ts
 => 실패 시 ruleId/file/message/suggestion을 포함한 report 생성.
 
@@ -139,7 +134,7 @@ Step 6) Report
 - CLI에서 콘솔 요약 출력 + nextActions 제시
 
 Step 7) CLI 커맨드 완성
-- packages/cli/src/main.ts: mandu spec-upsert / generate / guard / dev
+- packages/cli/src/main.ts: mandu generate / guard / dev
 - bunx 실행 가능하게 package.json에 bin 설정
 => README에 사용법 4줄로 재현 가능하게.
 

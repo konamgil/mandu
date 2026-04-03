@@ -2,7 +2,6 @@ import type { RoutesManifest } from "../spec/schema";
 import type { GuardViolation } from "./rules";
 import { GUARD_RULES } from "./rules";
 import { runGuardCheck } from "./check";
-import { writeLock } from "../spec/lock";
 import { generateRoutes } from "../generator/generate";
 import { beginChange, commitChange, rollbackChange } from "../change";
 import path from "path";
@@ -27,7 +26,6 @@ export interface AutoCorrectResult {
 
 // 자동 수정 가능한 규칙들
 const AUTO_CORRECTABLE_RULES = new Set([
-  GUARD_RULES.SPEC_HASH_MISMATCH.id,
   GUARD_RULES.GENERATED_MANUAL_EDIT.id,
   GUARD_RULES.SLOT_NOT_FOUND.id,
 ]);
@@ -148,9 +146,6 @@ async function correctViolation(
   rootDir: string
 ): Promise<AutoCorrectStep> {
   switch (violation.ruleId) {
-    case GUARD_RULES.SPEC_HASH_MISMATCH.id:
-      return await correctSpecHashMismatch(manifest, rootDir);
-
     case GUARD_RULES.GENERATED_MANUAL_EDIT.id:
       return await correctGeneratedManualEdit(manifest, rootDir);
 
@@ -164,30 +159,6 @@ async function correctViolation(
         success: false,
         message: `자동 수정 불가능한 규칙: ${violation.ruleId}`,
       };
-  }
-}
-
-async function correctSpecHashMismatch(
-  manifest: RoutesManifest,
-  rootDir: string
-): Promise<AutoCorrectStep> {
-  try {
-    const lockPath = path.join(rootDir, ".mandu/spec.lock.json");
-    await writeLock(lockPath, manifest);
-
-    return {
-      ruleId: GUARD_RULES.SPEC_HASH_MISMATCH.id,
-      action: "spec-upsert",
-      success: true,
-      message: "spec.lock.json 업데이트 완료",
-    };
-  } catch (error) {
-    return {
-      ruleId: GUARD_RULES.SPEC_HASH_MISMATCH.id,
-      action: "spec-upsert",
-      success: false,
-      message: `spec.lock.json 업데이트 실패: ${error instanceof Error ? error.message : String(error)}`,
-    };
   }
 }
 

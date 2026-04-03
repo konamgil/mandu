@@ -55,19 +55,6 @@ if (result.success && result.data) {
 }
 ```
 
-### Lock 파일
-
-```typescript
-import { writeLock, readLock } from "@mandujs/core";
-
-// lock 파일 쓰기
-const lock = await writeLock(".mandu/spec.lock.json", manifest);
-console.log(lock.routesHash);
-
-// lock 파일 읽기
-const existing = await readLock(".mandu/spec.lock.json");
-```
-
 ## Generator 모듈
 
 Spec 기반 코드 생성.
@@ -132,7 +119,6 @@ if (!result.passed) {
 
 | 규칙 ID | 설명 | 자동 수정 |
 |---------|------|----------|
-| `SPEC_HASH_MISMATCH` | spec과 lock 해시 불일치 | ✅ |
 | `GENERATED_MANUAL_EDIT` | generated 파일 수동 수정 | ✅ |
 | `HANDLER_NOT_FOUND` | 핸들러 파일 없음 | ❌ |
 | `COMPONENT_NOT_FOUND` | 컴포넌트 파일 없음 | ❌ |

@@ -1,5 +1,4 @@
 import type { RoutesManifest } from "../spec/schema";
-import type { SpecLock } from "../spec/lock";
 import type { ManduLockfile } from "../lockfile";
 
 /**
@@ -30,8 +29,8 @@ export interface Snapshot {
   timestamp: string;
   /** routes.manifest.json 내용 (~1KB) */
   manifest: RoutesManifest;
-  /** spec.lock.json 내용 (~0.1KB, 없을 수 있음) */
-  lock: SpecLock | null;
+  /** Legacy lock 데이터 (하위호환용, 새 스냅샷에서는 항상 null) */
+  lock: { routesHash: string; updatedAt: string } | null;
   /** Slot 파일 내용만 저장 (Generated 파일은 재생성 가능) */
   slotContents: Record<string, string>;
   /** 설정 스냅샷 (Lockfile 포함) - ont-run 통합 */

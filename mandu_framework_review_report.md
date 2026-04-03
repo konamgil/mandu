@@ -4,16 +4,16 @@
 평가 방법: 코드/템플릿/테스트/문서 정적 검토 (실행/벤치마크 미수행)
 
 ## 1. 총평 (Executive Summary)
-Mandu는 “Spec = SSOT + Guard + Transaction”을 실 코드로 구현해, 에이전트 기반 개발의 구조 보존 문제를 정면으로 다루는 독창적 프레임워크다.  
-특히 Spec→Generate→Guard의 핵심 루프와 트랜잭션/스냅샷이 결합되어 있다는 점은 세계적 프레임워크에서도 보기 어려운 강점이다.  
+Mandu는 “FS-First Routes + Guard + Transaction”을 실 코드로 구현해, 에이전트 기반 개발의 구조 보존 문제를 정면으로 다루는 독창적 프레임워크다.  
+특히 FS Routes→Manifest→Guard의 핵심 루프와 트랜잭션/스냅샷이 결합되어 있다는 점은 세계적 프레임워크에서도 보기 어려운 강점이다.  
+> *주: 이 보고서는 2026-01-28 기준 작성. 이후 FS-First 아키텍처로 정리되어 “Spec(JSON) = SSOT” 표현은 “app/ 파일시스템 = SSOT”로 교체됨.*  
 다만 런타임–번들러–하이드레이션의 실제 연결 경로가 끊겨 있고, 템플릿/CLI/문서 간 불일치가 누적되어 “완결성”과 “현장 DX”가 떨어진다.  
 이 연결 고리만 정리되면 Mandu는 기존 프레임워크와 명확히 구분되는 “아키텍처 보존형 개발 OS”로 진입할 수 있다.
 
 ## 2. 구현 기반 아키텍처 흐름 (코드 실측)
 ### 2.1 핵심 실행 흐름
-1) Spec 로드 및 검증: `packages/core/src/spec/load.ts`  
-2) Lock 갱신: `packages/core/src/spec/lock.ts`  
-3) 코드 생성 + generated.map 작성: `packages/core/src/generator/generate.ts`  
+1) FS Routes 스캔 및 매니페스트 생성: `packages/core/src/router/fs-scanner.ts`, `fs-routes.ts`  
+2) 코드 생성 + generated.map 작성: `packages/core/src/generator/generate.ts`  
 4) Guard 검사/자동수정: `packages/core/src/guard/check.ts`, `packages/core/src/guard/auto-correct.ts`  
 5) 런타임 SSR: `packages/core/src/runtime/server.ts`, `packages/core/src/runtime/ssr.ts`  
 6) 트랜잭션/히스토리: `packages/core/src/change/*`
@@ -31,9 +31,9 @@ Mandu는 “Spec = SSOT + Guard + Transaction”을 실 코드로 구현해, 에
 - 서버 본체: `packages/mcp/src/server.ts`
 
 ## 3. 세계적 프레임워크 관점의 강점
-### 3.1 계약 중심(SSOT) 설계의 명확성
-- Spec 스키마가 강한 계약으로 작동한다: `packages/core/src/spec/schema.ts`.  
-- Prisma/GraphQL codegen 계열처럼 “스펙이 단일 진실”이라는 구조는 대규모 협업과 자동화에 유리하다.
+### 3.1 FS-First + 계약 중심 설계의 명확성
+- `app/` 파일시스템이 라우트의 SSOT이고, `spec/contracts/`의 Zod 스키마가 API 계약으로 작동한다.  
+- Prisma/GraphQL codegen 계열처럼 구조화된 설계는 대규모 협업과 자동화에 유리하다.
 
 ### 3.2 Guard + Transaction의 결합
 - Guard 위반을 자동 수정하고, 실패 시 스냅샷 롤백까지 수행:  

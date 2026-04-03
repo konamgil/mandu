@@ -25,7 +25,7 @@ export type ViolationCategory =
  * Categorize a violation by its rule ID
  */
 export function categorizeViolation(ruleId: string): ViolationCategory {
-  if (ruleId.includes("SPEC") || ruleId === "SPEC_HASH_MISMATCH") {
+  if (ruleId.includes("SPEC")) {
     return "spec";
   }
   if (ruleId.includes("GENERATED") || ruleId.includes("FORBIDDEN_IMPORT")) {
@@ -138,16 +138,6 @@ export function generateTemplatePatches(
 
   for (const violation of violations) {
     switch (violation.ruleId) {
-      case GUARD_RULES.SPEC_HASH_MISMATCH?.id:
-        patches.push({
-          file: ".mandu/spec.lock.json",
-          description: "Spec lock 파일 갱신",
-          type: "command",
-          command: "bunx mandu spec-upsert",
-          confidence: 0.9,
-        });
-        break;
-
       case GUARD_RULES.GENERATED_MANUAL_EDIT?.id:
         patches.push({
           file: violation.file,
@@ -307,9 +297,6 @@ export async function analyzeViolations(
 
   // Determine recommended next command
   let nextCommand = "bunx mandu generate";
-  if (violations.some((v) => v.ruleId === GUARD_RULES.SPEC_HASH_MISMATCH?.id)) {
-    nextCommand = "bunx mandu spec-upsert";
-  }
 
   // If LLM is not requested or not available, return template analysis
   if (!useLLM) {

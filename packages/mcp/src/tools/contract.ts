@@ -1,7 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   loadManifest,
-  writeLock,
   runContractGuardCheck,
   generateContractTemplate,
   generateOpenAPIDocument,
@@ -311,7 +310,6 @@ export function contractTools(projectRoot: string) {
         };
 
         await writeJsonFile(paths.manifestPath, result.data);
-        await writeLock(paths.lockPath, result.data);
       }
 
       return {
@@ -352,7 +350,6 @@ export function contractTools(projectRoot: string) {
 
       // Write updated manifest
       await writeJsonFile(paths.manifestPath, result.data);
-      await writeLock(paths.lockPath, result.data);
 
       return {
         success: true,

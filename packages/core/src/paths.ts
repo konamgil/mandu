@@ -15,8 +15,6 @@ export interface GeneratedPaths {
   mapDir: string;
   /** 생성된 매니페스트 경로 */
   manifestPath: string;
-  /** 생성된 lock 경로 */
-  lockPath: string;
   /** Resource 관련 경로 */
   resourceContractsDir: string;
   resourceTypesDir: string;
@@ -35,7 +33,6 @@ export function resolveGeneratedPaths(rootDir: string): GeneratedPaths {
     typesDir: path.join(rootDir, ".mandu/generated/server/types"),
     mapDir: path.join(rootDir, ".mandu/generated"),
     manifestPath: path.join(rootDir, ".mandu/routes.manifest.json"),
-    lockPath: path.join(rootDir, ".mandu/spec.lock.json"),
     resourceContractsDir: path.join(rootDir, ".mandu/generated/server/contracts"),
     resourceTypesDir: path.join(rootDir, ".mandu/generated/server/types"),
     resourceSlotsDir: path.join(rootDir, "spec/slots"),
@@ -53,7 +50,6 @@ export const GENERATED_RELATIVE_PATHS = {
   types: ".mandu/generated/server/types",
   map: ".mandu/generated",
   manifest: ".mandu/routes.manifest.json",
-  lock: ".mandu/spec.lock.json",
   history: ".mandu/history",
   contracts: ".mandu/generated/server/contracts",
   resourceTypes: ".mandu/generated/server/types",

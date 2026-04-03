@@ -269,7 +269,6 @@ my-app/
 │
 └── .mandu/                        # 생성된 산출물 (자동 관리)
     ├── routes.manifest.json       # 라우트 매니페스트 (app/ 스캔 결과)
-    └── spec.lock.json             # 해시 검증
 ```
 
 ### 4.3 핵심 결정 사항

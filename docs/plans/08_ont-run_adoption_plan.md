@@ -352,7 +352,7 @@ export function validateAgainstLockfile(
 #### 3.4.3 mandu 적용 방안
 
 **적용 대상**:
-- `.mandu/lockfile.json` 파일로 설정 버전 관리 (spec.lock과 분리)
+- `.mandu/lockfile.json` 파일로 설정 버전 관리
 - 팀 협업 시 설정 충돌 방지
 - CI/CD에서 설정 무결성 검증
 - `.mcp.json` 변경 감지 및 검증 (선택)

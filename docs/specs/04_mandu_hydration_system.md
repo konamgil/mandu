@@ -150,7 +150,6 @@ useEffect 실행 안됨 → API 호출 안됨 → 영원히 로딩
 my-app/
 ├── spec/
 │   ├── routes.manifest.json      # 라우트 + hydration 설정
-│   ├── spec.lock.json
 │   └── slots/
 │       ├── todos.slot.ts         # 서버 로직 (API, loader)
 │
@@ -1161,7 +1160,6 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
 // packages/core/src/guard/rules.ts (발췌)
 
 export const GUARD_RULES = {
-  SPEC_HASH_MISMATCH: { id: "SPEC_HASH_MISMATCH", severity: "error" },
   GENERATED_MANUAL_EDIT: { id: "GENERATED_MANUAL_EDIT", severity: "error" },
   INVALID_GENERATED_IMPORT: { id: "INVALID_GENERATED_IMPORT", severity: "error" },
   FORBIDDEN_IMPORT_IN_GENERATED: { id: "FORBIDDEN_IMPORT_IN_GENERATED", severity: "error" },
@@ -1716,9 +1714,6 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 ```bash
 # 1. 패키지 업데이트
 bun update @mandujs/core @mandujs/cli
-
-# 2. spec.lock 재생성
-bun run spec
 
 # 3. 코드 재생성
 bun run generate

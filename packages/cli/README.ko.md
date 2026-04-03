@@ -83,8 +83,7 @@ my-app/
 │   ├── slots/              # 비즈니스 로직 파일
 │   └── contracts/          # 타입 안전 계약
 ├── .mandu/                  # 생성된 산출물 (자동 관리)
-│   ├── routes.manifest.json # 라우트 매니페스트 (자동 생성)
-│   └── spec.lock.json       # 해시 검증
+│   └── routes.manifest.json # 라우트 매니페스트 (자동 생성)
 ├── package.json
 └── tsconfig.json
 ```
@@ -141,7 +140,6 @@ bunx mandu guard legacy --no-auto-correct
 ```
 
 자동 수정 가능한 규칙(legacy):
-- `SPEC_HASH_MISMATCH` → lock 파일 갱신
 - `GENERATED_MANUAL_EDIT` → 코드 재생성
 - `SLOT_NOT_FOUND` → slot 파일 생성
 

@@ -38,7 +38,6 @@ export function getProjectPaths(rootDir: string) {
     appDir: path.join(rootDir, "app"),
     specDir: path.join(rootDir, "spec"),
     manifestPath: path.join(rootDir, ".mandu", "routes.manifest.json"),
-    lockPath: path.join(rootDir, ".mandu", "spec.lock.json"),
     slotsDir: path.join(rootDir, "spec", "slots"),
     contractsDir: path.join(rootDir, "spec", "contracts"),
     historyDir: path.join(rootDir, ".mandu", "history"),

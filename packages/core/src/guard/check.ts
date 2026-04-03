@@ -1,5 +1,4 @@
 import { GUARD_RULES, FORBIDDEN_IMPORTS, type GuardViolation } from "./rules";
-import { verifyLock, computeHash } from "../spec/lock";
 import { runContractGuardCheck } from "./contract-guard";
 import { validateSlotContent } from "../slot/validator";
 import type { RoutesManifest } from "../spec/schema";
@@ -57,27 +56,6 @@ async function readFileContent(filePath: string): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-// Rule 1: Spec hash mismatch
-export async function checkSpecHashMismatch(
-  manifest: RoutesManifest,
-  lockPath: string
-): Promise<GuardViolation | null> {
-  const result = await verifyLock(lockPath, manifest);
-
-  if (!result.valid) {
-    return {
-      ruleId: GUARD_RULES.SPEC_HASH_MISMATCH.id,
-      file: lockPath,
-      message: result.lockHash
-        ? `Spec 해시 불일치: lock(${result.lockHash.slice(0, 8)}...) != current(${result.currentHash.slice(0, 8)}...)`
-        : "spec.lock.json 파일이 없습니다",
-      suggestion: "bunx mandu spec-upsert를 실행하여 변경사항을 반영하세요",
-    };
-  }
-
-  return null;
 }
 
 // Rule 2: Generated file manual edit detection
@@ -370,20 +348,17 @@ export async function runGuardCheck(
 ): Promise<GuardCheckResult> {
   const config = await loadManduConfig(rootDir);
 
-  const lockPath = path.join(rootDir, ".mandu/spec.lock.json");
   const mapPath = path.join(rootDir, ".mandu/generated/generated.map.json");
 
   // ============================================
   // Phase 1: 독립적인 검사 병렬 실행
   // ============================================
   const [
-    hashViolation,
     importViolations,
     slotViolations,
     specDirViolations,
     islandViolations,
   ] = await Promise.all([
-    checkSpecHashMismatch(manifest, lockPath),
     checkInvalidGeneratedImport(rootDir),
     checkSlotFileExists(manifest, rootDir),
     checkSpecDirNaming(rootDir),
@@ -391,7 +366,6 @@ export async function runGuardCheck(
   ]);
 
   const violations: GuardViolation[] = [];
-  if (hashViolation) violations.push(hashViolation);
   violations.push(...importViolations);
   violations.push(...slotViolations);
   violations.push(...specDirViolations);

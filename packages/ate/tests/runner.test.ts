@@ -1,8 +1,26 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll, mock } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { runPlaywright, type RunResult } from "../src/runner";
+import { EventEmitter } from "node:events";
+
+// Mock child_process.spawn to avoid real Playwright dependency
+mock.module("node:child_process", () => ({
+  spawn: (_cmd: string, _args: string[], options?: Record<string, unknown>) => {
+    const child = new EventEmitter();
+    (child as any).kill = () => {};
+
+    // Simulate exit code based on playwright config existence
+    const cwd = (options?.cwd as string) ?? process.cwd();
+    const configExists = existsSync(join(cwd, "tests", "e2e", "playwright.config.ts"));
+
+    setTimeout(() => child.emit("exit", configExists ? 0 : 1), 5);
+    return child;
+  },
+}));
+
+// Dynamic import after mock.module so runner gets the mocked spawn
+const { runPlaywright } = await import("../src/runner");
 import type { RunInput } from "../src/types";
 import { readJson } from "../src/fs";
 
@@ -14,7 +32,11 @@ describe("runner", () => {
   });
 
   afterAll(() => {
-    rmSync(testDir, { recursive: true, force: true });
+    try {
+      rmSync(testDir, { recursive: true, force: true });
+    } catch {
+      // Windows: EBUSY can occur if files are briefly locked; ignore in cleanup
+    }
   });
 
   function setupMinimalProject(): string {
@@ -51,75 +73,59 @@ describe("runner", () => {
   }
 
   test("should return runId and reportDir", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = { repoRoot };
     const result = await runPlaywright(input);
 
-    // Assert
     expect(result.runId).toBeDefined();
     expect(result.runId).toMatch(/^run-\d+$/);
 
-    // reportDir is absolute path, normalize for cross-platform check
     const normalizedReportDir = result.reportDir.replace(/\\/g, "/");
     expect(normalizedReportDir).toContain(".mandu/reports");
     expect(result.reportDir).toContain(result.runId);
   });
 
   test("should create .mandu/reports directory", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = { repoRoot };
     await runPlaywright(input);
 
-    // Assert
     const manduReportsDir = join(repoRoot, ".mandu", "reports");
     expect(existsSync(manduReportsDir)).toBe(true);
   });
 
   test("should create latest symlink directory", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = { repoRoot };
     await runPlaywright(input);
 
-    // Assert
     const latestDir = join(repoRoot, ".mandu", "reports", "latest");
     expect(existsSync(latestDir)).toBe(true);
   });
 
   test("should return exit code", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = { repoRoot };
     const result = await runPlaywright(input);
 
-    // Assert
     expect(result.exitCode).toBeDefined();
     expect(typeof result.exitCode).toBe("number");
     expect([0, 1]).toContain(result.exitCode);
   });
 
   test("should use custom baseURL", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = {
       repoRoot,
       baseURL: "http://localhost:8080",
     };
     const result = await runPlaywright(input);
 
-    // Assert - should write run metadata
     const runJsonPath = join(result.reportDir, "run.json");
     if (existsSync(runJsonPath)) {
       const runData = readJson<{ baseURL: string }>(runJsonPath);
@@ -128,30 +134,23 @@ describe("runner", () => {
   });
 
   test("should set CI environment variable", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = {
       repoRoot,
       ci: true,
     };
 
-    // Can't easily test env var propagation without actually running Playwright
-    // So we just verify the function accepts the parameter
     const result = await runPlaywright(input);
     expect(result).toBeDefined();
   });
 
   test("should write run metadata JSON", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = { repoRoot };
     const result = await runPlaywright(input);
 
-    // Assert
     const runJsonPath = join(result.reportDir, "run.json");
     expect(existsSync(runJsonPath)).toBe(true);
 
@@ -161,99 +160,79 @@ describe("runner", () => {
   });
 
   test("should include jsonReportPath in result", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = { repoRoot };
     const result = await runPlaywright(input);
 
-    // Assert
     expect(result.jsonReportPath).toBeDefined();
     expect(result.jsonReportPath).toContain("playwright-report.json");
   });
 
   test("should include junitPath in result", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = { repoRoot };
     const result = await runPlaywright(input);
 
-    // Assert
     expect(result.junitPath).toBeDefined();
     expect(result.junitPath).toContain("junit.xml");
   });
 
   test("should handle missing playwright config gracefully", async () => {
-    // Setup - no config file
+    // No config file
     const repoRoot = join(testDir, `no-config-${Date.now()}`);
     mkdirSync(repoRoot, { recursive: true });
 
-    // Execute
     const input: RunInput = { repoRoot };
     const result = await runPlaywright(input);
 
-    // Assert - should return error exit code
     expect(result.exitCode).not.toBe(0);
   });
 
   test("should generate sequential runIds", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const result1 = await runPlaywright({ repoRoot });
-    // Small delay to ensure different timestamps
     await new Promise((resolve) => setTimeout(resolve, 50));
     const result2 = await runPlaywright({ repoRoot });
 
-    // Assert
     expect(result1.runId).not.toBe(result2.runId);
 
     const timestamp1 = parseInt(result1.runId.replace("run-", ""));
     const timestamp2 = parseInt(result2.runId.replace("run-", ""));
     expect(timestamp2).toBeGreaterThan(timestamp1);
-  }, 10000);
+  });
 
   test("should use default baseURL if not provided", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = { repoRoot };
     const result = await runPlaywright(input);
 
-    // Assert
     const runJsonPath = join(result.reportDir, "run.json");
     if (existsSync(runJsonPath)) {
       const runData = readJson<{ baseURL: string }>(runJsonPath);
       expect(runData.baseURL).toBeDefined();
-      // Should be default or from env
       expect(runData.baseURL).toMatch(/^http:\/\/localhost:\d+$/);
     }
   });
 
   test("should respect BASE_URL environment variable", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
     const originalEnv = process.env.BASE_URL;
     process.env.BASE_URL = "http://test.example.com";
 
     try {
-      // Execute
       const input: RunInput = { repoRoot };
       const result = await runPlaywright(input);
 
-      // Assert
       const runJsonPath = join(result.reportDir, "run.json");
       if (existsSync(runJsonPath)) {
         const runData = readJson<{ baseURL: string }>(runJsonPath);
         expect(runData.baseURL).toBe("http://test.example.com");
       }
     } finally {
-      // Cleanup
       if (originalEnv !== undefined) {
         process.env.BASE_URL = originalEnv;
       } else {
@@ -263,33 +242,25 @@ describe("runner", () => {
   });
 
   test("should handle headless option", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = {
       repoRoot,
       headless: true,
     };
 
-    // Can't easily verify headless mode without running actual tests
-    // Just verify the parameter is accepted
     const result = await runPlaywright(input);
     expect(result).toBeDefined();
   });
 
   test("should handle browsers option", async () => {
-    // Setup
     const repoRoot = setupMinimalProject();
 
-    // Execute
     const input: RunInput = {
       repoRoot,
       browsers: ["chromium"],
     };
 
-    // Can't easily verify browser selection without running actual tests
-    // Just verify the parameter is accepted
     const result = await runPlaywright(input);
     expect(result).toBeDefined();
   });

@@ -1,7 +1,7 @@
 /**
  * mandu check - Workflow Check Command
  *
- * Integrated check: FS Routes + Architecture Guard + Legacy Guard
+ * Integrated check: FS Routes + Architecture Guard + Manifest Guard
  */
 
 import {
@@ -27,16 +27,16 @@ import path from "path";
 import { resolveFromCwd, isDirectory, pathExists } from "../util/fs";
 import { resolveOutputFormat } from "../util/output";
 
-interface LegacyCheckDeps {
+interface ManifestCheckDeps {
   runGuardCheck: typeof runGuardCheck;
   runAutoCorrect: typeof runAutoCorrect;
   isAutoCorrectableViolation: typeof isAutoCorrectableViolation;
 }
 
-export async function runLegacyGuardWithAutoHeal(
+export async function runManifestGuardWithAutoHeal(
   manifest: Parameters<typeof runGuardCheck>[0],
   rootDir: string,
-  deps: LegacyCheckDeps = { runGuardCheck, runAutoCorrect, isAutoCorrectableViolation }
+  deps: ManifestCheckDeps = { runGuardCheck, runAutoCorrect, isAutoCorrectableViolation }
 ): Promise<{
   passed: boolean;
   violations: number;
@@ -67,7 +67,7 @@ export async function runLegacyGuardWithAutoHeal(
     passed: checkResult.passed,
     violations: checkResult.violations.length,
     autoHealed,
-    nextAction: checkResult.passed ? undefined : "mandu guard legacy",
+    nextAction: checkResult.passed ? undefined : "mandu guard",
     checkResult,
   };
 }
@@ -221,8 +221,8 @@ export async function check(): Promise<boolean> {
     }
   }
 
-  // 3) Legacy Guard check (only when spec file exists)
-  let legacySummary: {
+  // 3) Manifest Guard check (only when spec file exists)
+  let manifestGuardSummary: {
     enabled: boolean;
     passed: boolean;
     violations: number;
@@ -236,12 +236,12 @@ export async function check(): Promise<boolean> {
   };
 
   if (hasSpec) {
-    legacySummary.enabled = true;
+    manifestGuardSummary.enabled = true;
 
     const manifestResult = await loadManifest(specPath);
     if (!manifestResult.success || !manifestResult.data) {
-      legacySummary.passed = false;
-      legacySummary.errors = manifestResult.errors ?? ["Failed to load spec"];
+      manifestGuardSummary.passed = false;
+      manifestGuardSummary.errors = manifestResult.errors ?? ["Failed to load spec"];
       success = false;
 
       if (format === "console") {
@@ -249,31 +249,31 @@ export async function check(): Promise<boolean> {
         manifestResult.errors?.forEach((e) => console.error(`  - ${e}`));
       }
     } else {
-      const legacyResult = await runLegacyGuardWithAutoHeal(manifestResult.data, rootDir);
-      legacySummary.passed = legacyResult.passed;
-      legacySummary.violations = legacyResult.violations;
-      legacySummary.autoHealed = legacyResult.autoHealed;
-      legacySummary.nextAction = legacyResult.nextAction;
+      const guardResult = await runManifestGuardWithAutoHeal(manifestResult.data, rootDir);
+      manifestGuardSummary.passed = guardResult.passed;
+      manifestGuardSummary.violations = guardResult.violations;
+      manifestGuardSummary.autoHealed = guardResult.autoHealed;
+      manifestGuardSummary.nextAction = guardResult.nextAction;
 
-      if (format === "console" && legacyResult.autoHealed) {
-        log("✅ Legacy spec drift auto-healed");
+      if (format === "console" && guardResult.autoHealed) {
+        log("✅ Manifest guard drift auto-healed");
       }
-      if (format === "console" && legacyResult.nextAction) {
-        log("💡 Legacy guard violations remain. Run `mandu guard legacy` for detailed inspection/repair.");
+      if (format === "console" && guardResult.nextAction) {
+        log("💡 Manifest guard violations remain. Run `mandu guard` for detailed inspection/repair.");
       }
 
-      if (strictWarnings && legacyResult.violations > 0) {
+      if (strictWarnings && guardResult.violations > 0) {
         success = false;
       } else {
-        success = success && legacyResult.passed;
+        success = success && guardResult.passed;
       }
 
       if (format === "console") {
-        const legacyReport = buildGuardReport(legacyResult.checkResult);
+        const guardReport = buildGuardReport(guardResult.checkResult);
         if (quiet) {
-          print(`📊 Legacy Guard: ${legacySummary.violations} violation(s)`);
+          print(`📊 Manifest Guard: ${manifestGuardSummary.violations} violation(s)`);
         } else {
-          printReportSummary(legacyReport);
+          printReportSummary(guardReport);
         }
       }
     }
@@ -343,7 +343,7 @@ export async function check(): Promise<boolean> {
         errors: configGuardResult.errors,
         warnings: configGuardResult.warnings,
       },
-      legacy: legacySummary,
+      legacy: manifestGuardSummary,
     };
     console.log(JSON.stringify(summary, null, 2));
   }

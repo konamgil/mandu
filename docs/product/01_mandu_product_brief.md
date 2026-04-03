@@ -1,7 +1,7 @@
 # 만두 기획안 (v0.2) — Agent‑Native Fullstack Framework + MCP
 
 > 목적: **에이전트가 코딩해도 아키텍처가 무너지지 않는 개발 OS**를 만든다.  
-> 핵심: **코드 = 산출물, Spec(JSON) = 단일 진실원천(SSOT)**
+> 핵심: **코드 = 산출물, `app/` 파일시스템 = 단일 진실원천(SSOT), Manifest = 파생 캐시**
 
 ---
 
@@ -24,7 +24,7 @@
 **자연어 → MCP(기획/스펙 작성) → Generate(뼈대 생성) → Slot(로직) → Guard/Tests → Report**까지 자동화하는, **Bun+TS+React 기반 Agent‑Native 풀스택 프레임워크**
 
 ### 2.2 핵심 철학(불변 원칙)
-1) **Spec(JSON)이 SSOT**다. 코드는 spec의 산출물이다.  
+1) **`app/` 파일시스템이 SSOT**다. Manifest(JSON)는 FS에서 자동 생성되는 파생물이다.  
 2) **generated는 언제든 날리고 재생성 가능**해야 한다.  
 3) 에이전트는 **슬롯(허용 영역)에서만** 작업한다.  
 4) Lint는 최소화하고, **Guard가 구조 보존의 주인공**이 된다.  
@@ -57,21 +57,24 @@
 
 ---
 
-## 5. SSOT 스펙 체계(버전/락/롤백 포함)
+## 5. 파생 매니페스트 체계(버전/롤백 포함)
 
-### 5.1 SSOT 파일(모두 JSON)
-- `.mandu/routes.manifest.json` (auto-generated from `app/` scanning)
+### 5.1 SSOT (Source of Truth)
+- **`app/` 디렉토리** — 파일시스템 라우팅의 원천. 파일 생성/삭제가 곧 라우트 정의.
+- **`spec/slots/*.slot.ts`** — 서버 데이터 로더 (비즈니스 로직)
+- **`spec/contracts/*.contract.ts`** — Zod API 스키마
+
+### 5.2 파생 아티팩트 (자동 생성, 직접 편집 금지)
+- `.mandu/routes.manifest.json` — `app/`에서 FSScanner가 자동 생성하는 캐시. 편집해도 다음 빌드 시 덮어씀.
 - `spec/channels.manifest.json` (후속)
-- `spec/contracts/*.contract.ts` (후속)
 - `spec/isr.policy.json` (후속)
 - `spec/plan.json` (후속)
 
-### 5.2 버전/락/롤백(필수)
-- `.mandu/spec.lock.json`: 적용된 스펙의 해시/메타
-- `.mandu/history/snapshots/<id>.snapshot.json`: 커밋 스냅샷(옵션→필수로 확장)
+### 5.3 히스토리/롤백
+- `.mandu/history/snapshots/<id>.snapshot.json`: 커밋 스냅샷
 
-### 5.3 변경 트랜잭션 ✅ (구현 완료)
-- `beginChange()` → (spec 변경/생성) → `runGuardCheck()` + `tests.run()` → `commitChange()`
+### 5.4 변경 트랜잭션 ✅ (구현 완료)
+- `beginChange()` → (파일 변경/생성) → `runGuardCheck()` + `tests.run()` → `commitChange()`
 - 실패 시 `rollbackChange()`으로 깨끗하게 복구
 
 **트랜잭션 API (core 함수)**:
@@ -79,7 +82,7 @@
 import { beginChange, commitChange, rollbackChange } from "@mandujs/core";
 
 await beginChange(projectRoot, { message: "Add users API" }); // 스냅샷 생성
-// ... spec 변경, 코드 생성, 슬롯 작성 ...
+// ... app/ 파일 추가, 슬롯 작성 ...
 await commitChange(projectRoot); // 히스토리에 저장
 // 또는
 await rollbackChange(projectRoot); // 스냅샷으로 완전 복원
@@ -88,8 +91,7 @@ await rollbackChange(projectRoot); // 스냅샷으로 완전 복원
 **스냅샷 구조**:
 - `timestamp`: 생성 시간
 - `message`: 변경 설명
-- `manifest`: routes.manifest.json 백업
-- `lock`: spec.lock.json 백업
+- `manifest`: routes.manifest.json 캐시 (롤백 편의용)
 - `slotContents`: 슬롯 파일 전체 백업
 
 ---
@@ -166,7 +168,7 @@ await rollbackChange(projectRoot); // 스냅샷으로 완전 복원
 ### MVP‑0.1 ✅
 - Spec 기반 라우트 생성 + 최소 SSR 동작
 - Guard: spec/generated/슬롯 경계 오염 방지
-- CLI: spec‑upsert / generate / guard / build / dev
+- CLI: generate / guard / build / dev
 
 ### MVP‑0.3 ✅ (현재)
 - route‑logic 슬롯 시스템
@@ -195,7 +197,7 @@ await rollbackChange(projectRoot); // 스냅샷으로 완전 복원
 - UX 목표: express/next처럼 **`bunx mandu init`** (또는 **`bunx @mandujs/cli init`**)로 프로젝트 생성
 - 패키지 구성:
   - `@mandujs/core` - 런타임, SSR, Guard, Spec 스키마, 트랜잭션 API ✅
-  - `@mandujs/cli` - init, spec-upsert, generate, guard, build, dev, contract, openapi, change, doctor, watch, brain ✅
+  - `@mandujs/cli` - init, generate, guard, build, dev, contract, openapi, change, doctor, watch, brain ✅
   - `@mandujs/mcp` - MCP 서버 (AI 에이전트 통합) ✅
   - `@mandujs/adapters-*` - redis/pubsub/session/cache (후속)
 
@@ -216,7 +218,6 @@ AI 에이전트가 Mandu 프레임워크를 직접 조작하는 MCP 서버:
 
 **리소스 (Resources)**:
 - `mandu://spec/manifest` - routes.manifest.json
-- `mandu://spec/lock` - spec.lock.json
 - `mandu://generated/map` - generated.map.json
 - `mandu://transaction/active` - 활성 트랜잭션 정보
 - `mandu://slots/{routeId}` - 라우트 슬롯 내용

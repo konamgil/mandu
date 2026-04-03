@@ -1,7 +1,7 @@
 import type { RoutesManifest, RouteSpec } from "../spec/schema";
 import { generateApiHandler, generatePageComponent, generateSlotLogic } from "./templates";
 import { generateContractTypeGlue, generateContractTemplate, generateContractTypesIndex } from "./contract-glue";
-import { computeHash } from "../spec/lock";
+import { createHash } from "crypto";
 import { getWatcher } from "../watcher/watcher";
 import { resolveGeneratedPaths, GENERATED_RELATIVE_PATHS } from "../paths";
 import path from "path";
@@ -158,7 +158,7 @@ export async function generateRoutes(
     generatedAt: new Date().toISOString(),
     specSource: {
       path: ".mandu/routes.manifest.json",
-      hash: computeHash(manifest),
+      hash: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
     },
     files: {},
     frameworkPaths: [

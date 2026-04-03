@@ -138,7 +138,7 @@ async function watchAndRebuild(
   options: BuildOptions,
   resolveOptions: Parameters<typeof resolveManifest>[1] = {}
 ): Promise<void> {
-  // FS Routes projects watch app/, legacy projects watch spec/slots/
+  // Watch app/ for route changes, spec/slots/ for slot changes
   const fsRoutesDir = path.join(rootDir, "app");
   const slotsDir = path.join(rootDir, "spec", "slots");
 

@@ -1,7 +1,6 @@
 import path from "path";
 import type { Snapshot, RestoreResult, ConfigSnapshot } from "./types";
 import type { RoutesManifest } from "../spec/schema";
-import type { SpecLock } from "../spec/lock";
 import {
   readLockfile,
   writeLockfile,
@@ -14,7 +13,6 @@ import { validateAndReport } from "../config";
 const MANDU_DIR = ".mandu";
 const SPEC_DIR = "spec";
 const MANIFEST_FILE = "routes.manifest.json";
-const LOCK_FILE = "spec.lock.json";
 const SLOTS_DIR = "slots";
 const HISTORY_DIR = "history";
 const SNAPSHOTS_DIR = "snapshots";
@@ -74,7 +72,6 @@ async function collectSlotContents(rootDir: string): Promise<Record<string, stri
 export async function createSnapshot(rootDir: string): Promise<Snapshot> {
   const manduDir = path.join(rootDir, MANDU_DIR);
   const manifestPath = path.join(manduDir, MANIFEST_FILE);
-  const lockPath = path.join(manduDir, LOCK_FILE);
 
   // Manifest 읽기 (필수)
   const manifestFile = Bun.file(manifestPath);
@@ -83,12 +80,8 @@ export async function createSnapshot(rootDir: string): Promise<Snapshot> {
   }
   const manifest: RoutesManifest = await manifestFile.json();
 
-  // Lock 읽기 (선택)
-  let lock: SpecLock | null = null;
-  const lockFile = Bun.file(lockPath);
-  if (await lockFile.exists()) {
-    lock = await lockFile.json();
-  }
+  // Lock은 FS-First 전환으로 제거됨 - 하위호환을 위해 null 유지
+  const lock = null;
 
   // Slot 내용 수집
   const slotContents = await collectSlotContents(rootDir);
@@ -171,7 +164,6 @@ export async function readSnapshotById(rootDir: string, snapshotId: string): Pro
 export async function restoreSnapshot(rootDir: string, snapshot: Snapshot): Promise<RestoreResult> {
   const manduDir = path.join(rootDir, MANDU_DIR);
   const manifestPath = path.join(manduDir, MANIFEST_FILE);
-  const lockPath = path.join(manduDir, LOCK_FILE);
   const slotsDir = path.join(rootDir, SPEC_DIR, SLOTS_DIR);
 
   const restoredFiles: string[] = [];
@@ -187,18 +179,7 @@ export async function restoreSnapshot(rootDir: string, snapshot: Snapshot): Prom
     errors.push(`Failed to restore manifest: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // 2. Lock 복원 (있는 경우)
-  if (snapshot.lock) {
-    try {
-      await Bun.write(lockPath, JSON.stringify(snapshot.lock, null, 2));
-      restoredFiles.push(LOCK_FILE);
-    } catch (error) {
-      failedFiles.push(LOCK_FILE);
-      errors.push(`Failed to restore lock: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  // 3. Slot 파일들 복원
+  // 2. Slot 파일들 복원
   for (const [relativePath, content] of Object.entries(snapshot.slotContents)) {
     const filePath = path.join(slotsDir, relativePath);
     try {
@@ -216,7 +197,7 @@ export async function restoreSnapshot(rootDir: string, snapshot: Snapshot): Prom
     }
   }
 
-  // 4. Config Lockfile 복원 (있는 경우)
+  // 3. Config Lockfile 복원 (있는 경우)
   if (snapshot.configSnapshot) {
     try {
       await writeLockfile(rootDir, snapshot.configSnapshot.lockfile);

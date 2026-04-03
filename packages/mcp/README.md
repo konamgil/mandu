@@ -185,7 +185,6 @@ bunx @mandujs/mcp --root /path/to/project
 | URI | Description |
 |-----|-------------|
 | `mandu://spec/manifest` | Current routes.manifest.json |
-| `mandu://spec/lock` | Current spec.lock.json with hash |
 | `mandu://generated/map` | Generated files mapping |
 | `mandu://transaction/active` | Active transaction state |
 | `mandu://slots/{routeId}` | Slot file content by route ID |

@@ -15,12 +15,6 @@ export interface GuardRule {
 }
 
 export const GUARD_RULES: Record<string, GuardRule> = {
-  SPEC_HASH_MISMATCH: {
-    id: "SPEC_HASH_MISMATCH",
-    name: "Spec Hash Mismatch",
-    description: "spec.lock.json의 해시와 현재 spec이 일치하지 않습니다",
-    severity: "error",
-  },
   GENERATED_MANUAL_EDIT: {
     id: "GENERATED_MANUAL_EDIT",
     name: "Generated File Manual Edit",

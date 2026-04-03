@@ -43,7 +43,6 @@ describe("Backward Compatibility - Path Structure", () => {
     expect(paths.typesDir).toBeDefined();
     expect(paths.mapDir).toBeDefined();
     expect(paths.manifestPath).toBeDefined();
-    expect(paths.lockPath).toBeDefined();
   });
 
   test("should not conflict with existing generated directories", async () => {
