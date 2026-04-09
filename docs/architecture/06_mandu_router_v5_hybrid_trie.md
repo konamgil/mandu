@@ -2,7 +2,7 @@
 
 > **Status**: Implemented (2026-01-30)
 > **Version**: 5.0.0
-> **Author**: Claude & Team
+> **Author**: Mandu Team
 > **Created**: 2025-01-30
 > **Target**: `@mandujs/core/src/runtime/router.ts`
 > **Implementation**: `packages/core/src/runtime/router.ts`

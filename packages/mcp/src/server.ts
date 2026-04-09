@@ -244,7 +244,7 @@ export class ManduMcpServer {
           warning.message
         );
 
-        // Claude Code에 알림
+        // MCP 클라이언트에 알림
         this.server.sendLoggingMessage({
           level: "warning",
           logger: "mandu-watch",

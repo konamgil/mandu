@@ -256,7 +256,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
               );
             }
 
-            // Push logging message (Claude Code receives in real-time)
+            // Push logging message (MCP client receives in real-time)
             server.sendLoggingMessage({
               level: "warning",
               logger: "mandu-watch",

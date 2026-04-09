@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm view:*)",
+      "mcp__mandu__mandu_list_routes",
+      "mcp__mandu__mandu_list_islands",
+      "mcp__mandu__mandu_begin"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "mandu"
+  ]
+}

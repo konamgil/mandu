@@ -275,7 +275,9 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
       const { done, value } = await reader.read();
       if (done) break;
 
-      const text = decoder.decode(value).trim();
+      const rawText = decoder.decode(value).trim();
+      // ANSI 이스케이프 코드 제거 후 비교 (Tailwind CLI가 컬러 출력)
+      const text = rawText.replace(/\u001b\[[0-9;]*m/g, "").trim();
       if (text) {
         // 환경 경고 무시
         if (text.includes(".bash_profile") || text.includes("$'\\377")) {
@@ -287,7 +289,7 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
           text.includes("Resolving dependencies") ||
           text.includes("Resolved, downloaded") ||
           text.includes("Saved lockfile") ||
-          text.includes("≈ tailwindcss") ||
+          text.includes("tailwindcss") ||
           text.match(/^v?\d+\.\d+\.\d+/) // 버전 출력
         ) {
           if (text) console.log(`   ℹ️  CSS: ${text}`);

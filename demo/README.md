@@ -1,77 +1,52 @@
-# Mandu Demo Index
+# Mandu Demos
 
-This index uses three demo labels:
+Mandu 프레임워크의 주요 기능을 시연하는 데모 앱 모음입니다.
 
-| Label | Meaning | How to use it |
-|------|---------|---------------|
-| `official` | Current demo aligned with Mandu's active app-based workflow | Safe starting point for users evaluating the framework |
-| `experimental` | Useful for feature exploration, internal validation, or contributor workflows | Read the notes before assuming it is a supported reference app |
-| `legacy` | Kept for history or comparison with older Mandu workflows | Do not use as the basis for new projects |
-
-The official demo surface is intentionally small until the reference app set is finalized.
-
----
-
-## Official
-
-### `demo/todo-list-mandu`
-
-The current best demo for Mandu's app-based flow.
-
-- Uses `app/` routing and current `mandu dev` / `mandu build` scripts
-- Includes E2E-style automation scripts and test helpers
-- Good default demo for validating DX, routing, basic APIs, and UI flow
-
-Run:
+## Quick Start
 
 ```bash
-cd demo/todo-list-mandu
+cd demo/<app-name>
 bun install
 bun run dev
 ```
 
-Default local URL: `http://localhost:3333`
+Default: `http://localhost:3333`
 
 ---
 
-## Experimental
+## Demo Apps
 
-### `demo/ai-chat`
+### `starter`
 
-- Explores an AI chat use case
-- Uses a mixed structure (`app/` plus `apps/`)
-- Useful for contributor experimentation, not yet a reference app
+최소 구성의 Mandu 앱. 프레임워크 기본 구조를 이해하는 시작점입니다.
 
-### `demo/ate-integration-test/ate-integration-test`
+- `app/page.tsx` — SSR 페이지
+- `app/api/health/route.ts` — Health check API (Filling API)
+- `app/layout.tsx` — Root layout
 
-- Internal verification app for ATE and integration testing
-- Useful for framework validation, not positioned as an end-user showcase
-
-### `demo/resource-example`
-
-- Resource-centric add-on workflow example
-- Currently documentation/design heavy and not yet a canonical runnable starter
-- Treat as exploratory material until the resource workflow is promoted
-
-### `demo/test-app`
-
-- General-purpose internal app for smoke-style checks
-- Useful for contributors, but not a polished public-facing reference demo
+**Features**: File-based routing, Filling handler API
 
 ---
 
-## Legacy
+### `todo-app`
 
-### `demo/island-first`
+CRUD 풀스택 참조 앱. Mandu의 핵심 기능을 종합적으로 시연합니다.
 
-- Preserves an older manifest/slot-centric workflow
-- Contains `spec/routes.manifest.json` and older generation patterns
-- Keep for historical comparison only, not for new Mandu projects
+- REST API (GET/POST/PUT/DELETE)
+- Island 컴포넌트 (`Mandu.island()` + setup/render 패턴)
+- In-memory data store
+- TailwindCSS 스타일링
+
+**Features**: Filling API, Island hydration, Dynamic routes, SSR + Client interactivity
 
 ---
 
-## Selection Rule
+### `ai-chat`
 
-- Use `demo/todo-list-mandu` first if you want to understand current Mandu usage.
-- Use `experimental` demos only when you are intentionally validating a feature area.
-- Do not point new users to `legacy` demos from official onboarding docs.
+SSE 스트리밍 채팅 데모. 실시간 데이터 스트리밍과 Island 인터랙션을 시연합니다.
+
+- `Mandu.sse()` 를 사용한 Server-Sent Events 스트리밍
+- Mock AI 응답 (글자 단위 스트리밍)
+- 실시간 채팅 UI (Island 컴포넌트)
+
+**Features**: SSE streaming, Island hydration, Real-time UI updates

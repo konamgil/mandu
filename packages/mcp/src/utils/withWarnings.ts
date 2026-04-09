@@ -4,7 +4,7 @@
  * Mutation 도구(write_slot, add_route, generate 등) 실행 후
  * watcher 경고를 자동으로 응답에 포함시킨다.
  *
- * MCP notification이 Claude Code에 전달되지 않는 문제를 해결.
+ * MCP notification이 AI 에이전트에 전달되지 않는 문제를 해결.
  */
 
 import { getWatcher } from "../../../core/src/index.js";

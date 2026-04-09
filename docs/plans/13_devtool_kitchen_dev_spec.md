@@ -20,7 +20,7 @@
 
 ┌──────────────────────────────────────────────────┐
 │ MCP Server (Bun 프로세스 #2)                      │
-│  ├── stdio transport (Claude Code/Gemini가 spawn) │
+│  ├── stdio transport (AI 에이전트가 spawn)          │
 │  ├── ActivityMonitor → .mandu/activity.jsonl       │
 │  └── Guard/Watch/Tool 이벤트 기록                  │
 └──────────────────────────────────────────────────┘
