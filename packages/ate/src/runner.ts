@@ -1,7 +1,19 @@
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { getAtePaths, ensureDir, writeJson } from "./fs";
 import type { RunInput } from "./types";
+
+/**
+ * bunx 또는 bun x 중 사용 가능한 실행 명령을 반환한다.
+ */
+function resolveBunx(): { cmd: string; args: string[] } {
+  try {
+    execFileSync("bunx", ["--version"], { stdio: "ignore" });
+    return { cmd: "bunx", args: [] };
+  } catch {
+    return { cmd: "bun", args: ["x"] };
+  }
+}
 
 export interface RunResult {
   runId: string;
@@ -50,15 +62,17 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
     BASE_URL: baseURL,
   };
 
+  const { cmd, args: prefixArgs } = resolveBunx();
+
   let child;
   try {
-    child = spawn("bunx", args, {
+    child = spawn(cmd, [...prefixArgs, ...args], {
       cwd: repoRoot,
       stdio: "inherit",
       env,
     });
   } catch (err: unknown) {
-    throw new Error(`Playwright 프로세스 시작 실패: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Playwright 프로세스 시작 실패 (${cmd}): ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const exitCode: number = await new Promise((resolve, reject) => {
@@ -75,8 +89,8 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
 
     child.on("error", (err) => {
       clearTimeout(timeout);
-      console.error(`[ATE] Playwright 실행 에러: ${err.message}`);
-      resolve(1); // Fail gracefully
+      // spawn 자체 실패는 환경 문제 — 테스트 실패와 구분하기 위해 명시적 에러
+      reject(new Error(`Playwright 실행기 오류 (환경 문제): ${err.message}`));
     });
   });
 

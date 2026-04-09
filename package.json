@@ -19,7 +19,7 @@
     "test:cli": "bun test packages/cli/src packages/cli/tests packages/cli/templates/default/tests packages/cli/templates/realtime-chat/tests",
     "test:mcp": "bun test packages/mcp/tests",
     "test:ate": "bun test packages/ate/src packages/ate/tests",
-    "test:demo": "bun test ./demo/todo-list-mandu/tests/example.test.ts",
+    "test:demo": "bun run test:smoke",
     "test:smoke": "bun run ./scripts/smoke.ts",
     "test:packages": "bun run test:core && bun run test:cli && bun run test:mcp && bun run test:ate",
     "perf:baseline:check": "bun run scripts/perf-baseline.ts",

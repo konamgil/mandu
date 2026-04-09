@@ -8,10 +8,23 @@
  * - 출력: .mandu/client/globals.css
  */
 
-import { spawn, type Subprocess } from "bun";
+import { spawn, which, type Subprocess } from "bun";
 import path from "path";
 import fs from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
+
+/**
+ * Tailwind CLI 실행 명령어를 결정한다.
+ * bunx가 PATH에 없는 환경(일부 Windows/CI)에서도 동작하도록
+ * `bun x`로 fallback한다.
+ */
+function getTailwindCommand(args: string[]): string[] {
+  if (which("bunx")) {
+    return ["bunx", ...args];
+  }
+  // bunx shim이 없어도 `bun x`는 동작함
+  return ["bun", "x", ...args];
+}
 
 // ========== Types ==========
 
@@ -124,7 +137,7 @@ export async function buildCSS(options: CSSBuildOptions): Promise<CSSBuildResult
   }
 
   try {
-    const proc = spawn(["bunx", ...args], {
+    const proc = spawn(getTailwindCommand(args), {
       cwd: rootDir,
       stdout: "pipe",
       stderr: "pipe",
@@ -206,7 +219,7 @@ export async function startCSSWatch(options: CSSBuildOptions): Promise<CSSWatche
   // Bun subprocess로 Tailwind CLI 실행
   let proc;
   try {
-    proc = spawn(["bunx", ...args], {
+    proc = spawn(getTailwindCommand(args), {
       cwd: rootDir,
       stdout: "pipe",
       stderr: "pipe",

@@ -197,7 +197,7 @@ export async function runFullPipeline(options: AutoPipelineOptions): Promise<Aut
     }
 
     // 최종 결과
-    result.ok = result.steps.extract.ok && result.steps.generate.ok && result.steps.report.ok;
+    result.ok = result.steps.extract.ok && result.steps.generate.ok && result.steps.run.ok && result.steps.report.ok;
     console.log(
       `\n${result.ok ? "✅" : "⚠️"} [ATE Pipeline] 파이프라인 완료 - 전체 성공: ${result.ok}`,
     );
