@@ -94,7 +94,7 @@ describe("island() - Setup/Render Pattern (Client Island)", () => {
       todos: { id: string; title: string; completed: boolean }[];
     }
 
-    const result = island<TodoData>({
+    const result = island<TodoData, { todos: TodoData["todos"]; count: number }>({
       setup: (serverData) => {
         return {
           todos: serverData.todos,
