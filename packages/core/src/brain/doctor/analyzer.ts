@@ -198,6 +198,23 @@ export function generateTemplatePatches(
         });
         break;
 
+      case GUARD_RULES.ISLAND_FIRST_INTEGRITY?.id:
+        patches.push({
+          file: violation.file,
+          description:
+            "Create a .island.tsx file in the same app/ directory as page.tsx. " +
+            "Do NOT import or re-export the island in page.tsx — island() returns " +
+            "a config object, not a React component. Use data-island attributes instead.",
+          type: "modify",
+          content:
+            `// Example: app/my-feature.island.tsx\n` +
+            `import { island } from "@mandujs/core/client";\n\n` +
+            `export default island("visible", MyComponent);\n\n` +
+            `// In page.tsx, reference via: <div data-island="my-feature">...</div>`,
+          confidence: 0.9,
+        });
+        break;
+
       default:
         // Generic suggestion based on violation.suggestion
         if (violation.suggestion) {

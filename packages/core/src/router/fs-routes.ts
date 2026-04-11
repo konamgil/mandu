@@ -72,7 +72,7 @@ export function fsRouteToRouteSpec(fsRoute: FSRouteConfig): RouteSpec {
             clientModule: normalizePath(fsRoute.clientModule),
             hydration: fsRoute.hydration ?? {
               strategy: "island" as const,
-              priority: "visible" as const,
+              priority: "immediate" as const,
               preload: false,
             },
           }
@@ -162,7 +162,7 @@ export async function resolveAutoLinks(
         if (!route.hydration) {
           route.hydration = {
             strategy: "island" as const,
-            priority: "visible" as const,
+            priority: "immediate" as const,
             preload: false,
           };
         }

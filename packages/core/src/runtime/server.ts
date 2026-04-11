@@ -1008,12 +1008,13 @@ async function renderPageSSR(
 
     if (needsIslandWrap) {
       const bundle = settings.bundleManifest?.bundles[route.id];
-      const bundleSrc = bundle?.js || "";
+      const bundleSrc = bundle?.js ? `${bundle.js}?t=${Date.now()}` : "";
       const priority = route.hydration!.priority || "visible";
       app = React.createElement("div", {
         "data-mandu-island": route.id,
         "data-mandu-src": bundleSrc,
         "data-mandu-priority": priority,
+        style: { display: "contents" },
       }, app);
     }
 

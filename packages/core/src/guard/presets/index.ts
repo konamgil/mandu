@@ -132,39 +132,41 @@ export const manduPreset: PresetDefinition = {
       description: "클라이언트 전용 공유",
     },
     // Shared layers
+    // Patterns use brace expansion to match both directory contents (e.g. src/shared/types/**)
+    // and direct files (e.g. src/shared/types.ts, src/shared/types.tsx)
     {
       name: "shared/contracts",
-      pattern: "src/shared/contracts/**",
+      pattern: "src/shared/contracts{/**,.ts,.tsx}",
       canImport: ["shared/types", "shared/utils/client"],
       description: "공용 계약 (클라이언트 safe)",
     },
     {
       name: "shared/schema",
-      pattern: "src/shared/schema/**",
+      pattern: "src/shared/schema{/**,.ts,.tsx}",
       canImport: ["shared/types", "shared/utils/server"],
       description: "서버 전용 스키마 (JSON/OpenAPI)",
     },
     {
       name: "shared/types",
-      pattern: "src/shared/types/**",
+      pattern: "src/shared/types{/**,.ts,.tsx}",
       canImport: [],
       description: "공용 타입",
     },
     {
       name: "shared/utils/client",
-      pattern: "src/shared/utils/client/**",
+      pattern: "src/shared/utils/client{/**,.ts,.tsx}",
       canImport: ["shared/types"],
       description: "클라이언트 safe 유틸",
     },
     {
       name: "shared/utils/server",
-      pattern: "src/shared/utils/server/**",
+      pattern: "src/shared/utils/server{/**,.ts,.tsx}",
       canImport: ["shared/types", "shared/utils/client"],
       description: "서버 전용 유틸",
     },
     {
       name: "shared/env",
-      pattern: "src/shared/env/**",
+      pattern: "src/shared/env{/**,.ts,.tsx}",
       canImport: ["shared/types", "shared/utils/client", "shared/utils/server"],
       description: "서버 전용 환경/설정",
     },

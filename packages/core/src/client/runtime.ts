@@ -15,6 +15,7 @@ export interface HydrationState {
   total: number;
   hydrated: number;
   failed: number;
+  recoverableErrors: number;
   pending: Set<string>;
 }
 
@@ -36,12 +37,13 @@ export function getServerData<T = unknown>(islandId: string): T | undefined {
  */
 export function getHydrationState(): Readonly<HydrationState> {
   if (typeof document === "undefined") {
-    return { total: 0, hydrated: 0, failed: 0, pending: new Set() };
+    return { total: 0, hydrated: 0, failed: 0, recoverableErrors: 0, pending: new Set() };
   }
 
   const islands = document.querySelectorAll<HTMLElement>("[data-mandu-island]");
   const hydrated = document.querySelectorAll<HTMLElement>("[data-mandu-hydrated]");
   const failed = document.querySelectorAll<HTMLElement>("[data-mandu-error]");
+  const recoverableErrors = document.querySelectorAll<HTMLElement>("[data-mandu-recoverable-error]");
 
   const pending = new Set<string>();
   islands.forEach((el) => {
@@ -55,6 +57,7 @@ export function getHydrationState(): Readonly<HydrationState> {
     total: islands.length,
     hydrated: hydrated.length,
     failed: failed.length,
+    recoverableErrors: recoverableErrors.length,
     pending,
   };
 }

@@ -22,7 +22,7 @@ export { contractTools, contractToolDefinitions } from "./contract.js";
 export { brainTools, brainToolDefinitions } from "./brain.js";
 export { runtimeTools, runtimeToolDefinitions } from "./runtime.js";
 export { seoTools, seoToolDefinitions } from "./seo.js";
-export { projectTools, projectToolDefinitions } from "./project.js";
+export { projectTools, projectToolDefinitions, getDevServerState } from "./project.js";
 export { ateTools, ateToolDefinitions } from "./ate.js";
 export { resourceTools, resourceToolDefinitions } from "./resource.js";
 export { componentTools, componentToolDefinitions } from "./component.js";

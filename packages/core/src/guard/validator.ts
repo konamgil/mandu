@@ -181,8 +181,8 @@ function createInvalidSharedSegmentViolation(
     severity,
     allowedLayers: [],
     suggestions: [
-      "허용 경로: src/shared/contracts|schema|types|utils/client|utils/server|env",
-      "파일을 허용된 shared 하위 폴더로 이동하세요",
+      "허용 경로: src/shared/{contracts,schema,types,utils/client,utils/server,env}/ 또는 src/shared/{contracts,schema,types,env}.ts",
+      "파일을 허용된 shared 하위 폴더로 이동하거나, 허용된 이름의 직접 파일로 배치하세요",
     ],
   };
 }

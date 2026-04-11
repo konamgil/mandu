@@ -1,10 +1,10 @@
 /**
- * Mandu Client Module 🏝️
- * 클라이언트 사이드 hydration 및 라우팅을 위한 API
+ * Mandu Client Module
+ * Client-side hydration and routing API
  *
  * @example
  * ```typescript
- * // Island 컴포넌트
+ * // Island component
  * import { Mandu } from "@mandujs/core/client";
  *
  * export default Mandu.island<TodosData>({
@@ -15,7 +15,7 @@
  *
  * @example
  * ```typescript
- * // Client-side 라우팅
+ * // Client-side routing
  * import { Link, useRouter } from "@mandujs/core/client";
  *
  * function Nav() {
@@ -63,6 +63,15 @@ export {
   type HydrationPriority,
 } from "./runtime";
 
+// SSE / ReadableStream API (microtask-starvation-safe)
+export {
+  useSSE,
+  readStreamWithYield,
+  type UseSSEOptions,
+  type UseSSEReturn,
+  type ReadStreamOptions,
+} from "./use-sse";
+
 // Client-side Router API
 export {
   navigate,
@@ -102,7 +111,7 @@ export {
   useRouterState,
 } from "./hooks";
 
-// Props Serialization (Fresh 스타일)
+// Props Serialization (Fresh style)
 export {
   serializeProps,
   deserializeProps,
@@ -118,7 +127,7 @@ import { Link, NavLink } from "./Link";
 
 /**
  * Mandu Client namespace
- * v0.8.0: Hydration은 자동으로 처리됨 (generateRuntimeSource에서 생성)
+ * v0.8.0: Hydration is handled automatically (generateRuntimeSource)
  * Note: Use `ManduClient` to avoid conflict with other Mandu exports
  */
 export const ManduClient = {

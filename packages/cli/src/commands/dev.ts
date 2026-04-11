@@ -186,15 +186,33 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     serverConfig.port ??
     3333;
 
+  // Port is explicitly configured if it came from CLI flag, env var, or config file
+  const isExplicitPort = !!(
+    options.port ||
+    (envPort && Number.isFinite(envPort)) ||
+    serverConfig.port
+  );
+
   const hasIslands = manifest.routes.some(
     (r) => r.kind === "page" && r.clientModule && needsHydration(r)
   );
   const hmrEnabled = devConfig.hmr ?? true;
 
-  const { port } = await resolveAvailablePort(desiredPort, {
-    hostname: serverConfig.hostname,
-    offsets: hasIslands && hmrEnabled ? [0, HMR_OFFSET] : [0],
-  });
+  let port: number;
+  try {
+    const resolved = await resolveAvailablePort(desiredPort, {
+      hostname: serverConfig.hostname,
+      offsets: hasIslands && hmrEnabled ? [0, HMR_OFFSET] : [0],
+      strict: isExplicitPort,
+    });
+    port = resolved.port;
+  } catch (error) {
+    if (isExplicitPort) {
+      printCLIError(CLI_ERROR_CODES.DEV_PORT_IN_USE, { port: desiredPort });
+      process.exit(1);
+    }
+    throw error;
+  }
 
   if (port !== desiredPort) {
     console.warn(`⚠️  Port ${desiredPort} is in use.`);

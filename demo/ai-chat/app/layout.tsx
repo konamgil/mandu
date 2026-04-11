@@ -4,7 +4,7 @@ interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 font-sans antialiased">
+    <div className="bg-gray-950 text-gray-100 font-sans antialiased">
       {children}
     </div>
   );

@@ -56,6 +56,17 @@ const DEFAULT_CONFIG: Partial<WatcherConfig> = {
  * Monitors file changes and emits warnings based on architecture rules.
  * Never blocks operations - only warns.
  */
+/**
+ * Windows reserved device names that cannot be used as file/directory names.
+ * These cause EISDIR/ENOENT errors when file watchers try to access them.
+ * See: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+ */
+const WINDOWS_RESERVED_NAMES = new Set([
+  "CON", "PRN", "AUX", "NUL",
+  "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+  "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+]);
+
 export class FileWatcher {
   private config: WatcherConfig;
   private chokidarWatcher: FSWatcher | null = null;
@@ -118,6 +129,9 @@ export class FileWatcher {
         const basename = path.basename(filePath);
         // Ignore directories in the ignore list
         if (ignoredSet.has(basename)) return true;
+        // Filter out Windows reserved device names (#12)
+        // These cause EISDIR errors when chokidar tries to scandir them
+        if (WINDOWS_RESERVED_NAMES.has(basename.toUpperCase().replace(/\..*$/, ""))) return true;
         // For files, only watch matching extensions
         if (stats?.isFile() && extSet.size > 0) {
           const ext = path.extname(filePath);
@@ -158,7 +172,19 @@ export class FileWatcher {
     });
 
     this.chokidarWatcher.on("error", (error: unknown) => {
-      console.error(`[Watch] Error:`, error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      // Suppress EISDIR errors from Windows reserved device names (#12)
+      // e.g. "EISDIR: illegal operation on a directory, scandir 'C:\...\nul'"
+      if (message.includes("EISDIR")) {
+        const pathMatch = message.match(/scandir\s+'([^']+)'/);
+        if (pathMatch) {
+          const baseName = pathMatch[1].split(/[/\\]/).pop() || "";
+          if (WINDOWS_RESERVED_NAMES.has(baseName.toUpperCase())) {
+            return; // Silently ignore — these are not real directories
+          }
+        }
+      }
+      console.error(`[Watch] Error:`, message);
     });
 
     this._active = true;

@@ -3,25 +3,65 @@ import fs from "fs/promises";
 import { pathToFileURL } from "url";
 
 /**
- * Find the Mandu project root by looking for app/ directory or mandu.config.*
+ * Find the Mandu project root by looking for mandu.config.* or app/ directory.
+ *
+ * Detection order (first match wins):
+ *  1. mandu.config.ts / .js / .json in the current directory
+ *  2. app/ directory in the current directory
+ *  3. Walk up to parent directories and repeat
+ *
+ * For monorepo sub-projects (e.g. demo/ai-chat inside a larger workspace),
+ * the config file takes priority so that the MCP server binds to the correct
+ * sub-project even when launched from the monorepo root.
+ *
+ * ## Monorepo Sub-Project Setup
+ *
+ * When using MCP in a monorepo sub-project, the recommended `.mcp.json` is:
+ *
+ * ```json
+ * {
+ *   "mcpServers": {
+ *     "mandu": {
+ *       "command": "bun",
+ *       "args": ["run", "node_modules/@mandujs/mcp/src/index.ts"],
+ *       "cwd": "."
+ *     }
+ *   }
+ * }
+ * ```
+ *
+ * The sub-project must have `@mandujs/mcp` as a devDependency.
+ * Using a `cwd` that points to a parent monorepo root will NOT work because
+ * the MCP stdio transport resolves paths relative to the spawned process,
+ * and the parent's node_modules layout differs from the sub-project's.
  */
 export async function findProjectRoot(startDir: string = process.cwd()): Promise<string | null> {
   let currentDir = path.resolve(startDir);
 
   while (currentDir !== path.dirname(currentDir)) {
-    // Check for app/ directory (FS Routes source)
-    try {
-      const appStat = await fs.stat(path.join(currentDir, "app"));
-      if (appStat.isDirectory()) return currentDir;
-    } catch {}
-
-    // Check for mandu.config.* files
+    // Prioritize config files — they unambiguously mark a Mandu project root,
+    // which is critical for monorepo sub-projects that each have their own config.
     for (const configFile of ["mandu.config.ts", "mandu.config.js", "mandu.config.json"]) {
       try {
         await fs.access(path.join(currentDir, configFile));
         return currentDir;
       } catch {}
     }
+
+    // Check for app/ directory (FS Routes source)
+    try {
+      const appStat = await fs.stat(path.join(currentDir, "app"));
+      if (appStat.isDirectory()) {
+        // Extra guard: only treat this as a Mandu project if it also has
+        // package.json (avoids false positives from unrelated app/ dirs)
+        try {
+          await fs.access(path.join(currentDir, "package.json"));
+          return currentDir;
+        } catch {
+          // No package.json — likely not a Mandu project, keep searching
+        }
+      }
+    } catch {}
 
     currentDir = path.dirname(currentDir);
   }

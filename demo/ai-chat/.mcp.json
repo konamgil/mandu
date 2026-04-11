@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mandu": {
+      "command": "bun",
+      "args": ["run", "node_modules/@mandujs/mcp/src/index.ts"]
+    }
+  }
+}

@@ -313,9 +313,9 @@ export function SuspenseIsland({
   const defaultFallback = React.createElement("div", {
     "data-mandu-island": routeId,
     "data-mandu-priority": priority,
-    "data-mandu-src": bundleSrc,
+    "data-mandu-src": bundleSrc ? `${bundleSrc}${bundleSrc.includes('?') ? '&' : '?'}t=${Date.now()}` : bundleSrc,
     "data-mandu-loading": "true",
-    style: { minHeight: "50px" },
+    style: { display: "contents", minHeight: "50px" },
   }, React.createElement("div", {
     className: "mandu-loading-skeleton",
     style: {
@@ -334,7 +334,8 @@ export function SuspenseIsland({
     React.createElement("div", {
       "data-mandu-island": routeId,
       "data-mandu-priority": priority,
-      "data-mandu-src": bundleSrc,
+      "data-mandu-src": bundleSrc ? `${bundleSrc}${bundleSrc.includes('?') ? '&' : '?'}t=${Date.now()}` : bundleSrc,
+      style: { display: "contents" },
     }, children)
   );
 }
@@ -424,9 +425,9 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   let islandOpenTag = "";
   if (needsHydration) {
     const bundle = bundleManifest.bundles[routeId];
-    const bundleSrc = bundle?.js || "";
+    const bundleSrc = bundle?.js ? `${bundle.js}?t=${Date.now()}` : "";
     const priority = hydration.priority || "visible";
-    islandOpenTag = `<div data-mandu-island="${escapeHtmlAttr(routeId)}" data-mandu-src="${escapeHtmlAttr(bundleSrc)}" data-mandu-priority="${escapeHtmlAttr(priority)}">`;
+    islandOpenTag = `<div data-mandu-island="${escapeHtmlAttr(routeId)}" data-mandu-src="${escapeHtmlAttr(bundleSrc)}" data-mandu-priority="${escapeHtmlAttr(priority)}" style="display:contents">`;
   }
 
   // Import map은 module 스크립트보다 먼저 정의되어야 bare specifier 해석 가능
@@ -515,7 +516,8 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
   if (bundleManifest && routeId) {
     const bundle = bundleManifest.bundles[routeId];
     if (bundle) {
-      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(bundle.js)}">`);
+      const cacheBust = `${bundle.js}${bundle.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
     }
   }
 

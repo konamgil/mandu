@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h1>SSE Test (no Mandu runtime)</h1>
+<button id="btn">Send</button>
+<pre id="output"></pre>
+<script>
+document.getElementById('btn').onclick = async () => {
+  const res = await fetch('/api/sessions');
+  const {sessions} = await res.json();
+  const sid = sessions[0]?.id;
+  if (!sid) { document.getElementById('output').textContent = 'No session'; return; }
+  
+  const xhr = new XMLHttpRequest();
+  xhr.open('GET', '/api/chat?message=hi&sessionId=' + sid);
+  let last = 0;
+  xhr.onprogress = () => {
+    const chunk = xhr.responseText.slice(last);
+    last = xhr.responseText.length;
+    document.getElementById('output').textContent += chunk;
+  };
+  xhr.send();
+};
+</script>
+</body>
+</html>

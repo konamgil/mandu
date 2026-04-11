@@ -10,6 +10,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import type { ActivityMonitor } from "../activity-monitor.js";
 import { spawn, type Subprocess } from "bun";
+import { execSync } from "child_process";
 import path from "path";
 import fs from "fs/promises";
 
@@ -23,6 +24,19 @@ type DevServerState = {
 
 let devServerState: DevServerState | null = null;
 let devServerStarting = false;
+
+/**
+ * Get the current dev server state.
+ * Used by other tools (e.g. kitchen) to discover the running server's port/output.
+ */
+export function getDevServerState(): { cwd: string; output: string[]; startedAt: Date } | null {
+  if (!devServerState) return null;
+  return {
+    cwd: devServerState.cwd,
+    output: [...devServerState.output],
+    startedAt: devServerState.startedAt,
+  };
+}
 
 function trimOutput(text: string, maxChars: number = 4000): string {
   if (text.length <= maxChars) return text;
@@ -325,6 +339,32 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
         };
         devServerState = state;
 
+        // Wait for the server to output its port before returning
+        const portPromise = new Promise<{ port: number; url: string } | null>((resolve) => {
+          const PORT_DETECT_TIMEOUT_MS = 15_000;
+          const timeout = setTimeout(() => resolve(null), PORT_DETECT_TIMEOUT_MS);
+          const portPattern = /https?:\/\/[^:\s]+:(\d+)/;
+
+          const originalPush = state.output.push.bind(state.output);
+          state.output.push = (...items: string[]) => {
+            const result = originalPush(...items);
+            for (const item of items) {
+              const match = item.match(portPattern);
+              if (match) {
+                const detectedPort = parseInt(match[1], 10);
+                clearTimeout(timeout);
+                state.output.push = originalPush;
+                resolve({
+                  port: detectedPort,
+                  url: match[0],
+                });
+                break;
+              }
+            }
+            return result;
+          };
+        });
+
         consumeStream(proc.stdout, state, "stdout", server).catch(() => {});
         consumeStream(proc.stderr, state, "stderr", server).catch(() => {});
 
@@ -338,12 +378,19 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
           monitor.logEvent("dev", `Dev server started (${targetDir})`);
         }
 
+        // Wait for port detection (with timeout fallback)
+        const detected = await portPromise;
+
         return {
           success: true,
           pid: proc.pid,
+          port: detected?.port ?? null,
+          url: detected?.url ?? null,
           cwd: targetDir,
           startedAt: state.startedAt.toISOString(),
-          message: "Dev server started",
+          message: detected
+            ? `Dev server started on port ${detected.port}`
+            : "Dev server started (port detection timed out)",
         };
       } finally {
         devServerStarting = false;
@@ -359,12 +406,29 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
       }
 
       const { process: proc, cwd, output } = devServerState;
+      const pid = proc.pid;
       devServerState = null;
 
+      // Kill the entire process tree to prevent zombie processes
       try {
-        proc.kill();
+        if (pid) {
+          if (process.platform === "win32") {
+            // Windows: taskkill /T kills the process tree, /F forces termination
+            execSync(`taskkill /PID ${pid} /T /F`, { stdio: "ignore" });
+          } else {
+            // Unix: kill the entire process group (negative PID)
+            try {
+              process.kill(-pid, "SIGKILL");
+            } catch {
+              // Fallback: kill just the process if process group kill fails
+              proc.kill("SIGKILL");
+            }
+          }
+        } else {
+          proc.kill();
+        }
       } catch {
-        // ignore
+        // Process may have already exited
       }
 
       if (monitor) {

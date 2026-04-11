@@ -1,39 +1,110 @@
 import { Mandu } from "@mandujs/core";
+import { chatService } from "../../../src/server/chat-service";
+import chatContract from "../../../spec/contracts/api-chat.contract";
+import { chatRateLimiter, getClientIp } from "../../../src/server/rate-limiter";
 
-const MOCK_RESPONSES = [
-  "Mandu는 Bun 기반의 풀스택 프레임워크입니다. Island 아키텍처로 필요한 부분만 하이드레이션하여 성능을 최적화합니다.",
-  "SSE(Server-Sent Events)는 서버에서 클라이언트로 실시간 데이터를 스트리밍하는 기술입니다. WebSocket보다 간단하고 HTTP 위에서 동작합니다.",
-  "Filling API는 Mandu의 핵심 핸들러 체이닝 시스템입니다. `.get()`, `.post()` 등으로 HTTP 메서드별 핸들러를 정의하고 미들웨어를 조합할 수 있습니다.",
-  "Island 컴포넌트는 `Mandu.island()` 로 정의합니다. setup 함수에서 상태를 초기화하고, render 함수에서 UI를 그립니다. 서버 데이터를 자연스럽게 클라이언트 상태로 전환합니다.",
-  "Contract API로 요청/응답 스키마를 Zod로 정의하면 타입 안전한 API를 구축할 수 있습니다. OpenAPI 스펙도 자동 생성됩니다.",
-];
+const STREAM_INITIAL_DELAY_MS = 180;
+const STREAM_DELAY_MS = 72;
+const STREAM_BREAK_DELAY_MS = 120;
 
-export default Mandu.filling()
-  .post(async (ctx) => {
-    const { message } = await ctx.body<{ message: string }>();
+function getChunkDelay(chunk: string, index: number): number {
+  if (index === 0) {
+    return STREAM_INITIAL_DELAY_MS;
+  }
 
-    if (!message?.trim()) {
-      return ctx.error("Message is required");
+  if (/\n\s*$/.test(chunk) || /[.!?]\s*$/.test(chunk)) {
+    return STREAM_BREAK_DELAY_MS;
+  }
+
+  return STREAM_DELAY_MS;
+}
+
+function wait(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
     }
 
-    const response = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
-    const words = response.split("");
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
 
-    const sse = Mandu.sse(ctx.request.signal);
-    const stopHeartbeat = sse.heartbeat(10000);
+    const abort = () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
 
-    (async () => {
+    const cleanup = () => signal.removeEventListener("abort", abort);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+export default Mandu.filling()
+  .beforeHandle(async (ctx) => {
+    const ip = getClientIp(ctx.request);
+    const result = chatRateLimiter.check(ip);
+
+    if (!result.allowed) {
+      return ctx.json(
+        {
+          error: "Rate limit exceeded. Please try again shortly.",
+          retryAfterMs: result.resetMs,
+        },
+        429,
+      );
+    }
+
+    ctx.set("rateLimit.remaining", result.remaining);
+  })
+  .post(async (ctx) => {
+    let input: { body: { message: string; sessionId: string } };
+    try {
+      input = await ctx.input(chatContract, "POST");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Invalid request body";
+      return ctx.error(message);
+    }
+
+    const { message, sessionId } = input.body;
+    const session = chatService.getSession(sessionId);
+    if (!session) {
+      return ctx.notFound("Session not found");
+    }
+
+    chatService.addMessage(sessionId, { role: "user", content: message.trim() });
+
+    const response = chatService.getRandomResponse();
+
+    return ctx.sse(async (sse) => {
       try {
-        for (const char of words) {
-          await new Promise((r) => setTimeout(r, 20 + Math.random() * 30));
-          sse.send({ token: char }, { event: "token" });
+        const chunks = chatService.getResponseChunks(response);
+
+        for (const [index, chunk] of chunks.entries()) {
+          if (ctx.request.signal.aborted) {
+            return;
+          }
+
+          sse.event("token", chunk);
+          await wait(getChunkDelay(chunk, index), ctx.request.signal);
         }
-        sse.send({ done: true }, { event: "done" });
+
+        if (ctx.request.signal.aborted) {
+          return;
+        }
+
+        chatService.addMessage(sessionId, { role: "assistant", content: response });
+        sse.event("done", response);
+      } catch (error: unknown) {
+        if (!ctx.request.signal.aborted) {
+          const message =
+            error instanceof Error ? error.message : "스트리밍 중 오류가 발생했습니다.";
+          sse.event("error", message);
+        }
       } finally {
-        stopHeartbeat();
         await sse.close();
       }
-    })();
-
-    return sse.response;
+    });
   });

@@ -1,0 +1,5 @@
+/**
+ * ChatApp Client Slot
+ * Re-exports the ChatApp island for hydration
+ */
+export { default } from "../../src/client/islands/ChatApp";

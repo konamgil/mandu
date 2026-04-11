@@ -206,7 +206,13 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
       if (pendingBuildFile) {
         const next = pendingBuildFile;
         pendingBuildFile = null;
-        await handleFileChange(next);
+        // Catch errors to prevent unhandled promise rejection from killing the watcher (#10)
+        try {
+          await handleFileChange(next);
+        } catch (retryError) {
+          console.error(`❌ Retry build error:`, retryError instanceof Error ? retryError.message : String(retryError));
+          console.log(`   ⏳ Waiting for next file change to retry...`);
+        }
       }
     }
   };
@@ -247,6 +253,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         console.error(`❌ Build error:`, err.message);
+        console.log(`   ⏳ Waiting for next file change to retry...`);
         onError?.(err, "*");
       }
       return;
@@ -303,6 +310,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
         });
       } else {
         console.error(`❌ Build failed:`, result.errors);
+        console.log(`   ⏳ Previous bundle preserved. Waiting for next file change to retry...`);
         onRebuild?.({
           routeId,
           success: false,
@@ -313,6 +321,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error(`❌ Build error:`, err.message);
+      console.log(`   ⏳ Previous bundle preserved. Waiting for next file change to retry...`);
       onError?.(err, routeId);
     }
   };

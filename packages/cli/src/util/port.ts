@@ -61,10 +61,16 @@ export async function resolveAvailablePort(
     hostname?: string;
     offsets?: number[];
     maxAttempts?: number;
+    /**
+     * When true, throw an error if the exact startPort is not available
+     * instead of silently trying the next port. Use this when the port
+     * was explicitly configured by the user.
+     */
+    strict?: boolean;
   } = {}
 ): Promise<{ port: number; attempts: number }> {
   const offsets = options.offsets && options.offsets.length > 0 ? options.offsets : [0];
-  const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+  const maxAttempts = options.strict ? 1 : (options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
   const isWindows = process.platform === "win32";
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -91,6 +97,12 @@ export async function resolveAvailablePort(
     if (results.every(Boolean)) {
       return { port: candidate, attempts: attempt };
     }
+  }
+
+  if (options.strict) {
+    throw new Error(
+      `Port ${startPort} is in use. Kill the process using that port or set a different port in mandu.config.`
+    );
   }
 
   throw new Error(`No available port found starting at ${startPort}`);

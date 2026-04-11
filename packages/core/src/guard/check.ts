@@ -225,16 +225,25 @@ export async function checkIslandFirstIntegrity(
       continue;
     }
 
-    // 2. componentModule이 island을 import하는지 확인
-    if (route.componentModule) {
+    // 2. Island-First integrity: verify that a .island.tsx or .client.tsx file
+    //    exists alongside the page's componentModule. The page does NOT need to
+    //    directly import the island - the framework auto-links them via
+    //    data-island attributes and the manifest's clientModule field.
+    if (route.componentModule && route.clientModule) {
       const componentPath = path.join(rootDir, route.componentModule);
       const content = await readFileContent(componentPath);
-      if (content && !content.includes("islandModule") && !content.includes("Island-First")) {
+      // Check if the island file actually exists on disk
+      const clientPath = path.join(rootDir, route.clientModule);
+      const clientExists = await fileExists(clientPath);
+      if (content && !clientExists && !content.includes("data-island") && !content.includes("data-mandu-island")) {
         violations.push({
           ruleId: "ISLAND_FIRST_INTEGRITY",
           file: route.componentModule,
-          message: `componentModule이 island을 import하지 않습니다 (routeId: ${route.id})`,
-          suggestion: "mandu generate를 실행하여 Island-First 템플릿으로 재생성하세요",
+          message: `No island file found for page route (routeId: ${route.id}). The clientModule '${route.clientModule}' does not exist.`,
+          suggestion:
+            "Create a .island.tsx file in the same app/ directory as page.tsx. " +
+            "The page should reference islands via data-island attributes, NOT by directly importing or re-exporting the island. " +
+            "Importing island() return values into page.tsx causes a runtime crash because they are config objects, not React components.",
         });
       }
     }

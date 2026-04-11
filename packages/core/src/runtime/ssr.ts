@@ -141,7 +141,8 @@ function generateHydrationScripts(
   // Island 번들 modulepreload (성능 최적화 - prefetch only)
   const bundle = manifest.bundles[routeId];
   if (bundle) {
-    scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(bundle.js)}">`);
+    const cacheBust = `${bundle.js}${bundle.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
+    scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
   }
 
   // Runtime 로드 (hydrateIslands 실행 - dynamic import 사용)
@@ -162,8 +163,9 @@ export function wrapWithIsland(
   priority: HydrationPriority = "visible",
   bundleSrc?: string
 ): string {
-  const srcAttr = bundleSrc ? ` data-mandu-src="${escapeHtmlAttr(bundleSrc)}"` : "";
-  return `<div data-mandu-island="${escapeHtmlAttr(routeId)}"${srcAttr} data-mandu-priority="${escapeHtmlAttr(priority)}">${content}</div>`;
+  const cacheBustedSrc = bundleSrc ? `${bundleSrc}?t=${Date.now()}` : undefined;
+  const srcAttr = cacheBustedSrc ? ` data-mandu-src="${escapeHtmlAttr(cacheBustedSrc)}"` : "";
+  return `<div data-mandu-island="${escapeHtmlAttr(routeId)}"${srcAttr} data-mandu-priority="${escapeHtmlAttr(priority)}" style="display:contents">${content}</div>`;
 }
 
 export function renderToHTML(element: ReactElement, options: SSROptions = {}): string {

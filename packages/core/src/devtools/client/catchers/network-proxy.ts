@@ -1,8 +1,25 @@
 /**
  * Mandu Kitchen DevTools - Network Proxy
- * @version 1.0.3
+ * @version 1.0.4
  *
  * Fetch/XHR 요청을 인터셉트하여 DevTools로 전달
+ *
+ * FIXED (v1.0.4): Streaming response handling no longer clones the response.
+ * The previous approach used response.clone() + a parallel reader loop, which
+ * caused two critical issues:
+ *   1. Tee'd ReadableStream backpressure: clone() creates a tee — if one
+ *      branch is read faster than the other, the browser buffers data
+ *      internally, eventually stalling both streams.
+ *   2. Microtask starvation: the tight `while(true) { await reader.read() }`
+ *      loop resolved as microtasks. With fast SSE token streams, the loop
+ *      never yielded to the macrotask queue, blocking page.evaluate(),
+ *      user interactions, and all macrotask-scheduled work — effectively
+ *      freezing the main thread.
+ *
+ * New approach: wrap the original response body with a TransformStream that
+ * passthrough-observes each chunk without consuming or buffering it separately.
+ * The consumer (island component) drives the read pace; the proxy merely
+ * piggybacks on each chunk as it flows through.
  */
 
 import type { NetworkRequest, NetworkBodyPolicy } from '../../types';
@@ -237,6 +254,16 @@ export class NetworkProxy {
   // Streaming Response Handler
   // --------------------------------------------------------------------------
 
+  /**
+   * Handle streaming (SSE/NDJSON) responses by wrapping the body with a
+   * passthrough TransformStream that observes chunks without cloning.
+   *
+   * This avoids:
+   * - response.clone() tee backpressure that stalls both streams
+   * - Separate reader loop that causes microtask starvation
+   *
+   * The consumer (island component) remains in full control of read pacing.
+   */
   private handleStreamingResponse(requestId: string, response: Response): Response {
     const trackedRequest = this.trackedRequests.get(requestId);
     if (trackedRequest) {
@@ -244,36 +271,24 @@ export class NetworkProxy {
       trackedRequest.chunkCount = 0;
     }
 
-    // 응답 복제 (body를 두 번 읽기 위해)
-    const clonedResponse = response.clone();
-    const reader = clonedResponse.body?.getReader();
-
-    if (reader) {
-      this.trackStreamChunks(requestId, reader);
+    // If there is no body (e.g., 204), just emit the response event and return
+    if (!response.body) {
+      const responseEvent = createNetworkResponseEvent(requestId, response.status);
+      getOrCreateHook().emit(responseEvent);
+      return response;
     }
 
-    return response;
-  }
-
-  private async trackStreamChunks(
-    requestId: string,
-    reader: ReadableStreamDefaultReader<Uint8Array>
-  ): Promise<void> {
-    const trackedRequest = this.trackedRequests.get(requestId);
     let chunkIndex = 0;
+    const self = this;
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
+    // Create a passthrough TransformStream that observes each chunk as it
+    // flows from the network to the consumer. No cloning, no buffering.
+    const observerTransform = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        // Pass the chunk through immediately — zero copy
+        controller.enqueue(chunk);
 
-        if (done) {
-          // 스트림 완료
-          const responseEvent = createNetworkResponseEvent(requestId, 200);
-          getOrCreateHook().emit(responseEvent);
-          break;
-        }
-
-        // Chunk 이벤트
+        // Emit tracking event (lightweight, non-blocking)
         if (trackedRequest) {
           trackedRequest.chunkCount = (trackedRequest.chunkCount ?? 0) + 1;
         }
@@ -284,20 +299,28 @@ export class NetworkProxy {
           data: {
             id: requestId,
             chunkIndex: chunkIndex++,
-            size: value?.length ?? 0,
+            size: chunk?.length ?? 0,
           },
         });
-      }
-    } catch (error) {
-      getOrCreateHook().emit({
-        type: 'network:error',
-        timestamp: Date.now(),
-        data: {
-          id: requestId,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-    }
+      },
+
+      flush() {
+        // Stream completed — emit response event
+        const responseEvent = createNetworkResponseEvent(requestId, response.status);
+        getOrCreateHook().emit(responseEvent);
+        self.trackedRequests.delete(requestId);
+      },
+    });
+
+    // Pipe the original body through the observer
+    const observedBody = response.body.pipeThrough(observerTransform);
+
+    // Construct a new Response with the observed body but identical headers/status
+    return new Response(observedBody, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
   }
 
   // --------------------------------------------------------------------------

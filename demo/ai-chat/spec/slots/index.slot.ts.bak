@@ -1,0 +1,24 @@
+import { Mandu } from "@mandujs/core";
+import { chatService } from "../../src/server/chat-service";
+
+export default Mandu.filling()
+  .loader(async () => {
+    const sessions = chatService.listSessions().map((s) => ({
+      id: s.id,
+      title: s.title,
+      messageCount: s.messages.length,
+      systemPrompt: s.systemPrompt,
+      updatedAt: s.updatedAt,
+    }));
+
+    const firstSession = sessions[0];
+    const messages = firstSession
+      ? chatService.getSession(firstSession.id)?.messages || []
+      : [];
+
+    return {
+      sessions,
+      messages,
+      currentSessionId: firstSession?.id || null,
+    };
+  });

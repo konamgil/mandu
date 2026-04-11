@@ -47,6 +47,78 @@ function getHydratedRoutes(manifest: RoutesManifest): RouteSpec[] {
   );
 }
 
+const REACT_SHIM_EXPORTS = [
+  "Activity",
+  "Children",
+  "Component",
+  "Fragment",
+  "Profiler",
+  "PureComponent",
+  "StrictMode",
+  "Suspense",
+  "__COMPILER_RUNTIME",
+  "act",
+  "cache",
+  "cacheSignal",
+  "captureOwnerStack",
+  "cloneElement",
+  "createContext",
+  "createElement",
+  "createRef",
+  "forwardRef",
+  "isValidElement",
+  "lazy",
+  "memo",
+  "startTransition",
+  "unstable_useCacheRefresh",
+  "use",
+  "useActionState",
+  "useCallback",
+  "useContext",
+  "useDebugValue",
+  "useDeferredValue",
+  "useEffect",
+  "useEffectEvent",
+  "useId",
+  "useImperativeHandle",
+  "useInsertionEffect",
+  "useLayoutEffect",
+  "useMemo",
+  "useOptimistic",
+  "useReducer",
+  "useRef",
+  "useState",
+  "useSyncExternalStore",
+  "useTransition",
+  "version",
+] as const;
+
+const REACT_DOM_SHIM_EXPORTS = [
+  "createPortal",
+  "flushSync",
+  "preconnect",
+  "prefetchDNS",
+  "preinit",
+  "preinitModule",
+  "preload",
+  "preloadModule",
+  "requestFormReset",
+  "unstable_batchedUpdates",
+  "useFormState",
+  "useFormStatus",
+  "version",
+] as const;
+
+const REACT_DOM_CLIENT_SHIM_EXPORTS = [
+  "createRoot",
+  "hydrateRoot",
+  "version",
+] as const;
+
+function formatShimBindings(names: readonly string[], indent = "  "): string {
+  return names.map((name) => `${indent}${name},`).join("\n");
+}
+
 /**
  * Runtime 번들 소스 생성 (v0.8.0 재설계)
  *
@@ -147,6 +219,67 @@ function IslandLoadingWrapper({ children, loading, isReady }) {
   return children;
 }
 
+function resolveHydrationTarget(element) {
+  if (!(element instanceof HTMLElement)) {
+    return element;
+  }
+
+  if (getComputedStyle(element).display !== 'contents') {
+    return element;
+  }
+
+  const queue = Array.from(element.children);
+  while (queue.length > 0) {
+    const candidate = queue.shift();
+    if (candidate instanceof HTMLElement) {
+      return candidate;
+    }
+    if (candidate) {
+      queue.push(...candidate.children);
+    }
+  }
+
+  return element.parentElement || element;
+}
+
+function hasHydratableMarkup(element) {
+  for (const node of element.childNodes) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      return true;
+    }
+
+    if (node.nodeType === Node.TEXT_NODE && node.textContent && node.textContent.trim() !== '') {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function shouldHydrateCompiledIsland(element) {
+  return (
+    element.getAttribute('data-mandu-loading') !== 'true' &&
+    hasHydratableMarkup(element)
+  );
+}
+
+function createHydrationOptions(element, id, mode) {
+  return {
+    onRecoverableError(error) {
+      element.setAttribute('data-mandu-recoverable-error', 'true');
+      console.warn('[Mandu] Recoverable hydration error:', id, mode, error);
+      element.dispatchEvent(new CustomEvent('mandu:recoverable-hydration-error', {
+        bubbles: true,
+        detail: {
+          id,
+          mode,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }));
+    },
+  };
+}
+
 /**
  * Hydration 스케줄러
  */
@@ -164,7 +297,8 @@ function scheduleHydration(element, src, priority) {
             loadAndHydrate(element, src);
           }
         }, { rootMargin: '50px' });
-        observer.observe(element);
+        const target = resolveHydrationTarget(element);
+        observer.observe(target);
       } else {
         loadAndHydrate(element, src);
       }
@@ -179,15 +313,20 @@ function scheduleHydration(element, src, priority) {
       break;
 
     case 'interaction': {
+      const target = resolveHydrationTarget(element);
       const hydrate = () => {
-        element.removeEventListener('mouseenter', hydrate);
-        element.removeEventListener('focusin', hydrate);
-        element.removeEventListener('touchstart', hydrate);
+        target.removeEventListener('mouseenter', hydrate);
+        target.removeEventListener('focusin', hydrate);
+        target.removeEventListener('touchstart', hydrate);
+        target.removeEventListener('pointerdown', hydrate);
+        target.removeEventListener('keydown', hydrate);
         loadAndHydrate(element, src);
       };
-      element.addEventListener('mouseenter', hydrate, { once: true, passive: true });
-      element.addEventListener('focusin', hydrate, { once: true });
-      element.addEventListener('touchstart', hydrate, { once: true, passive: true });
+      target.addEventListener('mouseenter', hydrate, { once: true, passive: true });
+      target.addEventListener('focusin', hydrate, { once: true });
+      target.addEventListener('touchstart', hydrate, { once: true, passive: true });
+      target.addEventListener('pointerdown', hydrate, { once: true, passive: true });
+      target.addEventListener('keydown', hydrate, { once: true });
       break;
     }
   }
@@ -200,6 +339,19 @@ function scheduleHydration(element, src, priority) {
  */
 async function loadAndHydrate(element, src) {
   const id = element.getAttribute('data-mandu-island');
+  if (!id) {
+    return;
+  }
+
+  if (
+    hydratedRoots.has(id) ||
+    element.hasAttribute('data-mandu-hydrated') ||
+    element.getAttribute('data-mandu-hydrating') === 'true'
+  ) {
+    return;
+  }
+
+  element.setAttribute('data-mandu-hydrating', 'true');
 
   try {
     // Dynamic import - 이 시점에 Island 모듈 로드
@@ -222,10 +374,12 @@ async function loadAndHydrate(element, src) {
     // Mandu Island (preferred)
     if (island && island.__mandu_island === true) {
       const { definition } = island;
+      const shouldHydrate = shouldHydrateCompiledIsland(element);
+      const renderMode = shouldHydrate ? 'hydrate' : 'mount';
 
       // Island 컴포넌트 (Error Boundary + Loading 지원)
-      function IslandComponent() {
-        const [isReady, setIsReady] = useState(false);
+      function IslandComponent({ initialReady }) {
+        const [isReady, setIsReady] = useState(initialReady);
 
         useEffect(() => {
           setIsReady(true);
@@ -250,12 +404,22 @@ async function loadAndHydrate(element, src) {
         }, wrappedContent);
       }
 
-      // Mount island (createRoot for islands with different SSR fallback)
-      const root = createRoot(element);
-      root.render(React.createElement(IslandComponent));
+      const root = shouldHydrate
+        ? hydrateRoot(
+            element,
+            React.createElement(IslandComponent, { initialReady: true }),
+            createHydrationOptions(element, id, renderMode)
+          )
+        : createRoot(element);
+
+      if (!shouldHydrate) {
+        root.render(React.createElement(IslandComponent, { initialReady: false }));
+      }
+
       hydratedRoots.set(id, root);
 
       // 완료 표시
+      element.setAttribute('data-mandu-render-mode', renderMode);
       element.setAttribute('data-mandu-hydrated', 'true');
 
       // 성능 마커
@@ -266,7 +430,7 @@ async function loadAndHydrate(element, src) {
       // 이벤트 발송
       element.dispatchEvent(new CustomEvent('mandu:hydrated', {
         bubbles: true,
-        detail: { id, data }
+        detail: { id, data, mode: renderMode }
       }));
 
       // Kitchen DevTools에 island 등록
@@ -280,6 +444,7 @@ async function loadAndHydrate(element, src) {
             name: id,
             strategy: element.getAttribute('data-mandu-priority') || 'visible',
             status: 'hydrated',
+            renderMode,
             hydrateStartTime: hydrateTime - 10,
             hydrateEndTime: hydrateTime,
             propsSize: JSON.stringify(data).length,
@@ -287,19 +452,25 @@ async function loadAndHydrate(element, src) {
         });
       }
 
-      console.log('[Mandu] Hydrated:', id);
+      console.log('[Mandu] Hydrated:', id, '(' + renderMode + ')');
     }
     // Plain React component fallback (e.g. "use client" pages)
     else if (typeof island === 'function' || React.isValidElement(island)) {
       console.warn('[Mandu] Plain component hydration:', id);
+      const renderMode = 'hydrate';
 
       const root = typeof island === 'function'
-        ? hydrateRoot(element, React.createElement(island, data))
-        : hydrateRoot(element, island);
+        ? hydrateRoot(
+            element,
+            React.createElement(island, data),
+            createHydrationOptions(element, id, renderMode)
+          )
+        : hydrateRoot(element, island, createHydrationOptions(element, id, renderMode));
 
       hydratedRoots.set(id, root);
 
       // 완료 표시
+      element.setAttribute('data-mandu-render-mode', renderMode);
       element.setAttribute('data-mandu-hydrated', 'true');
 
       // 성능 마커
@@ -310,10 +481,10 @@ async function loadAndHydrate(element, src) {
       // 이벤트 발송
       element.dispatchEvent(new CustomEvent('mandu:hydrated', {
         bubbles: true,
-        detail: { id, data }
+        detail: { id, data, mode: renderMode }
       }));
 
-      console.log('[Mandu] Plain component hydrated:', id);
+      console.log('[Mandu] Plain component hydrated:', id, '(' + renderMode + ')');
     }
     else {
       throw new Error('[Mandu] Invalid module: expected Mandu island or React component: ' + id);
@@ -327,6 +498,8 @@ async function loadAndHydrate(element, src) {
       bubbles: true,
       detail: { id, error: error.message }
     }));
+  } finally {
+    element.removeAttribute('data-mandu-hydrating');
   }
 }
 
@@ -394,42 +567,7 @@ function generateReactShimSource(): string {
  * import map을 통해 bare specifier 해결
  */
 import React, {
-  // Core
-  createElement,
-  cloneElement,
-  createContext,
-  createRef,
-  forwardRef,
-  isValidElement,
-  memo,
-  lazy,
-  // Hooks
-  useState,
-  useEffect,
-  useContext,
-  useReducer,
-  useCallback,
-  useMemo,
-  useRef,
-  useLayoutEffect,
-  useImperativeHandle,
-  useDebugValue,
-  useDeferredValue,
-  useTransition,
-  useId,
-  useSyncExternalStore,
-  useInsertionEffect,
-  // Components
-  Fragment,
-  Suspense,
-  StrictMode,
-  Profiler,
-  // Misc
-  version,
-  // Types
-  Component,
-  PureComponent,
-  Children,
+${formatShimBindings(REACT_SHIM_EXPORTS)}
 } from 'react';
 
 // JSX Runtime functions (JSX 변환에 필요)
@@ -457,37 +595,7 @@ if (typeof window !== 'undefined') {
 
 // Named exports
 export {
-  createElement,
-  cloneElement,
-  createContext,
-  createRef,
-  forwardRef,
-  isValidElement,
-  memo,
-  lazy,
-  useState,
-  useEffect,
-  useContext,
-  useReducer,
-  useCallback,
-  useMemo,
-  useRef,
-  useLayoutEffect,
-  useImperativeHandle,
-  useDebugValue,
-  useDeferredValue,
-  useTransition,
-  useId,
-  useSyncExternalStore,
-  useInsertionEffect,
-  Fragment,
-  Suspense,
-  StrictMode,
-  Profiler,
-  version,
-  Component,
-  PureComponent,
-  Children,
+${formatShimBindings(REACT_SHIM_EXPORTS)}
   __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
   __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED,
   // JSX Runtime exports
@@ -511,16 +619,12 @@ function generateReactDOMShimSource(): string {
  * Mandu React DOM Shim (Generated)
  */
 import ReactDOM, {
-  createPortal,
-  flushSync,
-  version,
+${formatShimBindings(REACT_DOM_SHIM_EXPORTS)}
 } from 'react-dom';
 
 // Named exports
 export {
-  createPortal,
-  flushSync,
-  version,
+${formatShimBindings(REACT_DOM_SHIM_EXPORTS)}
 };
 
 // Default export
@@ -537,13 +641,19 @@ function generateReactDOMClientShimSource(): string {
 /**
  * Mandu React DOM Client Shim (Generated)
  */
-import { createRoot, hydrateRoot } from 'react-dom/client';
+import { 
+${formatShimBindings(REACT_DOM_CLIENT_SHIM_EXPORTS)}
+} from 'react-dom/client';
 
 // Named exports (명시적으로 re-export)
-export { createRoot, hydrateRoot };
+export { 
+${formatShimBindings(REACT_DOM_CLIENT_SHIM_EXPORTS)}
+};
 
 // Default export
-export default { createRoot, hydrateRoot };
+export default { 
+${formatShimBindings(REACT_DOM_CLIENT_SHIM_EXPORTS)}
+};
 `;
 }
 
@@ -1336,24 +1446,28 @@ export async function buildClientBundles(
       return buildClientBundles(manifest, rootDir, { ...options, targetRouteIds: undefined });
     }
 
-    for (const output of outputs) {
-      if (existingManifest.bundles[output.routeId]) {
-        existingManifest.bundles[output.routeId].js = output.outputPath;
-      } else {
-        const route = targetRoutes.find((r) => r.id === output.routeId);
-        const hydration = route ? getRouteHydration(route) : null;
-        existingManifest.bundles[output.routeId] = {
-          js: output.outputPath,
-          dependencies: ["_runtime", "_react"],
-          priority: hydration?.priority || HYDRATION.DEFAULT_PRIORITY,
-        };
+    // Only update manifest with successfully built outputs (#10: preserve previous good manifest on failure)
+    if (outputs.length > 0) {
+      for (const output of outputs) {
+        if (existingManifest.bundles[output.routeId]) {
+          existingManifest.bundles[output.routeId].js = output.outputPath;
+        } else {
+          const route = targetRoutes.find((r) => r.id === output.routeId);
+          const hydration = route ? getRouteHydration(route) : null;
+          existingManifest.bundles[output.routeId] = {
+            js: output.outputPath,
+            dependencies: ["_runtime", "_react"],
+            priority: hydration?.priority || HYDRATION.DEFAULT_PRIORITY,
+          };
+        }
       }
-    }
 
-    await fs.writeFile(
-      path.join(rootDir, ".mandu/manifest.json"),
-      JSON.stringify(existingManifest, null, 2)
-    );
+      await fs.writeFile(
+        path.join(rootDir, ".mandu/manifest.json"),
+        JSON.stringify(existingManifest, null, 2)
+      );
+    }
+    // When all builds failed, do NOT overwrite manifest — keep previous good state
 
     const stats = calculateStats(outputs, startTime);
     return { success: errors.length === 0, outputs, errors, manifest: existingManifest, stats };
@@ -1385,6 +1499,28 @@ export async function buildClientBundles(
   if (devtoolsResult && !devtoolsResult.success) {
     // DevTools 빌드 실패는 경고만 (개발 중단시키지 않음)
     console.warn("[Mandu] DevTools bundle build failed:", devtoolsResult.errors.join(", "));
+  }
+
+  // 4.5. Pre-build validation: detect wrong import paths in island files
+  for (const route of hydratedRoutes) {
+    if (route.clientModule) {
+      const clientModulePath = path.join(rootDir, route.clientModule);
+      try {
+        const source = await fs.readFile(clientModulePath, "utf-8");
+        // Match imports from "@mandujs/core" but NOT "@mandujs/core/client" or other subpaths
+        const wrongImportPattern = /(?:import|from)\s+['"]@mandujs\/core['"]|require\s*\(\s*['"]@mandujs\/core['"]\s*\)/;
+        if (wrongImportPattern.test(source)) {
+          const errMsg =
+            `[${route.id}] Island file "${route.clientModule}" imports from "@mandujs/core" which is a server-side module.\n` +
+            `  Fix: Change the import to "@mandujs/core/client".\n` +
+            `  Client islands cannot use server-side modules.`;
+          console.error(`\n\x1b[31mERROR: ${errMsg}\x1b[0m\n`);
+          errors.push(errMsg);
+        }
+      } catch {
+        // File read failure will be caught later during build
+      }
+    }
   }
 
   // 5. 각 Island 번들 빌드

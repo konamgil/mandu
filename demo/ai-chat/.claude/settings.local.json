@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": []
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "mandu"
+  ]
+}

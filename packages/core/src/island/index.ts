@@ -276,7 +276,7 @@ export function createIslandPlaceholder({
   const serializedProps = serializeIslandProps(props);
   const fallbackHtml = fallback ? renderFallback(fallback) : '<div class="mandu-island-loading">Loading...</div>';
 
-  return `<div data-mandu-island="${name}" data-hydrate="${hydrate}"${media ? ` data-media="${media}"` : ''} data-props='${escapeHtml(serializedProps)}'>${fallbackHtml}</div>`;
+  return `<div data-mandu-island="${name}" data-hydrate="${hydrate}"${media ? ` data-media="${media}"` : ''} data-props='${escapeHtml(serializedProps)}' style="display:contents">${fallbackHtml}</div>`;
 }
 
 function escapeHtml(str: string): string {
@@ -318,7 +318,9 @@ export const ISLAND_HYDRATION_SCRIPT = `
           hydrate();
         }
       });
-      observer.observe(el);
+      // display:contents elements have zero size — observe first child instead
+      const target = (typeof getComputedStyle !== 'undefined' && getComputedStyle(el).display === 'contents' && el.firstElementChild) ? el.firstElementChild : el;
+      observer.observe(target);
     },
     media: (el, hydrate, query) => {
       const mql = window.matchMedia(query);

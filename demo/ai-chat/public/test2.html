@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h1>SSE + ReadableStream Test</h1>
+<button id="btn">Send</button>
+<pre id="output"></pre>
+<script>
+document.getElementById('btn').onclick = async () => {
+  const res = await fetch('/api/sessions');
+  const {sessions} = await res.json();
+  const sid = sessions[0]?.id;
+  if (!sid) { document.getElementById('output').textContent = 'No session'; return; }
+
+  // Same pattern as ChatApp island - fetch + ReadableStream reader
+  const sseRes = await fetch('/api/chat?message=hi&sessionId=' + sid);
+  const reader = sseRes.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.token) content += data.token;
+      } catch {}
+    }
+    document.getElementById('output').textContent = content;
+  }
+  document.getElementById('output').textContent = 'DONE: ' + content;
+};
+</script>
+</body>
+</html>

@@ -99,7 +99,9 @@ export const GUARD_RULES: Record<string, GuardRule> = {
   ISLAND_FIRST_INTEGRITY: {
     id: "ISLAND_FIRST_INTEGRITY",
     name: "Island-First Integrity",
-    description: "clientModule이 있는 page route의 componentModule이 island을 import하지 않습니다",
+    description:
+      "A page route has a clientModule defined but the island file does not exist. " +
+      "Create a .island.tsx file in the same directory; do NOT import island() into page.tsx.",
     severity: "error",
   },
   CLIENT_MODULE_NOT_FOUND: {

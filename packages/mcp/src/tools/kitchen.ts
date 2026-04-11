@@ -6,6 +6,7 @@
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { loadManduConfig } from "@mandujs/core";
+import { getDevServerState } from "./project.js";
 
 export const kitchenToolDefinitions: Tool[] = [
   {
@@ -35,9 +36,26 @@ export function kitchenTools(projectRoot: string) {
     mandu_kitchen_errors: async (args: Record<string, unknown>) => {
       const { clear = false } = args as { clear?: boolean };
 
-      // Read port from mandu config
-      const config = await loadManduConfig(projectRoot);
-      const port = config.server?.port ?? 4567;
+      // Detect port from the running dev server output first, then fall back to config
+      let port: number | undefined;
+
+      const serverState = getDevServerState();
+      if (serverState) {
+        // Parse the actual port from dev server stdout (e.g. "http://localhost:3333")
+        for (const line of serverState.output) {
+          const portMatch = line.match(/https?:\/\/localhost:(\d+)/);
+          if (portMatch) {
+            port = parseInt(portMatch[1], 10);
+          }
+        }
+      }
+
+      // Fall back to config if we couldn't detect from running server
+      if (!port) {
+        const config = await loadManduConfig(projectRoot);
+        port = config.server?.port ?? 3333;
+      }
+
       const baseUrl = `http://localhost:${port}`;
 
       try {

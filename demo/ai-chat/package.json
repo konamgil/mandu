@@ -16,10 +16,13 @@
   },
   "devDependencies": {
     "@mandujs/cli": "workspace:*",
+    "@mandujs/mcp": "workspace:*",
+    "@playwright/test": "^1.59.1",
+    "@tailwindcss/cli": "^4.1.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "typescript": "^5.0.0",
-    "@tailwindcss/cli": "^4.1.0",
-    "tailwindcss": "^4.1.0"
+    "playwright": "^1.59.1",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.0.0"
   }
 }
