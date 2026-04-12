@@ -4,28 +4,33 @@ Mandu's Resource-Centric Architecture is a code generation approach that puts **
 
 ## Overview
 
-Instead of manually writing manifests, API handlers, and validation logic separately, you define a **resource** (e.g., `user`, `post`, `comment`) with its fields and options. Mandu then generates:
+Instead of manually writing manifests, API handlers, and validation logic separately, you define a **resource** (e.g., `user`, `post`, `comment`) with its fields and options. Resources can be created via the MCP tool (`mandu.resource.create`) or the CLI (`bun run mandu generate resource <name> --fields ...`). Mandu then generates:
 
-- ✅ **Contract**: Zod validation schemas for requests/responses
-- ✅ **Types**: TypeScript interfaces inferred from fields
-- ✅ **Slot**: API handler with slot markers for custom logic
-- ✅ **Client**: Type-safe frontend client
+- **Route**: API route file in `app/api/<plural>/route.ts`
+- **Contract**: Zod validation schemas for requests/responses
+- **Slot**: API handler with slot markers for custom logic
+- **Types**: TypeScript interfaces inferred from fields
+
+Guard presets validate that generated resources are placed in the correct directories according to your project's architectural rules.
 
 **Key benefit**: When you add a field to your resource, regeneration updates types and schemas automatically while **preserving your custom business logic** in slots.
 
 ### Key Concepts
 
 **Resource**
-: A data model representing a domain entity (e.g., `user`, `post`, `product`). Defined using `defineResource()` with fields and options.
+: A data model representing a domain entity (e.g., `user`, `post`, `product`). Defined using `defineResource()` with fields and options. Created via MCP (`mandu.resource.create`) or CLI (`bun run mandu generate resource <name>`).
 
 **Resource Schema**
-: The TypeScript definition in `spec/resources/*.resource.ts` that describes field types, validation rules, and endpoint configuration.
+: The TypeScript definition in `spec/resources/<name>/schema.ts` that describes field types, validation rules, and endpoint configuration.
 
 **Generated Code**
-: Auto-generated files in `.mandu/generated/` including contracts, types, slots, and clients. Updated on regeneration.
+: Auto-generated files in `.mandu/generated/` including routes, contracts, types, slots, and clients. Updated on regeneration.
 
 **Slot Preservation**
 : The mechanism that preserves custom business logic in slot files during regeneration. Code between `@slot:*` markers is never overwritten.
+
+**Guard Preset Validation**
+: Guard presets (fsd, clean, hexagonal, atomic, cqrs, mandu) validate that resource files are placed in the correct directories according to your chosen architecture.
 
 **Auto-Pluralization**
 : Automatic conversion of resource names to plural form for API endpoints (e.g., `user` → `/api/users`). Can be customized or disabled.
@@ -94,7 +99,7 @@ The traditional manifest-first approach requires manually maintaining JSON files
 └─────────────────────────────────────────────────────────────┘
 
 1. DEFINE RESOURCE
-   spec/resources/user.resource.ts
+   spec/resources/user/schema.ts
    ↓
    defineResource({
      name: "user",
@@ -103,9 +108,9 @@ The traditional manifest-first approach requires manually maintaining JSON files
 
 2. CLI/MCP GENERATION
    ↓
-   bunx mandu generate resource user
+   bun run mandu generate resource user --fields "id:uuid,email:email"
    OR
-   mandu_generate_resource (MCP tool)
+   mandu.resource.create (MCP tool)
    ↓
    parseResourceSchema()
    generateResourceArtifacts()
@@ -116,16 +121,16 @@ The traditional manifest-first approach requires manually maintaining JSON files
    │  .mandu/generated/                        │
    ├──────────────────────────────────────────┤
    │  contracts/user.contract.ts  ← Zod       │
-   │  types/user.types.ts         ← TypeScript│
-   │  slots/user.slot.ts          ← Handler   │ ⚠️ PRESERVED
-   │  client/user.client.ts       ← Client    │
+   │  types/user.types.ts         ← TypeScript │
+   │  slots/user.slot.ts          ← Handler    │ PRESERVED
+   │  client/user.client.ts       ← Client     │
    └──────────────────────────────────────────┘
+   app/api/users/route.ts            ← Route (generated)
 
-4. APPLICATION USAGE
+4. GUARD VALIDATION
    ↓
-   app/api/users/route.ts
-   import { userHandler } from ".mandu/generated/slots/user.slot"
-   export { userHandler as GET, POST, ... }
+   bun run mandu guard-check
+   Guard presets verify resource placement
 
 5. FRONTEND CONSUMPTION
    ↓
@@ -144,9 +149,12 @@ The resource-centric architecture uses a specific directory structure based on `
 project/
 ├── spec/
 │   └── resources/
-│       ├── user.resource.ts       # Resource definition
-│       ├── post.resource.ts
-│       └── comment.resource.ts
+│       ├── user/
+│       │   └── schema.ts          # Resource definition
+│       ├── post/
+│       │   └── schema.ts
+│       └── comment/
+│           └── schema.ts
 │
 ├── .mandu/generated/              # AUTO-GENERATED - DO NOT EDIT
 │   ├── contracts/
@@ -172,7 +180,7 @@ project/
 └── app/                           # Your application code
     ├── api/
     │   ├── users/
-    │   │   └── route.ts           # Import from slots/
+    │   │   └── route.ts           # Generated route (imports from slots/)
     │   ├── posts/
     │   │   └── route.ts
     │   └── comments/
@@ -182,11 +190,12 @@ project/
 ```
 
 **Directory Conventions:**
-- `spec/resources/` - Source of truth for resource definitions
+- `spec/resources/<name>/schema.ts` - Source of truth for resource definitions
 - `.mandu/generated/contracts/` - Always regenerated
 - `.mandu/generated/types/` - Always regenerated
 - `.mandu/generated/slots/` - **PRESERVED unless `--force`**
 - `.mandu/generated/client/` - Always regenerated
+- `app/api/<plural>/route.ts` - Generated route file
 
 ---
 
@@ -200,11 +209,11 @@ The generation pipeline transforms a resource definition into production-ready c
 
 ```typescript
 // packages/core/src/resource/parser.ts
-const parsed = await parseResourceSchema("/path/to/user.resource.ts");
+const parsed = await parseResourceSchema("/path/to/spec/resources/user/schema.ts");
 // → { definition, filePath, fileName, resourceName }
 ```
 
-- Imports the `*.resource.ts` file
+- Imports the `schema.ts` file from the resource directory
 - Validates resource definition
 - Extracts metadata (name, file path)
 - Returns `ParsedResource` object
@@ -339,7 +348,7 @@ if (!slotExists || force) {
 **Initial Generation:**
 
 ```bash
-$ bunx mandu generate resource user
+$ bun run mandu generate resource user --fields "id:uuid,email:email"
 ```
 
 Generated `user.slot.ts`:
@@ -387,7 +396,14 @@ GET: async (ctx) => {
 
 **Add Field to Resource:**
 
-Edit `user.resource.ts` to add `avatar` field:
+Edit `spec/resources/user/schema.ts` to add `avatar` field, or use the MCP tool:
+
+```bash
+# Via MCP:  mandu.resource.addField { resourceName: "user", fieldName: "avatar", fieldType: "url" }
+# Via CLI:
+$ bun run mandu generate resource user --fields "id:uuid,email:email,avatar:url"
+```
+
 ```typescript
 defineResource({
   name: "user",
@@ -402,7 +418,7 @@ defineResource({
 **Regenerate:**
 
 ```bash
-$ bunx mandu generate resource user
+$ bun run mandu generate resource user
 
 ✓ Created: .mandu/generated/contracts/user.contract.ts
 ✓ Created: .mandu/generated/types/user.types.ts
@@ -419,7 +435,7 @@ $ bunx mandu generate resource user
 **Force Overwrite (Dangerous):**
 
 ```bash
-$ bunx mandu generate resource user --force
+$ bun run mandu generate resource user --force
 
 ⚠️  Overwriting existing slot (--force): .mandu/generated/slots/user.slot.ts
 ```
@@ -517,13 +533,15 @@ project/
 ├── spec/
 │   ├── routes.manifest.json        # Legacy routes (still works!)
 │   └── resources/
-│       └── user.resource.ts        # New resources
+│       └── user/
+│           └── schema.ts           # New resources
 │
 └── .mandu/generated/
-    ├── slots/                       # Legacy slots
-    │   └── old-api.slot.ts
-    └── slots/                       # Resource slots
-        └── user.slot.ts
+    ├── slots/                       # Legacy slots + Resource slots
+    │   ├── old-api.slot.ts
+    │   └── user.slot.ts
+    └── contracts/
+        └── user.contract.ts
 ```
 
 - Existing manifest routes continue to work
@@ -556,24 +574,76 @@ project/
 
 1. **Start with new features**
    ```bash
-   bunx mandu generate resource newFeature
+   bun run mandu generate resource newFeature --fields "id:uuid,name:string"
    ```
 
 2. **Keep existing routes**
    - Don't touch working manifest routes
    - Test new resource-based routes
 
-3. **Migrate incrementally**
+3. **Validate with Guard**
+   ```bash
+   bun run mandu guard-check
+   ```
+   Guard presets ensure new resources follow your chosen architecture.
+
+4. **Migrate incrementally**
    - Move one route at a time
    - Compare old vs new behavior
    - Remove manifest entry after migration
 
-4. **Complete migration (optional)**
+5. **Complete migration (optional)**
    - Once all routes migrated
    - Remove `routes.manifest.json`
    - Fully resource-based
 
 **See:** [Migration Guide](./migration/to-resources.md) for detailed steps.
+
+---
+
+## Content Collections
+
+Content Collections are **separate from resources**. While resources model API-backed domain entities with CRUD operations, content collections manage static or file-based content (e.g., blog posts as Markdown, documentation pages).
+
+| Aspect | Resources | Content Collections |
+|--------|-----------|---------------------|
+| Data source | API / database | Files (Markdown, MDX, JSON) |
+| Generation | Contracts, slots, types, routes | Type-safe content loaders |
+| CRUD | Full CRUD handlers | Read-only at runtime |
+| Validation | Zod contract schemas | Frontmatter schema validation |
+
+Use resources when you need dynamic API endpoints. Use content collections when your data lives in the filesystem and changes at build time.
+
+---
+
+## Session Storage
+
+Session storage is a **first-class feature** in Mandu, separate from the resource system. Sessions provide server-side state management for authenticated users without requiring a resource definition.
+
+```typescript
+// app/api/login/route.ts
+export async function POST(ctx) {
+  const session = ctx.session;
+  session.set("userId", authenticatedUser.id);
+  return ctx.json({ success: true });
+}
+```
+
+Sessions integrate with resources (e.g., a `user` resource provides the data model, while sessions track the authenticated user state) but are configured independently through `mandu.config.ts`.
+
+---
+
+## MCP Tools
+
+The resource system is fully integrated with MCP tools for AI agent workflows:
+
+| Tool | Description |
+|------|-------------|
+| `mandu.resource.create` | Create a new resource with schema definition |
+| `mandu.resource.list` | List all resources in the project |
+| `mandu.resource.get` | Get detailed information about a specific resource |
+| `mandu.resource.addField` | Add a new field to an existing resource (preserves slots) |
+| `mandu.resource.removeField` | Remove a field from an existing resource |
 
 ---
 

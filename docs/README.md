@@ -1,106 +1,196 @@
-# Mandu Documentation
+# Mandu
 
-This index uses three document labels:
+A Bun-based fullstack React framework with island architecture, AI-native tooling, and architectural guardrails.
 
-| Label | Meaning | How to use it |
-|------|---------|---------------|
-| `official` | Current, recommended, and aligned with the active Mandu workflow | Safe for onboarding and day-to-day reference |
-| `draft` | In progress, incomplete, or still moving with active product decisions | Read only when you are intentionally exploring that area |
-| `legacy` | Historical, superseded, or archival design material | Do not use as your first entrypoint |
+Mandu gives you SSR and streaming out of the box, ships only the JavaScript your page actually needs through islands, and integrates directly with AI coding agents through 85 MCP tools and 9 skill files.
 
-If you are new to Mandu, stay inside the `official` section until your app is running.
+## Quick Start
 
----
-
-## Start Here
-
-1. `docs/guides/01_configuration.md` - Current configuration, runtime defaults, and dev/build behavior
-2. `docs/api/api-reference.md` - Current public API surface
-3. `docs/status.md` - Implementation matrix synced to the codebase
-4. `docs/plans/14_top_tier_framework_priority_plan.md` - Current execution priorities for framework quality
-
----
-
-## Official
-
-- `docs/guides/01_configuration.md` - Canonical configuration guide
-- `docs/api/api-reference.md` - Canonical API reference
-- `docs/status.md` - Current implementation status
-- `docs/product/01_mandu_product_brief.md` - Product direction and framing
-- `docs/architecture/02_mandu_technical_architecture.md` - Current technical architecture overview
-- `docs/architecture/05_mandu_backend-architecture-guardrails.md` - Backend guardrails
-- `docs/specs/05_fs_routes_system.md` - FS Routes reference
-- `docs/specs/06_mandu_guard.md` - Guard architecture reference
-- `docs/specs/07_seo_module.md` - SEO module reference
-- `docs/specs/08_runtime_status_code_policy.md` - Runtime HTTP status code policy
-- `docs/guides/04_prisma.md` - Official Prisma integration guide
-- `docs/guides/05_realtime_chat_starter.md` - Official realtime starter guide
-- `demo/README.md` - Official demo index and current demo status
-- `docs/plans/14_top_tier_framework_priority_plan.md` - Current top-tier roadmap
-
-## Draft
-
-- `docs/comparison/manifest-vs-resource.md` - Incomplete comparison of legacy manifest flow vs resource flow
-- `docs/guides/resource-workflow.md` - Add-on resource workflow tutorial, not the default onboarding path
-- `docs/guides/resource-troubleshooting.md` - In-progress troubleshooting guide for the resource workflow
-- `docs/migration/to-resources.md` - In-progress migration guide from legacy manifests to resources
-- `docs/guides/06_realtime_chat_demo_validation_loop.md` - Internal demo-first validation loop
-
-## Legacy
-
-- `docs/architecture/01_filesystem_first_architecture.md` - Early architecture direction
-- `docs/devtools/MANDU_KITCHEN_SPEC.md` - Historical Kitchen design spec
-- `docs/devtools/MANDU_KITCHEN_SPEC_2.md` - Historical Kitchen design iteration
-- `docs/devtools/MANDU_KITCHEN_FINAL_SPEC.md` - Historical Kitchen design record
-- `docs/evaluation/MANDU_EVALUATION.ko.md` - Historical evaluation snapshot
-- `docs/plans/06_mandu_dna_master_plan.md` - Older master plan
-- `docs/plans/07_mandu_improvement_proposals.md` - Older proposal set
-- `docs/plans/07_product_readiness_plan.md` - Older readiness plan
-- `docs/plans/08_ont-run_adoption_plan.md` - Older adoption plan
-- `docs/plans/09_lockfile_integration_plan.md` - Older integration plan
-- `docs/plans/10_RFC-001-guard-to-guide.md` - Historical RFC
-- `docs/plans/11_openclaw_dna_adoption.md` - Historical adoption plan
-- `docs/plans/12_mcp_dna_integration.md` - Historical MCP integration plan
-- `docs/plans/13_devtool_kitchen_plan.md` - Historical Kitchen plan
-- `docs/plans/13_devtool_kitchen_dev_spec.md` - Historical Kitchen development spec
-- `docs/plans/react19-migration.md` - Historical migration note
-
----
-
-## Configuration Defaults
-
-Mandu loads configuration from `mandu.config.ts`, `mandu.config.js`, or `mandu.config.json`.
-For Guard-only overrides, `.mandu/guard.json` is also supported.
-
-- `mandu dev` and `mandu build` validate the config and print errors if invalid
-- CLI flags override config values
-- The default local dev server port is `3333`
-
-```ts
-// mandu.config.ts
-export default {
-  server: {
-    port: 3333,
-    hostname: "localhost",
-    cors: false,
-    streaming: false,
-  },
-  dev: {
-    hmr: true,
-    watchDirs: ["src/shared", "shared"],
-  },
-  build: {
-    outDir: ".mandu",
-    minify: true,
-    sourcemap: false,
-  },
-};
+```bash
+bunx @mandujs/cli init my-app
+cd my-app
+bun run dev
 ```
 
----
+Your app is running at `http://localhost:3333`.
 
-## Maintenance Rule
+## Feature Overview
 
-- Move a document to `official` only when it matches current CLI, templates, demos, and runtime behavior.
-- Keep TODO-heavy or unstable workflow docs in `draft`.
-- Keep superseded workflow docs and old planning artifacts in `legacy`.
+### Island Architecture
+
+Every interactive component is an island. You choose when it hydrates.
+
+```tsx
+import { island } from "@mandujs/core";
+
+export default island("visible", ({ name }) => {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount((c) => c + 1)}>{name}: {count}</button>;
+});
+```
+
+Five hydration strategies: `load` (immediate), `idle` (requestIdleCallback), `visible` (IntersectionObserver), `media` (media query match), `never` (SSR-only, zero JS).
+
+### Filling API
+
+Type-safe HTTP handlers with an 8-stage lifecycle.
+
+```
+onRequest -> onParse -> beforeHandle -> handler -> afterHandle -> mapResponse -> onError -> afterResponse
+```
+
+```ts
+export const api = filling({
+  method: "POST",
+  path: "/users",
+  contract: { body: UserSchema },
+  handler: async ({ body }) => ({ id: crypto.randomUUID(), ...body }),
+});
+```
+
+Supports WebSocket via `filling.ws()` with the same lifecycle model.
+
+### Contract API
+
+Zod-based schemas that power runtime validation and OpenAPI generation simultaneously.
+
+```ts
+import { contract } from "@mandujs/core";
+
+export const UserContract = contract({
+  body: z.object({ name: z.string(), email: z.string().email() }),
+  response: z.object({ id: z.string(), name: z.string() }),
+});
+```
+
+Run `mandu contract` to validate all contracts. Run `mandu openapi` to generate a spec.
+
+### Guard System
+
+Enforce project structure conventions at the filesystem level. Six presets available.
+
+| Preset | Architecture |
+|--------|-------------|
+| `fsd` | Feature-Sliced Design |
+| `clean` | Clean Architecture |
+| `hexagonal` | Hexagonal / Ports & Adapters |
+| `atomic` | Atomic Design |
+| `cqrs` | Command Query Responsibility Segregation |
+| `mandu` | Mandu default conventions |
+
+```bash
+mandu guard-check          # validate structure
+mandu guard-check --fix    # auto-fix violations
+```
+
+### Rendering
+
+- **SSR** -- server-side rendering with automatic `<head>` management
+- **Streaming SSR** -- progressive HTML streaming for large pages
+- **ISR / SWR** -- incremental static regeneration with `revalidatePath()` and `revalidateTag()`
+- **View Transitions** -- automatic transitions between route navigations
+
+### Data Loading
+
+**Slots** are server-side data loaders that run before render and inject typed props into pages. Define `page.slot.ts` next to any route and the data is available as props. **Middleware** runs globally via the `middleware.ts` convention at the project root.
+
+### Sessions and Auth
+
+Cookie-based sessions via `createCookieSessionStorage`. Scaffold auth boilerplate with `mandu auth` and session handling with `mandu session`.
+
+### Client Hooks
+
+| Hook | Purpose |
+|------|---------|
+| `useMandu()` | Framework context (route, params, navigation) |
+| `useLoaderData()` | Access slot data |
+| `useActionData()` | Access form action results |
+| `useSubmit()` | Programmatic form submission |
+| `useFetch()` | Data fetching with SWR semantics |
+| `useHead()` | Document head management |
+| `useSeoMeta()` | SEO meta tags |
+
+Progressive enhancement with the `<Form>` component. Type-safe server calls with `createClient` RPC.
+
+### Additional Features
+
+- **Image optimization** -- `/_mandu/image` endpoint with sharp, automatic format conversion
+- **Content Collections** -- Markdown and MDX with frontmatter, used via `mandu collection`
+- **Adapter system** -- `adapterBun` built-in, extensible for other runtimes
+
+## CLI
+
+38 commands organized by domain.
+
+| Category | Commands |
+|----------|---------|
+| **Core** | `dev`, `build`, `start`, `preview`, `clean`, `info` |
+| **Quality** | `guard-check`, `contract`, `doctor`, `explain`, `fix` |
+| **Scaffolding** | `init`, `scaffold`, `add`, `middleware`, `session`, `ws`, `auth`, `collection` |
+| **AI** | `ask`, `review`, `generate --ai`, `mcp` |
+| **Ops** | `deploy`, `upgrade`, `completion`, `cache`, `lock`, `monitor` |
+
+Run `mandu --help` for the full list.
+
+## MCP Integration
+
+Mandu ships an MCP server (`@mandujs/mcp`) with 85 tools across 18 categories.
+
+```bash
+mandu mcp                # start the MCP server
+mandu mcp --profile full # all 85 tools
+mandu mcp --profile minimal # essential subset
+```
+
+Tool categories use dot notation: `guard.check`, `contract.validate`, `slot.create`, `seo.audit`, `brain.explain`, `runtime.status`, and more.
+
+Includes 3 prompts, 3 resources, and transaction locking for safe multi-agent operation.
+
+## Skills
+
+The `@mandujs/skills` npm package provides 9 SKILL.md files that plug into Claude Code as a plugin with hooks.
+
+| Skill | Scope |
+|-------|-------|
+| `mandu-create-api` | API route scaffolding |
+| `mandu-create-feature` | Feature module generation |
+| `mandu-debug` | Debugging guidance |
+| `mandu-deploy` | Deployment workflows |
+| `mandu-explain` | Codebase explanation |
+| `mandu-fs-routes` | File-system routing |
+| `mandu-guard-guide` | Guard configuration |
+| `mandu-hydration` | Island hydration patterns |
+| `mandu-slot` | Data loader patterns |
+
+## Project Structure
+
+```
+app/                  # pages, layouts, islands
+  page.tsx            # route component
+  page.slot.ts        # server-side data loader
+  layout.tsx          # layout wrapper
+  *.island.tsx        # interactive island
+middleware.ts         # global middleware
+mandu.config.ts       # framework configuration
+.mandu/               # build output (generated)
+```
+
+## Configuration
+
+Configure via `mandu.config.ts` at the project root. Supports server, dev, build, and guard settings. CLI flags override config values. See `docs/guides/01_configuration.md` for full reference.
+
+## Documentation
+
+| Document | Path |
+|----------|------|
+| Configuration Guide | `docs/guides/01_configuration.md` |
+| API Reference | `docs/api/api-reference.md` |
+| Implementation Status | `docs/status.md` |
+| Technical Architecture | `docs/architecture/02_mandu_technical_architecture.md` |
+| FS Routes Spec | `docs/specs/05_fs_routes_system.md` |
+| Guard Spec | `docs/specs/06_mandu_guard.md` |
+| SEO Module | `docs/specs/07_seo_module.md` |
+
+## License
+
+MPL-2.0. Modified files must be shared. Applications built with Mandu remain under your own license.

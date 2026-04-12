@@ -1,27 +1,30 @@
-# GitHub Actions CI/CD Integration for Mandu ATE
+# GitHub Actions CI/CD Integration for Mandu
 
 > Mandu 프로젝트에 GitHub Actions 기반 CI/CD 파이프라인을 통합하는 가이드
 
-## 📋 목차
+## 목차
 
 1. [개요](#개요)
 2. [빠른 시작](#빠른-시작)
 3. [워크플로우 상세](#워크플로우-상세)
 4. [Impact Analysis](#impact-analysis)
 5. [커스터마이징](#커스터마이징)
-6. [트러블슈팅](#트러블슈팅)
+6. [배포](#배포)
+7. [트러블슈팅](#트러블슈팅)
 
 ## 개요
 
-Mandu ATE (Automation Test Engine)는 GitHub Actions와 통합하여 자동화된 E2E 테스트 파이프라인을 제공합니다.
+Mandu는 GitHub Actions와 통합하여 빌드, 검증, 테스트, 배포를 포함한 자동화된 CI/CD 파이프라인을 제공합니다.
 
 ### 주요 기능
 
-- ✅ **전체 E2E 테스트**: 모든 테스트를 실행하여 앱 전체 검증
-- 🎯 **Impact Analysis**: 변경된 파일 기반 서브셋 테스트로 실행 시간 최적화
-- 📊 **자동 리포트**: PR에 테스트 결과 자동 코멘트
-- 🚀 **병렬 실행**: 다중 브라우저, Shard 기반 병렬화 지원
-- 📦 **아티팩트 관리**: 테스트 리포트, 스크린샷, 비디오 자동 업로드
+- **빌드 파이프라인**: 클라이언트 번들 + CSS + 프리렌더링(SSG) 통합 빌드
+- **Guard 검증**: 구조 규칙, 슬롯 무결성, 계약(contract) 유효성 자동 검사
+- **ATE 테스트**: Automation Test Engine 기반 E2E 및 서브셋 테스트
+- **Impact Analysis**: 변경된 파일 기반 서브셋 테스트로 실행 시간 최적화
+- **자동 리포트**: PR에 테스트 결과 자동 코멘트
+- **병렬 실행**: 다중 브라우저, Shard 기반 병렬화 지원
+- **Docker 배포**: `mandu deploy --target docker` 내장 배포 지원
 
 ## 빠른 시작
 
@@ -80,12 +83,15 @@ PR이 생성되면 자동으로 워크플로우가 실행됩니다.
 **실행 단계:**
 
 ```yaml
-1. Checkout code               # 코드 체크아웃
-2. Setup Bun                   # Bun 런타임 설치
-3. Install dependencies        # 의존성 설치
-4. Install Playwright          # Playwright 브라우저 설치
-5. Run ATE pipeline            # E2E 테스트 실행
-6. Upload artifacts            # 리포트 업로드
+1. Checkout code                    # 코드 체크아웃
+2. Setup Bun                        # Bun 런타임 설치
+3. Install dependencies             # 의존성 설치
+4. Guard check                      # bun run mandu guard-check
+5. Contract validation              # bun run mandu contract validate
+6. Build                            # bun run mandu build
+7. Install Playwright               # Playwright 브라우저 설치
+8. Run ATE tests                    # bun run mandu test:auto
+9. Upload artifacts                 # 리포트 업로드
 ```
 
 **사용 시나리오:**
@@ -105,17 +111,19 @@ Job 1: analyze-changes
   1. Checkout with full history    # Git 히스토리 포함 체크아웃
   2. Setup Bun
   3. Install dependencies
-  4. Analyze impact                 # 변경 파일 분석
-  5. Determine affected tests       # 영향받는 테스트 식별
+  4. Guard check                    # bun run mandu guard-check
+  5. Analyze impact                 # 변경 파일 분석
+  6. Determine affected tests       # 영향받는 테스트 식별
 
 Job 2: e2e-subset (conditional)
   1. Checkout code
   2. Setup Bun
   3. Install dependencies
-  4. Install Playwright
-  5. Run affected tests only        # 서브셋만 실행
-  6. Upload artifacts
-  7. Comment PR with results        # PR에 결과 코멘트
+  4. Build                          # bun run mandu build
+  5. Install Playwright
+  6. Run affected tests only        # bun run mandu test:auto (서브셋)
+  7. Upload artifacts
+  8. Comment PR with results        # PR에 결과 코멘트
 ```
 
 **사용 시나리오:**
@@ -204,7 +212,7 @@ steps:
     run: bunx playwright install --with-deps ${{ matrix.browser }}
 
   - name: Run tests
-    run: bun run test:e2e:ci
+    run: bun run mandu test:auto --ci
     env:
       BROWSER: ${{ matrix.browser }}
 ```
@@ -219,7 +227,7 @@ strategy:
 
 steps:
   - name: Run tests
-    run: bun run test:e2e:ci --shard=${{ matrix.shard }}/4
+    run: bun run mandu test:auto --ci --shard=${{ matrix.shard }}/4
 ```
 
 ### 4. Slack 알림 추가
@@ -315,7 +323,7 @@ Error: Unable to find any artifacts for the associated workflow
 ```json
 {
   "scripts": {
-    "test:e2e:ci": "bun run test:auto --ci"
+    "test:e2e:ci": "bun run mandu test:auto --ci"
   }
 }
 ```
@@ -359,6 +367,45 @@ strategy:
   matrix:
     shard: [1, 2, 3, 4]
 ```
+
+## 배포
+
+### Docker 배포 (내장)
+
+Mandu는 Docker 배포를 내장 지원합니다.
+
+**로컬에서 Docker 이미지 빌드 및 배포:**
+
+```bash
+bun run mandu deploy --target docker
+```
+
+이 명령은 다음을 수행합니다:
+1. 프로덕션 빌드 (`bun run mandu build`) 실행
+2. 최적화된 Dockerfile 자동 생성
+3. Docker 이미지 빌드
+
+**CI에서 Docker 배포:**
+
+```yaml
+- name: Build application
+  run: bun run mandu build
+
+- name: Deploy to Docker
+  run: bun run mandu deploy --target docker
+  env:
+    DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+```
+
+### 빌드 명령어 요약
+
+| 명령어 | 설명 |
+|--------|------|
+| `bun run mandu build` | 클라이언트 번들 + CSS + 프리렌더링(SSG) 통합 빌드 |
+| `bun run mandu guard-check` | Guard 규칙 검증 (구조, 슬롯, island 무결성) |
+| `bun run mandu contract validate` | Contract(Zod 스키마) 유효성 검사 |
+| `bun run mandu test:auto` | ATE 자동화 테스트 실행 |
+| `bun run mandu deploy --target docker` | Docker 이미지 빌드 및 배포 |
 
 ## 고급 기능
 
@@ -431,7 +478,7 @@ on:
 ```yaml
 - name: Run integration tests
   if: contains(github.event.pull_request.labels.*.name, 'run-integration')
-  run: bun run test:integration
+  run: bun run mandu test:auto --ci
 ```
 
 ### 3. 동시 실행 제어
