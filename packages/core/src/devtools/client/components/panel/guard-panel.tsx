@@ -205,10 +205,9 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
     return (
       <div style={styles.container}>
         <div style={styles.emptyState}>
-          🛡️
           <p>
-            아키텍처 위반이 없어요!<br />
-            코드가 규칙을 잘 따르고 있어요.
+            현재 아키텍처 위반이 없습니다.<br />
+            새 스캔 결과가 생기면 여기에 표시됩니다.
           </p>
           <button
             style={{
@@ -220,12 +219,12 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
             onClick={handleScan}
             disabled={scanning}
           >
-            {scanning ? '스캔 중...' : '🔍 전체 스캔'}
+            {scanning ? '스캔 중...' : '전체 스캔'}
           </button>
           {scanResult && (
             <p style={{ marginTop: spacing.sm, fontSize: typography.fontSize.xs }}>
               스캔 결과: {scanResult.total === 0
-                ? '위반 없음 ✅'
+                ? '위반 없음'
                 : `${scanResult.total}개 위반 (에러 ${scanResult.errors}, 경고 ${scanResult.warnings})`
               }
             </p>
@@ -254,7 +253,7 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
             onClick={handleScan}
             disabled={scanning}
           >
-            {scanning ? '스캔 중...' : '🔍 스캔'}
+            {scanning ? '스캔 중...' : '스캔'}
           </button>
           <button style={styles.clearButton} onClick={onClear}>
             모두 지우기
@@ -324,7 +323,7 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
                     }}
                     onClick={() => handleDecision(violation.ruleId, violation.source.file, 'approve')}
                   >
-                    ✅
+                    허용
                   </button>
                   <button
                     style={{
@@ -336,7 +335,7 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
                     }}
                     onClick={() => handleDecision(violation.ruleId, violation.source.file, 'reject')}
                   >
-                    ❌
+                    차단
                   </button>
                 </div>
               </div>
@@ -361,7 +360,7 @@ export function GuardPanel({ violations, onClear }: GuardPanelProps): React.Reac
 
               {violation.suggestion && (
                 <div style={styles.suggestion}>
-                  <div style={styles.suggestionLabel}>💡 제안</div>
+                  <div style={styles.suggestionLabel}>제안</div>
                   {violation.suggestion}
                 </div>
               )}

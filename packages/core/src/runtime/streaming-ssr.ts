@@ -710,10 +710,29 @@ export async function renderToStream(
     ? { ...options, headTags: [options.headTags, collectedHeadTags].filter(Boolean).join("\n") }
     : options;
   const htmlShell = generateHTMLShell(resolvedOptions);
-  // _skipHtmlClose가 true이면 </body></html> 생략 (deferred 스크립트 삽입용)
-  const htmlTail = resolvedOptions._skipHtmlClose
-    ? generateHTMLTailContent(resolvedOptions)
-    : generateHTMLTail(resolvedOptions);
+
+  // Reset SSR head before real render so streaming components push fresh tags
+  try {
+    const headMod = require("../client/use-head") as { resetSSRHead?: () => void; getSSRHeadTags?: () => string };
+    headMod.resetSSRHead?.();
+  } catch {}
+
+  // Lazy tail: collect late head tags injected during streaming render
+  function buildHtmlTail(): string {
+    const baseTail = resolvedOptions._skipHtmlClose
+      ? generateHTMLTailContent(resolvedOptions)
+      : generateHTMLTail(resolvedOptions);
+    try {
+      const headMod = require("../client/use-head") as { getSSRHeadTags?: () => string };
+      const lateHeadTags = headMod.getSSRHeadTags?.() ?? "";
+      if (lateHeadTags) {
+        const escaped = escapeJsonForInlineScript(JSON.stringify(lateHeadTags));
+        const script = `<script>(function(){var t=${escaped},d=document.createElement('div');d.innerHTML=t;var h=document.head;while(d.firstChild)h.appendChild(d.firstChild);})()</script>`;
+        return script + baseTail;
+      }
+    } catch {}
+    return baseTail;
+  }
 
   let shellSent = false;
   let timedOut = false;
@@ -832,7 +851,7 @@ export async function renderToStream(
           controller.enqueue(encoder.encode(generateErrorScript(timeoutError, routeId)));
 
           if (!tailSent) {
-            controller.enqueue(encoder.encode(htmlTail));
+            controller.enqueue(encoder.encode(buildHtmlTail()));
             tailSent = true;
             metrics.allReadyTime = Date.now() - metrics.startTime;
             onMetrics?.(metrics);
@@ -851,7 +870,7 @@ export async function renderToStream(
 
         if (done) {
           if (!tailSent) {
-            controller.enqueue(encoder.encode(htmlTail));
+            controller.enqueue(encoder.encode(buildHtmlTail()));
             tailSent = true;
             // allReady가 아직 안 끝났을 수 있으므로 현재 시점으로 기록
             if (metrics.allReadyTime === 0) {
@@ -884,7 +903,7 @@ export async function renderToStream(
         controller.enqueue(encoder.encode(generateErrorScript(err, routeId)));
 
         if (!tailSent) {
-          controller.enqueue(encoder.encode(htmlTail));
+          controller.enqueue(encoder.encode(buildHtmlTail()));
           tailSent = true;
           metrics.allReadyTime = Date.now() - metrics.startTime;
           onMetrics?.(metrics);

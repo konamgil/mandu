@@ -50,6 +50,14 @@ export interface DevOptions {
   open?: boolean;
 }
 
+function logDevEvent(title: string, details: string[] = []): void {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`\n[${timestamp}] ${title}`);
+  for (const detail of details) {
+    console.log(`  ${detail}`);
+  }
+}
+
 export async function dev(options: DevOptions = {}): Promise<void> {
   const devStartTime = performance.now();
   const rootDir = resolveFromCwd(".");
@@ -71,7 +79,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   const hooks = config.hooks;
   const HMR_OFFSET = 1;
 
-  console.log(`🥟 Mandu Dev Server`);
+  console.log("Starting dev server...");
 
   // Print lockfile status
   printRuntimeLockfileStatus(action, bypassed, lockfile, lockResult);
@@ -83,11 +91,11 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   });
 
   if (envResult.loaded.length > 0) {
-    console.log(`🔐 Env loaded: ${envResult.loaded.join(", ")}`);
+    console.log(`Env loaded: ${envResult.loaded.join(", ")}`);
   }
 
   // Scan routes (FS Routes first, fallback to spec manifest)
-  console.log(`📂 Scanning routes...`);
+  console.log("Scanning routes...");
   let manifest: RoutesManifest;
   let enableFsRoutes = false;
 
@@ -98,16 +106,16 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
     if (manifest.routes.length === 0) {
       printCLIError(CLI_ERROR_CODES.DEV_NO_ROUTES);
-      console.log("💡 Create a page.tsx file in the app/ directory:");
+      console.log("Create a page.tsx file in the app/ directory:");
       console.log("");
-      console.log("  app/page.tsx        → /");
-      console.log("  app/blog/page.tsx   → /blog");
-      console.log("  app/api/users/route.ts → /api/users");
+      console.log("  app/page.tsx             -> /");
+      console.log("  app/blog/page.tsx        -> /blog");
+      console.log("  app/api/users/route.ts   -> /api/users");
       console.log("");
       process.exit(1);
     }
 
-    console.log(`✅ ${manifest.routes.length} route(s) found\n`);
+    console.log(`Routes found: ${manifest.routes.length}\n`);
   } catch (error) {
     printCLIError(CLI_ERROR_CODES.DEV_MANIFEST_NOT_FOUND);
     console.error(error instanceof Error ? error.message : error);
@@ -137,7 +145,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       } else {
         printReport(preflightReport, getPreset(guardPreset).hierarchy);
       }
-      console.error("\n❌ Architecture Guard failed. Fix errors before starting dev server.");
+      console.error("\nArchitecture Guard failed. Fix errors before starting dev server.");
       process.exit(1);
     }
   }
@@ -200,9 +208,9 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   }
 
   if (port !== desiredPort) {
-    console.warn(`⚠️  Port ${desiredPort} is in use.`);
-    console.warn(`    Dev server:    http://localhost:${port}`);
-    console.warn(`    HMR WebSocket: ws://localhost:${port + HMR_OFFSET}`);
+    console.warn(`Port ${desiredPort} is in use.`);
+    console.warn(`  Dev server:    http://localhost:${port}`);
+    console.warn(`  HMR WebSocket: ws://localhost:${port + HMR_OFFSET}`);
   }
 
   // Start HMR server (when client slots exist)
@@ -289,8 +297,11 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   // SSR file change callback (page.tsx, layout.tsx -> re-register server handlers + browser reload)
   const handleSSRChange = async (filePath: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    console.log(`\n🔄 [${timestamp}] SSR change detected -> re-registering handlers`);
+    logDevEvent("SSR change detected", [
+      `File: ${path.relative(rootDir, filePath)}`,
+      "Action: re-register handlers",
+      "Browser: full reload",
+    ]);
     clearDefaultRegistry();
     registeredLayouts.clear();
     await registerHandlers(manifest, true);
@@ -309,7 +320,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       type: "reload",
       data: { timestamp: Date.now() },
     });
-    console.log(`   ✅ SSR refresh complete — browser reload`);
+    console.log("  Status: SSR refresh complete");
   };
 
   const restartDevServer = async () => {
@@ -337,7 +348,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       });
     }
 
-    console.log("✅ Full restart completed");
+    console.log("Restart complete.");
   };
 
   if (hasIslands && hmrEnabled) {
@@ -387,7 +398,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
         await restartDevServer();
       });
       server.registry.settings.hmrPort = actualPort;
-      console.log(`🔁 HMR port updated: ${actualPort + HMR_OFFSET}`);
+      console.log(`HMR port updated: ${actualPort + HMR_OFFSET}`);
     }
   }
 
@@ -427,15 +438,15 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   // FS Routes real-time watching
   const routesWatcher = await watchFSRoutes(rootDir, {
     onChange: async (result) => {
-      const timestamp = new Date().toLocaleTimeString();
-      console.log(`\n🔄 [${timestamp}] Route change detected`);
-
       // Clear registry (including layout cache)
       clearDefaultRegistry();
 
       // Update server with new manifest
       manifest = result.manifest;
-      console.log(`   📋 Routes: ${manifest.routes.length}`);
+      logDevEvent("Route manifest updated", [
+        `Routes: ${manifest.routes.length}`,
+        "Browser: full reload",
+      ]);
 
       // Re-register routes (isReload = true)
       await registerHandlers(manifest, true);
@@ -457,7 +468,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   // Cleanup function
   const cleanup = () => {
-    console.log("\n🛑 Shutting down server...");
+    console.log("\nStopping dev server...");
     void runHook("onDevStop", plugins, hooks);
     server.stop();
     devBundler?.close();
@@ -476,13 +487,11 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       return;
     }
     guardFailed = true;
-    console.error("\n❌ Architecture Guard violation detected. Stopping dev server.");
+    console.error("\nArchitecture Guard violation detected. Stopping dev server.");
     cleanup();
   };
 
   if (guardConfig) {
-    console.log(`🛡️  Architecture Guard enabled (${guardPreset})`);
-
     archGuardWatcher = createGuardWatcher({
       config: guardConfig,
       rootDir,
@@ -496,7 +505,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
               file: analysis.filePath,
               violations: violations.map((v) => ({
                 line: v.line,
-                message: `${v.fromLayer} → ${v.toLayer}: ${v.ruleDescription}`,
+                message: `${v.fromLayer} -> ${v.toLayer}: ${v.ruleDescription}`,
               })),
             },
           });

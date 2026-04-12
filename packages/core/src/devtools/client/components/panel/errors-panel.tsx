@@ -176,8 +176,8 @@ export function ErrorsPanel({
         <div style={styles.emptyState}>
           <ManduCharacter state="normal" compact />
           <p style={styles.emptyMessage}>
-            에러가 없어요!<br />
-            만두가 잘 익고 있어요 🥟
+            활성 오류가 없습니다.<br />
+            새 이슈가 생기면 여기에 표시됩니다.
           </p>
         </div>
       </div>

@@ -1,5 +1,6 @@
 export * from "./ssr";
 export * from "./streaming-ssr";
+export { extractShellHtml, createPPRResponse, PPR_SHELL_MARKER } from "./ppr";
 export * from "./router";
 export * from "./server";
 export * from "./cors";

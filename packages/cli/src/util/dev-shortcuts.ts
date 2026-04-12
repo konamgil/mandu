@@ -17,16 +17,28 @@ export interface DevServerSummary {
   readyMs: number;
 }
 
+function formatSummaryRow(label: string, value: string): string {
+  return `  ${label.padEnd(9)} ${value}`;
+}
+
 export function renderDevReadySummary(summary: DevServerSummary): string {
   const lines = [
-    `🥟 Mandu ready in ${summary.readyMs}ms`,
+    "Mandu Dev Server",
+    `ready in ${summary.readyMs}ms`,
     "",
-    `  -> Local:   ${summary.url}`,
-    `  -> HMR:     ${summary.hmrUrl ?? "disabled"}`,
-    `  -> Guard:   ${summary.guardLabel}`,
-    `  -> Routes:  ${summary.pageCount} pages, ${summary.apiCount} API, ${summary.islandCount} island bundles`,
+    "Endpoints",
+    formatSummaryRow("Local", summary.url),
+    formatSummaryRow("HMR", summary.hmrUrl ?? "disabled"),
     "",
-    "  press o to open, r to restart, c to clear, q to quit",
+    "State",
+    formatSummaryRow("Guard", summary.guardLabel),
+    formatSummaryRow(
+      "Routes",
+      `${summary.pageCount} pages, ${summary.apiCount} API, ${summary.islandCount} island bundles`
+    ),
+    "",
+    "Shortcuts",
+    "  o open browser   r restart server   c clear screen   q quit",
   ];
 
   return lines.join("\n");

@@ -68,7 +68,7 @@ export interface LoaderCacheOptions {
 }
 
 /** 렌더링 모드 */
-export type RenderMode = "dynamic" | "isr" | "swr";
+export type RenderMode = "dynamic" | "isr" | "swr" | "ppr";
 
 /** Loader 타임아웃 에러 */
 export class LoaderTimeoutError extends Error {

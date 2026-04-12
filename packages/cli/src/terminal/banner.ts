@@ -84,7 +84,7 @@ export async function renderHeroBanner(version: string): Promise<void> {
 
   // Very narrow terminal: minimal output
   if (cols < 40) {
-    console.log(`\n  🥟 Mandu v${version}\n`);
+    console.log(`\n  Mandu v${version}\n`);
     return;
   }
 
@@ -107,7 +107,7 @@ export async function renderHeroBanner(version: string): Promise<void> {
   }
 
   // Tagline
-  const tagline = `🥟 Agent-Native Web Framework v${version}`;
+  const tagline = `Agent-Native Web Framework v${version}`;
   const taglineWidth = stripAnsi(tagline).length;
   const padding = Math.max(0, Math.floor((cols - taglineWidth) / 2));
 
@@ -125,7 +125,7 @@ export function renderMiniBanner(version: string): void {
   }
 
   console.log();
-  console.log(`  ${theme.heading("🥟 Mandu")} ${theme.muted(`v${version}`)}`);
+  console.log(`  ${theme.heading("Mandu")} ${theme.muted(`v${version}`)}`);
   console.log(`  ${theme.muted("Agent-Native Web Framework")}`);
   console.log();
 }
@@ -141,20 +141,13 @@ export function renderBoxBanner(version: string): void {
 
   const width = 30;
   const top = theme.accent("  ╭" + "─".repeat(width) + "╮");
-  const mid1 =
+  const line = (content: string) =>
     theme.accent("  │") +
-    "  " +
-    theme.heading("🥟 Mandu") +
-    " " +
-    theme.muted(`v${version}`) +
-    " ".repeat(width - 18 - version.length) +
+    content +
+    " ".repeat(Math.max(0, width - stripAnsi(content).length)) +
     theme.accent("│");
-  const mid2 =
-    theme.accent("  │") +
-    "  " +
-    theme.muted("Agent-Native Framework") +
-    " ".repeat(width - 24) +
-    theme.accent("│");
+  const mid1 = line(`  ${theme.heading("Mandu")} ${theme.muted(`v${version}`)}`);
+  const mid2 = line(`  ${theme.muted("Agent-Native Framework")}`);
   const bottom = theme.accent("  ╰" + "─".repeat(width) + "╯");
 
   console.log();

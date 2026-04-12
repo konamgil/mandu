@@ -53,6 +53,18 @@ export interface BundleManifest {
       priority: "immediate" | "visible" | "idle" | "interaction";
     }
   >;
+  /** Per-island bundles (code splitting: each island file gets its own JS bundle) */
+  islands?: Record<
+    string,
+    {
+      /** JavaScript bundle path */
+      js: string;
+      /** Route that owns this island */
+      route: string;
+      /** Hydration priority */
+      priority: "immediate" | "visible" | "idle" | "interaction";
+    }
+  >;
   /** 공유 청크 */
   shared: {
     /** Hydration 런타임 */
@@ -85,6 +97,14 @@ export interface BundleStats {
   buildTime: number;
   /** 번들 수 */
   bundleCount: number;
+}
+
+/** Per-island code splitting entry (used by scanIslandFiles) */
+export interface IslandFileEntry {
+  name: string;
+  filePath: string;
+  routeId: string;
+  priority: "immediate" | "visible" | "idle" | "interaction";
 }
 
 /**

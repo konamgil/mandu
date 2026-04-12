@@ -312,34 +312,34 @@ export type ManduState = 'normal' | 'warning' | 'error' | 'loading' | 'hmr';
 
 export interface ManduCharacterData {
   state: ManduState;
-  emoji: string;
+  mark: string;
   message: string;
 }
 
 export const MANDU_CHARACTERS: Record<ManduState, ManduCharacterData> = {
   normal: {
     state: 'normal',
-    emoji: '(◕‿◕)',
-    message: '모든 만두가 잘 익고 있어요~',
+    mark: 'OK',
+    message: '시스템이 안정적으로 동작 중입니다.',
   },
   warning: {
     state: 'warning',
-    emoji: '(◕_◕)',
-    message: '뭔가 이상해요...',
+    mark: 'WARN',
+    message: '확인이 필요한 항목이 있습니다.',
   },
   error: {
     state: 'error',
-    emoji: '(ノಠ益ಠ)ノ彡┻━┻',
-    message: '만두가 타버렸어요!',
+    mark: 'ERR',
+    message: '즉시 확인이 필요한 오류가 있습니다.',
   },
   loading: {
     state: 'loading',
-    emoji: '(◕‿◕)💨',
-    message: '만두 찌는 중...',
+    mark: 'SYNC',
+    message: '상태를 새로 불러오는 중입니다.',
   },
   hmr: {
     state: 'hmr',
-    emoji: '(◕‿◕)✨',
-    message: '레시피 업데이트됨!',
+    mark: 'HMR',
+    message: '코드 변경을 반영했습니다.',
   },
 };

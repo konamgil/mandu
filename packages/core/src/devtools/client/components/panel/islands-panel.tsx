@@ -68,9 +68,18 @@ const styles = {
     transition: `all ${animation.duration.fast}`,
   },
   islandIcon: {
-    fontSize: typography.fontSize.lg,
-    width: '28px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '48px',
+    height: '28px',
+    padding: '0 8px',
+    borderRadius: borderRadius.full,
     textAlign: 'center' as const,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    fontFamily: typography.fontFamily.mono,
+    letterSpacing: '0.08em',
   },
   islandInfo: {
     flex: 1,
@@ -118,11 +127,11 @@ const styles = {
 };
 
 const statusConfig: Record<string, { icon: string; color: string; bg: string }> = {
-  ssr: { icon: '📄', color: colors.text.muted, bg: colors.background.light },
-  pending: { icon: '⏳', color: colors.semantic.warning, bg: `${colors.semantic.warning}20` },
-  hydrating: { icon: '💧', color: colors.semantic.info, bg: `${colors.semantic.info}20` },
-  hydrated: { icon: '✅', color: colors.semantic.success, bg: `${colors.semantic.success}20` },
-  error: { icon: '❌', color: colors.semantic.error, bg: `${colors.semantic.error}20` },
+  ssr: { icon: 'SSR', color: colors.text.muted, bg: colors.background.light },
+  pending: { icon: 'WAIT', color: colors.semantic.warning, bg: `${colors.semantic.warning}20` },
+  hydrating: { icon: 'HYDR', color: colors.semantic.info, bg: `${colors.semantic.info}20` },
+  hydrated: { icon: 'READY', color: colors.semantic.success, bg: `${colors.semantic.success}20` },
+  error: { icon: 'ERR', color: colors.semantic.error, bg: `${colors.semantic.error}20` },
 };
 
 const strategyLabels: Record<string, string> = {
@@ -178,10 +187,9 @@ export function IslandsPanel({ islands }: IslandsPanelProps): React.ReactElement
     return (
       <div style={styles.container}>
         <div style={styles.emptyState}>
-          🏝️
           <p>
-            아직 등록된 Island가 없어요.<br />
-            Island 컴포넌트를 사용하면 여기에 표시됩니다.
+            아직 등록된 Island가 없습니다.<br />
+            Island 컴포넌트를 사용하면 여기에 상태가 표시됩니다.
           </p>
         </div>
       </div>
@@ -198,18 +206,18 @@ export function IslandsPanel({ islands }: IslandsPanelProps): React.ReactElement
             <span style={styles.statValue}>{stats.total}</span>
           </div>
           <div style={styles.stat}>
-            <span>✅</span>
+            <span>Ready</span>
             <span style={styles.statValue}>{stats.hydrated}</span>
           </div>
           {stats.pending > 0 && (
             <div style={styles.stat}>
-              <span>⏳</span>
+              <span>Pending</span>
               <span style={styles.statValue}>{stats.pending}</span>
             </div>
           )}
           {stats.errors > 0 && (
             <div style={styles.stat}>
-              <span>❌</span>
+              <span>Error</span>
               <span style={{ ...styles.statValue, color: colors.semantic.error }}>
                 {stats.errors}
               </span>
@@ -234,7 +242,15 @@ export function IslandsPanel({ islands }: IslandsPanelProps): React.ReactElement
 
           return (
             <div key={island.id} style={styles.islandItem}>
-              <span style={styles.islandIcon}>{status.icon}</span>
+              <span
+                style={{
+                  ...styles.islandIcon,
+                  backgroundColor: status.bg,
+                  color: status.color,
+                }}
+              >
+                {status.icon}
+              </span>
 
               <div style={styles.islandInfo}>
                 <div style={styles.islandName}>{island.name}</div>

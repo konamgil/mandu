@@ -141,7 +141,7 @@ export function initManduKitchen(config: DevToolsConfig = {}): KitchenInstance {
 
     isInitialized = true;
 
-    console.log('[Mandu Kitchen] DevTools v1.1 initialized 🥟');
+    console.log('[Mandu Kitchen] DevTools v1.1 initialized');
 
     return createInstance();
   } catch (error) {

@@ -139,10 +139,23 @@ function generateHydrationScripts(
   }
 
   // Island 번들 modulepreload (성능 최적화 - prefetch only)
-  const bundle = manifest.bundles[routeId];
-  if (bundle) {
-    const cacheBust = `${bundle.js}${bundle.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
-    scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
+  // Per-island bundles take precedence when available
+  const routeIslands = manifest.islands
+    ? Object.values(manifest.islands).filter((ib) => ib.route === routeId)
+    : [];
+
+  if (routeIslands.length > 0) {
+    for (const ib of routeIslands) {
+      const cacheBust = `${ib.js}${ib.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
+    }
+  } else {
+    // Fallback: route-level bundle (backward compat)
+    const bundle = manifest.bundles[routeId];
+    if (bundle) {
+      const cacheBust = `${bundle.js}${bundle.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
+    }
   }
 
   // Runtime 로드 (hydrateIslands 실행 - dynamic import 사용)

@@ -48,6 +48,7 @@ import {
 import { createFetchHandler } from "./handler";
 import { wrapBunWebSocket, type WSUpgradeData } from "../filling/ws";
 import { handleImageRequest } from "./image-handler";
+import { extractShellHtml, createPPRResponse } from "./ppr";
 
 export interface RateLimitOptions {
   windowMs?: number;
@@ -1399,8 +1400,25 @@ async function handlePageRoute(
   // _data 요청 (SPA 네비게이션)은 캐시하지 않음
   const isDataRequest = url.searchParams.has("_data");
 
+  // PPR: cached shell + fresh dynamic data per request
+  if (renderMode === "ppr" && cache && !isDataRequest) {
+    const shellCacheKey = `ppr-shell:${route.id}`;
+    const cachedShell = cache.get(shellCacheKey);
+
+    if (cachedShell) {
+      // Shell HIT: load only the dynamic data (cheap), skip full SSR render
+      const loadResult = await loadPageData(req, route, params, registry);
+      if (!loadResult.ok) return loadResult;
+      const { loaderData, cookies } = loadResult.value;
+      const pprResponse = createPPRResponse(cachedShell.html, route.id, loaderData);
+      return ok(cookies ? cookies.applyToResponse(pprResponse) : pprResponse);
+    }
+
+    // Shell MISS: fall through to full render, then cache the shell below
+  }
+
   // ISR/SWR 캐시 확인 (SSR 렌더링 요청에만 적용)
-  if (cache && !isDataRequest && renderMode !== "dynamic") {
+  if (cache && !isDataRequest && renderMode !== "dynamic" && renderMode !== "ppr") {
     const cacheKey = buildRouteCacheKey(route.id, url);
     const lookup = lookupCache(cache, cacheKey);
 
@@ -1454,8 +1472,22 @@ async function handlePageRoute(
   // 3. SSR 렌더링 (layoutData 전달)
   const ssrResult = await renderPageSSR(route, params, loaderData, req.url, registry, cookies, layoutData);
 
-  // 4. 캐시 저장 (revalidate 설정이 있는 경우 — non-blocking)
-  if (cache && ssrResult.ok && renderMode !== "dynamic") {
+  // 4a. PPR: cache only the shell (HTML structure minus loader data), not the full page
+  if (cache && ssrResult.ok && renderMode === "ppr") {
+    const cacheOptions = getCacheOptionsForRoute(route.id, registry);
+    const revalidate = cacheOptions?.revalidate ?? 3600; // default 1 hour for PPR shells
+    const shellCacheKey = `ppr-shell:${route.id}`;
+    const cloned = ssrResult.value.clone();
+    cloned.text().then((html) => {
+      const shellHtml = extractShellHtml(html);
+      cache.set(shellCacheKey, createCacheEntry(
+        shellHtml, null, revalidate, cacheOptions?.tags ?? []
+      ));
+    }).catch(() => {});
+  }
+
+  // 4b. ISR/SWR 캐시 저장 (revalidate 설정이 있는 경우 — non-blocking)
+  if (cache && ssrResult.ok && renderMode !== "dynamic" && renderMode !== "ppr") {
     const cacheOptions = getCacheOptionsForRoute(route.id, registry);
     if (cacheOptions?.revalidate && cacheOptions.revalidate > 0) {
       const cloned = ssrResult.value.clone();

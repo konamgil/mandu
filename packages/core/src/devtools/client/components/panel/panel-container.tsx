@@ -7,10 +7,6 @@ import React, { useState, useCallback } from 'react';
 import { colors, typography, spacing, borderRadius, shadows, zIndex, animation, testIds } from '../../../design-tokens';
 import type { KitchenState } from '../../state-manager';
 
-// ============================================================================
-// Types
-// ============================================================================
-
 export type TabId = 'errors' | 'islands' | 'network' | 'guard' | 'preview';
 
 export interface TabDefinition {
@@ -30,29 +26,23 @@ export interface PanelContainerProps {
   children: React.ReactNode;
 }
 
-// ============================================================================
-// Constants
-// ============================================================================
-
 export const TABS: TabDefinition[] = [
-  { id: 'errors', label: '에러', icon: '🔥', testId: testIds.tabErrors },
-  { id: 'islands', label: 'Islands', icon: '🏝️', testId: testIds.tabIslands },
-  { id: 'network', label: 'Network', icon: '📡', testId: testIds.tabNetwork },
-  { id: 'guard', label: 'Guard', icon: '🛡️', testId: testIds.tabGuard },
-  { id: 'preview', label: 'Preview', icon: '📝', testId: testIds.tabPreview },
+  { id: 'errors', label: 'Issues', icon: 'ERR', testId: testIds.tabErrors },
+  { id: 'islands', label: 'Islands', icon: 'ISL', testId: testIds.tabIslands },
+  { id: 'network', label: 'Network', icon: 'NET', testId: testIds.tabNetwork },
+  { id: 'guard', label: 'Guard', icon: 'GRD', testId: testIds.tabGuard },
+  { id: 'preview', label: 'Changes', icon: 'CHG', testId: testIds.tabPreview },
 ];
-
-// ============================================================================
-// Styles
-// ============================================================================
 
 const styles = {
   container: {
     position: 'fixed' as const,
-    width: '420px',
-    maxHeight: '70vh',
-    backgroundColor: colors.background.dark,
-    borderRadius: borderRadius.lg,
+    width: '468px',
+    maxWidth: 'calc(100vw - 32px)',
+    maxHeight: '76vh',
+    background: `linear-gradient(180deg, ${colors.background.medium}, ${colors.background.dark})`,
+    border: `1px solid ${colors.background.light}`,
+    borderRadius: '20px',
     boxShadow: shadows.xl,
     display: 'flex',
     flexDirection: 'column' as const,
@@ -63,54 +53,134 @@ const styles = {
   },
   header: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: `${spacing.sm} ${spacing.md}`,
+    flexDirection: 'column' as const,
+    gap: spacing.md,
+    padding: `${spacing.md} ${spacing.md} ${spacing.sm}`,
     borderBottom: `1px solid ${colors.background.light}`,
-    backgroundColor: colors.background.medium,
+    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0))',
+  },
+  headerTop: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
   },
   title: {
     display: 'flex',
     alignItems: 'center',
-    gap: spacing.sm,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.text.primary,
+    gap: spacing.md,
+    minWidth: 0,
   },
   logo: {
-    fontSize: typography.fontSize.lg,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '42px',
+    height: '42px',
+    padding: '0 10px',
+    borderRadius: borderRadius.full,
+    backgroundColor: `${colors.brand.accent}15`,
+    border: `1px solid ${colors.brand.accent}40`,
+    color: colors.brand.accent,
+    fontFamily: typography.fontFamily.mono,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: '0.14em',
+  },
+  titleGroup: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px',
+    minWidth: 0,
+  },
+  titleText: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.text.primary,
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  subtitle: {
+    fontSize: typography.fontSize.xs,
+    color: colors.text.secondary,
   },
   headerActions: {
     display: 'flex',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
+    flexWrap: 'wrap' as const,
+    justifyContent: 'flex-end',
+  },
+  statusBadge: {
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: borderRadius.full,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase' as const,
+    border: `1px solid ${colors.background.light}`,
+  },
+  headerButton: {
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.background.light,
+    border: `1px solid transparent`,
+    color: colors.text.secondary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    cursor: 'pointer',
+    transition: `all ${animation.duration.fast}`,
   },
   restartButton: {
-    background: 'transparent',
-    border: 'none',
+    backgroundColor: colors.background.light,
+    border: `1px solid transparent`,
     color: colors.text.secondary,
-    fontSize: typography.fontSize.md,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
     cursor: 'pointer',
-    padding: spacing.xs,
-    borderRadius: borderRadius.sm,
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: borderRadius.full,
     lineHeight: 1,
     transition: `all ${animation.duration.fast}`,
   },
   closeButton: {
-    background: 'transparent',
-    border: 'none',
+    backgroundColor: 'transparent',
+    border: `1px solid transparent`,
     color: colors.text.secondary,
-    fontSize: typography.fontSize.lg,
+    fontSize: typography.fontSize.md,
     cursor: 'pointer',
-    padding: spacing.xs,
-    borderRadius: borderRadius.sm,
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: borderRadius.full,
     lineHeight: 1,
-    transition: `color ${animation.duration.fast}`,
+    transition: `all ${animation.duration.fast}`,
+  },
+  summaryRow: {
+    display: 'flex',
+    gap: spacing.xs,
+    flexWrap: 'wrap' as const,
+  },
+  summaryChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: spacing.xs,
+    padding: `${spacing.xs} ${spacing.sm}`,
+    borderRadius: borderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    border: `1px solid rgba(255, 255, 255, 0.06)`,
+    fontSize: typography.fontSize.xs,
+    color: colors.text.secondary,
+  },
+  summaryValue: {
+    color: colors.text.primary,
+    fontWeight: typography.fontWeight.semibold,
   },
   tabs: {
     display: 'flex',
+    gap: spacing.xs,
+    padding: `0 ${spacing.md} ${spacing.md}`,
     borderBottom: `1px solid ${colors.background.light}`,
-    backgroundColor: colors.background.dark,
+    backgroundColor: 'transparent',
   },
   tab: {
     flex: 1,
@@ -118,22 +188,31 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    padding: `${spacing.sm} ${spacing.md}`,
-    background: 'transparent',
-    border: 'none',
-    borderBottom: '2px solid transparent',
+    padding: `${spacing.sm} ${spacing.sm}`,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    border: `1px solid rgba(255, 255, 255, 0.04)`,
+    borderRadius: borderRadius.md,
     color: colors.text.secondary,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
     cursor: 'pointer',
     transition: `all ${animation.duration.fast}`,
   },
   tabActive: {
-    color: colors.brand.accent,
-    borderBottomColor: colors.brand.accent,
-    backgroundColor: 'rgba(232, 150, 122, 0.12)',
+    color: colors.text.primary,
+    borderColor: `${colors.brand.accent}55`,
+    backgroundColor: 'rgba(232, 150, 122, 0.14)',
+    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
   },
   tabIcon: {
-    fontSize: typography.fontSize.md,
+    padding: '2px 6px',
+    borderRadius: borderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    fontSize: '10px',
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: '0.08em',
+    fontFamily: typography.fontFamily.mono,
+    color: colors.text.secondary,
   },
   tabBadge: {
     minWidth: '18px',
@@ -151,8 +230,8 @@ const styles = {
   content: {
     flex: 1,
     overflow: 'auto',
-    minHeight: '200px',
-    maxHeight: '50vh',
+    minHeight: '240px',
+    maxHeight: '56vh',
   },
   resizeHandle: {
     position: 'absolute' as const,
@@ -161,7 +240,7 @@ const styles = {
     cursor: 'ns-resize',
     backgroundColor: 'transparent',
   },
-};
+} as const;
 
 const positionStyles: Record<string, React.CSSProperties> = {
   'bottom-right': { bottom: '80px', right: '16px' },
@@ -169,10 +248,6 @@ const positionStyles: Record<string, React.CSSProperties> = {
   'top-right': { top: '16px', right: '16px' },
   'top-left': { top: '16px', left: '16px' },
 };
-
-// ============================================================================
-// Component
-// ============================================================================
 
 export function PanelContainer({
   state,
@@ -183,8 +258,8 @@ export function PanelContainer({
   position,
   children,
 }: PanelContainerProps): React.ReactElement {
-  const [isResizing, setIsResizing] = useState(false);
-  const [height, setHeight] = useState(400);
+  const [, setIsResizing] = useState(false);
+  const [height] = useState(420);
   const [hoveredTab, setHoveredTab] = useState<TabId | null>(null);
   const [isCloseHovered, setIsCloseHovered] = useState(false);
   const [isRestartHovered, setIsRestartHovered] = useState(false);
@@ -205,6 +280,41 @@ export function PanelContainer({
     }
   }, [state]);
 
+  const issueCount = getTabBadgeCount('errors');
+  const islandsCount = state.islands.size;
+  const networkCount = state.networkRequests.size;
+  const guardCount = state.guardViolations.length;
+  const changeCount = state.recentChanges?.length ?? 0;
+
+  const statusToneMap: Record<KitchenState['manduState'], { label: string; color: string; background: string }> = {
+    normal: {
+      label: 'Healthy',
+      color: colors.semantic.success,
+      background: `${colors.semantic.success}14`,
+    },
+    warning: {
+      label: 'Attention',
+      color: colors.semantic.warning,
+      background: `${colors.semantic.warning}14`,
+    },
+    error: {
+      label: 'Action',
+      color: colors.semantic.error,
+      background: `${colors.semantic.error}14`,
+    },
+    loading: {
+      label: 'Syncing',
+      color: colors.semantic.info,
+      background: `${colors.semantic.info}14`,
+    },
+    hmr: {
+      label: 'Updated',
+      color: colors.brand.accent,
+      background: `${colors.brand.accent}14`,
+    },
+  };
+  const statusTone = statusToneMap[state.manduState];
+
   const containerStyle: React.CSSProperties = {
     ...styles.container,
     ...positionStyles[position],
@@ -212,11 +322,7 @@ export function PanelContainer({
   };
 
   return (
-    <div
-      data-testid={testIds.panel}
-      style={containerStyle}
-    >
-      {/* Resize Handle (top) */}
+    <div data-testid={testIds.panel} style={containerStyle}>
       {position.startsWith('bottom') && (
         <div
           style={{ ...styles.resizeHandle, top: 0 }}
@@ -224,64 +330,102 @@ export function PanelContainer({
         />
       )}
 
-      {/* Header */}
       <div style={styles.header}>
-        <div style={styles.title}>
-          <span style={styles.logo}>🥟</span>
-          <span>Mandu Kitchen</span>
-        </div>
-        <div style={styles.headerActions}>
-          {onRestart && (
-            <button
-              data-testid={testIds.restartButton}
+        <div style={styles.headerTop}>
+          <div style={styles.title}>
+            <span style={styles.logo}>MK</span>
+            <div style={styles.titleGroup}>
+              <span style={styles.titleText}>Mandu Dev Console</span>
+              <span style={styles.subtitle}>
+                {state.hmrConnected ? 'Live runtime diagnostics' : 'Runtime diagnostics'}
+              </span>
+            </div>
+          </div>
+          <div style={styles.headerActions}>
+            <span
               style={{
-                ...styles.restartButton,
-                ...(isRestartHovered ? {
-                  color: colors.semantic.warning,
-                  backgroundColor: `${colors.semantic.warning}18`,
+                ...styles.statusBadge,
+                color: statusTone.color,
+                backgroundColor: statusTone.background,
+                borderColor: `${statusTone.color}45`,
+              }}
+            >
+              {statusTone.label}
+            </span>
+            {onRestart && (
+              <button
+                data-testid={testIds.restartButton}
+                style={{
+                  ...styles.restartButton,
+                  ...(isRestartHovered ? {
+                    color: colors.semantic.warning,
+                    borderColor: `${colors.semantic.warning}40`,
+                    backgroundColor: `${colors.semantic.warning}16`,
+                  } : {}),
+                }}
+                onClick={onRestart}
+                onMouseEnter={() => setIsRestartHovered(true)}
+                onMouseLeave={() => setIsRestartHovered(false)}
+                aria-label="캐시 지우고 완전 재시작"
+                title="캐시 지우고 완전 재시작"
+              >
+                Reset
+              </button>
+            )}
+            <button
+              style={{
+                ...styles.headerButton,
+                ...(isExpandHovered ? {
+                  color: colors.brand.accent,
+                  borderColor: `${colors.brand.accent}35`,
+                  backgroundColor: `${colors.brand.accent}12`,
                 } : {}),
               }}
-              onClick={onRestart}
-              onMouseEnter={() => setIsRestartHovered(true)}
-              onMouseLeave={() => setIsRestartHovered(false)}
-              aria-label="캐시 지우고 완전 재시작"
-              title="캐시 지우고 완전 재시작"
+              onClick={() => window.open('/__kitchen', '_blank')}
+              onMouseEnter={() => setIsExpandHovered(true)}
+              onMouseLeave={() => setIsExpandHovered(false)}
+              aria-label="풀 페이지로 열기"
+              title="풀 페이지로 열기"
             >
-              🔄
+              Open
             </button>
-          )}
-          <button
-            style={{
-              ...styles.restartButton,
-              ...(isExpandHovered ? {
-                color: colors.brand.accent,
-                backgroundColor: `${colors.brand.accent}18`,
-              } : {}),
-            }}
-            onClick={() => window.open('/__kitchen', '_blank')}
-            onMouseEnter={() => setIsExpandHovered(true)}
-            onMouseLeave={() => setIsExpandHovered(false)}
-            aria-label="풀 페이지로 열기"
-            title="풀 페이지로 열기"
-          >
-            🔲
-          </button>
-          <button
-            style={{
-              ...styles.closeButton,
-              ...(isCloseHovered ? { color: colors.text.primary, backgroundColor: 'rgba(255, 255, 255, 0.08)' } : {}),
-            }}
-            onClick={onClose}
-            onMouseEnter={() => setIsCloseHovered(true)}
-            onMouseLeave={() => setIsCloseHovered(false)}
-            aria-label="패널 닫기"
-          >
-            ×
-          </button>
+            <button
+              style={{
+                ...styles.closeButton,
+                ...(isCloseHovered ? {
+                  color: colors.text.primary,
+                  borderColor: 'rgba(255, 255, 255, 0.12)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                } : {}),
+              }}
+              onClick={onClose}
+              onMouseEnter={() => setIsCloseHovered(true)}
+              onMouseLeave={() => setIsCloseHovered(false)}
+              aria-label="패널 닫기"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+        <div style={styles.summaryRow}>
+          <span style={styles.summaryChip}>
+            Issues <span style={styles.summaryValue}>{issueCount}</span>
+          </span>
+          <span style={styles.summaryChip}>
+            Islands <span style={styles.summaryValue}>{islandsCount}</span>
+          </span>
+          <span style={styles.summaryChip}>
+            Requests <span style={styles.summaryValue}>{networkCount}</span>
+          </span>
+          <span style={styles.summaryChip}>
+            Guard <span style={styles.summaryValue}>{guardCount}</span>
+          </span>
+          <span style={styles.summaryChip}>
+            Changes <span style={styles.summaryValue}>{changeCount}</span>
+          </span>
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={styles.tabs} role="tablist">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -298,6 +442,7 @@ export function PanelContainer({
                 ...(isActive ? styles.tabActive : {}),
                 ...(!isActive && hoveredTab === tab.id ? {
                   color: colors.text.primary,
+                  borderColor: 'rgba(255, 255, 255, 0.09)',
                   backgroundColor: 'rgba(255, 255, 255, 0.05)',
                 } : {}),
               }}
@@ -305,7 +450,17 @@ export function PanelContainer({
               onMouseEnter={() => setHoveredTab(tab.id)}
               onMouseLeave={() => setHoveredTab(null)}
             >
-              <span style={styles.tabIcon}>{tab.icon}</span>
+              <span
+                style={{
+                  ...styles.tabIcon,
+                  ...(isActive ? {
+                    color: colors.text.primary,
+                    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+                  } : {}),
+                }}
+              >
+                {tab.icon}
+              </span>
               <span>{tab.label}</span>
               {badgeCount > 0 && (
                 <span style={styles.tabBadge}>{badgeCount > 99 ? '99+' : badgeCount}</span>
@@ -315,12 +470,10 @@ export function PanelContainer({
         })}
       </div>
 
-      {/* Content */}
       <div style={styles.content} role="tabpanel">
         {children}
       </div>
 
-      {/* Resize Handle (bottom) */}
       {position.startsWith('top') && (
         <div
           style={{ ...styles.resizeHandle, bottom: 0 }}

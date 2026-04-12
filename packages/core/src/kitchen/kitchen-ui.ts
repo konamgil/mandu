@@ -15,103 +15,150 @@ export function renderKitchenHTML(): string {
   <style>${CSS}</style>
 </head>
 <body>
-  <header class="header">
-    <div class="logo">
-      <span class="logo-icon">🍡</span>
-      <span class="logo-text">Mandu Kitchen</span>
-    </div>
-    <div class="status">
-      <span id="sse-status" class="status-dot disconnected"></span>
-      <span id="sse-label">Connecting...</span>
-    </div>
-  </header>
-
-  <nav class="tabs">
-    <button class="tab" data-panel="activity">Activity</button>
-    <button class="tab active" data-panel="routes">Routes</button>
-    <button class="tab" data-panel="guard">Guard</button>
-    <button class="tab" data-panel="preview">Preview</button>
-    <button class="tab" data-panel="contracts">Contracts</button>
-  </nav>
-
-  <main class="panels">
-    <section id="panel-activity" class="panel">
-      <div class="panel-header">
-        <h2>Activity Stream</h2>
-        <button id="clear-activity" class="btn-sm">Clear</button>
+  <div class="app-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <div class="hero-kicker">Mandu Dev Console</div>
+        <div class="logo">
+          <span class="logo-text">Mandu Kitchen</span>
+          <span class="logo-badge">live</span>
+        </div>
+        <p class="hero-subtitle">Routes, architecture, live activity, file changes, and contract checks for the current dev session.</p>
       </div>
-      <div id="activity-list" class="activity-list">
-        <div class="empty-state">Waiting for MCP activity...</div>
-      </div>
-    </section>
-
-    <section id="panel-routes" class="panel active">
-      <div class="panel-header">
-        <h2>Routes</h2>
-        <div id="routes-summary" class="summary"></div>
-      </div>
-      <div id="routes-list" class="routes-list">
-        <div class="empty-state">Loading routes...</div>
-      </div>
-    </section>
-
-    <section id="panel-guard" class="panel">
-      <div class="panel-header">
-        <h2>Architecture Guard</h2>
-        <button id="scan-guard" class="btn-sm">Scan</button>
-      </div>
-      <div id="guard-status" class="guard-status"></div>
-      <div id="guard-list" class="violations-list">
-        <div class="empty-state">Click "Scan" to check architecture rules.</div>
-      </div>
-    </section>
-
-    <section id="panel-preview" class="panel">
-      <div class="panel-header">
-        <h2>Preview</h2>
-        <button id="refresh-changes" class="btn-sm">Refresh</button>
-      </div>
-      <div id="preview-list" class="preview-list">
-        <div class="empty-state">Loading file changes...</div>
-      </div>
-      <div id="preview-diff" class="preview-diff" style="display:none;"></div>
-    </section>
-
-    <section id="panel-contracts" class="panel">
-      <div class="panel-header">
-        <h2>Contracts</h2>
-        <div style="display:flex;gap:4px;">
-          <button id="export-openapi-json" class="btn-sm">Export JSON</button>
-          <button id="export-openapi-yaml" class="btn-sm">Export YAML</button>
+      <div class="hero-side">
+        <a class="hero-link" href="/" target="_blank" rel="noreferrer">Open app</a>
+        <div class="status-pill">
+          <span id="sse-status" class="status-dot disconnected"></span>
+          <span id="sse-label">Connecting...</span>
         </div>
       </div>
-      <div class="contracts-layout">
-        <div id="contracts-list" class="contracts-list">
-          <div class="empty-state">Loading contracts...</div>
+    </header>
+
+    <section class="overview">
+      <div class="metric-card">
+        <span class="metric-label">Activity</span>
+        <strong id="metric-activity" class="metric-value">0</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Routes</span>
+        <strong id="metric-routes" class="metric-value">...</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Guard</span>
+        <strong id="metric-guard" class="metric-value">...</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Changes</span>
+        <strong id="metric-changes" class="metric-value">...</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Contracts</span>
+        <strong id="metric-contracts" class="metric-value">...</strong>
+      </div>
+    </section>
+
+    <nav class="tabs">
+      <button class="tab" data-panel="activity">Activity</button>
+      <button class="tab active" data-panel="routes">Routes</button>
+      <button class="tab" data-panel="guard">Guard</button>
+      <button class="tab" data-panel="preview">Preview</button>
+      <button class="tab" data-panel="contracts">Contracts</button>
+    </nav>
+
+    <main class="panels">
+      <section id="panel-activity" class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Activity Stream</h2>
+            <p class="panel-subtitle">Recent Kitchen events and MCP activity.</p>
+          </div>
+          <button id="clear-activity" class="btn-sm">Clear</button>
         </div>
-        <div id="contracts-detail" class="contracts-detail">
-          <div id="contract-schema" class="contract-schema"></div>
-          <div id="contract-playground" class="contract-playground">
-            <h3>Validate</h3>
-            <div class="playground-controls">
-              <select id="validate-method" class="select-sm">
-                <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
-              </select>
-              <button id="validate-btn" class="btn-sm">Validate</button>
-            </div>
-            <div class="playground-inputs">
-              <label>Query <textarea id="validate-query" rows="2" placeholder='{"key":"value"}'></textarea></label>
-              <label>Body <textarea id="validate-body" rows="3" placeholder='{"key":"value"}'></textarea></label>
-              <label>Params <textarea id="validate-params" rows="2" placeholder='{"id":"1"}'></textarea></label>
-            </div>
-            <div id="validate-result" class="validate-result"></div>
+        <div id="activity-list" class="activity-list">
+          <div class="empty-state">Waiting for MCP activity...</div>
+        </div>
+      </section>
+
+      <section id="panel-routes" class="panel active">
+        <div class="panel-header">
+          <div>
+            <h2>Routes</h2>
+            <p class="panel-subtitle">Current filesystem routes, slots, contracts, and hydration hints.</p>
+          </div>
+          <div id="routes-summary" class="summary"></div>
+        </div>
+        <div id="routes-list" class="routes-list">
+          <div class="empty-state">Loading routes...</div>
+        </div>
+      </section>
+
+      <section id="panel-guard" class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Architecture Guard</h2>
+            <p class="panel-subtitle">Run a scan and inspect dependency rule violations.</p>
+          </div>
+          <button id="scan-guard" class="btn-sm">Scan</button>
+        </div>
+        <div id="guard-status" class="guard-status"></div>
+        <div id="guard-list" class="violations-list">
+          <div class="empty-state">Click "Scan" to check architecture rules.</div>
+        </div>
+      </section>
+
+      <section id="panel-preview" class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Preview</h2>
+            <p class="panel-subtitle">Inspect changed files and open diffs without leaving Kitchen.</p>
+          </div>
+          <button id="refresh-changes" class="btn-sm">Refresh</button>
+        </div>
+        <div id="preview-list" class="preview-list">
+          <div class="empty-state">Loading file changes...</div>
+        </div>
+        <div id="preview-diff" class="preview-diff" style="display:none;"></div>
+      </section>
+
+      <section id="panel-contracts" class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Contracts</h2>
+            <p class="panel-subtitle">Browse route contracts and validate payloads in place.</p>
+          </div>
+          <div class="panel-actions">
+            <button id="export-openapi-json" class="btn-sm">Export JSON</button>
+            <button id="export-openapi-yaml" class="btn-sm">Export YAML</button>
           </div>
         </div>
-      </div>
-    </section>
-  </main>
+        <div class="contracts-layout">
+          <div id="contracts-list" class="contracts-list">
+            <div class="empty-state">Loading contracts...</div>
+          </div>
+          <div id="contracts-detail" class="contracts-detail">
+            <div id="contract-schema" class="contract-schema"></div>
+            <div id="contract-playground" class="contract-playground">
+              <h3>Validate</h3>
+              <div class="playground-controls">
+                <select id="validate-method" class="select-sm">
+                  <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+                </select>
+                <button id="validate-btn" class="btn-sm">Validate</button>
+              </div>
+              <div class="playground-inputs">
+                <label>Query <textarea id="validate-query" rows="2" placeholder='{"key":"value"}'></textarea></label>
+                <label>Body <textarea id="validate-body" rows="3" placeholder='{"key":"value"}'></textarea></label>
+                <label>Params <textarea id="validate-params" rows="2" placeholder='{"id":"1"}'></textarea></label>
+              </div>
+              <div id="validate-result" class="validate-result"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
 
-  <div id="debug-bar" class="debug-bar"></div>
+    <div id="debug-bar" class="debug-bar"></div>
+  </div>
 
   <script>${JS}</script>
 </body>
@@ -525,6 +572,619 @@ const CSS = /* css */ `
 
   .debug-bar .err { color: #ef4444; }
   .debug-bar .ok { color: #22c55e; }
+
+  :root {
+    --bg: #f4efe6;
+    --bg-soft: rgba(255, 252, 246, 0.7);
+    --surface: #fffdfa;
+    --surface-strong: #f8f1e4;
+    --surface-alt: #f0e5d2;
+    --ink: #1e2a3a;
+    --muted: #677181;
+    --line: #dccfba;
+    --accent: #b86a12;
+    --accent-strong: #8d4f0e;
+    --accent-soft: rgba(184, 106, 18, 0.14);
+    --success: #177f56;
+    --danger: #bc3d3d;
+    --info: #2e66b8;
+    --warning: #ad7a12;
+    --shadow: 0 20px 50px rgba(49, 39, 23, 0.08);
+  }
+
+  body {
+    font-family: "IBM Plex Sans", "Segoe UI Variable", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(226, 186, 124, 0.35), transparent 30%),
+      radial-gradient(circle at top right, rgba(152, 191, 193, 0.22), transparent 24%),
+      linear-gradient(180deg, #f8f3ea 0%, #efe7d8 100%);
+    color: var(--ink);
+    padding: 24px;
+  }
+
+  .app-shell {
+    width: min(1360px, 100%);
+    margin: 0 auto;
+  }
+
+  .hero {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 28px 30px;
+    background:
+      linear-gradient(135deg, rgba(255, 249, 240, 0.92), rgba(247, 238, 224, 0.9)),
+      linear-gradient(120deg, rgba(184, 106, 18, 0.08), transparent 60%);
+    border: 1px solid rgba(220, 207, 186, 0.9);
+    border-radius: 28px;
+    box-shadow: var(--shadow);
+    margin-bottom: 18px;
+  }
+
+  .hero-kicker {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(30, 42, 58, 0.08);
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .logo {
+    gap: 10px;
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+  }
+
+  .logo-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .hero-subtitle {
+    margin-top: 12px;
+    max-width: 720px;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .hero-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+    min-width: 190px;
+  }
+
+  .hero-link,
+  .hero-link:visited {
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .hero-link:hover {
+    border-color: var(--accent);
+    color: var(--accent-strong);
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .status-dot.connected { background: var(--success); }
+  .status-dot.disconnected { background: var(--danger); }
+  .status-dot.connecting { background: var(--warning); }
+
+  .overview {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .metric-card {
+    padding: 16px 18px;
+    background: var(--bg-soft);
+    border: 1px solid rgba(220, 207, 186, 0.9);
+    border-radius: 18px;
+    box-shadow: 0 8px 24px rgba(49, 39, 23, 0.05);
+  }
+
+  .metric-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .metric-value {
+    font-size: 28px;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    color: var(--ink);
+  }
+
+  .tabs {
+    gap: 10px;
+    flex-wrap: wrap;
+    background: transparent;
+    border-bottom: none;
+    padding: 0 0 16px 0;
+  }
+
+  .tab {
+    padding: 10px 14px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: var(--muted);
+    font-weight: 600;
+    background: rgba(255, 252, 246, 0.5);
+  }
+
+  .tab:hover {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.85);
+    border-color: var(--line);
+  }
+
+  .tab.active {
+    color: var(--accent-strong);
+    border-bottom-color: transparent;
+    border-color: rgba(184, 106, 18, 0.24);
+    background: rgba(184, 106, 18, 0.14);
+  }
+
+  .panels {
+    padding: 0;
+  }
+
+  .panel {
+    display: none;
+    background: rgba(255, 253, 250, 0.88);
+    border: 1px solid rgba(220, 207, 186, 0.9);
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: var(--shadow);
+  }
+
+  .panel.active {
+    display: block;
+  }
+
+  .panel-header {
+    align-items: flex-start;
+    margin-bottom: 18px;
+    gap: 12px;
+  }
+
+  .panel-header h2 {
+    font-size: 22px;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+  }
+
+  .panel-subtitle {
+    margin-top: 6px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .panel-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn-sm {
+    padding: 8px 14px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .btn-sm:hover {
+    background: rgba(184, 106, 18, 0.12);
+    border-color: rgba(184, 106, 18, 0.28);
+  }
+
+  .summary {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .summary-item {
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(184, 106, 18, 0.08);
+    color: var(--accent-strong);
+    font-weight: 600;
+  }
+
+  .summary-count {
+    color: var(--ink);
+  }
+
+  .activity-list,
+  .routes-list,
+  .violations-list,
+  .preview-list,
+  .contracts-list,
+  .contracts-detail,
+  .preview-diff {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(220, 207, 186, 0.9);
+    border-radius: 18px;
+  }
+
+  .activity-list,
+  .routes-list,
+  .violations-list,
+  .preview-list {
+    overflow: hidden;
+  }
+
+  .activity-list {
+    max-height: calc(100vh - 320px);
+  }
+
+  .activity-item,
+  .route-item,
+  .change-item,
+  .contract-item {
+    border-bottom: 1px solid rgba(220, 207, 186, 0.72);
+  }
+
+  .activity-item:last-child,
+  .route-item:last-child,
+  .change-item:last-child,
+  .contract-item:last-child {
+    border-bottom: none;
+  }
+
+  .activity-item {
+    padding: 12px 14px;
+    font-size: 12px;
+    color: var(--ink);
+  }
+
+  .activity-time {
+    color: var(--muted);
+  }
+
+  .activity-tool {
+    color: var(--accent-strong);
+  }
+
+  .activity-detail {
+    color: var(--ink);
+  }
+
+  .route-item {
+    padding: 14px 16px;
+  }
+
+  .route-kind.page {
+    background: rgba(46, 102, 184, 0.12);
+    color: var(--info);
+  }
+
+  .route-kind.api {
+    background: rgba(23, 127, 86, 0.12);
+    color: var(--success);
+  }
+
+  .route-pattern {
+    color: var(--ink);
+  }
+
+  .badge {
+    background: rgba(30, 42, 58, 0.08);
+    color: var(--muted);
+    border: 1px solid rgba(220, 207, 186, 0.72);
+  }
+
+  .guard-status {
+    margin-bottom: 12px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .guard-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    padding: 0;
+    background: transparent;
+    margin-bottom: 16px;
+  }
+
+  .guard-stat {
+    padding: 16px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(220, 207, 186, 0.9);
+  }
+
+  .guard-stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: var(--ink);
+  }
+
+  .guard-stat-label {
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 8px;
+  }
+
+  .sev-error { color: var(--danger); }
+  .sev-warning { color: var(--warning); }
+  .sev-info { color: var(--info); }
+
+  .violation-item {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(220, 207, 186, 0.72);
+  }
+
+  .violation-item:last-child {
+    border-bottom: none;
+  }
+
+  .violation-file {
+    color: var(--ink);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .violation-msg {
+    color: var(--muted);
+  }
+
+  .preview-list,
+  .preview-diff {
+    margin-bottom: 16px;
+  }
+
+  .change-item {
+    padding: 14px 16px;
+  }
+
+  .change-item:hover,
+  .contract-item:hover {
+    background: rgba(184, 106, 18, 0.06);
+  }
+
+  .change-icon {
+    color: var(--accent-strong);
+  }
+
+  .change-path {
+    color: var(--ink);
+  }
+
+  .change-status {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+
+  .contracts-layout {
+    grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.6fr);
+    gap: 16px;
+  }
+
+  .contracts-list,
+  .contracts-detail {
+    padding: 8px;
+  }
+
+  .contract-item {
+    padding: 14px 14px;
+    border-radius: 14px;
+  }
+
+  .contract-item.selected {
+    background: rgba(184, 106, 18, 0.12);
+    border-color: rgba(184, 106, 18, 0.28);
+  }
+
+  .method-badge {
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+  }
+
+  .contract-schema,
+  .contract-playground {
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(220, 207, 186, 0.9);
+    border-radius: 16px;
+  }
+
+  .contract-schema {
+    padding: 16px;
+    max-height: 420px;
+    overflow: auto;
+    color: var(--ink);
+  }
+
+  .contract-playground {
+    margin-top: 14px;
+    padding: 16px;
+  }
+
+  .playground-inputs label {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  textarea,
+  .select-sm {
+    background: rgba(255, 252, 246, 0.92);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 12px;
+  }
+
+  textarea {
+    width: 100%;
+    margin-top: 6px;
+    padding: 10px 12px;
+    resize: vertical;
+    font-family: "IBM Plex Mono", "Cascadia Code", monospace;
+  }
+
+  .select-sm {
+    padding: 8px 12px;
+  }
+
+  .validate-result {
+    margin-top: 12px;
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+
+  .validate-result.success {
+    background: rgba(23, 127, 86, 0.12);
+    color: var(--success);
+  }
+
+  .validate-result.error {
+    background: rgba(188, 61, 61, 0.12);
+    color: var(--danger);
+  }
+
+  .diff-header,
+  .diff-hunk-header {
+    background: transparent;
+    color: var(--ink);
+  }
+
+  .diff-line-num {
+    color: var(--muted);
+  }
+
+  .diff-line.add {
+    background: rgba(23, 127, 86, 0.08);
+  }
+
+  .diff-line.remove {
+    background: rgba(188, 61, 61, 0.08);
+  }
+
+  .empty-state {
+    padding: 48px 20px;
+    color: var(--muted);
+  }
+
+  .debug-bar {
+    position: sticky;
+    bottom: 0;
+    margin-top: 16px;
+    border-radius: 16px;
+    background: rgba(30, 42, 58, 0.94);
+    border: 1px solid rgba(30, 42, 58, 0.94);
+    color: rgba(255, 255, 255, 0.76);
+    box-shadow: 0 12px 28px rgba(30, 42, 58, 0.22);
+  }
+
+  @media (max-width: 1040px) {
+    body {
+      padding: 18px;
+    }
+
+    .hero {
+      flex-direction: column;
+    }
+
+    .hero-side {
+      align-items: flex-start;
+    }
+
+    .overview {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .contracts-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .guard-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    body {
+      padding: 12px;
+    }
+
+    .hero,
+    .panel {
+      padding: 18px;
+      border-radius: 20px;
+    }
+
+    .overview {
+      grid-template-columns: 1fr;
+    }
+
+    .tabs {
+      gap: 8px;
+    }
+
+    .tab {
+      width: calc(50% - 4px);
+      justify-content: center;
+    }
+
+    .panel-header {
+      flex-direction: column;
+    }
+  }
 `;
 
 // ─── JavaScript ──────────────────────────────────
@@ -547,6 +1207,12 @@ const JS = /* js */ `
     var d = document.createElement('div');
     d.appendChild(document.createTextNode(String(str)));
     return d.innerHTML;
+  }
+
+  function setMetric(id, value) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = String(value);
   }
 
   try { log('JS loaded', 'ok'); } catch(e) {}
@@ -626,6 +1292,7 @@ const JS = /* js */ `
       activityList.innerHTML = '';
     }
     activityCount++;
+    setMetric('metric-activity', activityCount);
 
     var item = document.createElement('div');
     item.className = 'activity-item';
@@ -650,6 +1317,7 @@ const JS = /* js */ `
   document.getElementById('clear-activity').addEventListener('click', function() {
     activityList.innerHTML = '<div class="empty-state">Waiting for MCP activity...</div>';
     activityCount = 0;
+    setMetric('metric-activity', 0);
   });
 
   connectSSE();
@@ -686,6 +1354,7 @@ const JS = /* js */ `
     var summaryEl = document.getElementById('routes-summary');
     var listEl = document.getElementById('routes-list');
     var s = data.summary;
+    setMetric('metric-routes', s.total);
 
     summaryEl.innerHTML =
       '<span class="summary-item"><span class="summary-count">' + s.total + '</span> total</span>' +
@@ -779,6 +1448,7 @@ const JS = /* js */ `
     if (!data.enabled) {
       guardStatusEl.textContent = 'Guard is not configured for this project.';
       guardListEl.innerHTML = '';
+      setMetric('metric-guard', 'off');
       return;
     }
 
@@ -786,10 +1456,12 @@ const JS = /* js */ `
 
     if (!data.report) {
       guardListEl.innerHTML = '<div class="empty-state">No scan results yet. Click "Scan" to check.</div>';
+      setMetric('metric-guard', 'ready');
       return;
     }
 
     var r = data.report;
+    setMetric('metric-guard', r.totalViolations);
     var summaryHtml = '<div class="guard-summary">' +
       '<div class="guard-stat"><div class="guard-stat-value">' + r.totalViolations + '</div><div class="guard-stat-label">Total</div></div>' +
       '<div class="guard-stat"><div class="guard-stat-value sev-error">' + (r.bySeverity.error || 0) + '</div><div class="guard-stat-label">Errors</div></div>' +
@@ -846,6 +1518,7 @@ const JS = /* js */ `
   }
 
   function renderFileChanges(changes) {
+    setMetric('metric-changes', changes.length);
     if (!changes.length) {
       previewListEl.innerHTML = '<div class="empty-state">No file changes detected.</div>';
       return;
@@ -956,6 +1629,7 @@ const JS = /* js */ `
   }
 
   function renderContractsList(contracts) {
+    setMetric('metric-contracts', contracts.length);
     if (!contracts.length) {
       contractsListEl.innerHTML = '<div class="empty-state">No contracts found.</div>';
       return;

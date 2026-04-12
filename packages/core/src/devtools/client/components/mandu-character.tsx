@@ -8,24 +8,34 @@ import type { ManduState } from '../../types';
 import { MANDU_CHARACTERS } from '../../types';
 import { colors, typography, animation, testIds } from '../../design-tokens';
 
-// ============================================================================
-// Styles
-// ============================================================================
-
 const styles = {
   container: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
     padding: '12px 16px',
-    borderRadius: '12px',
-    backgroundColor: colors.background.medium,
+    borderRadius: '16px',
+    background: `linear-gradient(180deg, ${colors.background.medium}, ${colors.background.dark})`,
+    border: `1px solid ${colors.background.light}`,
+    boxShadow: '0 14px 32px rgba(7, 7, 12, 0.28)',
     transition: `all ${animation.duration.normal} ${animation.easing.easeOut}`,
   },
-  emoji: {
-    fontSize: '32px',
+  mark: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '44px',
+    height: '44px',
+    padding: '0 12px',
+    borderRadius: '9999px',
+    fontSize: '11px',
     lineHeight: 1,
+    letterSpacing: '0.12em',
+    fontWeight: 700,
     userSelect: 'none' as const,
+    fontFamily: typography.fontFamily.mono,
+    textTransform: 'uppercase' as const,
+    border: `1px solid ${colors.background.light}`,
   },
   content: {
     display: 'flex',
@@ -35,7 +45,7 @@ const styles = {
   message: {
     fontSize: '14px',
     color: colors.text.primary,
-    fontWeight: 500,
+    fontWeight: 600,
   },
   status: {
     fontSize: '12px',
@@ -50,10 +60,6 @@ const stateColors: Record<ManduState, string> = {
   loading: colors.semantic.info,
   hmr: colors.brand.accent,
 };
-
-// ============================================================================
-// Animation Keyframes (inline)
-// ============================================================================
 
 const bounceAnimation = `
   @keyframes mk-bounce {
@@ -80,14 +86,10 @@ const shakeAnimation = `
 const sparkleAnimation = `
   @keyframes mk-sparkle {
     0% { transform: scale(1); }
-    50% { transform: scale(1.1); }
+    50% { transform: scale(1.08); }
     100% { transform: scale(1); }
   }
 `;
-
-// ============================================================================
-// Props
-// ============================================================================
 
 export interface ManduCharacterProps {
   state: ManduState;
@@ -96,10 +98,6 @@ export interface ManduCharacterProps {
   compact?: boolean;
   onClick?: () => void;
 }
-
-// ============================================================================
-// Component
-// ============================================================================
 
 export function ManduCharacter({
   state,
@@ -126,25 +124,34 @@ export function ManduCharacter({
     }
   };
 
-  const containerStyle = {
+  const containerStyle: React.CSSProperties = {
     ...styles.container,
     borderLeft: `4px solid ${stateColor}`,
     cursor: onClick ? 'pointer' : 'default',
     ...(compact && {
       padding: '8px 12px',
       gap: '8px',
+      borderRadius: '14px',
     }),
   };
 
-  const emojiStyle = {
-    ...styles.emoji,
+  const markStyle: React.CSSProperties = {
+    ...styles.mark,
     animation: getAnimation(),
-    ...(compact && { fontSize: '24px' }),
+    color: stateColor,
+    backgroundColor: `${stateColor}18`,
+    borderColor: `${stateColor}45`,
+    boxShadow: `inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 0 0 1px ${stateColor}10`,
+    ...(compact && {
+      minWidth: '36px',
+      height: '36px',
+      padding: '0 10px',
+      fontSize: '10px',
+    }),
   };
 
   return (
     <>
-      {/* Inject keyframes */}
       <style>
         {bounceAnimation}
         {pulseAnimation}
@@ -166,8 +173,8 @@ export function ManduCharacter({
           }
         }}
       >
-        <span style={emojiStyle} aria-hidden="true">
-          {character.emoji}
+        <span style={markStyle} aria-hidden="true">
+          {character.mark}
         </span>
 
         {!compact && (
@@ -175,7 +182,7 @@ export function ManduCharacter({
             <span style={styles.message}>{character.message}</span>
             {errorCount > 0 && (
               <span style={styles.status}>
-                {errorCount}개의 {state === 'error' ? '에러' : '경고'}가 있어요
+                {errorCount}개의 {state === 'error' ? '에러' : '경고'}가 있습니다
               </span>
             )}
           </div>
@@ -184,10 +191,6 @@ export function ManduCharacter({
     </>
   );
 }
-
-// ============================================================================
-// Badge Component (for mini display)
-// ============================================================================
 
 export interface ManduBadgeProps {
   state: ManduState;
@@ -210,28 +213,28 @@ export function ManduBadge({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '52px',
-    height: '52px',
-    padding: 0,
-    borderRadius: '9999px',
-    backgroundColor: isPressed
-      ? colors.background.light
+    width: '72px',
+    height: '56px',
+    padding: '0 14px',
+    borderRadius: '18px',
+    background: isPressed
+      ? `linear-gradient(180deg, ${colors.background.light}, ${colors.background.medium})`
       : isHovered
-        ? colors.background.medium
-        : colors.background.dark,
-    border: `2px solid ${isPressed ? stateColor : isHovered ? colors.brand.accent : stateColor + '70'}`,
+        ? `linear-gradient(180deg, ${colors.background.medium}, ${colors.background.dark})`
+        : `linear-gradient(180deg, ${colors.background.dark}, ${colors.background.medium})`,
+    border: `1px solid ${isPressed ? stateColor : isHovered ? colors.brand.accent : `${stateColor}80`}`,
     cursor: 'pointer',
     transition: `all 200ms ${animation.easing.spring}`,
     boxShadow: isPressed
-      ? `0 2px 8px rgba(8, 6, 18, 0.4), inset 0 2px 4px rgba(0, 0, 0, 0.15)`
+      ? '0 8px 18px rgba(8, 6, 18, 0.36), inset 0 2px 4px rgba(0, 0, 0, 0.12)'
       : isHovered
-        ? `0 8px 32px rgba(8, 6, 18, 0.45), 0 0 20px ${stateColor}55, 0 0 0 3px ${stateColor}20`
-        : `0 4px 16px rgba(8, 6, 18, 0.35), 0 0 10px ${stateColor}30`,
+        ? `0 18px 36px rgba(8, 6, 18, 0.42), 0 0 0 4px ${stateColor}18`
+        : `0 10px 22px rgba(8, 6, 18, 0.3), 0 0 0 1px ${stateColor}14`,
     userSelect: 'none',
     transform: isPressed
       ? 'scale(0.92) translateY(1px)'
       : isHovered
-        ? 'scale(1.1) translateY(-2px)'
+        ? 'scale(1.04) translateY(-2px)'
         : 'scale(1) translateY(0px)',
     outline: 'none',
     lineHeight: 1,
@@ -247,15 +250,27 @@ export function ManduBadge({
   };
 
   const textStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '3px',
     fontFamily: typography.fontFamily.sans,
     color: colors.brand.accent,
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: typography.fontWeight.bold,
     lineHeight: 1,
-    letterSpacing: '0.5px',
+    letterSpacing: '0.08em',
     transition: `transform 200ms ${animation.easing.spring}`,
-    transform: isHovered ? 'rotate(-8deg)' : 'rotate(0deg)',
+    transform: isHovered ? 'translateY(-1px)' : 'translateY(0px)',
     userSelect: 'none',
+  };
+
+  const subtextStyle: React.CSSProperties = {
+    fontSize: '9px',
+    fontWeight: typography.fontWeight.medium,
+    letterSpacing: '0.16em',
+    color: colors.text.secondary,
+    textTransform: 'uppercase',
   };
 
   const countBubbleStyle: React.CSSProperties = {
@@ -286,14 +301,23 @@ export function ManduBadge({
       style={badgeStyle}
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => { setIsHovered(false); setIsPressed(false); }}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        setIsPressed(false);
+      }}
       onMouseDown={() => setIsPressed(true)}
       onMouseUp={() => setIsPressed(false)}
       onFocus={() => setIsHovered(true)}
-      onBlur={() => { setIsHovered(false); setIsPressed(false); }}
+      onBlur={() => {
+        setIsHovered(false);
+        setIsPressed(false);
+      }}
       aria-label={`Mandu Kitchen: ${character.message}${count > 0 ? `, ${count} issues` : ''}`}
     >
-      <span aria-hidden="true" style={textStyle}>MK</span>
+      <span aria-hidden="true" style={textStyle}>
+        <span>MK</span>
+        <span style={subtextStyle}>Dev</span>
+      </span>
       {count > 0 && (
         <span style={countBubbleStyle}>
           {count > 99 ? '99+' : count}

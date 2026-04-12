@@ -213,10 +213,9 @@ export function NetworkPanel({ requests }: NetworkPanelProps): React.ReactElemen
     return (
       <div style={styles.container}>
         <div style={styles.emptyState}>
-          📡
           <p>
-            아직 네트워크 요청이 없어요.<br />
-            API 호출이 발생하면 여기에 표시됩니다.
+            아직 네트워크 요청이 없습니다.<br />
+            요청이 발생하면 여기에 기록됩니다.
           </p>
         </div>
       </div>

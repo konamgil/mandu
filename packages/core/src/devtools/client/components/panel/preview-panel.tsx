@@ -69,7 +69,17 @@ const styles = {
   },
   changeIcon: {
     flexShrink: 0,
-    fontSize: typography.fontSize.md,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '42px',
+    height: '24px',
+    padding: '0 8px',
+    borderRadius: borderRadius.full,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    fontFamily: typography.fontFamily.mono,
+    letterSpacing: '0.08em',
   },
   changePath: {
     flex: 1,
@@ -88,9 +98,15 @@ const styles = {
 };
 
 const typeIcons: Record<string, string> = {
-  add: '➕',
-  change: '✏️',
-  delete: '🗑️',
+  add: 'ADD',
+  change: 'EDIT',
+  delete: 'DEL',
+};
+
+const typeStyles: Record<string, { bg: string; color: string }> = {
+  add: { bg: `${colors.semantic.success}20`, color: colors.semantic.success },
+  change: { bg: `${colors.semantic.info}20`, color: colors.semantic.info },
+  delete: { bg: `${colors.semantic.error}20`, color: colors.semantic.error },
 };
 
 // ============================================================================
@@ -137,8 +153,7 @@ export function PreviewPanel({ recentChanges, onClearChanges }: PreviewPanelProp
     return (
       <div style={styles.container}>
         <div style={styles.emptyState}>
-          📝
-          <p>파일을 수정하면 여기에 변경사항이 표시됩니다</p>
+          <p>파일을 수정하면 여기에 최근 변경사항이 표시됩니다.</p>
         </div>
       </div>
     );
@@ -160,6 +175,7 @@ export function PreviewPanel({ recentChanges, onClearChanges }: PreviewPanelProp
       <div style={styles.list}>
         {recentChanges.map((change, i) => {
           const isLoading = loadingDiff === change.filePath;
+          const changeStyle = typeStyles[change.type] ?? typeStyles.change;
           return (
             <div
               key={`${change.filePath}-${change.timestamp}-${i}`}
@@ -169,7 +185,15 @@ export function PreviewPanel({ recentChanges, onClearChanges }: PreviewPanelProp
               }}
               onClick={() => !isLoading && handleFileClick(change.filePath)}
             >
-              <span style={styles.changeIcon}>{typeIcons[change.type] ?? '✏️'}</span>
+              <span
+                style={{
+                  ...styles.changeIcon,
+                  backgroundColor: changeStyle.bg,
+                  color: changeStyle.color,
+                }}
+              >
+                {typeIcons[change.type] ?? 'EDIT'}
+              </span>
               <span style={styles.changePath}>{change.filePath}</span>
               <span style={styles.changeTime}>
                 {formatTime(change.timestamp)}

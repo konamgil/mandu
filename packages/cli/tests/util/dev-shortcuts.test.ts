@@ -17,11 +17,15 @@ describe("dev shortcut helpers", () => {
       readyMs: 420,
     });
 
+    expect(summary).toContain("Mandu Dev Server");
     expect(summary).toContain("ready in 420ms");
-    expect(summary).toContain("Local:   http://localhost:3333");
-    expect(summary).toContain("HMR:     ws://localhost:3334");
-    expect(summary).toContain("Routes:  12 pages, 5 API, 3 island bundles");
-    expect(summary).toContain("press o to open");
+    expect(summary).toContain("Endpoints");
+    expect(summary).toContain("Local     http://localhost:3333");
+    expect(summary).toContain("HMR       ws://localhost:3334");
+    expect(summary).toContain("State");
+    expect(summary).toContain("Routes    12 pages, 5 API, 3 island bundles");
+    expect(summary).toContain("Shortcuts");
+    expect(summary).toContain("o open browser");
   });
 
   it("maps shortcut keys to actions", () => {

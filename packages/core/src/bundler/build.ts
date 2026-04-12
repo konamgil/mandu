@@ -11,10 +11,66 @@ import type {
   BundleManifest,
   BundleStats,
   BundlerOptions,
+  IslandFileEntry,
 } from "./types";
 import { HYDRATION } from "../constants";
 import path from "path";
 import fs from "fs/promises";
+
+/** Scan for *.island.tsx / *.island.ts files across hydrated route directories. */
+async function scanIslandFiles(routes: RouteSpec[], rootDir: string): Promise<IslandFileEntry[]> {
+  const entries: IslandFileEntry[] = [];
+  const seenDirs = new Set<string>();
+
+  for (const route of routes) {
+    const dir = path.dirname(path.join(rootDir, route.componentModule ?? route.module));
+    if (seenDirs.has(dir)) continue;
+    seenDirs.add(dir);
+
+    let files: string[];
+    try { files = await fs.readdir(dir); } catch { continue; }
+
+    const priority = getRouteHydration(route)?.priority || HYDRATION.DEFAULT_PRIORITY;
+    for (const file of files) {
+      if (/\.island\.tsx?$/.test(file)) {
+        entries.push({
+          name: file.replace(/\.island\.tsx?$/, ""),
+          filePath: path.join(dir, file),
+          routeId: route.id,
+          priority,
+        });
+      }
+    }
+  }
+  return entries;
+}
+
+/** Build a single per-island bundle. */
+async function buildPerIslandBundle(
+  entry: IslandFileEntry, outDir: string, options: BundlerOptions
+): Promise<{ name: string; js: string; route: string; priority: IslandFileEntry["priority"] }> {
+  const entryPath = path.join(outDir, `_entry_island_${entry.name}.js`);
+  const outputName = `${entry.name}.island.js`;
+  try {
+    await Bun.write(entryPath, generateIslandEntry(entry.name, entry.filePath));
+    const result = await Bun.build({
+      entrypoints: [entryPath],
+      outdir: outDir,
+      naming: outputName,
+      minify: options.minify ?? process.env.NODE_ENV === "production",
+      sourcemap: options.sourcemap ? "external" : "none",
+      target: "browser",
+      external: ["react", "react-dom", "react-dom/client", ...(options.external || [])],
+      define: { "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"), ...options.define },
+    });
+    await fs.unlink(entryPath).catch(() => {});
+    if (!result.success) throw new Error(result.logs.map((l) => l.message).join("\n"));
+    return { name: entry.name, js: `/.mandu/client/${outputName}`, route: entry.routeId, priority: entry.priority };
+  } catch (error) {
+    await fs.unlink(entryPath).catch(() => {});
+    throw error;
+  }
+}
 
 /**
  * 빈 매니페스트 생성
@@ -1292,7 +1348,8 @@ function createBundleManifest(
   runtimePath: string,
   vendorResult: VendorBuildResult,
   routerPath: string,
-  env: "development" | "production"
+  env: "development" | "production",
+  islandBundles?: Array<{ name: string; js: string; route: string; priority: IslandFileEntry["priority"] }>
 ): BundleManifest {
   const bundles: BundleManifest["bundles"] = {};
 
@@ -1307,11 +1364,25 @@ function createBundleManifest(
     };
   }
 
+  // Per-island bundles (code splitting)
+  let islands: BundleManifest["islands"];
+  if (islandBundles && islandBundles.length > 0) {
+    islands = {};
+    for (const ib of islandBundles) {
+      islands[ib.name] = {
+        js: ib.js,
+        route: ib.route,
+        priority: ib.priority,
+      };
+    }
+  }
+
   return {
     version: 1,
     buildTime: new Date().toISOString(),
     env,
     bundles,
+    ...(islands ? { islands } : {}),
     shared: {
       runtime: runtimePath,
       vendor: vendorResult.react, // primary vendor for backwards compatibility
@@ -1544,6 +1615,26 @@ export async function buildClientBundles(
     }
   }
 
+  // 5.5. Per-island code splitting: scan and build individual island bundles
+  const islandFiles = await scanIslandFiles(hydratedRoutes, rootDir);
+  const islandBundles: Array<{ name: string; js: string; route: string; priority: IslandFileEntry["priority"] }> = [];
+
+  if (islandFiles.length > 0) {
+    const islandResults = await Promise.all(
+      islandFiles.map(async (entry) => {
+        try {
+          return await buildPerIslandBundle(entry, outDir, options);
+        } catch (error) {
+          errors.push(`[island:${entry.name}] ${String(error)}`);
+          return null;
+        }
+      })
+    );
+    for (const result of islandResults) {
+      if (result) islandBundles.push(result);
+    }
+  }
+
   // 6. 번들 매니페스트 생성
   const bundleManifest = createBundleManifest(
     outputs,
@@ -1551,7 +1642,8 @@ export async function buildClientBundles(
     runtimeResult.outputPath,
     vendorResult,
     routerResult.outputPath,
-    env
+    env,
+    islandBundles
   );
 
   await fs.writeFile(
