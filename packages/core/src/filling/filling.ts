@@ -11,6 +11,7 @@ import { type FillingDeps, globalDeps } from "./deps";
 import { ErrorClassifier, formatErrorResponse, ErrorCode } from "../error";
 import { TIMEOUTS } from "../constants";
 import { createContract, type ContractDefinition, type ContractInstance } from "../contract";
+import type { WSHandlers } from "./ws";
 import {
   type Middleware as RuntimeMiddleware,
   type MiddlewareEntry,
@@ -40,6 +41,13 @@ export type Guard = BeforeHandleHandler;
 /** HTTP methods */
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
 
+/** 미들웨어 플러그인 (여러 lifecycle 단계를 조합) */
+export interface MiddlewarePlugin {
+  beforeHandle?: BeforeHandleHandler;
+  afterHandle?: AfterHandleHandler;
+  mapResponse?: MapResponseHandler;
+}
+
 /** Loader function type - SSR 데이터 로딩 */
 export type Loader<T = unknown> = (ctx: ManduContext) => T | Promise<T>;
 
@@ -51,6 +59,17 @@ export interface LoaderOptions<T = unknown> {
   fallback?: T;
 }
 
+/** Loader 캐시/ISR 옵션 */
+export interface LoaderCacheOptions {
+  /** 캐시 유지 시간 (초). 0이면 캐시 안 함, Infinity면 영구 */
+  revalidate?: number;
+  /** 온디맨드 무효화 태그 */
+  tags?: string[];
+}
+
+/** 렌더링 모드 */
+export type RenderMode = "dynamic" | "isr" | "swr";
+
 /** Loader 타임아웃 에러 */
 export class LoaderTimeoutError extends Error {
   constructor(timeout: number) {
@@ -59,9 +78,16 @@ export class LoaderTimeoutError extends Error {
   }
 }
 
+/** Action handler type — named mutation handler */
+export type ActionHandler = (ctx: ManduContext) => Response | Promise<Response>;
+
 interface FillingConfig<TLoaderData = unknown> {
   handlers: Map<HttpMethod, Handler>;
+  actions: Map<string, ActionHandler>;
   loader?: Loader<TLoaderData>;
+  loaderCache?: LoaderCacheOptions;
+  renderMode?: RenderMode;
+  wsHandlers?: WSHandlers;
   lifecycle: LifecycleStore;
   middleware: MiddlewareEntry[];
   /** Semantic slot metadata */
@@ -71,6 +97,7 @@ interface FillingConfig<TLoaderData = unknown> {
 export class ManduFilling<TLoaderData = unknown> {
   private config: FillingConfig<TLoaderData> = {
     handlers: new Map(),
+    actions: new Map(),
     lifecycle: createLifecycleStore(),
     middleware: [],
     semantic: {},
@@ -154,9 +181,54 @@ export class ManduFilling<TLoaderData = unknown> {
     return { ...this.config.semantic };
   }
 
-  loader(loaderFn: Loader<TLoaderData>): this {
+  /**
+   * SSR 데이터 로더 등록
+   *
+   * @example
+   * ```typescript
+   * // 기본 (캐시 없음)
+   * .loader(async (ctx) => ({ posts: await db.getPosts() }))
+   *
+   * // ISR: 60초 캐시 후 백그라운드 재생성
+   * .loader(async (ctx) => ({ posts: await db.getPosts() }), { revalidate: 60 })
+   *
+   * // 태그 기반 무효화
+   * .loader(async (ctx) => ({ posts: await db.getPosts() }), { revalidate: 3600, tags: ["posts"] })
+   * ```
+   */
+  loader(loaderFn: Loader<TLoaderData>, cacheOptions?: LoaderCacheOptions): this {
     this.config.loader = loaderFn;
+    if (cacheOptions) {
+      this.config.loaderCache = cacheOptions;
+    }
     return this;
+  }
+
+  /**
+   * 렌더링 모드 설정
+   *
+   * @example
+   * ```typescript
+   * .render("isr", { revalidate: 120 })
+   * .render("swr", { revalidate: 300, tags: ["blog"] })
+   * ```
+   */
+  render(mode: RenderMode, cacheOptions?: LoaderCacheOptions): this {
+    this.config.renderMode = mode;
+    if (cacheOptions) {
+      this.config.loaderCache = { ...this.config.loaderCache, ...cacheOptions };
+    }
+    return this;
+  }
+
+  /** 현재 캐시/ISR 설정 반환 */
+  getCacheOptions(): LoaderCacheOptions | undefined {
+    return this.config.loaderCache;
+  }
+
+  /** 현재 렌더링 모드 반환 */
+  getRenderMode(): RenderMode {
+    return this.config.renderMode ?? "dynamic";
   }
 
   async executeLoader(
@@ -228,6 +300,71 @@ export class ManduFilling<TLoaderData = unknown> {
   }
 
   /**
+   * Named action — mutation 핸들러 등록
+   * POST 요청에서 _action 파라미터로 디스패치됨
+   *
+   * action 완료 후 loader가 있으면 자동 revalidation:
+   * 응답에 { _action, _revalidated, loaderData } 포함
+   *
+   * @example
+   * ```typescript
+   * Mandu.filling()
+   *   .loader(async (ctx) => ({ todos: await db.getTodos() }))
+   *   .action("create", async (ctx) => {
+   *     const { title } = await ctx.body<{ title: string }>();
+   *     await db.createTodo(title);
+   *     return ctx.ok({ created: true });
+   *   })
+   *   .action("delete", async (ctx) => {
+   *     const { id } = await ctx.body<{ id: string }>();
+   *     await db.deleteTodo(id);
+   *     return ctx.ok({ deleted: true });
+   *   });
+   * ```
+   */
+  action(name: string, handler: ActionHandler): this {
+    if (!name || name.trim().length === 0) {
+      throw new Error("[Mandu] Action name must be a non-empty string");
+    }
+    this.config.actions.set(name, handler);
+    return this;
+  }
+
+  hasAction(name: string): boolean {
+    return this.config.actions.has(name);
+  }
+
+  getActionNames(): string[] {
+    return Array.from(this.config.actions.keys());
+  }
+
+  /**
+   * WebSocket 핸들러 등록
+   *
+   * @example
+   * ```typescript
+   * Mandu.filling()
+   *   .ws({
+   *     open(ws) { ws.subscribe("chat"); },
+   *     message(ws, msg) { ws.publish("chat", msg); },
+   *     close(ws) { console.log("Disconnected:", ws.id); },
+   *   });
+   * ```
+   */
+  ws(handlers: WSHandlers): this {
+    this.config.wsHandlers = handlers;
+    return this;
+  }
+
+  getWSHandlers(): WSHandlers | undefined {
+    return this.config.wsHandlers;
+  }
+
+  hasWS(): boolean {
+    return !!this.config.wsHandlers;
+  }
+
+  /**
    * 요청 시작 훅
    */
   onRequest(fn: OnRequestHandler): this {
@@ -271,10 +408,27 @@ export class ManduFilling<TLoaderData = unknown> {
   }
 
   /**
-   * Middleware alias (guard와 동일)
+   * 미들웨어 등록 (Guard 함수 또는 lifecycle 객체)
+   *
+   * @example
+   * ```typescript
+   * // 단순 guard
+   * .use(authGuard)
+   *
+   * // lifecycle 객체 (beforeHandle + afterHandle)
+   * .use(compress())
+   * .use(cors({ origin: "https://example.com" }))
+   * ```
    */
-  use(fn: Guard): this {
-    return this.guard(fn);
+  use(fn: Guard | MiddlewarePlugin): this {
+    if (typeof fn === "function") {
+      return this.guard(fn);
+    }
+    // 미들웨어 플러그인 객체: 각 lifecycle 단계를 개별 등록
+    if (fn.beforeHandle) this.beforeHandle(fn.beforeHandle);
+    if (fn.afterHandle) this.afterHandle(fn.afterHandle);
+    if (fn.mapResponse) this.mapResponse(fn.mapResponse);
+    return this;
   }
 
   /**
@@ -318,6 +472,13 @@ export class ManduFilling<TLoaderData = unknown> {
     const deps = options?.deps ?? globalDeps.get();
     const ctx = new ManduContext(request, params, deps);
     const method = request.method.toUpperCase() as HttpMethod;
+
+    // Action 디스패치: POST/PUT/PATCH/DELETE + 등록된 action이 있을 때
+    if (this.config.actions.size > 0 && method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+      const actionResult = await this.tryDispatchAction(ctx, routeContext, options);
+      if (actionResult) return actionResult;
+    }
+
     const handler = this.config.handlers.get(method);
     if (!handler) {
       return ctx.json({ status: "error", message: `Method ${method} not allowed`, allowed: Array.from(this.config.handlers.keys()) }, 405);
@@ -339,6 +500,113 @@ export class ManduFilling<TLoaderData = unknown> {
       return composed(ctx);
     };
     return executeLifecycle(lifecycleWithDefaults, ctx, runHandler, options);
+  }
+
+  /**
+   * Action 디스패치 시도
+   * _action 파라미터가 있고 매칭되는 action이 있으면 실행 + revalidation
+   * 매칭 안 되면 null 반환 → 기존 핸들러로 fallback
+   */
+  private async tryDispatchAction(
+    ctx: ManduContext,
+    routeContext?: { routeId: string; pattern: string },
+    options?: ExecuteOptions & { deps?: FillingDeps }
+  ): Promise<Response | null> {
+    const actionName = await this.resolveActionName(ctx);
+    if (!actionName) return null;
+
+    const actionHandler = this.config.actions.get(actionName);
+    if (!actionHandler) return null;
+
+    // action 이름을 ctx에 저장 (다른 lifecycle 훅에서 접근 가능)
+    ctx.set("_actionName", actionName);
+
+    const lifecycleWithDefaults = this.createLifecycleWithDefaults(routeContext);
+
+    const runAction = async () => {
+      if (this.config.middleware.length === 0) {
+        return actionHandler(ctx);
+      }
+      const chain: MiddlewareEntry[] = [
+        ...this.config.middleware,
+        { fn: async (innerCtx) => actionHandler(innerCtx), name: `action:${actionName}`, isAsync: true },
+      ];
+      return compose(chain)(ctx);
+    };
+
+    const actionResponse = await executeLifecycle(lifecycleWithDefaults, ctx, runAction, options);
+
+    // Action 성공 + loader 있으면 자동 revalidation
+    if (actionResponse.ok && this.config.loader) {
+      // fetch 요청(JS 환경)만 revalidation JSON 반환
+      // HTML form 제출(Accept: text/html)은 action 응답 그대로 반환
+      const accept = ctx.headers.get("accept") ?? "";
+      const isFetchRequest = accept.includes("application/json")
+        || ctx.headers.get("x-requested-with") === "ManduAction";
+
+      if (isFetchRequest) {
+        try {
+          const freshData = await this.executeLoader(ctx);
+
+          // action 응답 본문 보존 (actionData로 포함)
+          let actionData: unknown = null;
+          const actionContentType = actionResponse.headers.get("content-type") ?? "";
+          if (actionContentType.includes("application/json")) {
+            actionData = await actionResponse.clone().json().catch(() => null);
+          }
+
+          const revalidatedResponse = ctx.json({
+            _action: actionName,
+            _revalidated: true,
+            actionData,
+            loaderData: freshData,
+          });
+
+          // action 응답의 Set-Cookie 헤더 보존
+          const setCookies = actionResponse.headers.getSetCookie?.() ?? [];
+          for (const cookie of setCookies) {
+            revalidatedResponse.headers.append("Set-Cookie", cookie);
+          }
+
+          return revalidatedResponse;
+        } catch {
+          // Loader 실패 시 action 결과만 반환
+          return actionResponse;
+        }
+      }
+    }
+
+    return actionResponse;
+  }
+
+  /**
+   * 요청에서 action 이름 추출
+   * 우선순위: body._action > URL ?_action=
+   * (body를 우선하여 URL query 조작에 의한 action hijacking 방지)
+   */
+  private async resolveActionName(ctx: ManduContext): Promise<string | null> {
+    // 1. Request body에서 먼저 확인 (form 제어 하에 있으므로 더 안전)
+    const contentType = ctx.headers.get("content-type") ?? "";
+    try {
+      if (contentType.includes("application/json")) {
+        const cloned = ctx.request.clone();
+        const body = await cloned.json() as Record<string, unknown>;
+        if (typeof body._action === "string") return body._action;
+      } else if (contentType.includes("form")) {
+        const cloned = ctx.request.clone();
+        const formData = await cloned.formData();
+        const action = formData.get("_action");
+        if (typeof action === "string") return action;
+      }
+    } catch {
+      // 파싱 실패 시 query fallback
+    }
+
+    // 2. URL query parameter (body에 없을 때만)
+    const fromQuery = ctx.query._action;
+    if (fromQuery) return fromQuery;
+
+    return null;
   }
 
   private createLifecycleWithDefaults(routeContext?: { routeId: string; pattern: string }): LifecycleStore {

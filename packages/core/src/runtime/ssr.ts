@@ -193,8 +193,22 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
 
+  // useHead/useSeoMeta SSR 수집
+  let collectedHeadTags = "";
+  let headReset: (() => void) | undefined;
+  let headGet: (() => string) | undefined;
+  try {
+    const mod = require("../client/use-head");
+    headReset = mod.resetSSRHead;
+    headGet = mod.getSSRHeadTags;
+    headReset?.();
+  } catch { /* client 모듈 로드 실패 시 무시 */ }
+
   const renderToString = getRenderToString();
   let content = renderToString(element);
+
+  // 렌더링 중 수집된 head 태그
+  collectedHeadTags = headGet?.() ?? "";
 
   // Island 래퍼 적용 (hydration 필요 시)
   // islandPreWrapped가 true이면 React 엘리먼트 레벨에서 이미 래핑됨 → HTML 래핑 건너뜀
@@ -208,37 +222,42 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     content = wrapWithIsland(content, routeId, hydration.priority, bundleSrc);
   }
 
-  // 서버 데이터 스크립트
+  // Zero-JS 모드: island이 없는 페이지에서는 클라이언트 JS 번들을 전송하지 않음
+  // HMR/DevTools는 dev 환경에서만 유지 (CSS 핫리로드 등)
   let dataScript = "";
-  if (serverData && routeId) {
-    const wrappedData = {
-      [routeId]: {
-        serverData,
-        timestamp: Date.now(),
-      },
-    };
-    dataScript = serializeServerData(wrappedData);
-  }
-
-  // Client-side Routing: 라우트 정보 주입
   let routeScript = "";
-  if (enableClientRouter && routeId) {
-    routeScript = generateRouteScript(routeId, routePattern || "", serverData);
-  }
-
-  // Hydration 스크립트
   let hydrationScripts = "";
-  if (needsHydration && bundleManifest) {
-    hydrationScripts = generateHydrationScripts(routeId, bundleManifest);
-  }
-
-  // Client-side Router 스크립트
   let routerScript = "";
-  if (enableClientRouter && bundleManifest) {
-    routerScript = generateClientRouterScript(bundleManifest);
+
+  if (needsHydration) {
+    // 서버 데이터 스크립트 (클라이언트 hydration에서 사용)
+    if (serverData && routeId) {
+      const wrappedData = {
+        [routeId]: {
+          serverData,
+          timestamp: Date.now(),
+        },
+      };
+      dataScript = serializeServerData(wrappedData);
+    }
+
+    // Client-side Routing: 라우트 정보 주입
+    if (enableClientRouter && routeId) {
+      routeScript = generateRouteScript(routeId, routePattern || "", serverData);
+    }
+
+    // Hydration 스크립트 (vendor/runtime/island preloads)
+    if (bundleManifest) {
+      hydrationScripts = generateHydrationScripts(routeId, bundleManifest);
+    }
+
+    // Client-side Router 스크립트
+    if (enableClientRouter && bundleManifest) {
+      routerScript = generateClientRouterScript(bundleManifest);
+    }
   }
 
-  // HMR 스크립트 (개발 모드)
+  // HMR 스크립트 (개발 모드 — island 유무와 무관하게 CSS 핫리로드 지원)
   let hmrScript = "";
   if (isDev && hmrPort) {
     hmrScript = generateHMRScript(hmrPort);
@@ -258,6 +277,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   <title>${escapeHtmlText(title)}</title>
   ${cssLinkTag}
   ${headTags}
+  ${collectedHeadTags}
 </head>
 <body>
   <div id="root">${content}</div>

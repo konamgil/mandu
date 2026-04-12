@@ -1228,7 +1228,7 @@ async function buildIsland(
       minify: options.minify ?? process.env.NODE_ENV === "production",
       sourcemap: options.sourcemap ? "external" : "none",
       target: "browser",
-      splitting: options.splitting ?? false,
+      splitting: options.splitting ?? (process.env.NODE_ENV === "production"),
       external: ["react", "react-dom", "react-dom/client", ...(options.external || [])],
       define: {
         "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),

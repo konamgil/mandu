@@ -7,7 +7,11 @@
 export { ManduContext, ValidationError, CookieManager } from "./context";
 export type { CookieOptions } from "./context";
 export { ManduFilling, ManduFillingFactory, LoaderTimeoutError } from "./filling";
-export type { Handler, Guard, HttpMethod, Loader, LoaderOptions } from "./filling";
+export type { Handler, Guard, ActionHandler, HttpMethod, Loader, LoaderOptions, LoaderCacheOptions, RenderMode, MiddlewarePlugin } from "./filling";
+export { createCookieSessionStorage, Session } from "./session";
+export type { SessionStorage, SessionData, CookieSessionOptions } from "./session";
+export { wrapBunWebSocket } from "./ws";
+export type { WSHandlers, ManduWebSocket, WSUpgradeData } from "./ws";
 export { SSEConnection, createSSEConnection } from "./sse";
 export type { SSEOptions, SSESendOptions, SSECleanup } from "./sse";
 export { resolveResumeCursor, catchupFromCursor, mergeUniqueById } from "./sse-catchup";

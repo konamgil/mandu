@@ -3,6 +3,7 @@ import {
   registerPageLoader,
   registerPageHandler,
   registerLayoutLoader,
+  registerWSHandler,
   needsHydration,
   type RoutesManifest,
 } from "@mandujs/core";
@@ -82,6 +83,13 @@ export async function registerManifestHandlers(
         if (handler && typeof handler.handle === "function") {
           console.log(`  🔄 ManduFilling wrapped: ${route.id}`);
           const filling = handler;
+
+          // WebSocket 핸들러 등록
+          if (typeof filling.hasWS === "function" && filling.hasWS()) {
+            registerWSHandler(route.id, filling.getWSHandlers());
+            console.log(`  🔌 WebSocket: ${route.pattern} -> ${route.id}`);
+          }
+
           handler = async (req: Request, params?: Record<string, string>) => {
             return filling.handle(req, params);
           };

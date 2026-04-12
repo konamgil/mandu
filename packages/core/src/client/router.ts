@@ -24,14 +24,22 @@ export interface RouteInfo {
 }
 
 export interface NavigationState {
-  state: "idle" | "loading";
+  state: "idle" | "loading" | "submitting";
   location?: string;
+  formAction?: string;
 }
 
 export interface RouterState {
   currentRoute: RouteInfo | null;
   loaderData: unknown;
+  actionData: unknown;
   navigation: NavigationState;
+}
+
+export interface ActionResult {
+  ok: boolean;
+  actionData?: unknown;
+  loaderData?: unknown;
 }
 
 export interface NavigateOptions {
@@ -39,13 +47,44 @@ export interface NavigateOptions {
   replace?: boolean;
   /** 스크롤 위치 복원 여부 */
   scroll?: boolean;
+  /** revalidation 스킵 (기존 loaderData 유지) */
+  skipRevalidation?: boolean;
+}
+
+/**
+ * shouldRevalidate 콜백 타입
+ * false 반환 시 loader 재실행을 건너뜀
+ */
+export type ShouldRevalidateFunction = (args: {
+  currentUrl: URL;
+  nextUrl: URL;
+  formAction?: string;
+  defaultShouldRevalidate: boolean;
+}) => boolean;
+
+/** 글로벌 shouldRevalidate 핸들러 */
+let globalShouldRevalidate: ShouldRevalidateFunction | null = null;
+
+/**
+ * shouldRevalidate 핸들러 등록
+ *
+ * @example
+ * ```typescript
+ * setShouldRevalidate(({ currentUrl, nextUrl }) => {
+ *   // 같은 탭 내 이동이면 loader 재실행 안 함
+ *   return currentUrl.pathname !== nextUrl.pathname;
+ * });
+ * ```
+ */
+export function setShouldRevalidate(fn: ShouldRevalidateFunction | null): void {
+  globalShouldRevalidate = fn;
 }
 
 type RouterListener = (state: RouterState) => void;
 
 function getGlobalRouterState(): RouterState {
   if (typeof window === "undefined") {
-    return { currentRoute: null, loaderData: undefined, navigation: { state: "idle" } };
+    return { currentRoute: null, loaderData: undefined, actionData: undefined, navigation: { state: "idle" } };
   }
   if (!getWindowRouterState()) {
     // SSR에서 주입된 __MANDU_ROUTE__에서 초기화
@@ -61,6 +100,7 @@ function getGlobalRouterState(): RouterState {
           }
         : null,
       loaderData: route && data?.[route.id]?.serverData,
+      actionData: undefined,
       navigation: { state: "idle" },
     });
   }
@@ -102,6 +142,7 @@ function initializeFromServer(): void {
         params,
       },
       loaderData: data?.[route.id]?.serverData,
+      actionData: undefined,
       navigation: { state: "idle" },
     });
   }
@@ -177,6 +218,9 @@ function extractParamsFromPath(
 
 // ========== Navigation ==========
 
+/** 현재 진행 중인 네비게이션의 AbortController (race condition 방지) */
+let activeNavigationController: AbortController | null = null;
+
 /**
  * 페이지 네비게이션
  */
@@ -184,7 +228,16 @@ export async function navigate(
   to: string,
   options: NavigateOptions = {}
 ): Promise<void> {
-  const { replace = false, scroll = true } = options;
+  const { replace = false, scroll = true, skipRevalidation = false } = options;
+
+  // 이전 네비게이션이 진행 중이면 취소
+  if (activeNavigationController) {
+    activeNavigationController.abort();
+    activeNavigationController = null;
+  }
+
+  const controller = new AbortController();
+  activeNavigationController = controller;
 
   try {
     const url = new URL(to, window.location.origin);
@@ -195,6 +248,27 @@ export async function navigate(
       return;
     }
 
+    // shouldRevalidate 체크 — false면 fetch 없이 URL만 변경
+    if (!skipRevalidation && globalShouldRevalidate) {
+      const currentUrl = new URL(window.location.href);
+      const shouldFetch = globalShouldRevalidate({
+        currentUrl,
+        nextUrl: url,
+        defaultShouldRevalidate: true,
+      });
+      if (!shouldFetch) {
+        const historyState = { ...getRouterStateInternal().currentRoute };
+        if (replace) {
+          history.replaceState(historyState, "", to);
+        } else {
+          history.pushState(historyState, "", to);
+        }
+        notifyListeners();
+        if (scroll) window.scrollTo(0, 0);
+        return;
+      }
+    }
+
     // 로딩 상태 시작
     setRouterStateInternal({
       ...getRouterStateInternal(),
@@ -202,9 +276,12 @@ export async function navigate(
     });
     notifyListeners();
 
-    // 데이터 fetch
+    // 데이터 fetch (signal 연결로 취소 가능)
     const dataUrl = `${url.pathname}${url.search ? url.search + "&" : "?"}_data=1`;
-    const response = await fetch(dataUrl);
+    const response = await fetch(dataUrl, { signal: controller.signal });
+
+    // 이 요청이 이미 abort된 경우 (새 네비게이션이 시작됨) 무시
+    if (controller.signal.aborted) return;
 
     if (!response.ok) {
       // 에러 시 full navigation fallback
@@ -214,38 +291,51 @@ export async function navigate(
 
     const data = await response.json();
 
-    // History 업데이트
-    const historyState = { routeId: data.routeId, params: data.params };
-    if (replace) {
-      history.replaceState(historyState, "", to);
+    // json 파싱 사이에 새 네비게이션이 시작됐을 수 있음
+    if (controller.signal.aborted) return;
+
+    // 상태 + History + 스크롤을 한 번에 적용하는 함수
+    const applyUpdate = () => {
+      const historyState = { routeId: data.routeId, params: data.params };
+      if (replace) {
+        history.replaceState(historyState, "", to);
+      } else {
+        history.pushState(historyState, "", to);
+      }
+
+      setRouterStateInternal({
+        currentRoute: {
+          id: data.routeId,
+          pattern: data.pattern,
+          params: data.params,
+        },
+        loaderData: data.loaderData,
+        actionData: undefined,
+        navigation: { state: "idle" },
+      });
+      setServerData(data.routeId, data.loaderData);
+      notifyListeners();
+      if (scroll) window.scrollTo(0, 0);
+    };
+
+    // View Transitions API — 브라우저 지원 시 URL + DOM 전환을 동기화
+    if (!replace && "startViewTransition" in document) {
+      (document as any).startViewTransition(applyUpdate);
     } else {
-      history.pushState(historyState, "", to);
-    }
-
-    // 상태 업데이트
-    setRouterStateInternal({
-      currentRoute: {
-        id: data.routeId,
-        pattern: data.pattern,
-        params: data.params,
-      },
-      loaderData: data.loaderData,
-      navigation: { state: "idle" },
-    });
-
-    // __MANDU_DATA__ 업데이트
-    setServerData(data.routeId, data.loaderData);
-
-    notifyListeners();
-
-    // 스크롤 복원
-    if (scroll) {
-      window.scrollTo(0, 0);
+      applyUpdate();
     }
   } catch (error) {
+    // abort된 네비게이션은 조용히 무시 (새 네비게이션이 대체함)
+    if (controller.signal.aborted) return;
+
     console.error("[Mandu Router] Navigation failed:", error);
     // 에러 시 full navigation fallback
     window.location.href = to;
+  } finally {
+    // 이 controller가 아직 active면 정리
+    if (activeNavigationController === controller) {
+      activeNavigationController = null;
+    }
   }
 }
 
@@ -262,15 +352,12 @@ function handlePopState(event: PopStateEvent): void {
       scroll: false,
     });
   } else {
-    // 직접 URL 입력 등으로 방문한 페이지 - 상태만 업데이트
-    const route = getManduRoute();
+    // SPA 네비게이션 이력이 아닌 페이지 — 현재 라우터 상태 유지
+    // (getManduRoute()는 SSR 초기값이라 SPA 네비게이션 후에는 stale)
+    const current = getGlobalRouterState();
     setGlobalRouterState({
-      currentRoute: route ? {
-        id: route.id,
-        pattern: route.pattern,
-        params: route.params || {},
-      } : null,
-      loaderData: getGlobalRouterState().loaderData,
+      ...current,
+      actionData: undefined,
       navigation: { state: "idle" },
     });
     notifyListeners();
@@ -381,12 +468,135 @@ export async function prefetch(url: string): Promise<void> {
   if (prefetchedUrls.has(url)) return;
 
   try {
-    const dataUrl = `${url}${url.includes("?") ? "&" : "?"}_data=1`;
+    const parsed = new URL(url, window.location.origin);
+    const dataUrl = `${parsed.pathname}${parsed.search ? parsed.search + "&" : "?"}_data=1`;
     await fetch(dataUrl, { priority: "low" } as RequestInit);
     prefetchedUrls.set(url, true);
   } catch {
     // Prefetch 실패는 무시
   }
+}
+
+// ========== Action Submission ==========
+
+/**
+ * 서버 action 제출 (mutation)
+ * 응답에 _revalidated가 있으면 loaderData를 자동 갱신
+ */
+/** 진행 중인 action의 AbortController */
+let activeActionController: AbortController | null = null;
+
+export async function submitAction(
+  url: string,
+  data: FormData | Record<string, unknown>,
+  actionName: string,
+  method: string = "POST"
+): Promise<ActionResult> {
+  // 진행 중인 navigate 취소 (action이 우선)
+  if (activeNavigationController) {
+    activeNavigationController.abort();
+    activeNavigationController = null;
+  }
+  // 진행 중인 이전 action 취소
+  if (activeActionController) {
+    activeActionController.abort();
+  }
+  const controller = new AbortController();
+  activeActionController = controller;
+
+  // submitting 상태 시작
+  setRouterStateInternal({
+    ...getRouterStateInternal(),
+    navigation: { state: "submitting", formAction: url },
+  });
+  notifyListeners();
+
+  try {
+    const isFormData = data instanceof FormData;
+    const body = isFormData ? data : JSON.stringify({ _action: actionName, ...data });
+    const headers: Record<string, string> = {
+      "X-Requested-With": "ManduAction",
+      "Accept": "application/json",
+    };
+    if (!isFormData) {
+      headers["Content-Type"] = "application/json";
+    } else if (!data.has("_action")) {
+      data.set("_action", actionName);
+    }
+
+    const response = await fetch(url, {
+      method: method.toUpperCase(),
+      body,
+      headers,
+      signal: controller.signal,
+    });
+
+    if (controller.signal.aborted) return { ok: false };
+
+    // JSON 파싱 (실패 시 빈 객체 — 타입 안전)
+    let result: Record<string, unknown> = {};
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      try {
+        const parsed = await response.json();
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          result = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // malformed JSON — result stays {}
+      }
+    }
+
+    if (controller.signal.aborted) return { ok: false };
+
+    // Revalidation: 서버가 loader를 재실행해서 fresh data를 보내줬으면 갱신
+    if (result._revalidated && result.loaderData !== undefined) {
+      setRouterStateInternal({
+        ...getRouterStateInternal(),
+        loaderData: result.loaderData,
+        actionData: result,
+        navigation: { state: "idle" },
+      });
+
+      const currentRoute = getRouterStateInternal().currentRoute;
+      if (currentRoute) {
+        setServerData(currentRoute.id, result.loaderData);
+      }
+    } else {
+      setRouterStateInternal({
+        ...getRouterStateInternal(),
+        actionData: result,
+        navigation: { state: "idle" },
+      });
+    }
+
+    notifyListeners();
+    return {
+      ok: response.ok,
+      actionData: result,
+      loaderData: result._revalidated ? result.loaderData as unknown : undefined,
+    };
+  } catch (error) {
+    if (controller.signal.aborted) return { ok: false };
+
+    setRouterStateInternal({
+      ...getRouterStateInternal(),
+      navigation: { state: "idle" },
+    });
+    notifyListeners();
+    return { ok: false };
+  } finally {
+    if (activeActionController === controller) {
+      activeActionController = null;
+    }
+  }
+}
+
+/**
+ * 현재 action 데이터 가져오기
+ */
+export function getActionData<T = unknown>(): T | undefined {
+  return getRouterStateInternal().actionData as T | undefined;
 }
 
 // ========== Initialization ==========
@@ -418,6 +628,16 @@ export function initializeRouter(): void {
  */
 export function cleanupRouter(): void {
   if (typeof window === "undefined" || !initialized) return;
+
+  // 진행 중인 네비게이션/액션 취소
+  if (activeNavigationController) {
+    activeNavigationController.abort();
+    activeNavigationController = null;
+  }
+  if (activeActionController) {
+    activeActionController.abort();
+    activeActionController = null;
+  }
 
   window.removeEventListener("popstate", handlePopState);
   document.removeEventListener("click", handleLinkClick);

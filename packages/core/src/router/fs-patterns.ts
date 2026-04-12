@@ -62,6 +62,15 @@ export function parseSegment(segment: string): RouteSegment {
     };
   }
 
+  // Slot / Parallel route: @name
+  if (segment.startsWith("@")) {
+    return {
+      raw: segment,
+      type: "slot",
+      paramName: segment.slice(1), // @modal → "modal"
+    };
+  }
+
   // Static segment
   return {
     raw: segment,
@@ -123,7 +132,7 @@ export function segmentsToPattern(segments: RouteSegment[]): string {
   }
 
   const parts = segments
-    .filter((seg) => seg.type !== "group") // 그룹은 URL에 포함 안 됨
+    .filter((seg) => seg.type !== "group" && seg.type !== "slot") // 그룹과 slot(@name)은 URL에 포함 안 됨
     .map((seg) => segmentToPatternPart(seg));
 
   return "/" + parts.join("/");
@@ -272,6 +281,7 @@ export function generateRouteId(relativePath: string): string {
 const SEGMENT_PRIORITY: Record<SegmentType, number> = {
   static: 0,
   group: 1, // 그룹은 URL에 영향 없으므로 static과 동일
+  slot: 1, // slot(@name)도 URL에 영향 없음 — layout named prop으로 전달
   dynamic: 2,
   catchAll: 3,
   optionalCatchAll: 4,

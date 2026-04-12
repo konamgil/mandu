@@ -11,6 +11,15 @@ import path from "path";
 import fs from "fs/promises";
 import { PORTS } from "../constants";
 import {
+  type CacheStore,
+  type CacheLookupResult,
+  MemoryCacheStore,
+  lookupCache,
+  createCacheEntry,
+  createCachedResponse,
+  setGlobalCache,
+} from "./cache";
+import {
   createNotFoundResponse,
   createHandlerNotFoundResponse,
   createPageLoadErrorResponse,
@@ -29,6 +38,14 @@ import {
 } from "./cors";
 import { validateImportPath } from "./security";
 import { KITCHEN_PREFIX, KitchenHandler } from "../kitchen/kitchen-handler";
+import {
+  type MiddlewareFn,
+  type MiddlewareConfig,
+  loadMiddlewareSync,
+} from "./middleware";
+import { createFetchHandler } from "./handler";
+import { wrapBunWebSocket, type WSUpgradeData } from "../filling/ws";
+import { handleImageRequest } from "./image-handler";
 
 export interface RateLimitOptions {
   windowMs?: number;
@@ -306,6 +323,13 @@ export interface ServerOptions {
    * Guard config for Kitchen dev dashboard (dev mode only)
    */
   guardConfig?: import("../guard/types").GuardConfig | null;
+  /**
+   * SSR 캐시 설정 (ISR/SWR 용)
+   * - true: 기본 메모리 캐시 (LRU 1000 엔트리)
+   * - CacheStore: 커스텀 캐시 구현체
+   * - false/undefined: 캐시 비활성화
+   */
+  cache?: boolean | CacheStore;
 }
 
 export interface ManduServer {
@@ -397,6 +421,8 @@ export interface ServerRegistrySettings {
    * - undefined: false로 처리 (404 방지)
    */
   cssPath?: string | false;
+  /** ISR/SWR 캐시 스토어 */
+  cacheStore?: CacheStore;
 }
 
 export class ServerRegistry {
@@ -420,6 +446,12 @@ export class ServerRegistry {
   rateLimiter: MemoryRateLimiter | null = null;
   /** Kitchen dev dashboard handler (dev mode only) */
   kitchen: KitchenHandler | null = null;
+  /** 라우트별 캐시 옵션 (filling.loader()의 cacheOptions에서 등록) */
+  readonly cacheOptions: Map<string, { revalidate?: number; tags?: string[] }> = new Map();
+  /** Layout slot 파일 경로 캐시 (모듈 경로 → slot 경로 | null) */
+  readonly layoutSlotPaths: Map<string, string | null> = new Map();
+  /** WebSocket 핸들러 (라우트 ID → WSHandlers) */
+  readonly wsHandlers: Map<string, import("../filling/ws").WSHandlers> = new Map();
   settings: ServerRegistrySettings = {
     isDev: false,
     rootDir: process.cwd(),
@@ -637,6 +669,10 @@ export function registerErrorLoader(modulePath: string, loader: ErrorLoader): vo
   defaultRegistry.registerErrorLoader(modulePath, loader);
 }
 
+export function registerWSHandler(routeId: string, handlers: import("../filling/ws").WSHandlers): void {
+  defaultRegistry.wsHandlers.set(routeId, handlers);
+}
+
 /**
  * 레이아웃 체인으로 컨텐츠 래핑
  *
@@ -650,7 +686,8 @@ async function wrapWithLayouts(
   content: React.ReactElement,
   layoutChain: string[],
   registry: ServerRegistry,
-  params: Record<string, string>
+  params: Record<string, string>,
+  layoutData?: Map<string, unknown>
 ): Promise<React.ReactElement> {
   if (!layoutChain || layoutChain.length === 0) {
     return content;
@@ -666,7 +703,16 @@ async function wrapWithLayouts(
   for (let i = layouts.length - 1; i >= 0; i--) {
     const Layout = layouts[i];
     if (Layout) {
-      wrapped = React.createElement(Layout, { params, children: wrapped });
+      // layout별 loader 데이터가 있으면 props로 전달
+      const data = layoutData?.get(layoutChain[i]);
+      const baseProps = { params, children: wrapped };
+      if (data && typeof data === "object") {
+        // data에서 children/params 키 제거 → 구조적 props 보호
+        const { children: _, params: __, ...safeData } = data as Record<string, unknown>;
+        wrapped = React.createElement(Layout as React.ComponentType<Record<string, unknown>>, { ...safeData, ...baseProps });
+      } else {
+        wrapped = React.createElement(Layout, baseProps);
+      }
     }
   }
 
@@ -751,7 +797,7 @@ async function isPathSafe(filePath: string, allowedDir: string): Promise<boolean
  *
  * 보안: Path traversal 공격 방지를 위해 모든 경로를 검증합니다.
  */
-async function serveStaticFile(pathname: string, settings: ServerRegistrySettings): Promise<StaticFileResult> {
+async function serveStaticFile(pathname: string, settings: ServerRegistrySettings, request?: Request): Promise<StaticFileResult> {
   let filePath: string | null = null;
   let isBundleFile = false;
   let allowedBaseDir: string;
@@ -836,12 +882,28 @@ async function serveStaticFile(pathname: string, settings: ServerRegistrySetting
       cacheControl = "public, max-age=86400";
     }
 
+    // ETag: weak validator (파일 크기 + 최종 수정 시간)
+    const etag = `W/"${file.size.toString(36)}-${file.lastModified.toString(36)}"`;
+
+    // 304 Not Modified — 불필요한 전송 방지
+    const ifNoneMatch = request?.headers.get("If-None-Match");
+    if (ifNoneMatch === etag) {
+      return {
+        handled: true,
+        response: new Response(null, {
+          status: 304,
+          headers: { "ETag": etag, "Cache-Control": cacheControl },
+        }),
+      };
+    }
+
     return {
       handled: true,
       response: new Response(file, {
         headers: {
           "Content-Type": mimeType,
           "Cache-Control": cacheControl,
+          "ETag": etag,
         },
       }),
     };
@@ -893,6 +955,8 @@ async function handleApiRoute(
 interface PageLoadResult {
   loaderData: unknown;
   cookies?: CookieManager;
+  /** Layout별 loader 데이터 (모듈 경로 → 데이터) */
+  layoutData?: Map<string, unknown>;
 }
 
 /**
@@ -900,7 +964,7 @@ interface PageLoadResult {
  */
 async function loadPageData(
   req: Request,
-  route: { id: string; pattern: string },
+  route: { id: string; pattern: string; layoutChain?: string[] },
   params: Record<string, string>,
   registry: ServerRegistry
 ): Promise<Result<PageLoadResult>> {
@@ -914,6 +978,11 @@ async function loadPageData(
       const registration = await pageHandler();
       const component = registration.component as RouteComponent;
       registry.registerRouteComponent(route.id, component);
+
+      // Filling의 캐시 옵션 등록 (ISR/SWR용)
+      if (registration.filling?.getCacheOptions?.()) {
+        registry.cacheOptions.set(route.id, registration.filling.getCacheOptions()!);
+      }
 
       // Filling의 loader 실행
       if (registration.filling?.hasLoader()) {
@@ -948,9 +1017,12 @@ async function loadPageData(
         : (exportedObj?.component ?? exported);
       registry.registerRouteComponent(route.id, component as RouteComponent);
 
-      // filling이 있으면 loader 실행
+      // filling이 있으면 캐시 옵션 등록 + loader 실행
       let cookies: CookieManager | undefined;
       const filling = typeof exported === "object" && exported !== null ? (exportedObj as Record<string, unknown>)?.filling as ManduFilling | null : null;
+      if (filling?.getCacheOptions?.()) {
+        registry.cacheOptions.set(route.id, filling.getCacheOptions()!);
+      }
       if (filling?.hasLoader?.()) {
         const ctx = new ManduContext(req, params);
         loaderData = await filling.executeLoader(ctx);
@@ -974,18 +1046,103 @@ async function loadPageData(
   return ok({ loaderData });
 }
 
+/**
+ * Layout chain의 모든 loader를 병렬 실행
+ * 각 layout.slot.ts가 있으면 해당 데이터를 layout props로 전달
+ */
+async function loadLayoutData(
+  req: Request,
+  layoutChain: string[] | undefined,
+  params: Record<string, string>,
+  registry: ServerRegistry
+): Promise<Map<string, unknown>> {
+  const layoutData = new Map<string, unknown>();
+  if (!layoutChain || layoutChain.length === 0) return layoutData;
+
+  // layout.slot.ts 파일 검색: layout 모듈 경로에서 .slot.ts 파일 경로 유도
+  // 예: app/layout.tsx → spec/slots/layout.slot.ts (auto-link 규칙)
+  // 또는 직접 등록된 layout loader에서 filling 추출
+
+  const loaderEntries: { modulePath: string; slotPath: string }[] = [];
+  for (const modulePath of layoutChain) {
+    // 캐시된 결과 확인
+    if (registry.layoutSlotPaths.has(modulePath)) {
+      const cached = registry.layoutSlotPaths.get(modulePath);
+      if (cached) loaderEntries.push({ modulePath, slotPath: cached });
+      continue;
+    }
+
+    // layout.tsx → layout 이름 추출 → 같은 디렉토리에서 .slot.ts 검색
+    const layoutName = path.basename(modulePath, path.extname(modulePath));
+    const slotCandidates = [
+      path.join(path.dirname(modulePath), `${layoutName}.slot.ts`),
+      path.join(path.dirname(modulePath), `${layoutName}.slot.tsx`),
+    ];
+    let found = false;
+    for (const slotPath of slotCandidates) {
+      try {
+        const fullPath = path.join(registry.settings.rootDir, slotPath);
+        const file = Bun.file(fullPath);
+        if (await file.exists()) {
+          registry.layoutSlotPaths.set(modulePath, fullPath);
+          loaderEntries.push({ modulePath, slotPath: fullPath });
+          found = true;
+          break;
+        }
+      } catch {
+        // 파일 없으면 스킵
+      }
+    }
+    if (!found) {
+      registry.layoutSlotPaths.set(modulePath, null); // 없음 캐시
+    }
+  }
+
+  if (loaderEntries.length === 0) return layoutData;
+
+  const results = await Promise.all(
+    loaderEntries.map(async ({ modulePath, slotPath }) => {
+      try {
+        const module = await import(slotPath);
+        const exported = module.default;
+        // layout.slot.ts가 ManduFilling이면 loader 실행
+        if (exported && typeof exported === "object" && "executeLoader" in exported) {
+          const filling = exported as ManduFilling;
+          if (filling.hasLoader()) {
+            const ctx = new ManduContext(req, params);
+            const data = await filling.executeLoader(ctx);
+            return { modulePath, data };
+          }
+        }
+      } catch (error) {
+        console.warn(`[Mandu] Layout loader failed for ${modulePath}:`, error);
+      }
+      return { modulePath, data: undefined };
+    })
+  );
+
+  for (const { modulePath, data } of results) {
+    if (data !== undefined) {
+      layoutData.set(modulePath, data);
+    }
+  }
+
+  return layoutData;
+}
+
 // ---------- SSR Renderer ----------
 
 /**
  * SSR 렌더링 (Streaming/Non-streaming)
  */
 async function renderPageSSR(
-  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig },
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig; errorModule?: string },
   params: Record<string, string>,
   loaderData: unknown,
   url: string,
   registry: ServerRegistry,
-  cookies?: CookieManager
+  cookies?: CookieManager,
+  layoutData?: Map<string, unknown>
 ): Promise<Result<Response>> {
   const settings = registry.settings;
   const defaultAppCreator = createDefaultAppFactory(registry);
@@ -1020,7 +1177,7 @@ async function renderPageSSR(
 
     // 레이아웃 체인 적용 (island 래핑 후 → 레이아웃은 island 바깥)
     if (route.layoutChain && route.layoutChain.length > 0) {
-      app = await wrapWithLayouts(app, route.layoutChain, registry, params);
+      app = await wrapWithLayouts(app, route.layoutChain, registry, params, layoutData);
     }
 
     const serverData = loaderData
@@ -1081,10 +1238,42 @@ async function renderPageSSR(
     });
     return ok(cookies ? cookies.applyToResponse(ssrResponse) : ssrResponse);
   } catch (error) {
+    const renderError = error instanceof Error ? error : new Error(String(error));
+
+    // Route-level ErrorBoundary: errorModule이 있으면 해당 컴포넌트로 에러 렌더링
+    if (route.errorModule) {
+      try {
+        const errorMod = await import(path.join(settings.rootDir, route.errorModule));
+        const ErrorComponent = errorMod.default as React.ComponentType<ErrorFallbackProps>;
+        if (ErrorComponent) {
+          const errorElement = React.createElement(ErrorComponent, {
+            error: renderError,
+            errorInfo: undefined,
+            resetError: () => {}, // SSR에서는 noop — 클라이언트 hydration 시 실제 동작
+          });
+
+          // 레이아웃은 유지하면서 에러 컴포넌트만 교체
+          let errorApp: React.ReactElement = errorElement;
+          if (route.layoutChain && route.layoutChain.length > 0) {
+            errorApp = await wrapWithLayouts(errorApp, route.layoutChain, registry, params, layoutData);
+          }
+
+          const errorHtml = renderSSR(errorApp, {
+            title: `Error - ${route.id}`,
+            isDev: settings.isDev,
+            cssPath: settings.cssPath,
+          });
+          return ok(cookies ? cookies.applyToResponse(errorHtml) : errorHtml);
+        }
+      } catch (errorBoundaryError) {
+        console.error(`[Mandu] Error boundary failed for ${route.id}:`, errorBoundaryError);
+      }
+    }
+
     const ssrError = createSSRErrorResponse(
       route.id,
       route.pattern,
-      error instanceof Error ? error : new Error(String(error))
+      renderError
     );
     console.error(`[Mandu] ${ssrError.errorType}:`, ssrError.message);
     return err(ssrError);
@@ -1092,6 +1281,9 @@ async function renderPageSSR(
 }
 
 // ---------- Page Route Handler ----------
+
+/** SWR 백그라운드 재생성 중복 방지 */
+const pendingRevalidations = new Set<string>();
 
 /**
  * 페이지 라우트 처리
@@ -1103,8 +1295,45 @@ async function handlePageRoute(
   params: Record<string, string>,
   registry: ServerRegistry
 ): Promise<Result<Response>> {
-  // 1. 데이터 로딩
-  const loadResult = await loadPageData(req, route, params, registry);
+  const settings = registry.settings;
+  const cache = settings.cacheStore;
+
+  // _data 요청 (SPA 네비게이션)은 캐시하지 않음
+  const isDataRequest = url.searchParams.has("_data");
+
+  // ISR/SWR 캐시 확인 (SSR 렌더링 요청에만 적용)
+  if (cache && !isDataRequest) {
+    const cacheKey = `${route.id}:${url.pathname}`;
+    const lookup = lookupCache(cache, cacheKey);
+
+    if (lookup.status === "HIT" && lookup.entry) {
+      return ok(createCachedResponse(lookup.entry, "HIT"));
+    }
+
+    if (lookup.status === "STALE" && lookup.entry) {
+      // Stale-While-Revalidate: 이전 캐시 즉시 반환 + 백그라운드 재생성
+      // 중복 재생성 방지: 이미 진행 중이면 스킵
+      if (!pendingRevalidations.has(cacheKey)) {
+        pendingRevalidations.add(cacheKey);
+        queueMicrotask(async () => {
+          try {
+            await regenerateCache(req, url, route, params, registry, cache, cacheKey);
+          } catch (error) {
+            console.warn(`[Mandu Cache] Background revalidation failed for ${cacheKey}:`, error);
+          } finally {
+            pendingRevalidations.delete(cacheKey);
+          }
+        });
+      }
+      return ok(createCachedResponse(lookup.entry, "STALE"));
+    }
+  }
+
+  // 1. 페이지 + 레이아웃 데이터 병렬 로딩
+  const [loadResult, layoutData] = await Promise.all([
+    loadPageData(req, route, params, registry),
+    loadLayoutData(req, route.layoutChain, params, registry),
+  ]);
   if (!loadResult.ok) {
     return loadResult;
   }
@@ -1112,7 +1341,8 @@ async function handlePageRoute(
   const { loaderData, cookies } = loadResult.value;
 
   // 2. Client-side Routing: 데이터만 반환 (JSON)
-  if (url.searchParams.has("_data")) {
+  // 참고: layoutData는 SSR 시에만 사용 — SPA 네비게이션은 전체 페이지 SSR을 받지 않으므로 제외
+  if (isDataRequest) {
     const jsonResponse = Response.json({
       routeId: route.id,
       pattern: route.pattern,
@@ -1123,8 +1353,80 @@ async function handlePageRoute(
     return ok(cookies ? cookies.applyToResponse(jsonResponse) : jsonResponse);
   }
 
-  // 3. SSR 렌더링
-  return renderPageSSR(route, params, loaderData, req.url, registry, cookies);
+  // 3. SSR 렌더링 (layoutData 전달)
+  const ssrResult = await renderPageSSR(route, params, loaderData, req.url, registry, cookies, layoutData);
+
+  // 4. 캐시 저장 (revalidate 설정이 있는 경우 — non-blocking)
+  if (cache && ssrResult.ok) {
+    const cacheOptions = getCacheOptionsForRoute(route.id, registry);
+    if (cacheOptions?.revalidate && cacheOptions.revalidate > 0) {
+      const cloned = ssrResult.value.clone();
+      const status = ssrResult.value.status;
+      const headers = Object.fromEntries(ssrResult.value.headers.entries());
+      const cacheKey = `${route.id}:${url.pathname}`;
+      // streaming 응답도 블로킹하지 않도록 백그라운드에서 캐시 저장
+      cloned.text().then((html) => {
+        cache.set(cacheKey, createCacheEntry(
+          html, loaderData, cacheOptions.revalidate!, cacheOptions.tags ?? [], status, headers
+        ));
+      }).catch(() => {});
+    }
+  }
+
+  return ssrResult;
+}
+
+/**
+ * 백그라운드 캐시 재생성 (SWR 패턴)
+ */
+async function regenerateCache(
+  req: Request,
+  url: URL,
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig },
+  params: Record<string, string>,
+  registry: ServerRegistry,
+  cache: CacheStore,
+  cacheKey: string
+): Promise<void> {
+  const [loadResult, layoutData] = await Promise.all([
+    loadPageData(req, route, params, registry),
+    loadLayoutData(req, route.layoutChain, params, registry),
+  ]);
+  if (!loadResult.ok) return;
+
+  const { loaderData } = loadResult.value;
+  const ssrResult = await renderPageSSR(route, params, loaderData, req.url, registry, undefined, layoutData);
+  if (!ssrResult.ok) return;
+
+  const cacheOptions = getCacheOptionsForRoute(route.id, registry);
+  if (!cacheOptions?.revalidate) return;
+
+  const html = await ssrResult.value.text();
+  const entry = createCacheEntry(
+    html,
+    loaderData,
+    cacheOptions.revalidate,
+    cacheOptions.tags ?? [],
+    ssrResult.value.status,
+    Object.fromEntries(ssrResult.value.headers.entries())
+  );
+  cache.set(cacheKey, entry);
+}
+
+/**
+ * 라우트의 캐시 옵션 가져오기 (pageHandler의 filling에서 추출)
+ */
+function getCacheOptionsForRoute(
+  routeId: string,
+  registry: ServerRegistry
+): { revalidate?: number; tags?: string[] } | null {
+  const pageHandler = registry.pageHandlers.get(routeId);
+  if (!pageHandler) return null;
+
+  // pageHandler는 async () => { component, filling } 형태
+  // filling의 getCacheOptions()를 호출하려면 filling 인스턴스에 접근해야 하지만
+  // pageHandler 실행 없이는 접근 불가 → 등록 시점에 캐시 옵션을 별도 저장
+  return registry.cacheOptions?.get(routeId) ?? null;
 }
 
 // ---------- Main Request Dispatcher ----------
@@ -1148,7 +1450,7 @@ async function handleRequestInternal(
   }
 
   // 1. 정적 파일 서빙 시도 (최우선)
-  const staticFileResult = await serveStaticFile(pathname, settings);
+  const staticFileResult = await serveStaticFile(pathname, settings, req);
   if (staticFileResult.handled) {
     const staticResponse = staticFileResult.response!;
     if (settings.cors && isCorsRequest(req)) {
@@ -1156,6 +1458,12 @@ async function handleRequestInternal(
       return ok(applyCorsToResponse(staticResponse, req, corsOptions));
     }
     return ok(staticResponse);
+  }
+
+  // 1.5. Image optimization handler (/_mandu/image)
+  if (pathname === "/_mandu/image") {
+    const imageResponse = await handleImageRequest(req, settings.rootDir, settings.publicDir);
+    if (imageResponse) return ok(imageResponse);
   }
 
   // 2. Kitchen dev dashboard (dev mode only)
@@ -1224,19 +1532,18 @@ function isPortInUseError(error: unknown): boolean {
 function startBunServerWithFallback(options: {
   port: number;
   hostname?: string;
-  fetch: (req: Request) => Promise<Response>;
+  fetch: (req: Request, server: Server<undefined>) => Promise<Response | undefined>;
+  websocket?: Record<string, unknown>;
 }): { server: Server<undefined>; port: number; attempts: number } {
-  const { port: startPort, hostname, fetch } = options;
+  const { port: startPort, hostname, fetch, websocket } = options;
   let lastError: unknown = null;
+
+  const serveOptions: Record<string, unknown> = { hostname, fetch, idleTimeout: 255 };
+  if (websocket) serveOptions.websocket = websocket;
 
   // Port 0: let Bun/OS pick an available ephemeral port.
   if (startPort === 0) {
-    const server = Bun.serve({
-      port: 0,
-      hostname,
-      fetch,
-      idleTimeout: 255,
-    });
+    const server = Bun.serve({ port: 0, ...serveOptions } as any);
     return { server, port: server.port ?? 0, attempts: 0 };
   }
 
@@ -1246,12 +1553,7 @@ function startBunServerWithFallback(options: {
       continue;
     }
     try {
-      const server = Bun.serve({
-        port: candidate,
-        hostname,
-        fetch,
-        idleTimeout: 255,
-      });
+      const server = Bun.serve({ port: candidate, ...serveOptions } as any);
       return { server, port: server.port ?? candidate, attempts: attempt };
     } catch (error) {
       if (!isPortInUseError(error)) {
@@ -1281,6 +1583,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     cssPath: cssPathOption,
     registry = defaultRegistry,
     guardConfig = null,
+    cache: cacheOption,
   } = options;
 
   // cssPath 처리:
@@ -1319,6 +1622,13 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
 
   registry.rateLimiter = rateLimitOptions ? new MemoryRateLimiter() : null;
 
+  // ISR/SWR 캐시 초기화
+  if (cacheOption) {
+    const store = cacheOption === true ? new MemoryCacheStore() : cacheOption;
+    registry.settings.cacheStore = store;
+    setGlobalCache(store); // revalidatePath/revalidateTag API에서 사용
+  }
+
   // Kitchen dev dashboard (dev mode only)
   if (isDev) {
     const kitchen = new KitchenHandler({ rootDir, manifest, guardConfig });
@@ -1328,22 +1638,75 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
 
   const router = new Router(manifest.routes);
 
-  // Fetch handler with CORS support (registry를 클로저로 캡처)
-  const fetchHandler = async (req: Request): Promise<Response> => {
-    const response = await handleRequest(req, router, registry);
+  // 글로벌 미들웨어 (middleware.ts) — 동기 로드로 첫 요청부터 보장
+  let middlewareFn: MiddlewareFn | null = null;
+  let middlewareConfig: MiddlewareConfig | null = null;
 
-    // API 라우트 응답에 CORS 헤더 적용
-    if (corsOptions && isCorsRequest(req)) {
-      return applyCorsToResponse(response, req, corsOptions);
-    }
+  const mwResult = loadMiddlewareSync(rootDir);
+  if (mwResult) {
+    middlewareFn = mwResult.fn;
+    middlewareConfig = mwResult.config;
+    console.log("🔗 Global middleware loaded");
+  }
 
-    return response;
-  };
+  // Fetch handler: 미들웨어 + CORS + 라우트 디스패치 (런타임 중립 팩토리 사용)
+  const fetchHandler = createFetchHandler({
+    router,
+    registry,
+    corsOptions,
+    middlewareFn,
+    middlewareConfig,
+    handleRequest,
+  });
+
+  // WebSocket 핸들러 빌드 (등록된 WS 라우트가 있을 때만)
+  const hasWsRoutes = registry.wsHandlers.size > 0;
+  const wsConfig = hasWsRoutes ? {
+    open(ws: any) {
+      const data = ws.data as WSUpgradeData;
+      const handlers = registry.wsHandlers.get(data.routeId);
+      handlers?.open?.(wrapBunWebSocket(ws));
+    },
+    message(ws: any, message: string | ArrayBuffer) {
+      const data = ws.data as WSUpgradeData;
+      const handlers = registry.wsHandlers.get(data.routeId);
+      handlers?.message?.(wrapBunWebSocket(ws), message);
+    },
+    close(ws: any, code: number, reason: string) {
+      const data = ws.data as WSUpgradeData;
+      const handlers = registry.wsHandlers.get(data.routeId);
+      handlers?.close?.(wrapBunWebSocket(ws), code, reason);
+    },
+    drain(ws: any) {
+      const data = ws.data as WSUpgradeData;
+      const handlers = registry.wsHandlers.get(data.routeId);
+      handlers?.drain?.(wrapBunWebSocket(ws));
+    },
+  } : undefined;
+
+  // fetch handler: WS upgrade 감지 추가
+  const wrappedFetch = hasWsRoutes
+    ? async (req: Request, bunServer: Server<undefined>): Promise<Response | undefined> => {
+        // WebSocket upgrade 요청 감지
+        if (req.headers.get("upgrade") === "websocket") {
+          const url = new URL(req.url);
+          const match = router.match(url.pathname);
+          if (match && registry.wsHandlers.has(match.route.id)) {
+            const upgraded = (bunServer as any).upgrade(req, {
+              data: { routeId: match.route.id, params: match.params, id: crypto.randomUUID() },
+            });
+            return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
+          }
+        }
+        return fetchHandler(req);
+      }
+    : async (req: Request): Promise<Response> => fetchHandler(req);
 
   const { server, port: actualPort, attempts } = startBunServerWithFallback({
     port,
     hostname,
-    fetch: fetchHandler,
+    fetch: wrappedFetch as any,
+    websocket: wsConfig,
   });
 
   if (attempts > 0) {

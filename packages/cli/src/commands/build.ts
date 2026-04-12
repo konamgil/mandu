@@ -5,10 +5,20 @@
  * Also builds CSS for Tailwind v4 projects.
  */
 
-import { buildClientBundles, printBundleStats, validateAndReport, isTailwindProject, buildCSS, type RoutesManifest } from "@mandujs/core";
+import {
+  buildClientBundles,
+  printBundleStats,
+  validateAndReport,
+  isTailwindProject,
+  buildCSS,
+  startServer,
+  type RoutesManifest,
+} from "@mandujs/core";
+import { prerenderRoutes } from "../../../core/src/bundler/prerender";
 import path from "path";
 import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";
+import { registerManifestHandlers } from "../util/handlers";
 
 export interface BuildOptions {
   /** Code minification (default: true in production) */
@@ -113,6 +123,64 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   console.log(`   Output: .mandu/client/`);
   if (hasTailwind) {
     console.log(`   CSS: .mandu/client/globals.css`);
+  }
+
+  // 5.5. Prerendering (SSG) — 정적 페이지를 HTML로 사전 생성
+  const staticRoutes = manifest.routes.filter(
+    r => r.kind === "page" && !r.pattern.includes(":")
+  );
+  const hasDynamicWithStaticParams = manifest.routes.some(
+    r => r.kind === "page" && r.pattern.includes(":") // generateStaticParams 가능
+  );
+
+  if (staticRoutes.length > 0 || hasDynamicWithStaticParams) {
+    console.log("\n📄 Prerendering static pages...");
+
+    try {
+      // 임시 서버 시작 (SSR 렌더링용 — 외부 접근 불가하도록 port 0)
+      const cssPath = hasTailwind ? "/.mandu/client/globals.css" : false;
+      await registerManifestHandlers(manifest, cwd, {
+        importFn: (p: string) => import(p),
+        registeredLayouts: new Set(),
+      });
+      const tempServer = startServer(manifest, {
+        port: 0,
+        rootDir: cwd,
+        isDev: false,
+        bundleManifest: result.manifest,
+        cssPath,
+      });
+
+      // fetchHandler 추출 — 서버의 내부 핸들러로 프리렌더
+      const fetchHandler = async (req: Request) => {
+        const url = new URL(req.url);
+        const targetUrl = `http://localhost:${tempServer.server.port}${url.pathname}${url.search}`;
+        return fetch(targetUrl);
+      };
+
+      const prerenderResult = await prerenderRoutes(manifest, fetchHandler, {
+        rootDir: cwd,
+        crawl: true,
+      });
+
+      tempServer.stop();
+
+      if (prerenderResult.generated > 0) {
+        console.log(`   ✅ ${prerenderResult.generated} page(s) prerendered`);
+        for (const page of prerenderResult.pages) {
+          const sizeKB = (page.size / 1024).toFixed(1);
+          console.log(`      ${page.path} (${sizeKB} KB, ${page.duration}ms)`);
+        }
+      }
+      if (prerenderResult.errors.length > 0) {
+        console.warn(`   ⚠️  ${prerenderResult.errors.length} error(s):`);
+        for (const err of prerenderResult.errors) {
+          console.warn(`      ${err}`);
+        }
+      }
+    } catch (error) {
+      console.warn("   ⚠️  Prerendering skipped:", error instanceof Error ? error.message : String(error));
+    }
   }
 
   // 6. Watch mode

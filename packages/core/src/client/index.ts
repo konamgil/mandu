@@ -80,17 +80,34 @@ export {
   getRouterState,
   getCurrentRoute,
   getLoaderData,
+  getActionData,
   getNavigationState,
   initializeRouter,
   cleanupRouter,
+  submitAction,
+  setShouldRevalidate,
   type RouteInfo,
   type NavigationState,
   type RouterState,
   type NavigateOptions,
+  type ActionResult,
+  type ShouldRevalidateFunction,
 } from "./router";
 
 // Link Components
 export { Link, NavLink, type LinkProps, type NavLinkProps } from "./Link";
+
+// Form Component (Progressive Enhancement)
+export { Form, type FormProps, type FormState } from "./Form";
+
+// RPC Client
+export { createClient, RpcError, type RpcMethods, type RpcRequestOptions, type RpcClientOptions } from "./rpc";
+
+// useFetch Composable
+export { useFetch, type UseFetchOptions, type UseFetchReturn } from "./use-fetch";
+
+// Head Management
+export { useHead, useSeoMeta, resetSSRHead, getSSRHeadTags, type HeadConfig, type SeoMetaConfig } from "./use-head";
 
 // Stable interaction components
 export { ManduButton, ManduModalTrigger } from "./interaction";
@@ -109,6 +126,9 @@ export {
   useGoBack,
   useGoForward,
   useRouterState,
+  useActionData,
+  useSubmit,
+  useMandu,
 } from "./hooks";
 
 // Props Serialization (Fresh style)

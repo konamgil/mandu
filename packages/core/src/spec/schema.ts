@@ -234,5 +234,6 @@ export function getRouteHydration(route: RouteSpec): HydrationConfig {
  */
 export function needsHydration(route: RouteSpec): boolean {
   const hydration = getRouteHydration(route);
+  // "none" 이외의 전략만 hydration 필요 (island의 "never"는 strategy가 "none"으로 매핑됨)
   return route.kind === "page" && hydration.strategy !== "none";
 }

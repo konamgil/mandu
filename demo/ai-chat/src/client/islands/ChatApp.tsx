@@ -374,9 +374,9 @@ export default island<ChatData>({
                 }
 
                 if (frame.event === "done") {
-                  finalContent = frame.data;
-                  streamPreviewRef.current = finalContent;
-                  hasToken = hasToken || !!frame.data;
+                  // done is a completion signal; keep the accumulated tokens
+                  // so the UI doesn't flash-replace with the full payload.
+                  hasToken = hasToken || !!finalContent;
                   continue;
                 }
 

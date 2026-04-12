@@ -18,7 +18,7 @@ import { serializeProps } from "../client/serialize";
 import type { Metadata, MetadataItem } from "../seo/types";
 import { injectSEOIntoOptions, resolveSEO, type SEOOptions } from "../seo/integration/ssr";
 import { PORTS, TIMEOUTS } from "../constants";
-import { escapeHtmlAttr, escapeJsonForInlineScript, escapeJsString } from "./escape";
+import { escapeHtmlAttr, escapeHtmlText, escapeJsonForInlineScript, escapeJsString } from "./escape";
 import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
 
 // ========== Types ==========
@@ -392,15 +392,18 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
 
-  // Import map (module scripts 전에 위치해야 함)
+  // Island wrapper (hydration이 필요한 경우)
+  const needsHydration = hydration && hydration.strategy !== "none" && routeId && bundleManifest;
+
+  // Import map (module scripts 전에 위치해야 함 — hydration 필요 시에만)
   let importMapScript = "";
-  if (bundleManifest?.importMap && Object.keys(bundleManifest.importMap.imports).length > 0) {
+  if (needsHydration && bundleManifest.importMap && Object.keys(bundleManifest.importMap.imports).length > 0) {
     const importMapJson = escapeJsonForInlineScript(JSON.stringify(bundleManifest.importMap, null, 2));
     importMapScript = `<script type="importmap">${importMapJson}</script>`;
   }
 
-  // Loading skeleton 애니메이션 스타일
-  const loadingStyles = `
+  // Loading skeleton 애니메이션 스타일 (hydration 필요 시에만)
+  const loadingStyles = !needsHydration ? "" : `
 <style>
 @keyframes mandu-shimmer {
   0% { background-position: 200% 0; }
@@ -420,8 +423,6 @@ function generateHTMLShell(options: StreamingSSROptions): string {
 }
 </style>`;
 
-  // Island wrapper (hydration이 필요한 경우)
-  const needsHydration = hydration && hydration.strategy !== "none" && routeId && bundleManifest;
   let islandOpenTag = "";
   if (needsHydration) {
     const bundle = bundleManifest.bundles[routeId];
@@ -436,7 +437,7 @@ function generateHTMLShell(options: StreamingSSROptions): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtmlAttr(title)}</title>
+  <title>${escapeHtmlText(title)}</title>
   ${cssLinkTag}
   ${loadingStyles}
   ${importMapScript}
@@ -464,79 +465,81 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
 
   const scripts: string[] = [];
 
-  // 1. Critical 데이터 스크립트 (즉시 사용 가능)
-  if (criticalData && routeId) {
-    const wrappedData = {
-      [routeId]: {
-        serverData: criticalData,
-        timestamp: Date.now(),
+  // Zero-JS 모드 판정: island이 없는 페이지에서는 클라이언트 번들을 전송하지 않음
+  const needsHydration = hydration && hydration.strategy !== "none" && routeId && bundleManifest;
+
+  // 1~8: hydration이 필요한 경우에만 클라이언트 JS 관련 스크립트 삽입
+  if (needsHydration) {
+    // 1. Critical 데이터 스크립트 (즉시 사용 가능)
+    if (criticalData && routeId) {
+      const wrappedData = {
+        [routeId]: {
+          serverData: criticalData,
+          timestamp: Date.now(),
+          streaming: true,
+        },
+      };
+      const json = escapeJsonForInlineScript(serializeProps(wrappedData));
+      scripts.push(`<script id="__MANDU_DATA__" type="application/json">${json}</script>`);
+      scripts.push(`<script>window.__MANDU_DATA_RAW__ = document.getElementById('__MANDU_DATA__').textContent;</script>`);
+    }
+
+    // 2. 라우트 정보 스크립트
+    if (enableClientRouter && routeId) {
+      const routeInfo = {
+        id: routeId,
+        pattern: routePattern || "",
+        params: {},
         streaming: true,
-      },
-    };
-    const json = escapeJsonForInlineScript(serializeProps(wrappedData));
-    scripts.push(`<script id="__MANDU_DATA__" type="application/json">${json}</script>`);
-    scripts.push(`<script>window.__MANDU_DATA_RAW__ = document.getElementById('__MANDU_DATA__').textContent;</script>`);
-  }
-
-  // 2. 라우트 정보 스크립트
-  if (enableClientRouter && routeId) {
-    const routeInfo = {
-      id: routeId,
-      pattern: routePattern || "",
-      params: {},
-      streaming: true,
-    };
-    const json = escapeJsonForInlineScript(JSON.stringify(routeInfo));
-    scripts.push(`<script>window.__MANDU_ROUTE__ = ${json};</script>`);
-  }
-
-  // 3. Streaming 완료 마커 (클라이언트에서 감지용)
-  scripts.push(`<script>window.__MANDU_STREAMING_SHELL_READY__ = true;</script>`);
-
-  // 4. Vendor modulepreload (React, ReactDOM 등 - 캐시 효율 극대화)
-  if (bundleManifest?.shared.vendor) {
-    scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(bundleManifest.shared.vendor)}">`);
-  }
-  if (bundleManifest?.importMap?.imports) {
-    const imports = bundleManifest.importMap.imports;
-    if (imports["react-dom"] && imports["react-dom"] !== bundleManifest.shared.vendor) {
-      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(imports["react-dom"])}">`);
+      };
+      const json = escapeJsonForInlineScript(JSON.stringify(routeInfo));
+      scripts.push(`<script>window.__MANDU_ROUTE__ = ${json};</script>`);
     }
-    if (imports["react-dom/client"]) {
-      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(imports["react-dom/client"])}">`);
+
+    // 3. Streaming 완료 마커 (클라이언트 hydration에서 감지용)
+    scripts.push(`<script>window.__MANDU_STREAMING_SHELL_READY__ = true;</script>`);
+
+    // 4. Vendor modulepreload (React, ReactDOM 등 - 캐시 효율 극대화)
+    if (bundleManifest.shared.vendor) {
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(bundleManifest.shared.vendor)}">`);
     }
-  }
+    if (bundleManifest.importMap?.imports) {
+      const imports = bundleManifest.importMap.imports;
+      if (imports["react-dom"] && imports["react-dom"] !== bundleManifest.shared.vendor) {
+        scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(imports["react-dom"])}">`);
+      }
+      if (imports["react-dom/client"]) {
+        scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(imports["react-dom/client"])}">`);
+      }
+    }
 
-  // 5. Runtime modulepreload (hydration 실행 전 미리 로드)
-  if (bundleManifest?.shared.runtime) {
-    scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(bundleManifest.shared.runtime)}">`);
-  }
+    // 5. Runtime modulepreload (hydration 실행 전 미리 로드)
+    if (bundleManifest.shared.runtime) {
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(bundleManifest.shared.runtime)}">`);
+    }
 
-  // 6. Island modulepreload
-  if (bundleManifest && routeId) {
+    // 6. Island modulepreload
     const bundle = bundleManifest.bundles[routeId];
     if (bundle) {
       const cacheBust = `${bundle.js}${bundle.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
       scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
     }
-  }
 
-  // 7. Runtime 로드
-  if (bundleManifest?.shared.runtime) {
-    scripts.push(`<script type="module" src="${escapeHtmlAttr(bundleManifest.shared.runtime)}"></script>`);
-  }
+    // 7. Runtime 로드
+    if (bundleManifest.shared.runtime) {
+      scripts.push(`<script type="module" src="${escapeHtmlAttr(bundleManifest.shared.runtime)}"></script>`);
+    }
 
-  // 7.5 React internals shim (must run before react-dom/client runs)
-  if (hydration && hydration.strategy !== "none") {
+    // 7.5 React internals shim (must run before react-dom/client runs)
     scripts.push(REACT_INTERNALS_SHIM_SCRIPT);
+
+    // 8. Router 스크립트
+    if (enableClientRouter && bundleManifest.shared?.router) {
+      scripts.push(`<script type="module" src="${escapeHtmlAttr(bundleManifest.shared.router)}"></script>`);
+    }
   }
 
-  // 8. Router 스크립트
-  if (enableClientRouter && bundleManifest?.shared?.router) {
-    scripts.push(`<script type="module" src="${escapeHtmlAttr(bundleManifest.shared.router)}"></script>`);
-  }
-
-  // 9. HMR 스크립트 (개발 모드)
+  // 9. HMR 스크립트 (개발 모드 — Zero-JS 페이지에서도 CSS 핫리로드 지원)
   if (isDev && hmrPort) {
     scripts.push(generateHMRScript(hmrPort));
   }
@@ -547,7 +550,6 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
   }
 
   // Island wrapper 닫기 (hydration이 필요한 경우)
-  const needsHydration = hydration && hydration.strategy !== "none" && routeId && bundleManifest;
   const islandCloseTag = needsHydration ? "</div>" : "";
 
   return `${islandCloseTag}</div>

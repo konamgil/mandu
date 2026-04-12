@@ -148,7 +148,8 @@ export async function start(options: StartOptions = {}): Promise<void> {
   const cssPath: string | false = hasCss ? "/.mandu/client/globals.css" : false;
 
   // Start main server (production mode)
-  const server = startServer(manifest, {
+  // Adapter가 설정되어 있으면 어댑터 사용, 없으면 기본 Bun 서버
+  const serverOptions = {
     port,
     hostname: serverConfig.hostname,
     rootDir,
@@ -158,15 +159,36 @@ export async function start(options: StartOptions = {}): Promise<void> {
     streaming: serverConfig.streaming,
     rateLimit: serverConfig.rateLimit,
     cssPath,
-  });
+  };
 
-  const actualPort = server.server.port ?? port;
+  let actualPort: number;
+  let stopFn: () => void;
+
+  const adapter = (config as Record<string, unknown>).adapter as import("@mandujs/core").ManduAdapter | undefined;
+
+  if (adapter) {
+    console.log(`🔌 Using adapter: ${adapter.name}`);
+    const adapterServer = adapter.createServer({
+      manifest,
+      bundleManifest,
+      rootDir,
+      serverOptions,
+    });
+    const address = await adapterServer.listen(port, serverConfig.hostname);
+    actualPort = address.port;
+    stopFn = () => { adapterServer.close(); };
+  } else {
+    const server = startServer(manifest, serverOptions);
+    actualPort = server.server.port ?? port;
+    stopFn = () => { server.stop(); };
+  }
+
   console.log(`\n🚀 Production server running on http://${serverConfig.hostname || "localhost"}:${actualPort}`);
 
   // Graceful shutdown
   const cleanup = () => {
     console.log("\n🛑 Shutting down server...");
-    server.stop();
+    stopFn();
     process.exit(0);
   };
 

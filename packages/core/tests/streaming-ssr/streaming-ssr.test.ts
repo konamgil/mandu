@@ -67,7 +67,17 @@ describe("Streaming SSR", () => {
 
     it("should include loading skeleton styles", async () => {
       const element = React.createElement(SimpleComponent, { message: "Test" });
-      const stream = await renderToStream(element, {});
+      const stream = await renderToStream(element, {
+        routeId: "skeleton-test",
+        hydration: { strategy: "island" as const, priority: "visible" as const, preload: true },
+        bundleManifest: {
+          version: 1,
+          buildTime: new Date().toISOString(),
+          env: "development" as const,
+          bundles: { "skeleton-test": { js: "/test.js", dependencies: [], priority: "visible" as const } },
+          shared: { runtime: "/runtime.js", vendor: "/vendor.js" },
+        },
+      });
 
       const reader = stream.getReader();
       const chunks: Uint8Array[] = [];
@@ -106,6 +116,14 @@ describe("Streaming SSR", () => {
       const stream = await renderToStream(element, {
         routeId: "test-route",
         criticalData: { foo: "bar", count: 42 },
+        hydration: { strategy: "island", priority: "visible", preload: true },
+        bundleManifest: {
+          version: 1,
+          buildTime: new Date().toISOString(),
+          env: "development",
+          bundles: { "test-route": { js: "/test.js", dependencies: [], priority: "visible" } },
+          shared: { runtime: "/runtime.js", vendor: "/vendor.js" },
+        },
       });
 
       const reader = stream.getReader();
@@ -126,7 +144,17 @@ describe("Streaming SSR", () => {
 
     it("should include streaming shell ready marker", async () => {
       const element = React.createElement(SimpleComponent, { message: "Test" });
-      const stream = await renderToStream(element, {});
+      const stream = await renderToStream(element, {
+        routeId: "marker-test",
+        hydration: { strategy: "island", priority: "visible", preload: true },
+        bundleManifest: {
+          version: 1,
+          buildTime: new Date().toISOString(),
+          env: "development",
+          bundles: { "marker-test": { js: "/test.js", dependencies: [], priority: "visible" } },
+          shared: { runtime: "/runtime.js", vendor: "/vendor.js" },
+        },
+      });
 
       const reader = stream.getReader();
       const chunks: Uint8Array[] = [];
@@ -192,7 +220,9 @@ describe("Streaming SSR", () => {
 
       expect(html).toContain('data-mandu-island="test-island"');
       expect(html).toContain('data-mandu-priority="visible"');
-      expect(html).toContain('data-mandu-src="/.mandu/client/test.js"');
+      // bundleSrc gets a cache-busting ?t= timestamp appended
+      expect(html).toContain("data-mandu-src=");
+      expect(html).toContain("/.mandu/client/test.js");
       expect(html).toContain("Count: 5");
     });
 
@@ -269,6 +299,14 @@ describe("Streaming SSR", () => {
         routeId: "todos-page",
         routePattern: "/todos",
         enableClientRouter: true,
+        hydration: { strategy: "island" as const, priority: "visible" as const, preload: true },
+        bundleManifest: {
+          version: 1,
+          buildTime: new Date().toISOString(),
+          env: "development" as const,
+          bundles: { "todos-page": { js: "/todos.js", dependencies: [], priority: "visible" as const } },
+          shared: { runtime: "/runtime.js", vendor: "/vendor.js" },
+        },
       });
 
       const reader = stream.getReader();
@@ -293,6 +331,7 @@ describe("Streaming SSR", () => {
       const element = React.createElement(SimpleComponent, { message: "Test" });
       const stream = await renderToStream(element, {
         routeId: "test-page",
+        hydration: { strategy: "island" as const, priority: "visible" as const, preload: true },
         bundleManifest: {
           version: 1,
           buildTime: new Date().toISOString(),
@@ -328,18 +367,21 @@ describe("Streaming SSR", () => {
 
       const html = new TextDecoder().decode(Buffer.concat(chunks.map(c => Buffer.from(c))));
 
-      expect(html).toContain('<link rel="modulepreload" href="/.mandu/client/test-page.js">');
+      // Island modulepreload has cache-busting ?v= timestamp
+      expect(html).toMatch(/modulepreload.*\.mandu\/client\/test-page\.js/);
       expect(html).toContain('src="/.mandu/client/_runtime.js"');
     });
 
     it("should include import map when provided", async () => {
       const element = React.createElement(SimpleComponent, { message: "Test" });
       const stream = await renderToStream(element, {
+        routeId: "importmap-test",
+        hydration: { strategy: "island" as const, priority: "visible" as const, preload: true },
         bundleManifest: {
           version: 1,
           buildTime: new Date().toISOString(),
-          env: "development",
-          bundles: {},
+          env: "development" as const,
+          bundles: { "importmap-test": { js: "/test.js", dependencies: [], priority: "visible" as const } },
           shared: {
             runtime: "/.mandu/client/_runtime.js",
             vendor: "/.mandu/client/_vendor.js",
@@ -863,6 +905,14 @@ describe("Streaming Core Value Tests", () => {
         xssTest: "<script>alert('xss')</script>", // 정상 데이터 내 XSS 시도
       },
       routeId: "xss-test",
+      hydration: { strategy: "island" as const, priority: "visible" as const, preload: true },
+      bundleManifest: {
+        version: 1,
+        buildTime: new Date().toISOString(),
+        env: "development" as const,
+        bundles: { "xss-test": { js: "/xss-test.js", dependencies: [], priority: "visible" as const } },
+        shared: { runtime: "/runtime.js", vendor: "/vendor.js" },
+      },
     });
 
     const html = await response.text();

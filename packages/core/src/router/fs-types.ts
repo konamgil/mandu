@@ -20,7 +20,8 @@ export type SegmentType =
   | "dynamic" // 동적 세그먼트 (예: "[slug]")
   | "catchAll" // Catch-all 세그먼트 (예: "[...path]")
   | "optionalCatchAll" // Optional catch-all (예: "[[...path]]")
-  | "group"; // 라우트 그룹 (예: "(marketing)")
+  | "group" // 라우트 그룹 (예: "(marketing)")
+  | "slot"; // Named slot / Parallel route (예: "@modal")
 
 /**
  * 파싱된 라우트 세그먼트

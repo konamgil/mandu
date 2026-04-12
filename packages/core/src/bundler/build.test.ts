@@ -1,15 +1,22 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
 import { pathToFileURL } from "url";
 import type { RoutesManifest } from "../spec/schema";
+import type { BundleResult } from "./types";
 import { buildClientBundles } from "./build";
 
-const tempDirs: string[] = [];
+// 모든 테스트가 하나의 빌드 결과를 공유 — 병렬 Bun.build 충돌 방지
+let rootDir: string;
+let result: BundleResult;
 
-async function createBundlerFixture(): Promise<{ rootDir: string; manifest: RoutesManifest }> {
-  const rootDir = await mkdtemp(path.join(import.meta.dir, ".tmp-bundler-"));
-  tempDirs.push(rootDir);
+async function importBuiltModule(relativePath: string): Promise<Record<string, unknown>> {
+  const fileUrl = pathToFileURL(path.join(rootDir, relativePath)).href;
+  return import(`${fileUrl}?t=${Date.now()}`);
+}
+
+beforeAll(async () => {
+  rootDir = await mkdtemp(path.join(import.meta.dir, ".tmp-bundler-"));
 
   await mkdir(path.join(rootDir, "app"), { recursive: true });
   await writeFile(
@@ -42,32 +49,29 @@ async function createBundlerFixture(): Promise<{ rootDir: string; manifest: Rout
     ],
   };
 
-  return { rootDir, manifest };
-}
+  result = await buildClientBundles(manifest, rootDir, {
+    minify: false,
+    sourcemap: false,
+    splitting: false,
+  });
+});
 
-async function importBuiltModule(rootDir: string, relativePath: string): Promise<Record<string, unknown>> {
-  const fileUrl = pathToFileURL(path.join(rootDir, relativePath)).href;
-  return import(`${fileUrl}?t=${Date.now()}`);
-}
-
-afterEach(async () => {
-  await Promise.all(
-    tempDirs.splice(0, tempDirs.length).map((dir) => rm(dir, { recursive: true, force: true })),
-  );
+afterAll(async () => {
+  if (rootDir) {
+    await rm(rootDir, { recursive: true, force: true });
+  }
 });
 
 describe("buildClientBundles vendor shims", () => {
-  test("re-exports modern React 19 APIs used by islands", async () => {
-    const { rootDir, manifest } = await createBundlerFixture();
-    const result = await buildClientBundles(manifest, rootDir, {
-      minify: false,
-      sourcemap: false,
-      splitting: false,
-    });
-
+  test("build succeeds", () => {
+    if (!result.success) {
+      console.error("[build.test] errors:", result.errors);
+    }
     expect(result.success).toBe(true);
+  });
 
-    const reactShim = await importBuiltModule(rootDir, ".mandu/client/_react.js");
+  test("re-exports modern React 19 APIs used by islands", async () => {
+    const reactShim = await importBuiltModule(".mandu/client/_react.js");
     const requiredExports = [
       "Activity",
       "__COMPILER_RUNTIME",
@@ -87,16 +91,7 @@ describe("buildClientBundles vendor shims", () => {
   });
 
   test("re-exports modern react-dom and react-dom/client APIs", async () => {
-    const { rootDir, manifest } = await createBundlerFixture();
-    const result = await buildClientBundles(manifest, rootDir, {
-      minify: false,
-      sourcemap: false,
-      splitting: false,
-    });
-
-    expect(result.success).toBe(true);
-
-    const reactDomShim = await importBuiltModule(rootDir, ".mandu/client/_react-dom.js");
+    const reactDomShim = await importBuiltModule(".mandu/client/_react-dom.js");
     for (const exportName of [
       "preconnect",
       "prefetchDNS",
@@ -112,22 +107,13 @@ describe("buildClientBundles vendor shims", () => {
       expect(exportName in reactDomShim).toBe(true);
     }
 
-    const reactDomClientShim = await importBuiltModule(rootDir, ".mandu/client/_react-dom-client.js");
+    const reactDomClientShim = await importBuiltModule(".mandu/client/_react-dom-client.js");
     for (const exportName of ["createRoot", "hydrateRoot", "version"]) {
       expect(exportName in reactDomClientShim).toBe(true);
     }
   });
 
   test("embeds hydration guards for deferred trigger strategies", async () => {
-    const { rootDir, manifest } = await createBundlerFixture();
-    const result = await buildClientBundles(manifest, rootDir, {
-      minify: false,
-      sourcemap: false,
-      splitting: false,
-    });
-
-    expect(result.success).toBe(true);
-
     const runtimeSource = await readFile(path.join(rootDir, ".mandu", "client", "_runtime.js"), "utf-8");
     expect(runtimeSource).toContain("function resolveHydrationTarget");
     expect(runtimeSource).toContain("function hasHydratableMarkup");
