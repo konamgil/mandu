@@ -14,8 +14,7 @@ import {
   startServer,
   type RoutesManifest,
 } from "@mandujs/core";
-// workspace 내부 직접 참조 (bundler/prerender는 package exports에 미등록)
-import { prerenderRoutes } from "../../../core/src/bundler/prerender";
+import { prerenderRoutes } from "@mandujs/core/bundler/prerender";
 import path from "path";
 import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";

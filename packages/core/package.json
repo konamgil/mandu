@@ -12,6 +12,7 @@
     "./testing": "./src/testing/index.ts",
     "./plugins": "./src/plugins/index.ts",
     "./error": "./src/error/index.ts",
+    "./bundler/prerender": "./src/bundler/prerender.ts",
     "./*": "./src/*"
   },
   "files": [

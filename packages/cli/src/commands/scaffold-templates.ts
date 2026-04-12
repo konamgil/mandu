@@ -36,6 +36,8 @@ export function wsTemplate(name: string): string {
  * Handles upgrade and message events.
  */
 
+import type { ServerWebSocket } from "bun";
+
 export function GET(request: Request): Response {
   const upgraded = Bun.upgradeWebSocket(request, { data: {} });
   if (!upgraded) {
@@ -76,25 +78,38 @@ export interface SessionData {
 /**
  * Read session data from the request cookies.
  */
-export function getSession(request: Request): SessionData {
+export async function getSession(request: Request): Promise<SessionData> {
   const cookie = request.headers.get("Cookie") ?? "";
   const match = cookie.match(/mandu_session=([^;]+)/);
   if (!match) return {};
 
   try {
-    const decoded = atob(match[1]);
-    return JSON.parse(decoded) as SessionData;
+    const [payload, signature] = decodeURIComponent(match[1]).split(".");
+    if (!payload || !signature) return {};
+
+    // HMAC 서명 검증
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey("raw", encoder.encode(SESSION_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+    const valid = await crypto.subtle.verify("HMAC", key, Uint8Array.from(atob(signature), c => c.charCodeAt(0)), encoder.encode(payload));
+    if (!valid) return {};
+
+    return JSON.parse(atob(payload)) as SessionData;
   } catch {
     return {};
   }
 }
 
 /**
- * Serialize session data into a Set-Cookie header value.
+ * Serialize session data into a signed Set-Cookie header value.
  */
-export function commitSession(data: SessionData): string {
-  const encoded = btoa(JSON.stringify(data));
-  return \`mandu_session=\${encoded}; Path=/; HttpOnly; SameSite=Lax\`;
+export async function commitSession(data: SessionData): Promise<string> {
+  const payload = btoa(JSON.stringify(data));
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", encoder.encode(SESSION_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  const signature = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  const value = encodeURIComponent(\`\${payload}.\${signature}\`);
+  return \`mandu_session=\${value}; Path=/; HttpOnly; SameSite=Lax\`;
 }
 
 /**

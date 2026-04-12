@@ -42,6 +42,7 @@ export interface DevOptions {
 }
 
 export async function dev(options: DevOptions = {}): Promise<void> {
+  const devStartTime = performance.now();
   const rootDir = resolveFromCwd(".");
   const config = await validateAndReport(rootDir);
 
@@ -414,6 +415,12 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       exec(cmd);
     } catch { /* 브라우저 열기 실패 무시 */ }
   }
+
+  // 시작 시간 표시
+  const elapsed = Math.round(performance.now() - devStartTime);
+  console.log(`🥟 Mandu Dev Server running at http://localhost:${actualPort}`);
+  console.log(`🔥 HMR enabled on port ${actualPort + HMR_OFFSET}`);
+  console.log(`⚡ Ready in ${elapsed}ms`);
 
   // FS Routes real-time watching
   const routesWatcher = await watchFSRoutes(rootDir, {
