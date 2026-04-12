@@ -12,11 +12,13 @@ import fs from "fs/promises";
 import { PORTS } from "../constants";
 import {
   type CacheStore,
+  type CacheStoreStats,
   type CacheLookupResult,
   MemoryCacheStore,
   lookupCache,
   createCacheEntry,
   createCachedResponse,
+  getCacheStoreStats,
   setGlobalCache,
 } from "./cache";
 import {
@@ -330,6 +332,11 @@ export interface ServerOptions {
    * - false/undefined: 캐시 비활성화
    */
   cache?: boolean | CacheStore;
+  /**
+   * Internal management token for local CLI/runtime control endpoints.
+   * When set, token-protected endpoints such as `/_mandu/cache` become available.
+   */
+  managementToken?: string;
 }
 
 export interface ManduServer {
@@ -423,6 +430,8 @@ export interface ServerRegistrySettings {
   cssPath?: string | false;
   /** ISR/SWR 캐시 스토어 */
   cacheStore?: CacheStore;
+  /** Internal management token for local runtime control */
+  managementToken?: string;
 }
 
 export class ServerRegistry {
@@ -748,6 +757,8 @@ interface StaticFileResult {
   response?: Response;
 }
 
+const INTERNAL_CACHE_ENDPOINT = "/_mandu/cache";
+
 function createStaticErrorResponse(status: 400 | 403 | 404 | 500): Response {
   const body = {
     400: "Bad Request",
@@ -916,6 +927,91 @@ async function serveStaticFile(pathname: string, settings: ServerRegistrySetting
 }
 
 // ========== Request Handler ==========
+
+function unauthorizedControlResponse(): Response {
+  return Response.json({ error: "Unauthorized runtime control request" }, { status: 401 });
+}
+
+function resolveInternalCacheTarget(payload: Record<string, unknown>): string {
+  if (typeof payload.path === "string" && payload.path.length > 0) {
+    return `path=${payload.path}`;
+  }
+  if (typeof payload.tag === "string" && payload.tag.length > 0) {
+    return `tag=${payload.tag}`;
+  }
+  if (payload.all === true) {
+    return "all";
+  }
+  return "unknown";
+}
+
+async function handleInternalCacheControlRequest(
+  req: Request,
+  settings: ServerRegistrySettings
+): Promise<Response> {
+  const expectedToken = settings.managementToken;
+  const providedToken = req.headers.get("x-mandu-control-token");
+
+  if (!expectedToken || providedToken !== expectedToken) {
+    return unauthorizedControlResponse();
+  }
+
+  const store = settings.cacheStore ?? null;
+  if (!store) {
+    return Response.json({
+      enabled: false,
+      message: "Runtime cache is disabled for this server instance.",
+      stats: null,
+    });
+  }
+
+  if (req.method === "GET") {
+    const stats = getCacheStoreStats(store);
+    return Response.json({
+      enabled: true,
+      message: "Runtime cache is available.",
+      stats,
+    });
+  }
+
+  if (req.method === "POST" || req.method === "DELETE") {
+    let payload: Record<string, unknown> = {};
+    if (req.method === "POST") {
+      try {
+        payload = await req.json() as Record<string, unknown>;
+      } catch {
+        return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+      }
+    } else {
+      payload = { all: true };
+    }
+
+    const before = store.size;
+    if (typeof payload.path === "string" && payload.path.length > 0) {
+      store.deleteByPath(payload.path);
+    } else if (typeof payload.tag === "string" && payload.tag.length > 0) {
+      store.deleteByTag(payload.tag);
+    } else if (payload.all === true) {
+      store.clear();
+    } else {
+      return Response.json({
+        error: "Provide one of: { path }, { tag }, or { all: true }",
+      }, { status: 400 });
+    }
+
+    const after = store.size;
+    const stats: CacheStoreStats | null = getCacheStoreStats(store);
+
+    return Response.json({
+      enabled: true,
+      cleared: Math.max(0, before - after),
+      target: resolveInternalCacheTarget(payload),
+      stats,
+    });
+  }
+
+  return Response.json({ error: "Method not allowed" }, { status: 405 });
+}
 
 async function handleRequest(req: Request, router: Router, registry: ServerRegistry): Promise<Response> {
   const result = await handleRequestInternal(req, router, registry);
@@ -1293,7 +1389,11 @@ async function handlePageRoute(
 ): Promise<Result<Response>> {
   const settings = registry.settings;
   const cache = settings.cacheStore;
-  await ensurePageRouteMetadata(route.id, registry);
+  // Only call ensurePageRouteMetadata when a pageHandler exists;
+  // routes registered via registerPageLoader are handled by loadPageData instead.
+  if (registry.pageHandlers.has(route.id)) {
+    await ensurePageRouteMetadata(route.id, registry);
+  }
   const renderMode = getRenderModeForRoute(route.id, registry);
 
   // _data 요청 (SPA 네비게이션)은 캐시하지 않음
@@ -1511,6 +1611,11 @@ async function handleRequestInternal(
     if (imageResponse) return ok(imageResponse);
   }
 
+  // 1.6. Internal runtime cache control endpoint
+  if (pathname === INTERNAL_CACHE_ENDPOINT) {
+    return ok(await handleInternalCacheControlRequest(req, settings));
+  }
+
   // 2. Kitchen dev dashboard (dev mode only)
   if (settings.isDev && pathname.startsWith(KITCHEN_PREFIX) && registry.kitchen) {
     const kitchenResponse = await registry.kitchen.handle(req, pathname);
@@ -1629,6 +1734,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     registry = defaultRegistry,
     guardConfig = null,
     cache: cacheOption,
+    managementToken,
   } = options;
 
   // cssPath 처리:
@@ -1663,6 +1769,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     streaming,
     rateLimit: rateLimitOptions,
     cssPath,
+    managementToken,
   };
 
   registry.rateLimiter = rateLimitOptions ? new MemoryRateLimiter() : null;

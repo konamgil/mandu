@@ -2,12 +2,12 @@
  * Mandu MCP - Brain Tools
  *
  * MCP tools for Brain functionality:
- * - mandu_doctor: Guard failure analysis + patch suggestions
- * - mandu_watch_start: Start file watching
- * - mandu_watch_status: Get watch status
- * - mandu_check_location: Check if file location is valid (v0.2)
- * - mandu_check_import: Check if imports are valid (v0.2)
- * - mandu_get_architecture: Get project architecture rules (v0.2)
+ * - mandu.brain.doctor: Guard failure analysis + patch suggestions
+ * - mandu.watch.start: Start file watching
+ * - mandu.watch.status: Get watch status
+ * - mandu.brain.checkLocation: Check if file location is valid (v0.2)
+ * - mandu.brain.checkImport: Check if imports are valid (v0.2)
+ * - mandu.brain.architecture: Get project architecture rules (v0.2)
  */
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -31,7 +31,7 @@ import { getProjectPaths } from "../utils/project.js";
 
 export const brainToolDefinitions: Tool[] = [
   {
-    name: "mandu_doctor",
+    name: "mandu.brain.doctor",
     description:
       "Analyze Guard failures and suggest patches. Works with or without LLM - template-based analysis is always available.",
     annotations: {
@@ -50,7 +50,7 @@ export const brainToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_watch_start",
+    name: "mandu.watch.start",
     description:
       "Start file watching with architecture rule warnings. Watches for common mistakes and emits warnings (no blocking).",
     annotations: {
@@ -68,7 +68,7 @@ export const brainToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_watch_status",
+    name: "mandu.watch.status",
     description:
       "Get the current watch status including recent warnings and active rules.",
     annotations: {
@@ -81,7 +81,7 @@ export const brainToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_watch_stop",
+    name: "mandu.watch.stop",
     description:
       "Stop file watching and clean up MCP notification subscriptions.",
     annotations: {
@@ -95,7 +95,7 @@ export const brainToolDefinitions: Tool[] = [
   },
   // Architecture tools (v0.2)
   {
-    name: "mandu_check_location",
+    name: "mandu.brain.checkLocation",
     description:
       "Check if a file location follows project architecture rules. Call this BEFORE creating or moving files to ensure proper placement.",
     annotations: {
@@ -117,7 +117,7 @@ export const brainToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_check_import",
+    name: "mandu.brain.checkImport",
     description:
       "Check if imports in a file follow architecture rules. Call this to validate imports before adding them.",
     annotations: {
@@ -140,7 +140,7 @@ export const brainToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_get_architecture",
+    name: "mandu.brain.architecture",
     description:
       "Get the project architecture rules and folder structure. Use this to understand where to place new files.",
     annotations: {
@@ -165,8 +165,8 @@ let mcpWarningUnsubscribe: (() => void) | null = null;
 export function brainTools(projectRoot: string, server?: Server, monitor?: ActivityMonitor) {
   const paths = getProjectPaths(projectRoot);
 
-  return {
-    mandu_doctor: async (args: Record<string, unknown>) => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.brain.doctor": async (args: Record<string, unknown>) => {
       const { useLLM = false } = args as { useLLM?: boolean };
 
       try {
@@ -234,7 +234,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
       }
     },
 
-    mandu_watch_start: async (args: Record<string, unknown>) => {
+    "mandu.watch.start": async (args: Record<string, unknown>) => {
       const { debounceMs } = args as { debounceMs?: number };
 
       try {
@@ -334,7 +334,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
       }
     },
 
-    mandu_watch_status: async () => {
+    "mandu.watch.status": async () => {
       try {
         const watcher = getWatcher();
 
@@ -342,7 +342,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
           return {
             active: false,
             message: "Watch is not running",
-            tip: "Use mandu_watch_start to begin watching",
+            tip: "Use mandu.watch.start to begin watching",
           };
         }
 
@@ -373,7 +373,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
       }
     },
 
-    mandu_watch_stop: async () => {
+    "mandu.watch.stop": async () => {
       try {
         // Clean up MCP notification subscription
         if (mcpWarningUnsubscribe) {
@@ -396,7 +396,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
     },
 
     // Architecture tools (v0.2)
-    mandu_check_location: async (args: Record<string, unknown>) => {
+    "mandu.brain.checkLocation": async (args: Record<string, unknown>) => {
       const { path: filePath, content } = args as {
         path: string;
         content?: string;
@@ -444,7 +444,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
       }
     },
 
-    mandu_check_import: async (args: Record<string, unknown>) => {
+    "mandu.brain.checkImport": async (args: Record<string, unknown>) => {
       const { sourceFile, imports } = args as {
         sourceFile: string;
         imports: string[];
@@ -487,7 +487,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
       }
     },
 
-    mandu_get_architecture: async (args: Record<string, unknown>) => {
+    "mandu.brain.architecture": async (args: Record<string, unknown>) => {
       const { includeStructure = true } = args as {
         includeStructure?: boolean;
       };
@@ -536,7 +536,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
                 indexedAt: structure.indexedAt,
               }
             : null,
-          tip: "이 규칙을 따라 파일을 생성하세요. mandu_check_location으로 검증할 수 있습니다.",
+          tip: "이 규칙을 따라 파일을 생성하세요. mandu.brain.checkLocation으로 검증할 수 있습니다.",
         };
       } catch (error) {
         return {
@@ -546,4 +546,15 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
       }
     },
   };
+
+  // Backward-compatible aliases (deprecated)
+  handlers["mandu_doctor"] = handlers["mandu.brain.doctor"];
+  handlers["mandu_watch_start"] = handlers["mandu.watch.start"];
+  handlers["mandu_watch_stop"] = handlers["mandu.watch.stop"];
+  handlers["mandu_watch_status"] = handlers["mandu.watch.status"];
+  handlers["mandu_check_location"] = handlers["mandu.brain.checkLocation"];
+  handlers["mandu_check_import"] = handlers["mandu.brain.checkImport"];
+  handlers["mandu_get_architecture"] = handlers["mandu.brain.architecture"];
+
+  return handlers;
 }

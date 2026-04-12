@@ -80,6 +80,13 @@ export function getAllCommands(): string[] {
   return Array.from(commandRegistry.keys());
 }
 
+/**
+ * List all registered commands with metadata in registration order.
+ */
+export function getAllCommandRegistrations(): CommandRegistration[] {
+  return Array.from(commandRegistry.values());
+}
+
 // ============================================================================
 // Command registration (lazy loading)
 // ============================================================================
@@ -450,9 +457,24 @@ registerCommand({
 registerCommand({
   id: "generate",
   description: "Code generation (FS Routes + Resources)",
-  subcommands: ["resource"],
+  subcommands: ["resource", "page", "api", "feature", "both"],
+  exitOnSuccess: true,
   async run(ctx) {
     const subCommand = ctx.args[1];
+
+    if (ctx.options.ai) {
+      const { generateAi } = await import("./generate-ai");
+      const recognizedKind = ["page", "api", "feature", "both"].includes(subCommand) ? subCommand : undefined;
+      return generateAi({
+        kind: recognizedKind,
+        name: recognizedKind ? ctx.args[2] : ctx.args[1] || ctx.options._positional,
+        prompt: ctx.options.ai,
+        methods: ctx.options.methods,
+        dryRun: ctx.options["dry-run"] === "true",
+        withContract: ctx.options["with-contract"] === "true" ? true : undefined,
+        withIsland: ctx.options["with-island"] === "true" ? true : undefined,
+      });
+    }
 
     if (subCommand === "resource") {
       // generate resource subcommand
@@ -490,6 +512,7 @@ registerCommand({
     return cache(action, {
       tag: ctx.options.tag,
       all: ctx.options.all === "true",
+      json: ctx.options.json === "true",
       path: ctx.args[2] || (action === "clear" ? ctx.options._positional : undefined),
     });
   },
@@ -564,15 +587,46 @@ registerCommand({
 
 registerCommand({
   id: "fix",
-  description: "Analyze or apply architecture auto-fixes",
+  description: "Run Guard healing, diagnostics, and optional build verification",
   exitOnSuccess: true,
   async run(ctx) {
     const { fix } = await import("./fix");
     return fix({
       apply: ctx.options.apply === "true" || ctx.options["auto-fix"] === "true",
+      build: ctx.options["no-build"] === "true" ? false : undefined,
       file: ctx.options.file,
       json: ctx.options.json === "true",
       preset: ctx.options.preset,
+      verify: ctx.options.verify === "true",
+    });
+  },
+});
+
+registerCommand({
+  id: "review",
+  description: "Review changed files with guard and contract diagnostics",
+  exitOnSuccess: true,
+  async run(ctx) {
+    const { review } = await import("./review");
+    return review({
+      base: ctx.options.base,
+      json: ctx.options.json === "true",
+      staged: ctx.options.staged === "true" || ctx.options.staged === "",
+      useLLM: ctx.options["no-llm"] !== "true",
+    });
+  },
+});
+
+registerCommand({
+  id: "ask",
+  description: "Ask the local Mandu assistant for codebase-aware guidance",
+  exitOnSuccess: true,
+  async run(ctx) {
+    const { ask } = await import("./ask");
+    return ask({
+      args: ctx.args,
+      json: ctx.options.json === "true",
+      useLLM: ctx.options["no-llm"] !== "true",
     });
   },
 });

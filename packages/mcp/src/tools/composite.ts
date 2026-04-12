@@ -6,10 +6,13 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { getProjectPaths } from "../utils/project.js";
 import { specTools } from "./spec.js";
 import { guardTools } from "./guard.js";
+import { negotiateTools } from "./negotiate.js";
 import { contractTools } from "./contract.js";
 import { generateTools } from "./generate.js";
 import { kitchenTools } from "./kitchen.js";
 import { ateTools } from "./ate.js";
+import { requestRuntimeCache } from "../utils/runtime-control.js";
+import { requireLock } from "../tx-lock.js";
 import path from "path";
 import fs from "fs/promises";
 
@@ -140,10 +143,22 @@ export const compositeToolDefinitions: Tool[] = [
   },
 ];
 
+/** Extract an error message from an unknown thrown value. */
+function toErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  return String(e);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 export function compositeTools(projectRoot: string) {
   const paths = getProjectPaths(projectRoot);
   const spec = specTools(projectRoot);
   const guard = guardTools(projectRoot);
+  const neg = negotiateTools(projectRoot);
   const contract = contractTools(projectRoot);
   const generate = generateTools(projectRoot);
   const kitchen = kitchenTools(projectRoot);
@@ -151,39 +166,83 @@ export function compositeTools(projectRoot: string) {
 
   return {
     "mandu.feature.create": async (args: Record<string, unknown>) => {
+      const lockCheck = requireLock(args.lockId as string | undefined);
+      if (!lockCheck.allowed) {
+        return { error: lockCheck.error, hint: "Use mandu.tx.begin to acquire a lock first" };
+      }
       const { name, description, kind = "both", methods = ["GET", "POST"],
         withContract = true, withIsland = false,
       } = args as {
         name: string; description: string; kind?: "page" | "api" | "both";
         methods?: string[]; withContract?: boolean; withIsland?: boolean;
       };
-      const steps: { step: string; result: unknown }[] = [];
+      const steps: Array<{ step: string; success: boolean; result?: unknown; error?: string }> = [];
       const kinds: Array<"page" | "api"> = kind === "both" ? ["api", "page"] : [kind];
 
       // Step 1: negotiate architecture
-      steps.push({ step: "negotiate", result: await guard.mandu_negotiate({ intent: description, featureName: name }) });
+      try {
+        const result = await neg["mandu.negotiate"]({ intent: description, featureName: name });
+        steps.push({ step: "negotiate", success: true, result });
+      } catch (e) {
+        steps.push({ step: "negotiate", success: false, error: toErrorMessage(e) });
+        return { success: false, feature: name, steps, failedAt: "negotiate" };
+      }
 
       // Step 2-3: add routes + contracts
       for (const k of kinds) {
         const routePath = k === "api" ? `api/${name}` : name;
-        steps.push({ step: `add_route(${k})`, result: await spec.mandu_add_route({ path: routePath, kind: k, withSlot: true, withContract: false }) });
+        const stepName = `add_route(${k})`;
+
+        try {
+          const result = await spec["mandu.route.add"]({ path: routePath, kind: k, withSlot: true, withContract: false });
+          steps.push({ step: stepName, success: true, result });
+        } catch (e) {
+          steps.push({ step: stepName, success: false, error: toErrorMessage(e) });
+          return { success: false, feature: name, steps, failedAt: stepName };
+        }
+
         if (withContract && k === "api") {
           const routeId = routePath.replace(/\//g, "-").replace(/[\[\]\.]/g, "");
-          steps.push({ step: "create_contract", result: await contract.mandu_create_contract({ routeId, description, methods }) });
+          try {
+            const result = await contract["mandu.contract.create"]({ routeId, description, methods });
+            steps.push({ step: "create_contract", success: true, result });
+          } catch (e) {
+            steps.push({ step: "create_contract", success: false, error: toErrorMessage(e) });
+            return { success: false, feature: name, steps, failedAt: "create_contract" };
+          }
         }
       }
 
-      // Step 4-5: generate + guard
-      steps.push({ step: "generate", result: await generate.mandu_generate({ dryRun: false }) });
-      steps.push({ step: "guard_check", result: await guard.mandu_guard_check({ autoCorrect: false }) });
+      // Step 4: generate
+      try {
+        const result = await generate["mandu.generate"]({ dryRun: false });
+        steps.push({ step: "generate", success: true, result });
+      } catch (e) {
+        steps.push({ step: "generate", success: false, error: toErrorMessage(e) });
+        return { success: false, feature: name, steps, failedAt: "generate" };
+      }
+
+      // Step 5: guard_check
+      try {
+        const result = await guard["mandu.guard.check"]({ autoCorrect: false });
+        steps.push({ step: "guard_check", success: true, result });
+      } catch (e) {
+        steps.push({ step: "guard_check", success: false, error: toErrorMessage(e) });
+        return { success: false, feature: name, steps, failedAt: "guard_check" };
+      }
 
       // Step 6 (optional): create island
       if (withIsland && kinds.includes("page")) {
         const pc = toPascalCase(name);
         const islandFile = path.join(paths.appDir, name, `${pc}.island.tsx`);
-        await fs.mkdir(path.dirname(islandFile), { recursive: true });
-        await Bun.write(islandFile, generateIslandSource(pc, "visible"));
-        steps.push({ step: "create_island", result: { file: `app/${name}/${pc}.island.tsx` } });
+        try {
+          await fs.mkdir(path.dirname(islandFile), { recursive: true });
+          await Bun.write(islandFile, generateIslandSource(pc, "visible"));
+          steps.push({ step: "create_island", success: true, result: { file: `app/${name}/${pc}.island.tsx` } });
+        } catch (e) {
+          steps.push({ step: "create_island", success: false, error: toErrorMessage(e) });
+          return { success: false, feature: name, steps, failedAt: "create_island" };
+        }
       }
 
       return { success: true, feature: name, description, steps,
@@ -193,10 +252,10 @@ export function compositeTools(projectRoot: string) {
     "mandu.diagnose": async (args: Record<string, unknown>) => {
       const { autoFix = false } = args as { autoFix?: boolean };
       const [kitchenResult, guardResult, contractResult, manifestResult] = await Promise.all([
-        kitchen.mandu_kitchen_errors({ clear: false }).catch((e: Error) => ({ error: e.message })),
-        guard.mandu_guard_check({ autoCorrect: autoFix }).catch((e: Error) => ({ error: e.message })),
-        contract.mandu_validate_contracts().catch((e: Error) => ({ error: e.message })),
-        spec.mandu_validate_manifest().catch((e: Error) => ({ error: e.message })),
+        kitchen["mandu.kitchen.errors"]({ clear: false }).catch((e: Error) => ({ error: e.message })),
+        guard["mandu.guard.check"]({ autoCorrect: autoFix }).catch((e: Error) => ({ error: e.message })),
+        contract["mandu.contract.validate"]({}).catch((e: Error) => ({ error: e.message })),
+        spec["mandu.manifest.validate"]({}).catch((e: Error) => ({ error: e.message })),
       ]);
       const checks = [
         { name: "kitchen_errors", result: kitchenResult },
@@ -215,6 +274,10 @@ export function compositeTools(projectRoot: string) {
     },
 
     "mandu.island.add": async (args: Record<string, unknown>) => {
+      const lockCheck = requireLock(args.lockId as string | undefined);
+      if (!lockCheck.allowed) {
+        return { error: lockCheck.error, hint: "Use mandu.tx.begin to acquire a lock first" };
+      }
       const { name, route, strategy = "visible" } = args as {
         name: string; route: string; strategy?: "load" | "idle" | "visible" | "media" | "never";
       };
@@ -267,9 +330,9 @@ export function compositeTools(projectRoot: string) {
     "mandu.deploy.check": async (args: Record<string, unknown>) => {
       const { target = "bun" } = args as { target?: "bun" | "docker" | "node" };
       const [guardResult, contractResult, manifestResult] = await Promise.all([
-        guard.mandu_guard_check({ autoCorrect: false }).catch((e: Error) => ({ error: e.message })),
-        contract.mandu_validate_contracts().catch((e: Error) => ({ error: e.message })),
-        spec.mandu_validate_manifest().catch((e: Error) => ({ error: e.message })),
+        guard["mandu.guard.check"]({ autoCorrect: false }).catch((e: Error) => ({ error: e.message })),
+        contract["mandu.contract.validate"]({}).catch((e: Error) => ({ error: e.message })),
+        spec["mandu.manifest.validate"]({}).catch((e: Error) => ({ error: e.message })),
       ]);
       const status = (r: Record<string, unknown>): "pass" | "fail" => (r.error || r.passed === false || r.valid === false) ? "fail" : "pass";
       const checks = { guard: status(guardResult as Record<string, unknown>), contracts: status(contractResult as Record<string, unknown>), manifest: status(manifestResult as Record<string, unknown>) };
@@ -277,7 +340,7 @@ export function compositeTools(projectRoot: string) {
       const warnings: string[] = [];
       if (checks.guard === "fail") blockers.push("Guard check failed — fix structural violations before deploying");
       if (checks.contracts === "fail") blockers.push("Contract validation failed — fix schema mismatches");
-      if (checks.manifest === "fail") warnings.push("Manifest validation has issues — regenerate with mandu_generate");
+      if (checks.manifest === "fail") warnings.push("Manifest validation has issues — regenerate with mandu.generate");
       if (target === "docker") warnings.push("Ensure Dockerfile copies .mandu/generated/ into the image");
       if (target === "node") warnings.push("Node target requires Bun APIs to be polyfilled or avoided");
       return { ready: blockers.length === 0, target, checks, blockers, warnings };
@@ -285,12 +348,56 @@ export function compositeTools(projectRoot: string) {
 
     "mandu.cache.manage": async (args: Record<string, unknown>) => {
       const { action, path: routePath, tag } = args as { action: "stats" | "clear"; path?: string; tag?: string };
+      const kitchenResult = await kitchen["mandu.kitchen.errors"]({ clear: false }).catch(() => null);
+      const kitchenInfo = isRecord(kitchenResult) ? kitchenResult : null;
+      const runtimeResult = await requestRuntimeCache(projectRoot, action, {
+        ...(routePath ? { path: routePath } : {}),
+        ...(tag ? { tag } : {}),
+        ...(action === "clear" && !routePath && !tag ? { all: true } : {}),
+      }).catch(() => null);
+      const runtimeBody = isRecord(runtimeResult?.body) ? runtimeResult.body : null;
+      const serverStatus = runtimeResult?.response.ok ? "up" : kitchenInfo?.success === true ? "up" : "down";
+
       if (action === "stats") {
-        const info = await kitchen.mandu_kitchen_errors({ clear: false }).catch(() => null);
-        return { action: "stats", result: info ? "Kitchen endpoint reachable — server is running" : "Kitchen endpoint unreachable — is the dev server running?", serverStatus: info ? "up" : "down" };
+        return {
+          action: "stats",
+          serverStatus,
+          mode: runtimeResult?.control.mode ?? null,
+          stats: runtimeBody?.stats ?? null,
+          kitchen: kitchenInfo,
+          message: typeof runtimeBody?.message === "string"
+            ? runtimeBody.message
+            : typeof kitchenInfo?.message === "string"
+              ? kitchenInfo.message
+            : serverStatus === "up"
+              ? "Runtime cache endpoint reachable — server is running."
+              : "Runtime cache endpoint unreachable — start `mandu dev` or `mandu start` first.",
+          hint: serverStatus === "up"
+            ? "Use `mandu cache clear <path>` or `mandu cache clear --tag=<tag>` to invalidate runtime cache."
+            : "Start `mandu dev` or `mandu start` before requesting cache diagnostics.",
+        };
       }
+
       const target = routePath ? `path=${routePath}` : tag ? `tag=${tag}` : "all";
-      return { action: "clear", target, result: "Runtime cache cannot be cleared via MCP. Use revalidatePath() or revalidateTag() in your route handler, or restart the server to clear all caches." };
+      return {
+        action: "clear",
+        target,
+        serverStatus,
+        mode: runtimeResult?.control.mode ?? null,
+        cleared: typeof runtimeBody?.cleared === "number" ? runtimeBody.cleared : null,
+        stats: runtimeBody?.stats ?? null,
+        kitchen: kitchenInfo,
+        message: typeof runtimeBody?.error === "string"
+          ? runtimeBody.error
+          : typeof runtimeBody?.message === "string"
+            ? runtimeBody.message
+            : runtimeResult?.response.ok
+              ? "Runtime cache cleared successfully."
+              : "Runtime cache endpoint is unavailable.",
+        hint: serverStatus === "up"
+          ? "Clear by path or tag against the running local server."
+          : "Start the dev or production server first, then trigger revalidation or restart the process.",
+      };
     },
   };
 }

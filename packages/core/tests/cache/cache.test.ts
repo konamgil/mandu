@@ -7,6 +7,7 @@ import {
   getGlobalCache,
   revalidatePath,
   revalidateTag,
+  getCacheStoreStats,
   type CacheEntry,
 } from "../../src/runtime/cache";
 
@@ -125,6 +126,23 @@ describe("lookupCache", () => {
     const result = lookupCache(store, "k");
     expect(result.status).toBe("STALE");
     expect(result.entry).not.toBeNull();
+  });
+
+  it("tracks hit/miss/stale stats for memory cache", () => {
+    store.set("fresh", entry([], Date.now() + 60_000));
+    store.set("stale", entry([], Date.now() - 1));
+
+    lookupCache(store, "fresh");
+    lookupCache(store, "stale");
+    lookupCache(store, "missing");
+
+    const stats = getCacheStoreStats(store);
+    expect(stats?.entries).toBe(2);
+    expect(stats?.hits).toBe(1);
+    expect(stats?.staleHits).toBe(1);
+    expect(stats?.misses).toBe(1);
+    expect(stats?.staleEntries).toBe(1);
+    expect(stats?.maxEntries).toBe(1000);
   });
 });
 

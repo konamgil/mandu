@@ -8,7 +8,7 @@ import {
 
 export const historyToolDefinitions: Tool[] = [
   {
-    name: "mandu_list_history",
+    name: "mandu.history.list",
     description: "List the change history with snapshots",
     annotations: {
       readOnlyHint: true,
@@ -25,7 +25,7 @@ export const historyToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_get_snapshot",
+    name: "mandu.history.snapshot",
     description: "Get details of a specific snapshot",
     annotations: {
       readOnlyHint: true,
@@ -42,7 +42,7 @@ export const historyToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_prune_history",
+    name: "mandu.history.prune",
     description: "Remove old snapshots to free up space",
     annotations: {
       destructiveHint: true,
@@ -62,8 +62,8 @@ export const historyToolDefinitions: Tool[] = [
 ];
 
 export function historyTools(projectRoot: string) {
-  return {
-    mandu_list_history: async (args: Record<string, unknown>) => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.history.list": async (args: Record<string, unknown>) => {
       const { limit = 10 } = args as { limit?: number };
 
       const changes = await listChanges(projectRoot);
@@ -93,7 +93,7 @@ export function historyTools(projectRoot: string) {
       };
     },
 
-    mandu_get_snapshot: async (args: Record<string, unknown>) => {
+    "mandu.history.snapshot": async (args: Record<string, unknown>) => {
       const { snapshotId } = args as { snapshotId: string };
 
       const snapshot = await readSnapshotById(projectRoot, snapshotId);
@@ -127,7 +127,7 @@ export function historyTools(projectRoot: string) {
       };
     },
 
-    mandu_prune_history: async (args: Record<string, unknown>) => {
+    "mandu.history.prune": async (args: Record<string, unknown>) => {
       const { keepCount = 5 } = args as { keepCount?: number };
 
       const deletedIds = await pruneHistory(projectRoot, keepCount);
@@ -145,4 +145,11 @@ export function historyTools(projectRoot: string) {
       };
     },
   };
+
+  // Backward-compatible aliases (deprecated)
+  handlers["mandu_list_history"] = handlers["mandu.history.list"];
+  handlers["mandu_get_snapshot"] = handlers["mandu.history.snapshot"];
+  handlers["mandu_prune_history"] = handlers["mandu.history.prune"];
+
+  return handlers;
 }

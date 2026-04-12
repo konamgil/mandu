@@ -36,3 +36,6 @@ export type {
   McpToolPlugin,
   MiddlewarePlugin,
 } from "./types";
+
+export { runHook } from "./hooks";
+export type { ManduPlugin, ManduHooks } from "./hooks";

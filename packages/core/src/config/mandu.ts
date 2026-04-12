@@ -1,6 +1,7 @@
 import path from "path";
 import { readJsonFile } from "../utils/bun";
 import type { ManduAdapter } from "../runtime/adapter";
+import type { ManduPlugin, ManduHooks } from "../plugins/hooks";
 
 export type GuardRuleSeverity = "error" | "warn" | "warning" | "off";
 
@@ -56,6 +57,8 @@ export interface ManduConfig {
     defaultTitle?: string;
     titleTemplate?: string;
   };
+  plugins?: ManduPlugin[];
+  hooks?: Partial<ManduHooks>;
 }
 
 export const CONFIG_FILES = [

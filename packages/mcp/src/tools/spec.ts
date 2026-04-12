@@ -13,7 +13,7 @@ import fs from "fs/promises";
 
 export const specToolDefinitions: Tool[] = [
   {
-    name: "mandu_list_routes",
+    name: "mandu.route.list",
     description:
       "List all routes from .mandu/routes.manifest.json with their kind, pattern, slotModule, and contractModule.",
     annotations: {
@@ -26,7 +26,7 @@ export const specToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_get_route",
+    name: "mandu.route.get",
     description:
       "Get full details of a specific route by its ID. Use before modifying a route.",
     annotations: {
@@ -37,14 +37,14 @@ export const specToolDefinitions: Tool[] = [
       properties: {
         routeId: {
           type: "string",
-          description: "The route ID to retrieve (use mandu_list_routes to see all IDs)",
+          description: "The route ID to retrieve (use mandu.route.list to see all IDs)",
         },
       },
       required: ["routeId"],
     },
   },
   {
-    name: "mandu_add_route",
+    name: "mandu.route.add",
     description:
       "Scaffold a new route in app/ with optional slot and contract files, then regenerate the manifest.",
     annotations: {
@@ -76,7 +76,7 @@ export const specToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_delete_route",
+    name: "mandu.route.delete",
     description:
       "Delete a route's app/ source file and regenerate the manifest. Slot and contract files are preserved.",
     annotations: {
@@ -88,14 +88,14 @@ export const specToolDefinitions: Tool[] = [
       properties: {
         routeId: {
           type: "string",
-          description: "The route ID to delete (use mandu_list_routes to find it)",
+          description: "The route ID to delete (use mandu.route.list to find it)",
         },
       },
       required: ["routeId"],
     },
   },
   {
-    name: "mandu_validate_manifest",
+    name: "mandu.manifest.validate",
     description:
       "Validate the routes manifest for structural integrity. Run after manual edits or when routes behave unexpectedly.",
     annotations: {
@@ -112,8 +112,8 @@ export const specToolDefinitions: Tool[] = [
 export function specTools(projectRoot: string) {
   const paths = getProjectPaths(projectRoot);
 
-  return {
-    mandu_list_routes: async () => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.route.list": async () => {
       const result = await loadManifest(paths.manifestPath);
       if (!result.success || !result.data) {
         return { error: result.errors };
@@ -133,7 +133,7 @@ export function specTools(projectRoot: string) {
       };
     },
 
-    mandu_get_route: async (args: Record<string, unknown>) => {
+    "mandu.route.get": async (args: Record<string, unknown>) => {
       const { routeId } = args as { routeId: string };
 
       const result = await loadManifest(paths.manifestPath);
@@ -149,7 +149,7 @@ export function specTools(projectRoot: string) {
       return { route };
     },
 
-    mandu_add_route: async (args: Record<string, unknown>) => {
+    "mandu.route.add": async (args: Record<string, unknown>) => {
       const { path: routePath, kind, withSlot = true, withContract = false } = args as {
         path: string;
         kind: "api" | "page";
@@ -209,7 +209,7 @@ export function specTools(projectRoot: string) {
       };
     },
 
-    mandu_delete_route: async (args: Record<string, unknown>) => {
+    "mandu.route.delete": async (args: Record<string, unknown>) => {
       const { routeId } = args as { routeId: string };
 
       // Load current manifest to find the route
@@ -246,7 +246,7 @@ export function specTools(projectRoot: string) {
       };
     },
 
-    mandu_validate_manifest: async () => {
+    "mandu.manifest.validate": async () => {
       const result = await loadManifest(paths.manifestPath);
       if (!result.success) {
         return {
@@ -262,4 +262,13 @@ export function specTools(projectRoot: string) {
       };
     },
   };
+
+  // Backward-compatible aliases (deprecated)
+  handlers["mandu_list_routes"] = handlers["mandu.route.list"];
+  handlers["mandu_get_route"] = handlers["mandu.route.get"];
+  handlers["mandu_add_route"] = handlers["mandu.route.add"];
+  handlers["mandu_delete_route"] = handlers["mandu.route.delete"];
+  handlers["mandu_validate_manifest"] = handlers["mandu.manifest.validate"];
+
+  return handlers;
 }

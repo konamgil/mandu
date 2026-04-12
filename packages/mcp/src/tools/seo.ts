@@ -26,7 +26,7 @@ import * as path from "path";
 
 export const seoToolDefinitions: Tool[] = [
   {
-    name: "mandu_preview_seo",
+    name: "mandu.seo.preview",
     description: "Preview rendered SEO HTML for given metadata. Useful for testing metadata before applying.",
     annotations: {
       readOnlyHint: true,
@@ -43,7 +43,7 @@ export const seoToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_generate_sitemap_preview",
+    name: "mandu.seo.sitemap",
     description: "Generate sitemap.xml preview from entries",
     annotations: {
       readOnlyHint: true,
@@ -78,7 +78,7 @@ export const seoToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_generate_robots_preview",
+    name: "mandu.seo.robots",
     description: "Generate robots.txt preview from configuration",
     annotations: {
       readOnlyHint: true,
@@ -99,7 +99,7 @@ export const seoToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_create_jsonld",
+    name: "mandu.seo.jsonld",
     description: "Create JSON-LD structured data for SEO. Supports Article, WebSite, Organization, Breadcrumb, FAQ, Product, LocalBusiness, Video, Event types.",
     annotations: {
       readOnlyHint: true,
@@ -121,7 +121,7 @@ export const seoToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_write_seo_file",
+    name: "mandu.seo.write",
     description: "Write SEO configuration file (sitemap.ts or robots.ts) to app directory",
     annotations: {
       destructiveHint: true,
@@ -144,7 +144,7 @@ export const seoToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_seo_analyze",
+    name: "mandu.seo.analyze",
     description: "Analyze SEO metadata for common issues and provide recommendations",
     annotations: {
       readOnlyHint: true,
@@ -169,8 +169,8 @@ export const seoToolDefinitions: Tool[] = [
 export function seoTools(projectRoot: string) {
   const paths = getProjectPaths(projectRoot);
 
-  return {
-    mandu_preview_seo: async (args: Record<string, unknown>) => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.seo.preview": async (args: Record<string, unknown>) => {
       const { metadata } = args as { metadata: Metadata };
 
       try {
@@ -197,7 +197,7 @@ export function seoTools(projectRoot: string) {
       }
     },
 
-    mandu_generate_sitemap_preview: async (args: Record<string, unknown>) => {
+    "mandu.seo.sitemap": async (args: Record<string, unknown>) => {
       const { entries } = args as { entries: Sitemap };
 
       try {
@@ -224,7 +224,7 @@ export function seoTools(projectRoot: string) {
       }
     },
 
-    mandu_generate_robots_preview: async (args: Record<string, unknown>) => {
+    "mandu.seo.robots": async (args: Record<string, unknown>) => {
       const { rules, sitemap } = args as {
         rules?: RobotsFile["rules"];
         sitemap?: string;
@@ -249,7 +249,7 @@ export function seoTools(projectRoot: string) {
       }
     },
 
-    mandu_create_jsonld: async (args: Record<string, unknown>) => {
+    "mandu.seo.jsonld": async (args: Record<string, unknown>) => {
       const { type, data } = args as { type: string; data: Record<string, unknown> };
 
       try {
@@ -303,7 +303,7 @@ export function seoTools(projectRoot: string) {
       }
     },
 
-    mandu_write_seo_file: async (args: Record<string, unknown>) => {
+    "mandu.seo.write": async (args: Record<string, unknown>) => {
       const { fileType, config } = args as {
         fileType: "sitemap" | "robots";
         config?: Record<string, unknown>;
@@ -368,7 +368,7 @@ export default function robots(): RobotsFile {
       }
     },
 
-    mandu_seo_analyze: async (args: Record<string, unknown>) => {
+    "mandu.seo.analyze": async (args: Record<string, unknown>) => {
       const { metadata, url } = args as { metadata: Metadata; url?: string };
 
       const issues: Array<{ severity: "error" | "warning" | "info"; message: string }> = [];
@@ -433,4 +433,14 @@ export default function robots(): RobotsFile {
       };
     },
   };
+
+  // Backward-compatible aliases (deprecated)
+  handlers["mandu_preview_seo"] = handlers["mandu.seo.preview"];
+  handlers["mandu_seo_analyze"] = handlers["mandu.seo.analyze"];
+  handlers["mandu_generate_sitemap_preview"] = handlers["mandu.seo.sitemap"];
+  handlers["mandu_generate_robots_preview"] = handlers["mandu.seo.robots"];
+  handlers["mandu_create_jsonld"] = handlers["mandu.seo.jsonld"];
+  handlers["mandu_write_seo_file"] = handlers["mandu.seo.write"];
+
+  return handlers;
 }

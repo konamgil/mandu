@@ -580,7 +580,7 @@ export function resourceTools(projectRoot: string) {
           message: `Field '${fieldName}' added to resource '${resourceName}'. ${force ? "⚠️ Slots overwritten!" : "Slots preserved."}`,
           tip: force
             ? "⚠️ Custom slot logic was overwritten because force: true was used"
-            : "Custom slot logic preserved. Run mandu_generate to apply changes to all resources.",
+            : "Custom slot logic preserved. Run mandu.generate to apply changes to all resources.",
         };
       } catch (error) {
         return {
@@ -658,7 +658,7 @@ export function resourceTools(projectRoot: string) {
           slotsPreserved: result.skipped,
           remainingFields: Object.keys(definition.fields),
           message: `Field '${fieldName}' removed from resource '${resourceName}'. Slots preserved.`,
-          tip: "Run mandu_generate to apply changes to all resources",
+          tip: "Run mandu.generate to apply changes to all resources",
         };
       } catch (error) {
         return {

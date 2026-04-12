@@ -20,6 +20,17 @@ async function runCLI(args: string, cwd?: string): Promise<string> {
   return text + err;
 }
 
+async function runCommand(command: string[], cwd?: string): Promise<string> {
+  const proc = Bun.spawn(["bun", CLI, ...command], {
+    cwd: cwd ?? process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const text = await new Response(proc.stdout).text();
+  const err = await new Response(proc.stderr).text();
+  return text + err;
+}
+
 describe("mandu info", () => {
   it("prints version and environment", async () => {
     const output = await runCLI("info");
@@ -38,14 +49,97 @@ describe("mandu clean", () => {
 });
 
 describe("mandu cache", () => {
-  it("stats shows kitchen guidance", async () => {
+  it("stats reports server and kitchen status", async () => {
     const output = await runCLI("cache stats");
-    expect(output).toContain("__kitchen");
+    expect(output).toContain("Cache Status");
+    expect(output).toContain("Server:");
   });
 
-  it("clear prints the requested path", async () => {
+  it("stats --json returns structured output", async () => {
+    const output = await runCLI("cache stats --json");
+    const parsed = JSON.parse(output.trim());
+    expect(parsed.action).toBe("stats");
+    expect(typeof parsed.serverStatus).toBe("string");
+  });
+
+  it("clear prints the requested target", async () => {
     const output = await runCLI("cache clear /products");
-    expect(output).toContain("cache clear /products");
+    expect(output).toContain("Cache Clear Request");
+    expect(output).toContain("Target: path=/products");
+  });
+});
+
+describe("mandu cache runtime control", () => {
+  const tmpDir = path.join(os.tmpdir(), `mandu-cache-control-${Date.now()}`);
+  let server: ReturnType<typeof Bun.serve> | null = null;
+
+  afterAll(async () => {
+    server?.stop();
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("uses runtime-control.json to talk to the running server", async () => {
+    await fs.mkdir(path.join(tmpDir, ".mandu"), { recursive: true });
+
+    server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        if (new URL(req.url).pathname !== "/_mandu/cache") {
+          return new Response("not found", { status: 404 });
+        }
+        if (req.headers.get("x-mandu-control-token") !== "secret-token") {
+          return Response.json({ error: "unauthorized" }, { status: 401 });
+        }
+
+        if (req.method === "GET") {
+          return Response.json({
+            enabled: true,
+            message: "Runtime cache is available.",
+            stats: {
+              entries: 2,
+              maxEntries: 1000,
+              staleEntries: 1,
+              hitRate: 0.5,
+            },
+          });
+        }
+
+        if (req.method === "POST") {
+          return Response.json({
+            enabled: true,
+            target: "path=/products",
+            cleared: 1,
+            stats: {
+              entries: 1,
+              maxEntries: 1000,
+            },
+          });
+        }
+
+        return new Response("method not allowed", { status: 405 });
+      },
+    });
+
+    await fs.writeFile(
+      path.join(tmpDir, ".mandu", "runtime-control.json"),
+      JSON.stringify({
+        mode: "dev",
+        port: server.port,
+        token: "secret-token",
+        baseUrl: `http://localhost:${server.port}`,
+        startedAt: new Date().toISOString(),
+      }, null, 2)
+    );
+
+    const statsOutput = await runCLI("cache stats", tmpDir);
+    expect(statsOutput).toContain("Mode: dev");
+    expect(statsOutput).toContain("Entries: 2/1000");
+    expect(statsOutput).toContain("Hit rate: 50%");
+
+    const clearOutput = await runCLI("cache clear /products", tmpDir);
+    expect(clearOutput).toContain("Target: path=/products");
+    expect(clearOutput).toContain("Cleared: 1");
+    expect(clearOutput).toContain("Remaining entries: 1/1000");
   });
 });
 
@@ -59,10 +153,16 @@ describe("mandu mcp", () => {
 describe("mandu help", () => {
   it("renders the semantic help output", async () => {
     const output = await runCLI("--help");
+    expect(output).toContain("cache");
     expect(output).toContain("middleware");
     expect(output).toContain("auth");
     expect(output).toContain("collection");
+    expect(output).toContain("review");
+    expect(output).toContain("ask");
     expect(output).toContain("fix");
+    expect(output).toContain("deploy");
+    expect(output).toContain("upgrade");
+    expect(output).toContain("completion");
     expect(output).toContain("Command Groups:");
   });
 });
@@ -152,5 +252,43 @@ describe("mandu explain", () => {
     const output = await runCLI("explain layer-violation --from client --to server");
     expect(output).toContain("Why:");
     expect(output).toContain("How To Fix:");
+  });
+});
+
+describe("AI workflow commands", () => {
+  const tmpDir = path.join(os.tmpdir(), `mandu-cli-ai-${Date.now()}`);
+
+  afterAll(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("ask provides actionable fallback guidance", async () => {
+    const output = await runCLI("ask auth");
+    expect(output).toContain("Relevant commands:");
+    expect(output).toContain("mandu auth init --strategy=jwt");
+  });
+
+  it("review handles a simple git repo gracefully", async () => {
+    const repoDir = path.join(tmpDir, "review-repo");
+    await fs.mkdir(repoDir, { recursive: true });
+    await fs.writeFile(path.join(repoDir, "README.md"), "# Demo\n");
+    await Bun.spawn(["git", "init"], { cwd: repoDir, stdout: "ignore", stderr: "ignore" }).exited;
+    await Bun.spawn(["git", "config", "user.email", "test@example.com"], { cwd: repoDir, stdout: "ignore", stderr: "ignore" }).exited;
+    await Bun.spawn(["git", "config", "user.name", "Test User"], { cwd: repoDir, stdout: "ignore", stderr: "ignore" }).exited;
+    await Bun.spawn(["git", "add", "README.md"], { cwd: repoDir, stdout: "ignore", stderr: "ignore" }).exited;
+    await Bun.spawn(["git", "commit", "-m", "init"], { cwd: repoDir, stdout: "ignore", stderr: "ignore" }).exited;
+    await fs.writeFile(path.join(repoDir, "README.md"), "# Demo\n\nUpdated\n");
+
+    const output = await runCLI("review", repoDir);
+    expect(output).toContain("Changed files:");
+    expect(output).toContain("README.md");
+  });
+
+  it("generate --ai supports dry-run planning", async () => {
+    const aiDir = path.join(tmpDir, "ai-generate");
+    await fs.mkdir(aiDir, { recursive: true });
+    const output = await runCommand(["generate", "page", "dashboard", "--ai", "analytics", "--dry-run"], aiDir);
+    expect(output).toContain("AI Generation Plan");
+    expect(output).toContain("Feature: dashboard");
   });
 });

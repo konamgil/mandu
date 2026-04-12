@@ -16,6 +16,7 @@ import {
   validateAndReport,
   isTailwindProject,
   startCSSWatch,
+  runHook,
   type RoutesManifest,
   type GuardConfig,
   type Violation,
@@ -34,6 +35,13 @@ import {
 } from "../util/lockfile";
 import { registerManifestHandlers } from "../util/handlers";
 import { getFsRoutesGuardPolicy } from "../util/guard-policy";
+import { openBrowser } from "../util/browser";
+import {
+  handleDevShortcutInput,
+  renderDevReadySummary,
+  shouldEnableDevShortcuts,
+} from "../util/dev-shortcuts";
+import { removeRuntimeControl, writeRuntimeControl } from "../util/runtime-control";
 import path from "path";
 
 export interface DevOptions {
@@ -59,6 +67,8 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   const serverConfig = config.server ?? {};
   const devConfig = config.dev ?? {};
   const guardConfigFromFile = config.guard ?? {};
+  const plugins = config.plugins ?? [];
+  const hooks = config.hooks;
   const HMR_OFFSET = 1;
 
   console.log(`🥟 Mandu Dev Server`);
@@ -165,7 +175,13 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   const hasIslands = manifest.routes.some(
     (r) => r.kind === "page" && r.clientModule && needsHydration(r)
   );
+  const routeStats = {
+    pageCount: manifest.routes.filter((route) => route.kind === "page").length,
+    apiCount: manifest.routes.filter((route) => route.kind === "api").length,
+    islandCount: manifest.routes.filter((route) => route.kind === "page" && route.clientModule).length,
+  };
   const hmrEnabled = devConfig.hmr ?? true;
+  const managementToken = crypto.randomUUID();
 
   let port: number;
   try {
@@ -296,6 +312,34 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     console.log(`   ✅ SSR refresh complete — browser reload`);
   };
 
+  const restartDevServer = async () => {
+    clearDefaultRegistry();
+    registeredLayouts.clear();
+
+    const resolved = await resolveManifest(rootDir, { fsRoutes: config.fsRoutes });
+    manifest = resolved.manifest;
+    await registerHandlers(manifest, true);
+
+    if (hmrServer) {
+      devBundler?.close();
+      devBundler = await startDevBundler({
+        rootDir,
+        manifest,
+        watchDirs: devConfig.watchDirs,
+        onRebuild: handleRebuild,
+        onError: handleBundlerError,
+        onSSRChange: handleSSRChange,
+      });
+
+      hmrServer.broadcast({
+        type: "reload",
+        data: { timestamp: Date.now() },
+      });
+    }
+
+    console.log("✅ Full restart completed");
+  };
+
   if (hasIslands && hmrEnabled) {
     // Start HMR server
     hmrServer = createHMRServer(port);
@@ -312,35 +356,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
     // Register restart handler
     hmrServer.setRestartHandler(async () => {
-      // 1. Clear registry
-      clearDefaultRegistry();
-      registeredLayouts.clear();
-
-      // 2. Rescan routes
-      const resolved = await resolveManifest(rootDir, { fsRoutes: config.fsRoutes });
-      manifest = resolved.manifest;
-
-      // 3. Re-register handlers (importFresh)
-      await registerHandlers(manifest, true);
-
-      // 4. Restart dev bundler
-      devBundler?.close();
-      devBundler = await startDevBundler({
-        rootDir,
-        manifest,
-        watchDirs: devConfig.watchDirs,
-        onRebuild: handleRebuild,
-        onError: handleBundlerError,
-        onSSRChange: handleSSRChange,
-      });
-
-      // 5. Full browser reload
-      hmrServer?.broadcast({
-        type: "reload",
-        data: { timestamp: Date.now() },
-      });
-
-      console.log("✅ Full restart completed");
+      await restartDevServer();
     });
   }
 
@@ -358,6 +374,8 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     // Inject CSS link only when Tailwind detected
     cssPath: hasTailwind ? cssWatcher?.serverPath : false,
     guardConfig,
+    cache: true,
+    managementToken,
   });
 
   const actualPort = server.server.port ?? port;
@@ -365,28 +383,46 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     if (hmrServer) {
       hmrServer.close();
       hmrServer = createHMRServer(actualPort);
+      hmrServer.setRestartHandler(async () => {
+        await restartDevServer();
+      });
       server.registry.settings.hmrPort = actualPort;
       console.log(`🔁 HMR port updated: ${actualPort + HMR_OFFSET}`);
     }
   }
 
+  const openUrl = `http://${serverConfig.hostname || "localhost"}:${actualPort}`;
+
   // --open 옵션: 브라우저 자동 열기
   if (options.open) {
-    const openUrl = `http://${serverConfig.hostname || "localhost"}:${actualPort}`;
-    try {
-      const { exec } = require("child_process");
-      const cmd = process.platform === "win32" ? `start ${openUrl}`
-        : process.platform === "darwin" ? `open ${openUrl}`
-        : `xdg-open ${openUrl}`;
-      exec(cmd);
-    } catch { /* 브라우저 열기 실패 무시 */ }
+    openBrowser(openUrl);
   }
 
   // 시작 시간 표시
   const elapsed = Math.round(performance.now() - devStartTime);
-  console.log(`🥟 Mandu Dev Server running at http://localhost:${actualPort}`);
-  console.log(`🔥 HMR enabled on port ${actualPort + HMR_OFFSET}`);
-  console.log(`⚡ Ready in ${elapsed}ms`);
+  const readySummary = renderDevReadySummary({
+    url: openUrl,
+    hmrUrl: hmrServer ? `ws://localhost:${actualPort + HMR_OFFSET}` : undefined,
+    guardLabel: guardConfig ? `${guardPreset} (watching)` : "disabled",
+    pageCount: routeStats.pageCount,
+    apiCount: routeStats.apiCount,
+    islandCount: routeStats.islandCount,
+    readyMs: elapsed,
+  });
+  console.log(readySummary);
+
+  await writeRuntimeControl(rootDir, {
+    mode: "dev",
+    port: actualPort,
+    token: managementToken,
+    baseUrl: openUrl,
+    startedAt: new Date().toISOString(),
+  });
+
+  await runHook("onDevStart", plugins, hooks, {
+    port: actualPort,
+    hostname: serverConfig.hostname || "localhost",
+  });
 
   // FS Routes real-time watching
   const routesWatcher = await watchFSRoutes(rootDir, {
@@ -417,17 +453,22 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   // Architecture Guard real-time watch (optional)
   let archGuardWatcher: ReturnType<typeof createGuardWatcher> | null = null;
   let guardFailed = false;
+  let shortcutCleanup: (() => void) | null = null;
 
   // Cleanup function
   const cleanup = () => {
     console.log("\n🛑 Shutting down server...");
+    void runHook("onDevStop", plugins, hooks);
     server.stop();
     devBundler?.close();
     hmrServer?.close();
     cssWatcher?.close();
     routesWatcher.close();
     archGuardWatcher?.close();
-    process.exit(0);
+    shortcutCleanup?.();
+    void removeRuntimeControl(rootDir).finally(() => {
+      process.exit(0);
+    });
   };
 
   const stopOnGuardError = (violation: Violation) => {
@@ -466,6 +507,55 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     archGuardWatcher.start();
   }
 
+  if (shouldEnableDevShortcuts()) {
+    shortcutCleanup = attachDevShortcuts({
+      openUrl,
+      readySummary,
+      restart: restartDevServer,
+      cleanup,
+    });
+  }
+
   process.on("SIGINT", cleanup);
   process.on("SIGTERM", cleanup);
+}
+
+function attachDevShortcuts(options: {
+  openUrl: string;
+  readySummary: string;
+  restart: () => Promise<void>;
+  cleanup: () => void;
+}): (() => void) | null {
+  const stdin = process.stdin;
+  if (!stdin.isTTY) {
+    return null;
+  }
+
+  stdin.setRawMode?.(true);
+  stdin.resume();
+  stdin.setEncoding("utf8");
+
+  const onData = async (chunk: string) => {
+    if (chunk === "\u0003") {
+      options.cleanup();
+      return;
+    }
+
+    await handleDevShortcutInput(chunk, {
+      clearScreen: () => {
+        console.clear();
+        console.log(options.readySummary);
+      },
+      openBrowser: () => openBrowser(options.openUrl),
+      restartServer: options.restart,
+      quit: options.cleanup,
+    });
+  };
+
+  stdin.on("data", onData);
+
+  return () => {
+    stdin.off("data", onData);
+    stdin.setRawMode?.(false);
+  };
 }

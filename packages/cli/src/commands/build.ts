@@ -12,6 +12,7 @@ import {
   isTailwindProject,
   buildCSS,
   startServer,
+  runHook,
   type RoutesManifest,
   type BundleManifest,
   type ServerOptions,
@@ -21,6 +22,7 @@ import path from "path";
 import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";
 import { registerManifestHandlers } from "../util/handlers";
+import { createBuildSummaryRows, renderBuildSummaryTable } from "../util/build-summary";
 
 export interface BuildOptions {
   /** Code minification (default: true in production) */
@@ -45,6 +47,12 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   const buildConfig = config.build ?? {};
   const serverConfig = config.server ?? {};
   const adapter = config.adapter;
+  const plugins = config.plugins ?? [];
+  const hooks = config.hooks;
+
+  await runHook("onBeforeBuild", plugins, hooks);
+
+  const buildStartTime = performance.now();
 
   // 1. Load route manifest (FS Routes first)
   let manifest: Awaited<ReturnType<typeof resolveManifest>>["manifest"];
@@ -114,6 +122,10 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
 
     if (!result.success) {
       console.error("\n❌ Build failed");
+      await runHook("onAfterBuild", plugins, hooks, {
+        success: false,
+        duration: Math.round(performance.now() - buildStartTime),
+      });
       return false;
     }
 
@@ -124,6 +136,15 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     if (hasTailwind) {
       console.log(`   CSS: .mandu/client/globals.css`);
     }
+
+    const summaryRows = await createBuildSummaryRows(
+      cwd,
+      hydratedRoutes,
+      result.outputs,
+      result.manifest
+    );
+    console.log("");
+    console.log(renderBuildSummaryTable(summaryRows, Number(elapsed)));
   }
 
   // 5.5. Prerendering (SSG) — 정적 페이지를 HTML로 사전 생성
@@ -207,6 +228,11 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
       serverOptions: adapterServerOptions,
     });
   }
+
+  await runHook("onAfterBuild", plugins, hooks, {
+    success: true,
+    duration: Math.round(performance.now() - buildStartTime),
+  });
 
   // 6. Watch mode
   if (options.watch) {

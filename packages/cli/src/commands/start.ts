@@ -8,6 +8,7 @@ import {
   startServer,
   loadEnv,
   validateAndReport,
+  runHook,
   type RoutesManifest,
   type BundleManifest,
 } from "@mandujs/core";
@@ -21,6 +22,7 @@ import {
   printRuntimeLockfileStatus,
 } from "../util/lockfile";
 import { registerManifestHandlers } from "../util/handlers";
+import { removeRuntimeControl, writeRuntimeControl } from "../util/runtime-control";
 import path from "path";
 import fs from "fs";
 
@@ -58,6 +60,9 @@ export async function start(options: StartOptions = {}): Promise<void> {
   handleBlockedLockfile(action, lockResult);
 
   const serverConfig = config.server ?? {};
+  const plugins = config.plugins ?? [];
+  const configHooks = config.hooks;
+  const managementToken = crypto.randomUUID();
 
   console.log(`🥟 Mandu Production Server`);
 
@@ -142,6 +147,8 @@ export async function start(options: StartOptions = {}): Promise<void> {
     console.warn(`⚠️  Port ${desiredPort} is in use. Using ${port} instead.`);
   }
 
+  await runHook("onBeforeStart", plugins, configHooks);
+
   // Determine CSS path (inject when built CSS file exists)
   const cssFilePath = path.join(rootDir, ".mandu", "client", "globals.css");
   const hasCss = fs.existsSync(cssFilePath);
@@ -159,6 +166,8 @@ export async function start(options: StartOptions = {}): Promise<void> {
     streaming: serverConfig.streaming,
     rateLimit: serverConfig.rateLimit,
     cssPath,
+    cache: true,
+    managementToken,
   };
 
   let actualPort: number;
@@ -185,11 +194,21 @@ export async function start(options: StartOptions = {}): Promise<void> {
 
   console.log(`\n🚀 Production server running on http://${serverConfig.hostname || "localhost"}:${actualPort}`);
 
+  await writeRuntimeControl(rootDir, {
+    mode: "start",
+    port: actualPort,
+    token: managementToken,
+    baseUrl: `http://${serverConfig.hostname || "localhost"}:${actualPort}`,
+    startedAt: new Date().toISOString(),
+  });
+
   // Graceful shutdown
   const cleanup = () => {
     console.log("\n🛑 Shutting down server...");
     stopFn();
-    process.exit(0);
+    void removeRuntimeControl(rootDir).finally(() => {
+      process.exit(0);
+    });
   };
 
   process.on("SIGINT", cleanup);

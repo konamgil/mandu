@@ -4,7 +4,7 @@ import fs from "fs/promises";
 
 export const componentToolDefinitions: Tool[] = [
   {
-    name: "mandu_add_component",
+    name: "mandu.component.add",
     annotations: {
       destructiveHint: false,
       readOnlyHint: false,
@@ -64,8 +64,8 @@ function toKebabCase(name: string): string {
 }
 
 export function componentTools(projectRoot: string) {
-  return {
-    mandu_add_component: async (args: Record<string, unknown>) => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.component.add": async (args: Record<string, unknown>) => {
       const {
         name,
         layer,
@@ -186,4 +186,9 @@ export function ${name}({ className }: ${name}Props) {
       };
     },
   };
+
+  // Backward-compatible aliases (deprecated)
+  handlers["mandu_add_component"] = handlers["mandu.component.add"];
+
+  return handlers;
 }

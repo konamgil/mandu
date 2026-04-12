@@ -2,7 +2,7 @@
  * MCP Error Handler Tests
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import {
   formatMcpError,
   createToolResponse,
@@ -92,6 +92,16 @@ describe("Error Handler", () => {
       const parsed = JSON.parse(response.content[0].text);
       expect(parsed.error).toBe("Test error");
       expect(parsed.category).toBeDefined();
+    });
+
+    it("sets isError: true for soft error results", () => {
+      const result = createToolResponse("test-tool", { error: "something went wrong" });
+      expect(result.isError).toBe(true);
+    });
+
+    it("does not set isError for success results", () => {
+      const result = createToolResponse("test-tool", { success: true, data: "ok" });
+      expect(result.isError).toBeFalsy();
     });
   });
 

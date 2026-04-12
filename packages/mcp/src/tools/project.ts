@@ -1,9 +1,9 @@
 /**
  * Mandu MCP - Project Tools
  *
- * - mandu_init: Create a new Mandu project (init + optional install)
- * - mandu_dev_start: Start dev server
- * - mandu_dev_stop: Stop dev server
+ * - mandu.project.init: Create a new Mandu project (init + optional install)
+ * - mandu.dev.start: Start dev server
+ * - mandu.dev.stop: Stop dev server
  */
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -127,7 +127,7 @@ async function consumeStream(
 
 export const projectToolDefinitions: Tool[] = [
   {
-    name: "mandu_init",
+    name: "mandu.project.init",
     description:
       "Initialize a new Mandu project (runs `mandu init` and optionally `bun install`).",
     annotations: {
@@ -172,7 +172,7 @@ export const projectToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_dev_start",
+    name: "mandu.dev.start",
     description: "Start Mandu dev server (bun run dev).",
     annotations: {
       readOnlyHint: false,
@@ -189,7 +189,7 @@ export const projectToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_dev_stop",
+    name: "mandu.dev.stop",
     description: "Stop Mandu dev server if running.",
     annotations: {
       destructiveHint: true,
@@ -204,8 +204,8 @@ export const projectToolDefinitions: Tool[] = [
 ];
 
 export function projectTools(projectRoot: string, server?: Server, monitor?: ActivityMonitor) {
-  return {
-    mandu_init: async (args: Record<string, unknown>) => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.project.init": async (args: Record<string, unknown>) => {
       const {
         name,
         parentDir,
@@ -317,7 +317,7 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
       };
     },
 
-    mandu_dev_start: async (args: Record<string, unknown>) => {
+    "mandu.dev.start": async (args: Record<string, unknown>) => {
       const { cwd } = args as { cwd?: string };
       if (devServerState || devServerStarting) {
         return {
@@ -408,7 +408,7 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
       }
     },
 
-    mandu_dev_stop: async () => {
+    "mandu.dev.stop": async () => {
       if (!devServerState) {
         return {
           success: false,
@@ -454,4 +454,11 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
       };
     },
   };
+
+  // Backward-compatible aliases (deprecated)
+  handlers["mandu_init"] = handlers["mandu.project.init"];
+  handlers["mandu_dev_start"] = handlers["mandu.dev.start"];
+  handlers["mandu_dev_stop"] = handlers["mandu.dev.stop"];
+
+  return handlers;
 }

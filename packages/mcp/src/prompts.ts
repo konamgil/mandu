@@ -47,8 +47,8 @@ Follow these steps using Mandu MCP tools:
 
 1. Read current route manifest: Resource mandu://routes
 2. Read project config: Resource mandu://config
-3. Negotiate the feature spec: Tool mandu_negotiate
-4. Generate scaffold: Tool mandu_generate_scaffold
+3. Negotiate the feature spec: Tool mandu.negotiate
+4. Generate scaffold: Tool mandu.negotiate.scaffold
 5. If client interactivity needed, create island: Tool mandu_create_island
    Use the declarative pattern: island('visible', Component)
 6. If data requirements exist, create slot: Tool mandu_create_slot
@@ -62,7 +62,7 @@ Follow these steps using Mandu MCP tools:
 
 Follow these diagnostic steps using Mandu MCP tools:
 
-1. Check client-side errors: Tool mandu_kitchen_errors
+1. Check client-side errors: Tool mandu.kitchen.errors
 2. Check recent build/runtime errors: Resource mandu://errors
 3. Check architecture rule violations: Resource mandu://watch/warnings
 4. Run brain doctor for structural analysis: Tool mandu_brain_diagnose
@@ -80,11 +80,11 @@ After identifying root cause, fix and re-run checks to confirm.`),
 Follow these steps using Mandu MCP tools:
 
 1. Read project config: Resource mandu://config
-2. Create API routes: Tool mandu_negotiate
+2. Create API routes: Tool mandu.negotiate
    - GET/POST for /api/${r}, GET/PUT/DELETE for /api/${r}/[id]
 3. Define contracts: Tool mandu_create_contract
    - Create${R}Schema, Update${R}Schema, ${R}ResponseSchema
-4. Generate scaffold: Tool mandu_generate_scaffold
+4. Generate scaffold: Tool mandu.negotiate.scaffold
 5. Create data slot for list page: Tool mandu_create_slot
 6. Validate: Tool mandu_guard_check + Tool mandu_brain_diagnose
 7. Verify routes: Resource mandu://routes`);

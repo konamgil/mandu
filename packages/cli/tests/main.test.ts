@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const getCommandMock = vi.fn();
+const getAllCommandRegistrationsMock = vi.fn(() => []);
 
 vi.mock("../src/commands/registry", () => ({
   commandRegistry: new Map(),
   getCommand: getCommandMock,
+  getAllCommandRegistrations: getAllCommandRegistrationsMock,
 }));
 
 vi.mock("../src/terminal", () => ({

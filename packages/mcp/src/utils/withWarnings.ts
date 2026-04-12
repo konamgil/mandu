@@ -14,6 +14,7 @@ const MUTATION_TOOLS = new Set([
   "mandu_add_route",
   "mandu_update_route",
   "mandu_delete_route",
+  "mandu.generate",
   "mandu_generate",
   "mandu_build",
   "mandu_commit",

@@ -11,15 +11,15 @@ import fs from "fs/promises";
 
 export const runtimeToolDefinitions: Tool[] = [
   {
-    name: "mandu_get_runtime_config",
+    name: "mandu.runtime.config",
     annotations: {
       readOnlyHint: true,
     },
     description:
       "Get the Mandu runtime configuration defaults for logger and normalize settings. " +
       "Shows default values for every configurable option along with usage examples. " +
-      "Use this to understand the runtime before calling mandu_set_contract_normalize " +
-      "or mandu_generate_logger_config.",
+      "Use this to understand the runtime before calling mandu.runtime.setNormalize " +
+      "or mandu.runtime.loggerConfig.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -27,7 +27,7 @@ export const runtimeToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_get_contract_options",
+    name: "mandu.runtime.contractOptions",
     annotations: {
       readOnlyHint: true,
     },
@@ -49,7 +49,7 @@ export const runtimeToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_set_contract_normalize",
+    name: "mandu.runtime.setNormalize",
     annotations: {
       readOnlyHint: false,
     },
@@ -83,7 +83,7 @@ export const runtimeToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_list_logger_options",
+    name: "mandu.runtime.loggerOptions",
     annotations: {
       readOnlyHint: true,
     },
@@ -91,7 +91,7 @@ export const runtimeToolDefinitions: Tool[] = [
       "List all available logger configuration options with types, defaults, and descriptions. " +
       "Covers: log format, level, header/body logging (security risk warnings), " +
       "sampling rate, slow request threshold, redaction fields, custom sink, and skip patterns. " +
-      "Use this as a reference before calling mandu_generate_logger_config.",
+      "Use this as a reference before calling mandu.runtime.loggerConfig.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -99,7 +99,7 @@ export const runtimeToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_generate_logger_config",
+    name: "mandu.runtime.loggerConfig",
     annotations: {
       readOnlyHint: true,
       idempotentHint: true,
@@ -153,8 +153,8 @@ async function readFileContent(filePath: string): Promise<string | null> {
 export function runtimeTools(projectRoot: string) {
   const paths = getProjectPaths(projectRoot);
 
-  return {
-    mandu_get_runtime_config: async () => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.runtime.config": async () => {
       return {
         defaults: {
           logger: {
@@ -219,7 +219,7 @@ export default Mandu.contract({
       };
     },
 
-    mandu_get_contract_options: async (args: Record<string, unknown>) => {
+    "mandu.runtime.contractOptions": async (args: Record<string, unknown>) => {
       const { routeId } = args as { routeId: string };
 
       const result = await loadManifest(paths.manifestPath);
@@ -240,7 +240,7 @@ export default Mandu.contract({
             normalize: "strip",
             coerceQueryParams: true,
           },
-          suggestion: `Create a contract with: mandu_create_contract({ routeId: "${routeId}" })`,
+          suggestion: `Create a contract with: mandu.contract.create({ routeId: "${routeId}" })`,
         };
       }
 
@@ -278,7 +278,7 @@ export default Mandu.contract({
       };
     },
 
-    mandu_set_contract_normalize: async (args: Record<string, unknown>) => {
+    "mandu.runtime.setNormalize": async (args: Record<string, unknown>) => {
       const { routeId, normalize, coerceQueryParams } = args as {
         routeId: string;
         normalize?: "strip" | "strict" | "passthrough";
@@ -298,7 +298,7 @@ export default Mandu.contract({
       if (!route.contractModule) {
         return {
           error: "Route has no contract module",
-          suggestion: `Create a contract first: mandu_create_contract({ routeId: "${routeId}" })`,
+          suggestion: `Create a contract first: mandu.contract.create({ routeId: "${routeId}" })`,
         };
       }
 
@@ -375,7 +375,7 @@ export default Mandu.contract({
       };
     },
 
-    mandu_list_logger_options: async () => {
+    "mandu.runtime.loggerOptions": async () => {
       return {
         options: [
           {
@@ -458,7 +458,7 @@ export default Mandu.contract({
       };
     },
 
-    mandu_generate_logger_config: async (args: Record<string, unknown>) => {
+    "mandu.runtime.loggerConfig": async (args: Record<string, unknown>) => {
       const {
         environment = "development",
         includeHeaders = false,
@@ -517,6 +517,15 @@ export const appLogger = logger(${JSON.stringify(config, null, 2)});
       };
     },
   };
+
+  // Backward-compatible aliases (deprecated)
+  handlers["mandu_get_runtime_config"] = handlers["mandu.runtime.config"];
+  handlers["mandu_set_contract_normalize"] = handlers["mandu.runtime.setNormalize"];
+  handlers["mandu_get_contract_options"] = handlers["mandu.runtime.contractOptions"];
+  handlers["mandu_list_logger_options"] = handlers["mandu.runtime.loggerOptions"];
+  handlers["mandu_generate_logger_config"] = handlers["mandu.runtime.loggerConfig"];
+
+  return handlers;
 }
 
 function insertAfter(content: string, search: string): boolean {

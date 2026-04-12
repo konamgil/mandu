@@ -4,6 +4,7 @@ import { pathToFileURL } from "url";
 import { CONFIG_FILES, coerceConfig } from "./mandu";
 import { readJsonFile } from "../utils/bun";
 import type { ManduAdapter } from "../runtime/adapter";
+import type { ManduPlugin, ManduHooks } from "../plugins/hooks";
 
 /**
  * DNA-003: Strict mode schema helper
@@ -143,6 +144,23 @@ const AdapterConfigSchema = z.custom<ManduAdapter | undefined>(
  * 알 수 없는 키가 있으면 오류 발생 → 오타 즉시 감지
  * MANDU_STRICT=0 으로 비활성화 가능
  */
+/**
+ * Plugin schema — array of objects with `name` (string) and optional `hooks`/`setup`.
+ * Validated structurally; hook functions are opaque to Zod.
+ */
+const ManduPluginSchema = z.custom<ManduPlugin>(
+  (v) =>
+    typeof v === "object" &&
+    v !== null &&
+    typeof (v as { name?: unknown }).name === "string",
+  { message: "Each plugin must be an object with a `name` string" }
+);
+
+const ManduHooksSchema = z.custom<Partial<ManduHooks>>(
+  (v) => typeof v === "object" && v !== null,
+  { message: "hooks must be an object" }
+);
+
 export const ManduConfigSchema = z
   .object({
     adapter: AdapterConfigSchema.optional(),
@@ -152,6 +170,8 @@ export const ManduConfigSchema = z
     dev: DevConfigSchema.default({}),
     fsRoutes: FsRoutesConfigSchema.default({}),
     seo: SeoConfigSchema.default({}),
+    plugins: z.array(ManduPluginSchema).optional(),
+    hooks: ManduHooksSchema.optional(),
   })
   .strict();
 

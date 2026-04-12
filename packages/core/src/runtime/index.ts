@@ -10,7 +10,14 @@ export * from "./trace";
 export * from "./logger";
 export * from "./boundary";
 export * from "./stable-selector";
-export { revalidatePath, revalidateTag, type CacheStore, MemoryCacheStore } from "./cache";
+export {
+  revalidatePath,
+  revalidateTag,
+  getCacheStoreStats,
+  type CacheStore,
+  type CacheStoreStats,
+  MemoryCacheStore,
+} from "./cache";
 export { type MiddlewareContext, type MiddlewareNext, type MiddlewareFn, type MiddlewareConfig } from "./middleware";
 export { type ManduAdapter, type AdapterOptions, type AdapterServer } from "./adapter";
 export { adapterBun } from "./adapter-bun";

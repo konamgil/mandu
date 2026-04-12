@@ -17,6 +17,9 @@ export { generateTools, generateToolDefinitions } from "./generate.js";
 export { transactionTools, transactionToolDefinitions } from "./transaction.js";
 export { historyTools, historyToolDefinitions } from "./history.js";
 export { guardTools, guardToolDefinitions } from "./guard.js";
+export { decisionTools, decisionToolDefinitions } from "./decisions.js";
+export { negotiateTools, negotiateToolDefinitions } from "./negotiate.js";
+export { slotValidationTools, slotValidationToolDefinitions } from "./slot-validation.js";
 export { slotTools, slotToolDefinitions } from "./slot.js";
 export { hydrationTools, hydrationToolDefinitions } from "./hydration.js";
 export { contractTools, contractToolDefinitions } from "./contract.js";
@@ -36,6 +39,9 @@ import { generateTools, generateToolDefinitions } from "./generate.js";
 import { transactionTools, transactionToolDefinitions } from "./transaction.js";
 import { historyTools, historyToolDefinitions } from "./history.js";
 import { guardTools, guardToolDefinitions } from "./guard.js";
+import { decisionTools, decisionToolDefinitions } from "./decisions.js";
+import { negotiateTools, negotiateToolDefinitions } from "./negotiate.js";
+import { slotValidationTools, slotValidationToolDefinitions } from "./slot-validation.js";
 import { slotTools, slotToolDefinitions } from "./slot.js";
 import { hydrationTools, hydrationToolDefinitions } from "./hydration.js";
 import { contractTools, contractToolDefinitions } from "./contract.js";
@@ -72,6 +78,9 @@ const TOOL_MODULES: ToolModule[] = [
   { category: "transaction", definitions: transactionToolDefinitions, handlers: transactionTools },
   { category: "history", definitions: historyToolDefinitions, handlers: historyTools },
   { category: "guard", definitions: guardToolDefinitions, handlers: guardTools },
+  { category: "decisions", definitions: decisionToolDefinitions, handlers: decisionTools },
+  { category: "negotiate", definitions: negotiateToolDefinitions, handlers: negotiateTools },
+  { category: "slot-validation", definitions: slotValidationToolDefinitions, handlers: slotValidationTools },
   { category: "slot", definitions: slotToolDefinitions, handlers: slotTools },
   { category: "hydration", definitions: hydrationToolDefinitions, handlers: hydrationTools },
   { category: "contract", definitions: contractToolDefinitions, handlers: contractTools },

@@ -18,14 +18,14 @@ const TOOL_ICONS: Record<string, string> = {
   mandu_delete_route: "SPEC-",
   mandu_validate_manifest: "SPEC?",
   // Generate
-  mandu_generate: "GEN",
-  mandu_generate_status: "GEN?",
+  "mandu.generate": "GEN",
+  "mandu.generate.status": "GEN?",
   // Guard
   mandu_guard_check: "GUARD",
   // Slot
-  mandu_read_slot: "SLOT",
+  "mandu.slot.read": "SLOT",
   mandu_write_slot: "SLOT~",
-  mandu_validate_slot: "SLOT?",
+  "mandu.slot.validate": "SLOT?",
   // Contract
   mandu_list_contracts: "CONTRACT",
   mandu_get_contract: "CONTRACT",

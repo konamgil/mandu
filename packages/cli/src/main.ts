@@ -8,7 +8,7 @@
  * - Lazy loading for optimized startup time
  */
 
-import { getCommand, type CommandContext } from "./commands/registry";
+import { getCommand, getAllCommandRegistrations, type CommandContext } from "./commands/registry";
 import { CLI_ERROR_CODES, handleCLIError, printCLIError } from "./errors";
 import { shouldShowBanner, renderHeroBanner, renderHelp, MANDU_HELP } from "./terminal";
 
@@ -22,9 +22,16 @@ const VERSION = (() => {
 })();
 
 function getHelpText(): string {
+  const subcommands = getAllCommandRegistrations().map((command) => ({
+    name: command.id,
+    description: command.description,
+    aliases: command.id === "guard" ? ["g"] : undefined,
+  }));
+
   return renderHelp({
     ...MANDU_HELP,
     description: `${MANDU_HELP.description} v${VERSION}`,
+    subcommands,
   });
 }
 

@@ -15,7 +15,7 @@ import path from "path";
 
 export const hydrationToolDefinitions: Tool[] = [
   {
-    name: "mandu_build",
+    name: "mandu.build",
     description:
       "Build client bundles for hydration. Compiles client slots (.client.ts) into browser-ready JavaScript bundles.",
     annotations: {
@@ -45,7 +45,7 @@ export const hydrationToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_build_status",
+    name: "mandu.build.status",
     description:
       "Get the current build status, bundle manifest, and statistics for client bundles.",
     annotations: {
@@ -58,7 +58,7 @@ export const hydrationToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_list_islands",
+    name: "mandu.island.list",
     description:
       "List all routes that have client-side hydration (islands). Shows hydration strategy and priority for each.",
     annotations: {
@@ -71,7 +71,7 @@ export const hydrationToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_set_hydration",
+    name: "mandu.hydration.set",
     description:
       "Set hydration configuration for a specific route. Updates the route's hydration strategy and priority.",
     annotations: {
@@ -105,7 +105,7 @@ export const hydrationToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_add_client_slot",
+    name: "mandu.hydration.addClientSlot",
     description:
       "Add a client slot file for a route to enable hydration. Creates the .client.ts file and updates the manifest.",
     annotations: {
@@ -138,8 +138,8 @@ export const hydrationToolDefinitions: Tool[] = [
 export function hydrationTools(projectRoot: string) {
   const paths = getProjectPaths(projectRoot);
 
-  return {
-    mandu_build: async (args: Record<string, unknown>) => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.build": async (args: Record<string, unknown>) => {
       const { minify, sourcemap, targetRouteIds } = args as {
         minify?: boolean;
         sourcemap?: boolean;
@@ -181,7 +181,7 @@ export function hydrationTools(projectRoot: string) {
       };
     },
 
-    mandu_build_status: async () => {
+    "mandu.build.status": async () => {
       // Read bundle manifest
       const manifestPath = path.join(projectRoot, ".mandu/manifest.json");
       const manifest = await readJsonFile<BundleManifest>(manifestPath);
@@ -189,7 +189,7 @@ export function hydrationTools(projectRoot: string) {
       if (!manifest) {
         return {
           hasBundles: false,
-          message: "No bundle manifest found. Run mandu_build first.",
+          message: "No bundle manifest found. Run mandu.build first.",
         };
       }
 
@@ -215,7 +215,7 @@ export function hydrationTools(projectRoot: string) {
       };
     },
 
-    mandu_list_islands: async () => {
+    "mandu.island.list": async () => {
       // Load manifest
       const manifestResult = await loadManifest(paths.manifestPath);
       if (!manifestResult.success || !manifestResult.data) {
@@ -254,7 +254,7 @@ export function hydrationTools(projectRoot: string) {
       };
     },
 
-    mandu_set_hydration: async (args: Record<string, unknown>) => {
+    "mandu.hydration.set": async (args: Record<string, unknown>) => {
       const { routeId, strategy, priority, preload } = args as {
         routeId: string;
         strategy?: SpecHydrationStrategy;
@@ -313,7 +313,7 @@ export function hydrationTools(projectRoot: string) {
       };
     },
 
-    mandu_add_client_slot: async (args: Record<string, unknown>) => {
+    "mandu.hydration.addClientSlot": async (args: Record<string, unknown>) => {
       const { routeId, strategy = "island", priority = "visible" } = args as {
         routeId: string;
         strategy?: SpecHydrationStrategy;
@@ -388,12 +388,21 @@ export function hydrationTools(projectRoot: string) {
         message: `Created client slot: ${clientModulePath}`,
         nextSteps: [
           `Edit ${clientModulePath} to add client-side logic`,
-          `Run mandu_build to compile the client bundle`,
+          `Run mandu.build to compile the client bundle`,
           `The page will now hydrate in the browser`,
         ],
       };
     },
   };
+
+  // Backward-compatible aliases (deprecated)
+  handlers["mandu_build"] = handlers["mandu.build"];
+  handlers["mandu_build_status"] = handlers["mandu.build.status"];
+  handlers["mandu_list_islands"] = handlers["mandu.island.list"];
+  handlers["mandu_set_hydration"] = handlers["mandu.hydration.set"];
+  handlers["mandu_add_client_slot"] = handlers["mandu.hydration.addClientSlot"];
+
+  return handlers;
 }
 
 /**

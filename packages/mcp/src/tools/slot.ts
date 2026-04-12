@@ -10,7 +10,7 @@ import path from "path";
 
 export const slotToolDefinitions: Tool[] = [
   {
-    name: "mandu_read_slot",
+    name: "mandu.slot.read",
     annotations: {
       readOnlyHint: true,
     },
@@ -28,7 +28,7 @@ export const slotToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_validate_slot",
+    name: "mandu.slot.validate",
     annotations: {
       readOnlyHint: true,
     },
@@ -50,8 +50,8 @@ export const slotToolDefinitions: Tool[] = [
 export function slotTools(projectRoot: string) {
   const paths = getProjectPaths(projectRoot);
 
-  return {
-    mandu_read_slot: async (args: Record<string, unknown>) => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.slot.read": async (args: Record<string, unknown>) => {
       const { routeId } = args as { routeId: string };
 
       // Load manifest to find the route
@@ -85,7 +85,7 @@ export function slotTools(projectRoot: string) {
           return {
             exists: false,
             slotPath: route.slotModule,
-            message: "Slot file does not exist. Run mandu_generate to create it.",
+            message: "Slot file does not exist. Run mandu.generate to create it.",
           };
         }
 
@@ -112,7 +112,7 @@ export function slotTools(projectRoot: string) {
       }
     },
 
-    mandu_validate_slot: async (args: Record<string, unknown>) => {
+    "mandu.slot.validate": async (args: Record<string, unknown>) => {
       const { content } = args as { content: string };
 
       const validation = validateSlotContent(content);
@@ -160,4 +160,10 @@ export function slotTools(projectRoot: string) {
       };
     },
   };
+
+  // Backward-compatible aliases
+  handlers["mandu_read_slot"] = handlers["mandu.slot.read"];
+  handlers["mandu_validate_slot"] = handlers["mandu.slot.validate"];
+
+  return handlers;
 }

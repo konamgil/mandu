@@ -2,7 +2,7 @@
  * MCP Tool Registry Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 import {
   McpToolRegistry,
   mcpToolRegistry,
@@ -13,12 +13,13 @@ import type { McpToolPlugin } from "@mandujs/core";
 describe("McpToolRegistry", () => {
   let registry: McpToolRegistry;
 
-  const mockTool: McpToolPlugin = {
+  const createMockTool = (overrides?: Partial<McpToolPlugin>): McpToolPlugin => ({
     name: "test_tool",
     description: "A test tool",
     inputSchema: { type: "object", properties: {} },
-    execute: vi.fn().mockResolvedValue({ success: true }),
-  };
+    execute: mock(() => Promise.resolve({ success: true })),
+    ...overrides,
+  });
 
   beforeEach(() => {
     registry = new McpToolRegistry();
@@ -26,21 +27,21 @@ describe("McpToolRegistry", () => {
 
   describe("register", () => {
     it("should register a tool", () => {
-      registry.register(mockTool);
+      registry.register(createMockTool());
 
       expect(registry.has("test_tool")).toBe(true);
       expect(registry.size).toBe(1);
     });
 
     it("should register a tool with category", () => {
-      registry.register(mockTool, "test-category");
+      registry.register(createMockTool(), "test-category");
 
       expect(registry.getByCategory("test-category")).toHaveLength(1);
       expect(registry.getCategories()).toContain("test-category");
     });
 
     it("should return unregister function", () => {
-      const unregister = registry.register(mockTool);
+      const unregister = registry.register(createMockTool());
 
       expect(registry.has("test_tool")).toBe(true);
 
@@ -49,10 +50,10 @@ describe("McpToolRegistry", () => {
     });
 
     it("should emit register event", () => {
-      const listener = vi.fn();
+      const listener = mock(() => {});
       registry.on(listener);
 
-      registry.register(mockTool, "test-category");
+      registry.register(createMockTool(), "test-category");
 
       expect(listener).toHaveBeenCalledWith({
         type: "register",
@@ -65,9 +66,9 @@ describe("McpToolRegistry", () => {
   describe("registerAll", () => {
     it("should register multiple tools", () => {
       const tools: McpToolPlugin[] = [
-        { ...mockTool, name: "tool_1" },
-        { ...mockTool, name: "tool_2" },
-        { ...mockTool, name: "tool_3" },
+        createMockTool({ name: "tool_1" }),
+        createMockTool({ name: "tool_2" }),
+        createMockTool({ name: "tool_3" }),
       ];
 
       registry.registerAll(tools, "batch");
@@ -79,7 +80,7 @@ describe("McpToolRegistry", () => {
 
   describe("unregister", () => {
     it("should unregister a tool", () => {
-      registry.register(mockTool);
+      registry.register(createMockTool());
       const result = registry.unregister("test_tool");
 
       expect(result).toBe(true);
@@ -92,7 +93,7 @@ describe("McpToolRegistry", () => {
     });
 
     it("should remove from category", () => {
-      registry.register(mockTool, "test-category");
+      registry.register(createMockTool(), "test-category");
       registry.unregister("test_tool");
 
       expect(registry.getByCategory("test-category")).toHaveLength(0);
@@ -101,9 +102,9 @@ describe("McpToolRegistry", () => {
 
   describe("unregisterCategory", () => {
     it("should unregister all tools in a category", () => {
-      registry.register({ ...mockTool, name: "tool_1" }, "cat");
-      registry.register({ ...mockTool, name: "tool_2" }, "cat");
-      registry.register({ ...mockTool, name: "other" }, "other-cat");
+      registry.register(createMockTool({ name: "tool_1" }), "cat");
+      registry.register(createMockTool({ name: "tool_2" }), "cat");
+      registry.register(createMockTool({ name: "other" }), "other-cat");
 
       const count = registry.unregisterCategory("cat");
 
@@ -115,7 +116,7 @@ describe("McpToolRegistry", () => {
 
   describe("get", () => {
     it("should return registered tool", () => {
-      registry.register(mockTool);
+      registry.register(createMockTool());
       const tool = registry.get("test_tool");
 
       expect(tool).toBeDefined();
@@ -129,7 +130,7 @@ describe("McpToolRegistry", () => {
 
   describe("setEnabled", () => {
     it("should disable a tool", () => {
-      registry.register(mockTool);
+      registry.register(createMockTool());
       registry.setEnabled("test_tool", false);
 
       expect(registry.enabledCount).toBe(0);
@@ -137,7 +138,7 @@ describe("McpToolRegistry", () => {
     });
 
     it("should re-enable a tool", () => {
-      registry.register(mockTool);
+      registry.register(createMockTool());
       registry.setEnabled("test_tool", false);
       registry.setEnabled("test_tool", true);
 
@@ -147,7 +148,7 @@ describe("McpToolRegistry", () => {
 
   describe("toToolDefinitions", () => {
     it("should return MCP SDK Tool format", () => {
-      registry.register(mockTool);
+      registry.register(createMockTool());
       const tools = registry.toToolDefinitions();
 
       expect(tools).toHaveLength(1);
@@ -159,8 +160,8 @@ describe("McpToolRegistry", () => {
     });
 
     it("should only return enabled tools", () => {
-      registry.register({ ...mockTool, name: "enabled" });
-      registry.register({ ...mockTool, name: "disabled" });
+      registry.register(createMockTool({ name: "enabled" }));
+      registry.register(createMockTool({ name: "disabled" }));
       registry.setEnabled("disabled", false);
 
       const tools = registry.toToolDefinitions();
@@ -171,7 +172,7 @@ describe("McpToolRegistry", () => {
 
   describe("toHandlers", () => {
     it("should return handler map", async () => {
-      registry.register(mockTool);
+      registry.register(createMockTool());
       const handlers = registry.toHandlers();
 
       expect(handlers["test_tool"]).toBeDefined();
@@ -182,8 +183,8 @@ describe("McpToolRegistry", () => {
 
   describe("clear", () => {
     it("should remove all tools", () => {
-      registry.register({ ...mockTool, name: "tool_1" });
-      registry.register({ ...mockTool, name: "tool_2" });
+      registry.register(createMockTool({ name: "tool_1" }));
+      registry.register(createMockTool({ name: "tool_2" }));
 
       registry.clear();
 
@@ -194,7 +195,7 @@ describe("McpToolRegistry", () => {
 
   describe("dump", () => {
     it("should return registry state", () => {
-      registry.register(mockTool, "test-category");
+      registry.register(createMockTool(), "test-category");
       const dump = registry.dump();
 
       expect(dump.totalTools).toBe(1);

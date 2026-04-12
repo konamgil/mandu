@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun *)",
+      "Bash(bunx mandu *)",
+      "Bash(bunx @mandujs/*)",
+      "mcp__mandu__mandu_*"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bunx mandu guard check-file \"$FILE_PATH\" --json --severity error 2>/dev/null || true"
+          }
+        ],
+        "description": "Run architecture guard validation before modifying source files"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=process.env.FILE_PATH||'';if(p.includes('spec/contracts/')){process.stdout.write('Contract modified. Run: bunx mandu guard contract --validate')}\" 2>/dev/null || true"
+          }
+        ],
+        "description": "Notify when contract files are modified"
+      }
+    ]
+  }
+}

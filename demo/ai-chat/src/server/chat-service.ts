@@ -1,4 +1,5 @@
 import type { ChatSession, Message } from "../shared/types";
+import db from "./db";
 
 const DEFAULT_SYSTEM_PROMPT =
   "당신은 Mandu 프레임워크 전문가입니다. Mandu의 기능과 사용법에 대해 친절하고 상세하게 설명합니다. 코드 예시를 적극 활용하세요.";
@@ -153,70 +154,136 @@ export default island<SlotData>({
 \`\`\``,
 ];
 
-class ChatService {
-  private sessions = new Map<string, ChatSession>();
+// ─── Prepared Statements ───────────────────────────────────
 
+const stmts = {
+  insertSession: db.prepare(
+    "INSERT INTO sessions (id, title, system_prompt, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+  ),
+  getSession: db.prepare("SELECT * FROM sessions WHERE id = ?"),
+  listSessions: db.prepare("SELECT * FROM sessions ORDER BY updated_at DESC"),
+  updateSessionTitle: db.prepare("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?"),
+  updateSessionPrompt: db.prepare("UPDATE sessions SET system_prompt = ?, updated_at = ? WHERE id = ?"),
+  updateSessionTime: db.prepare("UPDATE sessions SET updated_at = ? WHERE id = ?"),
+  deleteSession: db.prepare("DELETE FROM sessions WHERE id = ?"),
+
+  insertMessage: db.prepare(
+    "INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)"
+  ),
+  getMessages: db.prepare("SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp ASC"),
+  getMessageCount: db.prepare("SELECT COUNT(*) as count FROM messages WHERE session_id = ?"),
+  deleteLastAssistantMsg: db.prepare(
+    `DELETE FROM messages WHERE id = (
+      SELECT id FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY timestamp DESC LIMIT 1
+    )`
+  ),
+  searchMessages: db.prepare(
+    `SELECT m.*, s.title as session_title FROM messages m
+     JOIN sessions s ON m.session_id = s.id
+     WHERE m.content LIKE ? ORDER BY m.timestamp DESC LIMIT 50`
+  ),
+};
+
+// ─── Service ───────────────────────────────────────────────
+
+class ChatService {
   constructor() {
-    const defaultSession = this.createSession("새 채팅");
-    defaultSession.messages.push({
-      id: "welcome",
-      role: "assistant",
-      content: "안녕하세요! 👋 Mandu AI Chat 데모입니다.\n\n**Mandu 프레임워크**에 대해 무엇이든 물어보세요. 코드 예시와 함께 설명해드립니다.",
-      timestamp: Date.now(),
-    });
+    // Create default session if none exist
+    const sessions = stmts.listSessions.all();
+    if (sessions.length === 0) {
+      const session = this.createSession("새 채팅");
+      this.addMessage(session.id, {
+        role: "assistant",
+        content: "안녕하세요! 👋 Mandu AI Chat 데모입니다.\n\n**Mandu 프레임워크**에 대해 무엇이든 물어보세요. 코드 예시와 함께 설명해드립니다.",
+      });
+    }
   }
 
   createSession(title?: string): ChatSession {
     const id = crypto.randomUUID();
-    const session: ChatSession = {
+    const now = Date.now();
+    stmts.insertSession.run(id, title || "새 채팅", DEFAULT_SYSTEM_PROMPT, now, now);
+    return {
       id,
       title: title || "새 채팅",
       messages: [],
       systemPrompt: DEFAULT_SYSTEM_PROMPT,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     };
-    this.sessions.set(id, session);
-    return session;
   }
 
   getSession(id: string): ChatSession | undefined {
-    return this.sessions.get(id);
+    const row = stmts.getSession.get(id) as any;
+    if (!row) return undefined;
+    const messages = (stmts.getMessages.all(id) as any[]).map(this.rowToMessage);
+    return {
+      id: row.id,
+      title: row.title,
+      messages,
+      systemPrompt: row.system_prompt,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
   }
 
   listSessions(): ChatSession[] {
-    return Array.from(this.sessions.values())
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+    return (stmts.listSessions.all() as any[]).map(row => {
+      const messages = (stmts.getMessages.all(row.id) as any[]).map(this.rowToMessage);
+      return {
+        id: row.id,
+        title: row.title,
+        messages,
+        systemPrompt: row.system_prompt,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
   }
 
   addMessage(sessionId: string, message: Omit<Message, "id" | "timestamp">): Message | null {
-    const session = this.sessions.get(sessionId);
+    const session = stmts.getSession.get(sessionId) as any;
     if (!session) return null;
 
-    const msg: Message = {
-      ...message,
-      id: crypto.randomUUID(),
-      timestamp: Date.now(),
-    };
-    session.messages.push(msg);
-    session.updatedAt = Date.now();
+    const id = crypto.randomUUID();
+    const timestamp = Date.now();
+    stmts.insertMessage.run(id, sessionId, message.role, message.content, timestamp);
+    stmts.updateSessionTime.run(timestamp, sessionId);
 
-    if (message.role === "user" && session.messages.length <= 3) {
-      session.title = message.content.slice(0, 30) + (message.content.length > 30 ? "..." : "");
+    // Auto-title from first user message
+    if (message.role === "user") {
+      const count = (stmts.getMessageCount.get(sessionId) as any).count;
+      if (count <= 3) {
+        const title = message.content.slice(0, 30) + (message.content.length > 30 ? "..." : "");
+        stmts.updateSessionTitle.run(title, timestamp, sessionId);
+      }
     }
 
-    return msg;
+    return { id, role: message.role, content: message.content, timestamp };
+  }
+
+  deleteLastAssistantMessage(sessionId: string): boolean {
+    const result = stmts.deleteLastAssistantMsg.run(sessionId);
+    return result.changes > 0;
   }
 
   updateSystemPrompt(sessionId: string, prompt: string): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) return false;
-    session.systemPrompt = prompt;
-    return true;
+    const result = stmts.updateSessionPrompt.run(prompt, Date.now(), sessionId);
+    return result.changes > 0;
   }
 
   deleteSession(id: string): boolean {
-    return this.sessions.delete(id);
+    const result = stmts.deleteSession.run(id);
+    return result.changes > 0;
+  }
+
+  searchMessages(query: string): Array<{ message: Message; sessionId: string; sessionTitle: string }> {
+    const rows = stmts.searchMessages.all(`%${query}%`) as any[];
+    return rows.map(row => ({
+      message: this.rowToMessage(row),
+      sessionId: row.session_id,
+      sessionTitle: row.session_title,
+    }));
   }
 
   getRandomResponse(): string {
@@ -246,6 +313,10 @@ class ChatService {
     }
 
     return chunks;
+  }
+
+  private rowToMessage(row: any): Message {
+    return { id: row.id, role: row.role, content: row.content, timestamp: row.timestamp };
   }
 }
 

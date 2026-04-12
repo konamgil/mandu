@@ -25,6 +25,8 @@ export * from "./paths";
 export * from "./resource";
 export * from "./types";
 export * from "./kitchen";
+export { runHook } from "./plugins";
+export type { ManduPlugin, ManduHooks } from "./plugins";
 
 // ── Resolve export * ambiguities (TS2308) ──
 // When the same name is exported from multiple submodules via `export *`,

@@ -41,7 +41,7 @@ export async function explain(options: ExplainOptions = {}): Promise<boolean> {
     return false;
   }
 
-  const result = await executeMcpTool("mandu_guard_explain", {
+  const result = await executeMcpTool("mandu.guard.explain", {
     type,
     fromLayer: options.fromLayer,
     toLayer: options.toLayer,

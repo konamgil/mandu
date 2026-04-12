@@ -146,7 +146,7 @@ function getToolSpecificSuggestion(toolName: string, info: ExtractedErrorInfo): 
   }
 
   // generate 관련 도구
-  if (toolName === "mandu_generate") {
+  if (toolName === "mandu.generate" || toolName === "mandu_generate") {
     if (info.code === "EEXIST") {
       return "파일이 이미 존재합니다. 덮어쓰려면 force 옵션을 사용해주세요.";
     }

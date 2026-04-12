@@ -1,5 +1,5 @@
 /**
- * CLI Commands: deploy, upgrade, completion – integration tests
+ * CLI Commands: deploy, upgrade, completion, fix – integration tests
  */
 import { describe, it, expect } from "bun:test";
 import path from "path";
@@ -60,5 +60,24 @@ describe("mandu completion", () => {
   it("unsupported shell prints error", async () => {
     const output = await runCLI("completion powershell");
     expect(output).toContain("Unsupported shell");
+  });
+});
+
+describe("mandu fix", () => {
+  it("prints the multi-stage fix report", async () => {
+    const output = await runCLI("fix");
+    expect(output).toContain("Mandu Fix");
+    expect(output).toContain("Stage: guard-heal");
+    expect(output).toContain("Stage: diagnose");
+    expect(output).not.toContain("TypeError");
+    expect(output).not.toContain("ReferenceError");
+  });
+
+  it("--json flag returns parseable stage output", async () => {
+    const output = await runCLI("fix --json");
+    const parsed = JSON.parse(output.trim());
+    expect(Array.isArray(parsed.stages)).toBe(true);
+    expect(parsed.stages.length).toBeGreaterThan(0);
+    expect(typeof parsed.success).toBe("boolean");
   });
 });

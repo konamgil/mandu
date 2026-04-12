@@ -15,7 +15,7 @@ import fs from "fs/promises";
 
 export const contractToolDefinitions: Tool[] = [
   {
-    name: "mandu_list_contracts",
+    name: "mandu.contract.list",
     annotations: {
       readOnlyHint: true,
     },
@@ -28,7 +28,7 @@ export const contractToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_get_contract",
+    name: "mandu.contract.get",
     annotations: {
       readOnlyHint: true,
     },
@@ -46,7 +46,7 @@ export const contractToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_create_contract",
+    name: "mandu.contract.create",
     annotations: {
       destructiveHint: false,
       readOnlyHint: false,
@@ -74,7 +74,7 @@ export const contractToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_update_route_contract",
+    name: "mandu.contract.link",
     annotations: {
       readOnlyHint: false,
     },
@@ -96,7 +96,7 @@ export const contractToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_validate_contracts",
+    name: "mandu.contract.validate",
     annotations: {
       readOnlyHint: true,
     },
@@ -109,7 +109,7 @@ export const contractToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_sync_contract_slot",
+    name: "mandu.contract.sync",
     annotations: {
       readOnlyHint: true,
     },
@@ -134,7 +134,7 @@ export const contractToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_generate_openapi",
+    name: "mandu.contract.openapi",
     annotations: {
       readOnlyHint: false,
     },
@@ -181,8 +181,8 @@ async function readFileContent(filePath: string): Promise<string | null> {
 export function contractTools(projectRoot: string) {
   const paths = getProjectPaths(projectRoot);
 
-  return {
-    mandu_list_contracts: async () => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.contract.list": async () => {
       const result = await loadManifest(paths.manifestPath);
       if (!result.success || !result.data) {
         return { error: result.errors };
@@ -208,7 +208,7 @@ export function contractTools(projectRoot: string) {
       };
     },
 
-    mandu_get_contract: async (args: Record<string, unknown>) => {
+    "mandu.contract.get": async (args: Record<string, unknown>) => {
       const { routeId } = args as { routeId: string };
 
       const result = await loadManifest(paths.manifestPath);
@@ -225,7 +225,7 @@ export function contractTools(projectRoot: string) {
         return {
           routeId,
           hasContract: false,
-          suggestion: `Create a contract with: mandu_create_contract({ routeId: "${routeId}" })`,
+          suggestion: `Create a contract with: mandu.contract.create({ routeId: "${routeId}" })`,
         };
       }
 
@@ -249,7 +249,7 @@ export function contractTools(projectRoot: string) {
       };
     },
 
-    mandu_create_contract: async (args: Record<string, unknown>) => {
+    "mandu.contract.create": async (args: Record<string, unknown>) => {
       const { routeId, description, methods } = args as {
         routeId: string;
         description?: string;
@@ -310,13 +310,13 @@ export function contractTools(projectRoot: string) {
         message: `Contract created for route '${routeId}'`,
         nextSteps: [
           `Edit ${contractPath} to define your API schema`,
-          "Run mandu_generate to regenerate handlers with validation",
-          "Run mandu_validate_contracts to check consistency",
+          "Run mandu.generate to regenerate handlers with validation",
+          "Run mandu.contract.validate to check consistency",
         ],
       };
     },
 
-    mandu_update_route_contract: async (args: Record<string, unknown>) => {
+    "mandu.contract.link": async (args: Record<string, unknown>) => {
       const { routeId, contractModule } = args as {
         routeId: string;
         contractModule: string;
@@ -350,7 +350,7 @@ export function contractTools(projectRoot: string) {
       };
     },
 
-    mandu_validate_contracts: async () => {
+    "mandu.contract.validate": async () => {
       const result = await loadManifest(paths.manifestPath);
       if (!result.success || !result.data) {
         return { error: result.errors };
@@ -381,7 +381,7 @@ export function contractTools(projectRoot: string) {
       };
     },
 
-    mandu_sync_contract_slot: async (args: Record<string, unknown>) => {
+    "mandu.contract.sync": async (args: Record<string, unknown>) => {
       const { routeId, direction } = args as {
         routeId: string;
         direction: "contract-to-slot" | "slot-to-contract";
@@ -515,7 +515,7 @@ export function contractTools(projectRoot: string) {
       }
     },
 
-    mandu_generate_openapi: async (args: Record<string, unknown>) => {
+    "mandu.contract.openapi": async (args: Record<string, unknown>) => {
       const { output, title, version } = args as {
         output?: string;
         title?: string;
@@ -570,4 +570,15 @@ export function contractTools(projectRoot: string) {
       }
     },
   };
+
+  // Backward-compatible aliases (deprecated)
+  handlers["mandu_list_contracts"] = handlers["mandu.contract.list"];
+  handlers["mandu_get_contract"] = handlers["mandu.contract.get"];
+  handlers["mandu_create_contract"] = handlers["mandu.contract.create"];
+  handlers["mandu_update_route_contract"] = handlers["mandu.contract.link"];
+  handlers["mandu_validate_contracts"] = handlers["mandu.contract.validate"];
+  handlers["mandu_sync_contract_slot"] = handlers["mandu.contract.sync"];
+  handlers["mandu_generate_openapi"] = handlers["mandu.contract.openapi"];
+
+  return handlers;
 }

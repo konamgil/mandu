@@ -2,7 +2,7 @@
  * MCP Hooks Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 import {
   mcpHookRegistry,
   registerDefaultMcpHooks,
@@ -20,7 +20,7 @@ describe("MCP Hooks", () => {
 
   describe("mcpHookRegistry", () => {
     it("should register pre-hook", async () => {
-      const hook = vi.fn();
+      const hook = mock(() => {});
       mcpHookRegistry.registerPreHook(hook);
 
       const ctx: McpToolContext = {
@@ -36,7 +36,7 @@ describe("MCP Hooks", () => {
     });
 
     it("should register post-hook", async () => {
-      const hook = vi.fn();
+      const hook = mock(() => {});
       mcpHookRegistry.registerPostHook(hook);
 
       const ctx: McpToolContext = {
@@ -71,7 +71,7 @@ describe("MCP Hooks", () => {
     });
 
     it("should return unregister function", async () => {
-      const hook = vi.fn();
+      const hook = mock(() => {});
       const unregister = mcpHookRegistry.registerPreHook(hook);
 
       unregister();
@@ -100,11 +100,11 @@ describe("MCP Hooks", () => {
         startTime: Date.now(),
       };
 
-      await expect(mcpHookRegistry.runPreHooks(ctx)).rejects.toThrow("Pre-hook error");
+      expect(mcpHookRegistry.runPreHooks(ctx)).rejects.toThrow("Pre-hook error");
     });
 
     it("should continue on post-hook error", async () => {
-      const secondHook = vi.fn();
+      const secondHook = mock(() => {});
 
       mcpHookRegistry.registerPostHook(() => {
         throw new Error("Post-hook error");
@@ -199,7 +199,7 @@ describe("MCP Hooks", () => {
         startTime: Date.now(),
       };
 
-      await expect(mcpHookRegistry.runPreHooks(ctx)).rejects.toThrow("required field is missing");
+      expect(mcpHookRegistry.runPreHooks(ctx)).rejects.toThrow("required field is missing");
     });
 
     it("should pass valid arguments", async () => {
@@ -216,7 +216,7 @@ describe("MCP Hooks", () => {
         startTime: Date.now(),
       };
 
-      await expect(mcpHookRegistry.runPreHooks(ctx)).resolves.toBeUndefined();
+      expect(mcpHookRegistry.runPreHooks(ctx)).resolves.toBeUndefined();
     });
 
     it("should skip unknown tools", async () => {
@@ -233,7 +233,7 @@ describe("MCP Hooks", () => {
         startTime: Date.now(),
       };
 
-      await expect(mcpHookRegistry.runPreHooks(ctx)).resolves.toBeUndefined();
+      expect(mcpHookRegistry.runPreHooks(ctx)).resolves.toBeUndefined();
     });
   });
 });

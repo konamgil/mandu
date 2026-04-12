@@ -6,7 +6,7 @@ import fs from "fs/promises";
 
 export const generateToolDefinitions: Tool[] = [
   {
-    name: "mandu_generate",
+    name: "mandu.generate",
     description:
       "Generate all framework artifacts (server handlers, web components, resources) from the manifest. " +
       "Run after adding routes or modifying slots/contracts. Use dryRun=true to preview.",
@@ -31,7 +31,7 @@ export const generateToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu_generate_status",
+    name: "mandu.generate.status",
     description:
       "Show the current state of all generated artifacts from .mandu/generated.map.json.",
     annotations: {
@@ -48,8 +48,8 @@ export const generateToolDefinitions: Tool[] = [
 export function generateTools(projectRoot: string) {
   const paths = getProjectPaths(projectRoot);
 
-  return {
-    mandu_generate: async (args: Record<string, unknown>) => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.generate": async (args: Record<string, unknown>) => {
       const { dryRun, resources = true } = args as { dryRun?: boolean; resources?: boolean };
 
       // Regenerate manifest from FS Routes first
@@ -162,14 +162,14 @@ export function generateTools(projectRoot: string) {
       };
     },
 
-    mandu_generate_status: async () => {
+    "mandu.generate.status": async () => {
       // Read generated map
       const generatedMap = await readJsonFile<GeneratedMap>(paths.generatedMapPath);
 
       if (!generatedMap) {
         return {
           hasGeneratedFiles: false,
-          message: "No generated.map.json found. Run mandu_generate first.",
+          message: "No generated.map.json found. Run mandu.generate first.",
         };
       }
 
@@ -193,4 +193,10 @@ export function generateTools(projectRoot: string) {
       };
     },
   };
+
+  // Backward-compatible aliases
+  handlers["mandu_generate"] = handlers["mandu.generate"];
+  handlers["mandu_generate_status"] = handlers["mandu.generate.status"];
+
+  return handlers;
 }

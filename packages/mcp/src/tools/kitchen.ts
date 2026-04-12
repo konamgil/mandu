@@ -10,7 +10,7 @@ import { getDevServerState } from "./project.js";
 
 export const kitchenToolDefinitions: Tool[] = [
   {
-    name: "mandu_kitchen_errors",
+    name: "mandu.kitchen.errors",
     description:
       "Read client-side errors captured by Kitchen DevTools. Use clear=true to clear after reading.",
     annotations: {
@@ -30,8 +30,8 @@ export const kitchenToolDefinitions: Tool[] = [
 ];
 
 export function kitchenTools(projectRoot: string) {
-  return {
-    mandu_kitchen_errors: async (args: Record<string, unknown>) => {
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.kitchen.errors": async (args: Record<string, unknown>) => {
       const { clear = false } = args as { clear?: boolean };
 
       // Detect port from the running dev server output first, then fall back to config
@@ -99,4 +99,9 @@ export function kitchenTools(projectRoot: string) {
       }
     },
   };
+
+  // Backward-compatible alias
+  handlers["mandu_kitchen_errors"] = handlers["mandu.kitchen.errors"];
+
+  return handlers;
 }

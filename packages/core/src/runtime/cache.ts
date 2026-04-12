@@ -29,6 +29,16 @@ export interface CacheLookupResult {
   entry: CacheEntry | null;
 }
 
+export interface CacheStoreStats {
+  entries: number;
+  maxEntries?: number;
+  staleEntries?: number;
+  hits?: number;
+  staleHits?: number;
+  misses?: number;
+  hitRate?: number;
+}
+
 export interface CacheStore {
   get(key: string): CacheEntry | null;
   set(key: string, entry: CacheEntry): void;
@@ -46,6 +56,9 @@ export class MemoryCacheStore implements CacheStore {
   private cache = new Map<string, CacheEntry>();
   private tagIndex = new Map<string, Set<string>>();
   private readonly maxEntries: number;
+  private hits = 0;
+  private staleHits = 0;
+  private misses = 0;
 
   constructor(maxEntries: number = 1000) {
     this.maxEntries = maxEntries;
@@ -136,6 +149,34 @@ export class MemoryCacheStore implements CacheStore {
     this.tagIndex.clear();
   }
 
+  recordHit(): void {
+    this.hits += 1;
+  }
+
+  recordStale(): void {
+    this.staleHits += 1;
+  }
+
+  recordMiss(): void {
+    this.misses += 1;
+  }
+
+  getStats(): CacheStoreStats {
+    const now = Date.now();
+    const staleEntries = Array.from(this.cache.values()).filter((entry) => entry.revalidateAfter <= now).length;
+    const totalLookups = this.hits + this.staleHits + this.misses;
+
+    return {
+      entries: this.cache.size,
+      maxEntries: this.maxEntries,
+      staleEntries,
+      hits: this.hits,
+      staleHits: this.staleHits,
+      misses: this.misses,
+      hitRate: totalLookups > 0 ? this.hits / totalLookups : undefined,
+    };
+  }
+
   private removeFromTagIndex(key: string): void {
     const entry = this.cache.get(key);
     if (!entry) return;
@@ -164,11 +205,17 @@ function getCachePathname(key: string): string {
 export function lookupCache(store: CacheStore, key: string): CacheLookupResult {
   const entry = store.get(key);
   if (!entry) {
+    if ("recordMiss" in store && typeof (store as MemoryCacheStore).recordMiss === "function") {
+      (store as MemoryCacheStore).recordMiss();
+    }
     return { status: "MISS", entry: null };
   }
 
   const now = Date.now();
   if (now < entry.revalidateAfter) {
+    if ("recordHit" in store && typeof (store as MemoryCacheStore).recordHit === "function") {
+      (store as MemoryCacheStore).recordHit();
+    }
     // HIT: LRU 승격 (MemoryCacheStore만 해당)
     if ("touch" in store && typeof (store as MemoryCacheStore).touch === "function") {
       (store as MemoryCacheStore).touch(key);
@@ -176,6 +223,9 @@ export function lookupCache(store: CacheStore, key: string): CacheLookupResult {
     return { status: "HIT", entry };
   }
 
+  if ("recordStale" in store && typeof (store as MemoryCacheStore).recordStale === "function") {
+    (store as MemoryCacheStore).recordStale();
+  }
   // STALE: LRU 승격하지 않음 — eviction 대상으로 유지
   return { status: "STALE", entry };
 }
@@ -245,4 +295,16 @@ export function revalidatePath(path: string): void {
 export function revalidateTag(tag: string): void {
   if (!globalCacheStore) return;
   globalCacheStore.deleteByTag(tag);
+}
+
+export function getCacheStoreStats(store: CacheStore | null): CacheStoreStats | null {
+  if (!store) return null;
+
+  if ("getStats" in store && typeof (store as MemoryCacheStore).getStats === "function") {
+    return (store as MemoryCacheStore).getStats();
+  }
+
+  return {
+    entries: store.size,
+  };
 }

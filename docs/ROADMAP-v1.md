@@ -4,6 +4,13 @@
 > 
 > 기반: **Bun + React** | 날짜: 2026-04-11
 
+> 상태 업데이트 (2026-04-12):
+> - `adapter` 설정과 `adapter.build()` 훅은 현재 구현되어 `mandu.config.ts`와 `mandu build`에서 동작한다.
+> - `Route-level ErrorBoundary`, `shouldRevalidate()`, `Cookie/Session Storage`, `useHead/useSeoMeta`는 이미 코드에 반영되었다.
+> - 테스트 유틸은 `testFilling`, `createTestRequest`, `createTestContext`가 우선 제공되며, `testApp`은 후순위로 유지한다.
+> - Content API는 `defineContentConfig()`를 기본으로 쓰고, `defineCollection()` alias를 함께 제공한다.
+> - `Image`는 루트 export와 `placeholder="blur"`를 지원한다.
+
 ---
 
 ## 목차
@@ -849,11 +856,17 @@ if (await Bun.file(middlewarePath).exists()) {
 
 **문제**: `Bun.serve()` 하드코딩으로 Edge/서버리스/Node 배포 불가 (Hono, SvelteKit, Nuxt 공통 지적)
 
-**신규 파일**:
+**현재 상태 (2026-04-12)**:
+- `packages/core/src/runtime/adapter.ts` 인터페이스와 `packages/core/src/runtime/adapter-bun.ts` 기본 구현은 이미 존재
+- `mandu.config.ts`의 `adapter` 설정이 검증 스키마에 포함됨
+- `mandu build`는 `adapter.build()` 훅을 호출함
+- 외부 패키지 분리(`@mandujs/adapter-*`)는 아직 문서상 제안 단계
+
+**현재 구현 파일**:
 - `packages/core/src/runtime/adapter.ts` — 어댑터 인터페이스
-- `packages/adapter-bun/` — 기본 Bun 어댑터 (기존 코드 추출)
-- `packages/adapter-node/` — Node.js 어댑터
-- `packages/adapter-static/` — 정적 사이트 빌드
+- `packages/core/src/runtime/adapter-bun.ts` — 기본 Bun 어댑터
+- `packages/core/src/runtime/handler.ts` — 런타임 중립 fetch handler
+- 향후 분리 후보: `packages/adapter-node/`, `packages/adapter-static/`
 
 **어댑터 인터페이스**:
 
@@ -909,27 +922,12 @@ export function createFetchHandler(
 **Bun 어댑터** (기존 동작 유지):
 
 ```typescript
-// packages/adapter-bun/index.ts
-import type { ManduAdapter } from "@mandujs/core/adapter";
+// packages/core/src/runtime/adapter-bun.ts
+import { adapterBun } from "@mandujs/core";
 
-export default function adapterBun(): ManduAdapter {
-  return {
-    name: "adapter-bun",
-    async createServer(options) {
-      const fetch = createFetchHandler(router, registry, options);
-      const server = Bun.serve({
-        port: options.serverOptions.port ?? 3000,
-        fetch,
-      });
-      return {
-        listen: async () => {},  // Bun.serve는 즉시 시작
-        close: async () => server.stop(),
-        fetch,
-        address: { port: server.port, hostname: server.hostname },
-      };
-    },
-  };
-}
+export default {
+  adapter: adapterBun(),
+};
 ```
 
 **Node.js 어댑터**:
@@ -964,10 +962,10 @@ export default function adapterNode(): ManduAdapter {
 
 ```typescript
 // mandu.config.ts
-import adapterBun from "@mandujs/adapter-bun";
+import { adapterBun } from "@mandujs/core";
 
 export default {
-  adapter: adapterBun(),  // 기본값
+  adapter: adapterBun(),
 };
 ```
 
@@ -1592,6 +1590,10 @@ const server = Bun.serve({
 
 **문제**: 서버 없이 라우트 단위 테스트 불가 (Hono 전문가 지적)
 
+**현재 상태 (2026-04-12)**:
+- `testFilling`, `createTestRequest`, `createTestContext`는 구현 완료
+- `testApp(rootDir)` 수준의 프로젝트 통합 헬퍼는 아직 후순위
+
 **신규 파일**: `packages/core/src/testing/index.ts`
 
 **API 설계**:
@@ -1970,6 +1972,8 @@ async function handleImageRequest(request: Request): Promise<Response> {
 
 ### A-1. Route-level ErrorBoundary (Remix P1)
 
+**상태 (2026-04-12)**: 구현됨. `error.tsx` 기반 route-level SSR fallback이 이미 동작함.
+
 **문제**: 중첩 라우트에서 자식 에러가 부모 UI 전체를 파괴함. 현재 `boundary.tsx`는 전역 수준.
 
 **삽입 위치**: Phase 4-3 (Nested Route 병렬 Loader) 와 함께 구현
@@ -1995,6 +1999,8 @@ SSR에서 라우트별 `try/catch` → 해당 라우트의 `error.tsx` 렌더링
 
 ### A-2. shouldRevalidate() 훅 (Remix P2)
 
+**상태 (2026-04-12)**: 구현됨. `navigate()` skip 경로에서 URL/route state 동기화까지 반영됨.
+
 **문제**: 네비게이션마다 모든 loader가 재실행됨. 변경되지 않은 데이터도 불필요하게 재요청.
 
 **삽입 위치**: Phase 3-1 (ISR) 이후
@@ -2018,6 +2024,8 @@ export function shouldRevalidate({ currentUrl, nextUrl, formAction, defaultShoul
 ---
 
 ### A-3. Cookie/Session Storage 추상화 (Remix P3)
+
+**상태 (2026-04-12)**: 구현됨. `createCookieSessionStorage()`와 flash/session API 제공.
 
 **문제**: `ctx.cookies`는 있지만 서버 사이드 세션 관리(flash message, 세션 저장소) 추상화 없음.
 
@@ -2054,6 +2062,8 @@ const sessionStorage = createCookieSessionStorage({
 ---
 
 ### A-4. useHead / useSeoMeta 컴포저블 (Nuxt P5)
+
+**상태 (2026-04-12)**: 구현됨. 일반 SSR뿐 아니라 Streaming SSR에서도 head 수집이 반영됨.
 
 **문제**: SSR에서 `<head>` 태그를 선언적으로 제어하는 API 없음. title 외에 og:tags, canonical 등 동적 제어 불가.
 
@@ -2125,9 +2135,9 @@ app/
 
 | 항목 | 삽입 Phase | 난이도 | 영향도 |
 |------|-----------|--------|--------|
-| Route-level ErrorBoundary | 4-3과 함께 | 중 | 높 |
-| shouldRevalidate() | 3-1 이후 | 낮 | 중 |
-| Cookie/Session Storage | 5 | 중 | 중 |
-| useHead/useSeoMeta | 5 | 중 | 중 |
+| Route-level ErrorBoundary | 완료 | 중 | 높 |
+| shouldRevalidate() | 완료 | 낮 | 중 |
+| Cookie/Session Storage | 완료 | 중 | 중 |
+| useHead/useSeoMeta | 완료 | 중 | 중 |
 | `never` 번들 제외 | 6-1과 함께 | 낮 | 중 |
 | Parallel Routes (@slot) | 6 | 상 | 대 |

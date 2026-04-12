@@ -6,10 +6,11 @@ import {
   getTransactionStatus,
   hasActiveTransaction,
 } from "@mandujs/core";
+import { acquireLock, releaseLock, checkLock } from "../tx-lock.js";
 
 export const transactionToolDefinitions: Tool[] = [
   {
-    name: "mandu_begin",
+    name: "mandu.tx.begin",
     description:
       "Begin a new transaction. Creates a snapshot of the current spec state for safe rollback.",
     annotations: {
@@ -22,24 +23,30 @@ export const transactionToolDefinitions: Tool[] = [
           type: "string",
           description: "Description of the changes being made",
         },
+        sessionId: {
+          type: "string",
+          description: "Caller session identifier for the concurrency lock",
+        },
       },
       required: [],
     },
   },
   {
-    name: "mandu_commit",
+    name: "mandu.tx.commit",
     description: "Commit the current transaction, finalizing all changes",
     annotations: {
       readOnlyHint: false,
     },
     inputSchema: {
       type: "object",
-      properties: {},
+      properties: {
+        lockId: { type: "string", description: "Lock ID returned by mandu.tx.begin" },
+      },
       required: [],
     },
   },
   {
-    name: "mandu_rollback",
+    name: "mandu.tx.rollback",
     description: "Rollback the current transaction, restoring the previous state",
     annotations: {
       destructiveHint: true,
@@ -52,12 +59,13 @@ export const transactionToolDefinitions: Tool[] = [
           type: "string",
           description: "Specific change ID to rollback (optional, defaults to active transaction)",
         },
+        lockId: { type: "string", description: "Lock ID returned by mandu.tx.begin" },
       },
       required: [],
     },
   },
   {
-    name: "mandu_tx_status",
+    name: "mandu.tx.status",
     description: "Get the current transaction status",
     annotations: {
       readOnlyHint: true,
@@ -71,9 +79,9 @@ export const transactionToolDefinitions: Tool[] = [
 ];
 
 export function transactionTools(projectRoot: string) {
-  return {
-    mandu_begin: async (args: Record<string, unknown>) => {
-      const { message } = args as { message?: string };
+  const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "mandu.tx.begin": async (args: Record<string, unknown>) => {
+      const { message, sessionId } = args as { message?: string; sessionId?: string };
 
       // Check if there's already an active transaction
       const isActive = await hasActiveTransaction(projectRoot);
@@ -85,6 +93,12 @@ export function transactionTools(projectRoot: string) {
         };
       }
 
+      // Acquire concurrency lock
+      const lock = acquireLock(sessionId || "anonymous");
+      if (!lock.success) {
+        return { error: lock.error };
+      }
+
       const change = await beginChange(projectRoot, {
         message: message || "MCP transaction",
       });
@@ -92,14 +106,16 @@ export function transactionTools(projectRoot: string) {
       return {
         success: true,
         changeId: change.id,
+        lockId: lock.lockId,
         snapshotId: change.snapshotId,
         message: change.message,
         createdAt: change.createdAt,
-        tip: "Use mandu_commit to finalize or mandu_rollback to revert changes",
+        tip: "Use mandu.tx.commit to finalize or mandu.tx.rollback to revert changes. Pass lockId to subsequent calls.",
       };
     },
 
-    mandu_commit: async () => {
+    "mandu.tx.commit": async (args: Record<string, unknown>) => {
+      const { lockId } = args as { lockId?: string };
       const isActive = await hasActiveTransaction(projectRoot);
       if (!isActive) {
         return {
@@ -108,6 +124,7 @@ export function transactionTools(projectRoot: string) {
       }
 
       const result = await commitChange(projectRoot);
+      if (lockId) releaseLock(lockId);
 
       return {
         success: result.success,
@@ -116,8 +133,8 @@ export function transactionTools(projectRoot: string) {
       };
     },
 
-    mandu_rollback: async (args: Record<string, unknown>) => {
-      const { changeId } = args as { changeId?: string };
+    "mandu.tx.rollback": async (args: Record<string, unknown>) => {
+      const { changeId, lockId } = args as { changeId?: string; lockId?: string };
 
       const isActive = await hasActiveTransaction(projectRoot);
       if (!isActive && !changeId) {
@@ -127,6 +144,7 @@ export function transactionTools(projectRoot: string) {
       }
 
       const result = await rollbackChange(projectRoot, changeId);
+      if (lockId) releaseLock(lockId);
 
       return {
         success: result.success,
@@ -139,13 +157,15 @@ export function transactionTools(projectRoot: string) {
       };
     },
 
-    mandu_tx_status: async () => {
+    "mandu.tx.status": async () => {
       const { state, change } = await getTransactionStatus(projectRoot);
+      const lock = checkLock();
 
       if (!state.active) {
         return {
           hasActiveTransaction: false,
           message: "No active transaction",
+          lock,
         };
       }
 
@@ -153,6 +173,7 @@ export function transactionTools(projectRoot: string) {
         hasActiveTransaction: true,
         changeId: state.changeId,
         snapshotId: state.snapshotId,
+        lock,
         change: change
           ? {
               id: change.id,
@@ -164,4 +185,12 @@ export function transactionTools(projectRoot: string) {
       };
     },
   };
+
+  // Backward-compatible aliases (deprecated)
+  handlers["mandu_begin"] = handlers["mandu.tx.begin"];
+  handlers["mandu_commit"] = handlers["mandu.tx.commit"];
+  handlers["mandu_rollback"] = handlers["mandu.tx.rollback"];
+  handlers["mandu_tx_status"] = handlers["mandu.tx.status"];
+
+  return handlers;
 }

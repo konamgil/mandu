@@ -259,3 +259,85 @@ describe("startServer 기본 동작", () => {
     server = null;
   });
 });
+
+describe("runtime cache control endpoint", () => {
+  let server: ManduServer | null = null;
+  let registry: ServerRegistry;
+
+  beforeEach(() => {
+    registry = createServerRegistry();
+  });
+
+  afterEach(() => {
+    if (server) {
+      server.stop();
+      server = null;
+    }
+  });
+
+  it("rejects requests without the management token", async () => {
+    server = startServer(baseManifest, {
+      port: 0,
+      registry,
+      cache: true,
+      managementToken: "test-token",
+    });
+
+    const port = server.server.port;
+    const res = await fetch(`http://localhost:${port}/_mandu/cache`);
+    expect(res.status).toBe(401);
+  });
+
+  it("returns cache stats and clears entries by path", async () => {
+    server = startServer(baseManifest, {
+      port: 0,
+      registry,
+      cache: true,
+      managementToken: "test-token",
+    });
+
+    const store = server.registry.settings.cacheStore!;
+    store.set("home:/products?page=1", {
+      html: "<p>products</p>",
+      loaderData: {},
+      status: 200,
+      headers: {},
+      createdAt: Date.now(),
+      revalidateAfter: Date.now() + 60_000,
+      tags: ["products"],
+    });
+    store.set("home:/other", {
+      html: "<p>other</p>",
+      loaderData: {},
+      status: 200,
+      headers: {},
+      createdAt: Date.now(),
+      revalidateAfter: Date.now() + 60_000,
+      tags: ["other"],
+    });
+
+    const port = server.server.port;
+    const statsRes = await fetch(`http://localhost:${port}/_mandu/cache`, {
+      headers: { "x-mandu-control-token": "test-token" },
+    });
+    expect(statsRes.status).toBe(200);
+    const statsData = await statsRes.json();
+    expect(statsData.enabled).toBe(true);
+    expect(statsData.stats.entries).toBe(2);
+
+    const clearRes = await fetch(`http://localhost:${port}/_mandu/cache`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-mandu-control-token": "test-token",
+      },
+      body: JSON.stringify({ path: "/products" }),
+    });
+    expect(clearRes.status).toBe(200);
+    const clearData = await clearRes.json();
+    expect(clearData.target).toBe("path=/products");
+    expect(clearData.cleared).toBe(1);
+    expect(store.get("home:/products?page=1")).toBeNull();
+    expect(store.get("home:/other")).not.toBeNull();
+  });
+});
