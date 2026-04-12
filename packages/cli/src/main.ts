@@ -12,7 +12,14 @@ import { commandRegistry, getCommand, type CommandContext } from "./commands/reg
 import { CLI_ERROR_CODES, handleCLIError, printCLIError } from "./errors";
 import { shouldShowBanner, renderHeroBanner, theme } from "./terminal";
 
-const VERSION = "0.10.0";
+// package.json에서 버전 동적 로딩
+const VERSION = (() => {
+  try {
+    return require("../package.json").version as string;
+  } catch {
+    return "0.0.0";
+  }
+})();
 
 const HELP_TEXT = `
 ${theme.heading("🥟 Mandu CLI")} ${theme.muted(`v${VERSION}`)} - Agent-Native Fullstack Framework
@@ -33,6 +40,9 @@ Commands:
   guard manifest          Manifest Guard check (generated file integrity)
   generate                Generate code from FS Routes + Resources
   generate resource       Generate resource (interactive or flag-based)
+
+  mcp               Run MCP tools from terminal (--list to browse)
+  mcp <tool> [args] Execute a specific MCP tool (--json for raw output)
 
   doctor            Analyze Guard failures + suggest patches (Brain)
   watch             Watch files in real-time - warnings only (Brain)
@@ -146,6 +156,9 @@ Examples:
   bunx mandu generate resource product --fields name:string,price:number --methods GET,POST,PUT
   bunx mandu generate                      # Generate code from FS Routes + Resources
   bunx mandu generate --force              # Overwrite existing slots
+  bunx mandu mcp                           # List all MCP tools
+  bunx mandu mcp mandu_list_routes         # Run a specific MCP tool
+  bunx mandu mcp mandu_guard_check --autoCorrect true --json  # JSON output
 
 Official Workflow (recommended):
   Start here if you're new to Mandu.

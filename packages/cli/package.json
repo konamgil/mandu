@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@mandujs/core": "^0.19.0",
+    "@mandujs/mcp": "^0.18.10",
     "@mandujs/ate": "^0.17.2",
     "cfonts": "^3.3.0"
   },

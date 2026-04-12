@@ -37,6 +37,8 @@ import path from "path";
 
 export interface DevOptions {
   port?: number;
+  /** 서버 시작 후 브라우저 자동 열기 */
+  open?: boolean;
 }
 
 export async function dev(options: DevOptions = {}): Promise<void> {
@@ -399,6 +401,18 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       server.registry.settings.hmrPort = actualPort;
       console.log(`🔁 HMR port updated: ${actualPort + HMR_OFFSET}`);
     }
+  }
+
+  // --open 옵션: 브라우저 자동 열기
+  if (options.open) {
+    const openUrl = `http://${serverConfig.hostname || "localhost"}:${actualPort}`;
+    try {
+      const { exec } = require("child_process");
+      const cmd = process.platform === "win32" ? `start ${openUrl}`
+        : process.platform === "darwin" ? `open ${openUrl}`
+        : `xdg-open ${openUrl}`;
+      exec(cmd);
+    } catch { /* 브라우저 열기 실패 무시 */ }
   }
 
   // FS Routes real-time watching

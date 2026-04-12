@@ -13,7 +13,7 @@ import {
   printWatchStop,
   printStatus,
   createConsoleHandler,
-} from "../../../core/src/index";
+} from "@mandujs/core";
 import { getRootDir } from "../util/fs";
 
 export interface WatchOptions {

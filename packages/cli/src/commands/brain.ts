@@ -12,7 +12,7 @@ import {
   detectEnvironment,
   createOllamaAdapter,
   DEFAULT_OLLAMA_CONFIG,
-} from "../../../core/src/index";
+} from "@mandujs/core";
 
 export interface BrainSetupOptions {
   /** Model name (default: llama3.2) */

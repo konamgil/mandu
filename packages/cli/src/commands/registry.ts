@@ -107,9 +107,11 @@ registerCommand({
 registerCommand({
   id: "dev",
   description: "Start dev server (FS Routes + Guard enabled by default)",
-  async run() {
+  async run(ctx) {
     const { dev } = await import("./dev");
-    await dev();
+    const port = ctx.options.port ? Number(ctx.options.port) : undefined;
+    const open = ctx.options.open === "true" || ctx.options.open === "";
+    await dev({ port, open });
     return true;
   },
 });
@@ -127,9 +129,41 @@ registerCommand({
 registerCommand({
   id: "start",
   description: "Start production server (after build)",
-  async run() {
+  async run(ctx) {
     const { start } = await import("./start");
-    await start();
+    const port = ctx.options.port ? Number(ctx.options.port) : undefined;
+    await start({ port });
+    return true;
+  },
+});
+
+registerCommand({
+  id: "clean",
+  description: "Remove build artifacts (.mandu/client, .mandu/static)",
+  exitOnSuccess: true,
+  async run(ctx) {
+    const { clean } = await import("./clean");
+    return clean({ all: ctx.options.all === "true" });
+  },
+});
+
+registerCommand({
+  id: "info",
+  description: "Print project and environment information",
+  exitOnSuccess: true,
+  async run() {
+    const { info } = await import("./info");
+    return info();
+  },
+});
+
+registerCommand({
+  id: "preview",
+  description: "Build then start production server",
+  async run(ctx) {
+    const { preview } = await import("./preview");
+    const port = ctx.options.port ? Number(ctx.options.port) : undefined;
+    await preview({ port });
     return true;
   },
 });
@@ -440,5 +474,62 @@ registerCommand({
     return generateApply({
       force: ctx.options.force === "true",
     });
+  },
+});
+
+registerCommand({
+  id: "cache",
+  description: "Cache management (clear, stats)",
+  subcommands: ["clear", "stats"],
+  exitOnSuccess: true,
+  async run(ctx) {
+    const action = ctx.args[1];
+    if (!action || action.startsWith("--")) return false;
+    const { cache } = await import("./cache");
+    return cache(action, {
+      tag: ctx.options.tag,
+      all: ctx.options.all === "true",
+    });
+  },
+});
+
+registerCommand({
+  id: "scaffold",
+  description: "Generate boilerplate (middleware, ws, session)",
+  subcommands: ["middleware", "ws", "session"],
+  exitOnSuccess: true,
+  async run(ctx) {
+    const type = ctx.args[1];
+    if (!type || type.startsWith("--")) return false;
+    const name = ctx.args[2] || ctx.options._positional || "";
+    const { scaffold } = await import("./scaffold");
+    return scaffold(type, name);
+  },
+});
+
+registerCommand({
+  id: "new",
+  description: "Alias for scaffold",
+  subcommands: ["middleware", "ws", "session"],
+  exitOnSuccess: true,
+  async run(ctx) {
+    const type = ctx.args[1];
+    if (!type || type.startsWith("--")) return false;
+    const name = ctx.args[2] || ctx.options._positional || "";
+    const { scaffold } = await import("./scaffold");
+    return scaffold(type, name);
+  },
+});
+
+registerCommand({
+  id: "mcp",
+  description: "Run MCP tools from terminal",
+  exitOnSuccess: true,
+  async run(ctx) {
+    const { mcp } = await import("./mcp");
+    const tool = ctx.options._positional;
+    const json = ctx.options.json === "true";
+    const list = !tool || ctx.options.list === "true";
+    return mcp({ tool, args: ctx.options, json, list });
   },
 });
