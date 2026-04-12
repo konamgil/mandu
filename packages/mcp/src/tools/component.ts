@@ -5,6 +5,10 @@ import fs from "fs/promises";
 export const componentToolDefinitions: Tool[] = [
   {
     name: "mandu_add_component",
+    annotations: {
+      destructiveHint: false,
+      readOnlyHint: false,
+    },
     description:
       "Scaffold a new client-side component in the correct FSD (Feature-Sliced Design) layer. " +
       "Mandu projects organize client components under src/client/ following FSD layers: " +

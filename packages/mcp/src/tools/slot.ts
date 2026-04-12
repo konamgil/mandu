@@ -11,17 +11,11 @@ import path from "path";
 export const slotToolDefinitions: Tool[] = [
   {
     name: "mandu_read_slot",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
-      "Read the TypeScript source of a route's slot file and validate its structure. " +
-      "In Mandu, a 'slot' is the server-side data loader for a route: " +
-      "it runs on every request before rendering and returns a typed object " +
-      "that is injected into the page component as props (for pages) or as handler context (for API routes). " +
-      "The loader receives a ManduContext (ctx) with access to ctx.cookies for reading/setting cookies — " +
-      "cookies set in the loader are automatically applied to the SSR Response via Set-Cookie headers. " +
-      "Advanced: ctx.cookies.getSigned(name, secret) for HMAC-SHA256 signed cookies, " +
-      "ctx.cookies.getParsed(name, zodSchema) for Zod-validated JSON cookies. " +
-      "Slot files live at spec/slots/{routeId}.slot.ts and are auto-linked by generateManifest(). " +
-      "Returns the raw source, line count, and any structural validation issues.",
+      "Read the TypeScript source of a route's slot file and validate its structure.",
     inputSchema: {
       type: "object",
       properties: {
@@ -35,16 +29,11 @@ export const slotToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_validate_slot",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
-      "Validate TypeScript slot content against Mandu's structural rules — without writing any files. " +
-      "A valid slot must export a default function (or use the slot() builder) that accepts a Request " +
-      "and returns a plain serializable object (becomes the typed props injected into the page). " +
-      "Returns: " +
-      "errors (must fix before use), " +
-      "warnings (best-practice suggestions), " +
-      "autoFixable issues (with corrected code preview), " +
-      "manualFixRequired items (issues needing human review). " +
-      "Use this before writing a slot file with the Edit tool to catch structural problems early.",
+      "Validate TypeScript slot content against structural rules without writing files. Returns errors, warnings, and auto-fix previews.",
     inputSchema: {
       type: "object",
       properties: {

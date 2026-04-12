@@ -42,6 +42,9 @@ export const guardToolDefinitions: Tool[] = [
     name: "mandu_guard_check",
     description:
       "Run guard checks to validate spec integrity, generated files, and slot files",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -57,6 +60,9 @@ export const guardToolDefinitions: Tool[] = [
     name: "mandu_analyze_error",
     description:
       "Analyze a ManduError JSON to provide actionable fix guidance",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -74,8 +80,10 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_guard_heal",
     description:
-      "Run Self-Healing Guard: detect architecture violations and provide actionable fix suggestions with auto-fix capabilities. " +
-      "This tool not only detects violations but also explains WHY they are wrong and HOW to fix them.",
+      "Detect architecture violations with auto-fix suggestions. Use autoFix=true to apply fixes automatically.",
+    annotations: {
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -99,8 +107,10 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_guard_explain",
     description:
-      "Explain a specific guard rule in detail. " +
-      "Provides WHY the rule exists, HOW to fix violations, and code examples.",
+      "Explain a specific guard rule with rationale, fix guidance, and code examples.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -132,9 +142,10 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_get_decisions",
     description:
-      "Search and retrieve architecture decisions (ADRs) by tags. " +
-      "Use this before implementing features to ensure consistency with past decisions. " +
-      "Example: Before adding 'auth' feature, search for ['auth', 'security'] to find related decisions.",
+      "Search architecture decisions (ADRs) by tags. Use before implementing features for consistency.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -150,8 +161,10 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_save_decision",
     description:
-      "Save a new architecture decision record (ADR). " +
-      "Use this when making significant architectural choices that should be remembered for consistency.",
+      "Save a new architecture decision record (ADR) for future consistency checks.",
+    annotations: {
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -189,8 +202,10 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_check_consistency",
     description:
-      "Check if a proposed change is consistent with existing architecture decisions. " +
-      "Use this before implementing to catch potential conflicts with past decisions.",
+      "Check if a proposed change conflicts with existing architecture decisions.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -210,8 +225,10 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_get_architecture",
     description:
-      "Get a compact summary of project architecture decisions. " +
-      "Returns key decisions, tag statistics, and architecture rules for quick context.",
+      "Get a compact summary of project architecture decisions and rules.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {},
@@ -224,8 +241,10 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_validate_slot",
     description:
-      "Validate a slot file against semantic constraints. " +
-      "Checks code lines, complexity, required/forbidden patterns, and import rules.",
+      "Validate a slot file against semantic constraints (lines, complexity, patterns, imports).",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -256,8 +275,10 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_get_slot_constraints",
     description:
-      "Get recommended slot constraints for different use cases. " +
-      "Returns preset constraints that can be used with .constraints() in Filling API.",
+      "Get recommended slot constraint presets (default, api, readonly).",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -276,12 +297,11 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_negotiate",
     description:
-      "Negotiate with the framework before implementing a feature. " +
-      "Describes your intent and gets back the recommended project structure, " +
-      "file templates, and related architecture decisions. " +
-      "Use this BEFORE writing code to ensure architectural consistency. " +
-      "IMPORTANT: Always provide 'featureName' as a short English slug (e.g., 'chat', 'user-auth', 'payment'). " +
-      "Even if the user speaks Korean, YOU must translate the feature name to English.",
+      "Negotiate recommended structure and file templates before implementing a feature. " +
+      "IMPORTANT: featureName must be a short English kebab-case slug.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -322,8 +342,11 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_generate_scaffold",
     description:
-      "Generate scaffold files from a negotiation plan. " +
-      "Creates directories and file templates based on the approved structure.",
+      "Generate scaffold files from a negotiation plan. Use after mandu_negotiate.",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -356,8 +379,10 @@ export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu_analyze_structure",
     description:
-      "Analyze the existing project structure. " +
-      "Returns detected layers, existing features, and recommendations.",
+      "Analyze the existing project structure and return detected layers, features, and recommendations.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {},
@@ -390,6 +415,7 @@ export function guardTools(projectRoot: string) {
           passed: true,
           violations: [],
           message: "All guard checks passed",
+          relatedSkills: ["mandu-guard-guide", "mandu-debug"],
         };
       }
 
@@ -425,6 +451,7 @@ export function guardTools(projectRoot: string) {
         })),
         message: `Found ${checkResult.violations.length} violation(s)`,
         tip: "Use autoCorrect: true to attempt automatic fixes",
+        relatedSkills: ["mandu-guard-guide", "mandu-debug"],
       };
     },
 
@@ -1046,6 +1073,7 @@ Mandu.filling()
         // Next steps
         nextSteps: result.nextSteps,
         tip: "Use mandu_generate_scaffold to create the file structure, then implement the TODO sections.",
+        relatedSkills: ["mandu-create-feature", "mandu-guard-guide"],
       };
     },
 

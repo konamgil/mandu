@@ -130,6 +130,10 @@ export const projectToolDefinitions: Tool[] = [
     name: "mandu_init",
     description:
       "Initialize a new Mandu project (runs `mandu init` and optionally `bun install`).",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -170,6 +174,9 @@ export const projectToolDefinitions: Tool[] = [
   {
     name: "mandu_dev_start",
     description: "Start Mandu dev server (bun run dev).",
+    annotations: {
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -184,6 +191,10 @@ export const projectToolDefinitions: Tool[] = [
   {
     name: "mandu_dev_stop",
     description: "Stop Mandu dev server if running.",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {},

@@ -15,15 +15,10 @@ export const specToolDefinitions: Tool[] = [
   {
     name: "mandu_list_routes",
     description:
-      "List all routes registered in the Mandu project, read from .mandu/routes.manifest.json. " +
-      "Route kinds: " +
-      "'api' (REST endpoint — app/**/route.ts, exports named GET/POST/PUT/PATCH/DELETE handler functions), " +
-      "'page' (SSR page — app/**/page.tsx, React component supporting client-side hydration islands). " +
-      "Special files auto-detected by the filesystem router (not user-created routes): " +
-      "layout.tsx (shared wrapper rendered around child routes), " +
-      "error.tsx (error boundary for the route subtree), " +
-      "loading.tsx (suspense fallback shown while page data loads). " +
-      "Each route may have an associated slotModule (server data loader) and contractModule (Zod API schema).",
+      "List all routes from .mandu/routes.manifest.json with their kind, pattern, slotModule, and contractModule.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {},
@@ -33,10 +28,10 @@ export const specToolDefinitions: Tool[] = [
   {
     name: "mandu_get_route",
     description:
-      "Get full details of a specific route by its ID. " +
-      "Returns the complete route spec: kind, URL pattern, module paths (app, slot, contract, component), " +
-      "HTTP methods, and hydration configuration (for page routes with client islands). " +
-      "Use this before modifying a route to understand its current configuration.",
+      "Get full details of a specific route by its ID. Use before modifying a route.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -51,14 +46,11 @@ export const specToolDefinitions: Tool[] = [
   {
     name: "mandu_add_route",
     description:
-      "Scaffold a new route by creating source files in app/ and registering it in the manifest. " +
-      "For 'api' routes: creates app/{path}/route.ts with a GET handler stub. " +
-      "For 'page' routes: creates app/{path}/page.tsx with a React component stub. " +
-      "withSlot=true (default): also creates spec/slots/{routeId}.slot.ts — " +
-      "the server-side data loader that runs on every request before rendering and injects typed props into the page. " +
-      "withContract=true: also creates spec/contracts/{routeId}.contract.ts — " +
-      "Zod schemas for request/response validation, enabling typed handlers, OpenAPI generation, and ATE L2/L3 testing. " +
-      "Automatically runs generateManifest() after creation to link all files.",
+      "Scaffold a new route in app/ with optional slot and contract files, then regenerate the manifest.",
+    annotations: {
+      destructiveHint: false,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -86,11 +78,11 @@ export const specToolDefinitions: Tool[] = [
   {
     name: "mandu_delete_route",
     description:
-      "Delete a route's app/ source file and regenerate the manifest. " +
-      "Only removes the app/{path}/route.ts or page.tsx file — " +
-      "slot files (spec/slots/) and contract files (spec/contracts/) are intentionally preserved, " +
-      "as they may be reused when the route is recreated. " +
-      "Use mandu_list_routes before deleting to confirm the correct routeId.",
+      "Delete a route's app/ source file and regenerate the manifest. Slot and contract files are preserved.",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -105,9 +97,10 @@ export const specToolDefinitions: Tool[] = [
   {
     name: "mandu_validate_manifest",
     description:
-      "Validate the routes manifest (.mandu/routes.manifest.json) for structural integrity. " +
-      "Checks required fields, valid route kinds, correct module paths, and manifest schema version. " +
-      "Run this after manual manifest edits, after upgrading Mandu, or when routes behave unexpectedly.",
+      "Validate the routes manifest for structural integrity. Run after manual edits or when routes behave unexpectedly.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {},
@@ -212,6 +205,7 @@ export function specTools(projectRoot: string) {
         createdFiles,
         totalRoutes: genResult.manifest.routes.length,
         message: `Route '${routeId}' scaffolded successfully`,
+        relatedSkills: ["mandu-create-feature"],
       };
     },
 

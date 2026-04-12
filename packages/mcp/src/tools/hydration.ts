@@ -18,6 +18,11 @@ export const hydrationToolDefinitions: Tool[] = [
     name: "mandu_build",
     description:
       "Build client bundles for hydration. Compiles client slots (.client.ts) into browser-ready JavaScript bundles.",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -43,6 +48,9 @@ export const hydrationToolDefinitions: Tool[] = [
     name: "mandu_build_status",
     description:
       "Get the current build status, bundle manifest, and statistics for client bundles.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {},
@@ -53,6 +61,9 @@ export const hydrationToolDefinitions: Tool[] = [
     name: "mandu_list_islands",
     description:
       "List all routes that have client-side hydration (islands). Shows hydration strategy and priority for each.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {},
@@ -63,6 +74,9 @@ export const hydrationToolDefinitions: Tool[] = [
     name: "mandu_set_hydration",
     description:
       "Set hydration configuration for a specific route. Updates the route's hydration strategy and priority.",
+    annotations: {
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -94,6 +108,10 @@ export const hydrationToolDefinitions: Tool[] = [
     name: "mandu_add_client_slot",
     description:
       "Add a client slot file for a route to enable hydration. Creates the .client.ts file and updates the manifest.",
+    annotations: {
+      destructiveHint: false,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {

@@ -2,6 +2,8 @@
  * Scaffold templates — string constants for generated boilerplate files.
  */
 
+export type MiddlewarePreset = "default" | "jwt" | "all";
+
 export const MIDDLEWARE_TEMPLATE = `\
 /**
  * Middleware — runs before each request.
@@ -27,6 +29,123 @@ export default async function middleware(
   return next();
 }
 `;
+
+const JWT_MIDDLEWARE_TEMPLATE = `\
+/**
+ * JWT middleware scaffold.
+ *
+ * Protect routes by checking for a Bearer token.
+ * Replace verifyToken() with your own auth logic.
+ */
+
+async function verifyToken(token: string): Promise<boolean> {
+  return token.length > 10;
+}
+
+export default async function middleware(
+  request: Request,
+  next: () => Promise<Response>,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const needsAuth = url.pathname.startsWith("/api");
+
+  if (!needsAuth) {
+    return next();
+  }
+
+  const auth = request.headers.get("Authorization");
+  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+
+  if (!token || !(await verifyToken(token))) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  return next();
+}
+`;
+
+const ALL_MIDDLEWARE_TEMPLATE = `\
+/**
+ * Middleware preset: cors + logger + jwt placeholder.
+ *
+ * Adjust allowed origins and token validation before production use.
+ */
+
+const ALLOWED_ORIGINS = new Set(["http://localhost:3333"]);
+
+async function verifyToken(token: string): Promise<boolean> {
+  return token.length > 10;
+}
+
+export default async function middleware(
+  request: Request,
+  next: () => Promise<Response>,
+): Promise<Response> {
+  const origin = request.headers.get("Origin");
+  const corsHeaders = origin && ALLOWED_ORIGINS.has(origin)
+    ? {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+      }
+    : {};
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  const startedAt = Date.now();
+  const url = new URL(request.url);
+  const auth = request.headers.get("Authorization");
+  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+
+  if (url.pathname.startsWith("/api") && (!token || !(await verifyToken(token)))) {
+    return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+  }
+
+  const response = await next();
+  const elapsed = Date.now() - startedAt;
+  console.log(\`[middleware] \${request.method} \${url.pathname} \${response.status} (\${elapsed}ms)\`);
+
+  for (const [key, value] of Object.entries(corsHeaders)) {
+    response.headers.set(key, value);
+  }
+
+  return response;
+}
+`;
+
+export function normalizeMiddlewarePreset(value?: string): MiddlewarePreset | null {
+  if (!value) return "default";
+
+  switch (value.toLowerCase()) {
+    case "default":
+    case "basic":
+      return "default";
+    case "jwt":
+      return "jwt";
+    case "all":
+      return "all";
+    default:
+      return null;
+  }
+}
+
+export function getMiddlewareTemplate(preset?: string): string | null {
+  const normalized = normalizeMiddlewarePreset(preset);
+  if (!normalized) {
+    return null;
+  }
+
+  switch (normalized) {
+    case "jwt":
+      return JWT_MIDDLEWARE_TEMPLATE;
+    case "all":
+      return ALL_MIDDLEWARE_TEMPLATE;
+    default:
+      return MIDDLEWARE_TEMPLATE;
+  }
+}
 
 export function wsTemplate(name: string): string {
   return `\

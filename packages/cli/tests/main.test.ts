@@ -10,12 +10,8 @@ vi.mock("../src/commands/registry", () => ({
 vi.mock("../src/terminal", () => ({
   shouldShowBanner: () => false,
   renderHeroBanner: vi.fn(),
-  theme: {
-    heading: (s: string) => s,
-    muted: (s: string) => s,
-    command: (s: string) => s,
-    option: (s: string) => s,
-  },
+  renderHelp: () => "help",
+  MANDU_HELP: { description: "Agent-Native Web Framework" },
 }));
 
 describe("CLI main lifecycle", () => {
@@ -58,5 +54,16 @@ describe("CLI main lifecycle", () => {
       .toThrow("process.exit:0");
 
     expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it("parses --key=value style flags", async () => {
+    const { parseArgs } = await import("../src/main");
+    expect(parseArgs(["auth", "init", "--strategy=jwt"])).toEqual({
+      command: "auth",
+      options: {
+        _positional: "init",
+        strategy: "jwt",
+      },
+    });
   });
 });

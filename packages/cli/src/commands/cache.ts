@@ -14,6 +14,7 @@
 export interface CacheOptions {
   tag?: string;
   all?: boolean;
+  path?: string;
 }
 
 const SERVER_NOT_RUNNING = `\
@@ -48,7 +49,12 @@ function handleClear(options: CacheOptions): boolean {
     return true;
   }
 
-  // clear [path] — positional path handled by registry caller
+  if (options.path) {
+    console.log(`cache clear ${options.path}`);
+    console.log(`\n${SERVER_NOT_RUNNING}`);
+    return true;
+  }
+
   console.log("cache clear");
   console.log(`\n${SERVER_NOT_RUNNING}`);
   return true;

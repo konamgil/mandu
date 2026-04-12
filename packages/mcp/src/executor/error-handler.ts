@@ -174,6 +174,20 @@ function getToolSpecificSuggestion(toolName: string, info: ExtractedErrorInfo): 
  * const response = createToolResponse("mandu_list_routes", null, new Error("..."));
  * ```
  */
+/**
+ * Detect "soft error" results: handler returned { error: "..." } or { success: false, error: "..." }
+ * without throwing. These should still be flagged as isError for the MCP client.
+ */
+function isSoftErrorResult(result: unknown): boolean {
+  if (result == null || typeof result !== "object") return false;
+  const obj = result as Record<string, unknown>;
+  // Has an explicit "error" field (string or array)
+  if ("error" in obj && obj.error != null) return true;
+  // Has success: false with no data payload
+  if (obj.success === false && "error" in obj) return true;
+  return false;
+}
+
 export function createToolResponse(
   toolName: string,
   result: unknown,
@@ -192,6 +206,9 @@ export function createToolResponse(
     };
   }
 
+  // Detect soft errors returned by handlers (e.g. { error: "Route not found" })
+  const softError = isSoftErrorResult(result);
+
   return {
     content: [
       {
@@ -199,6 +216,7 @@ export function createToolResponse(
         text: JSON.stringify(result, null, 2),
       },
     ],
+    ...(softError && { isError: true }),
   };
 }
 

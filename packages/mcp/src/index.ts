@@ -83,6 +83,14 @@ export {
   getToolsSummary,
 } from "./tools/index.js";
 
+// Profile exports
+export {
+  type McpProfile,
+  PROFILE_CATEGORIES,
+  getProfileCategories,
+  isValidProfile,
+} from "./profiles.js";
+
 // CLI entry point
 import { startServer } from "./server.js";
 import path from "path";

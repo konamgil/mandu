@@ -26,6 +26,7 @@ export function toolToPlugin(
     name: definition.name,
     description: definition.description ?? "",
     inputSchema: definition.inputSchema as unknown as Record<string, unknown>,
+    ...(definition.annotations && { annotations: definition.annotations as unknown as Record<string, unknown> }),
     execute: handler as (input: unknown) => Promise<unknown>,
   };
 }
@@ -38,6 +39,7 @@ export function pluginToTool(plugin: McpToolPlugin): Tool {
     name: plugin.name,
     description: plugin.description,
     inputSchema: plugin.inputSchema as Tool["inputSchema"],
+    ...(plugin.annotations && { annotations: plugin.annotations as Tool["annotations"] }),
   };
 }
 

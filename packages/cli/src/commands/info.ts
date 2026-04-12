@@ -12,6 +12,14 @@ import { CONFIG_FILES, loadManduConfig } from "@mandujs/core";
 export async function info(): Promise<boolean> {
   const rootDir = resolveFromCwd(".");
 
+  let cliVersion = "unknown";
+  try {
+    const cliPkg = await Bun.file(path.resolve(import.meta.dir, "../../package.json")).json();
+    cliVersion = cliPkg.version;
+  } catch {
+    // leave as unknown
+  }
+
   // Read @mandujs/core version from its package.json
   let coreVersion = "unknown";
   try {
@@ -30,6 +38,7 @@ export async function info(): Promise<boolean> {
   }
 
   const bunVersion = process.versions.bun ?? "unknown";
+  const nodeVersion = process.version;
   const platform = `${process.platform} ${os.arch()}`;
 
   // Detect config file
@@ -64,12 +73,15 @@ export async function info(): Promise<boolean> {
   }
 
   console.log("🥟 Mandu Info\n");
-  console.log(`  Mandu:    v${coreVersion}`);
+  console.log(`  CLI:      v${cliVersion}`);
+  console.log(`  Core:     v${coreVersion}`);
   console.log(`  Bun:      v${bunVersion}`);
+  console.log(`  Node:     ${nodeVersion}`);
   console.log(`  OS:       ${platform}`);
-  console.log(`  Config:   ${configFile}`);
+  console.log(`  Config:   ${configFile === "none" ? "none" : `${configFile} ✓`}`);
   console.log(`  Guard:    ${guardPreset}`);
   console.log(`  Adapter:  ${adapter}`);
+  console.log("  Cache:    ISR/SWR in-memory runtime");
 
   return true;
 }

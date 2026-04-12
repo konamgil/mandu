@@ -33,6 +33,7 @@ import {
   printRuntimeLockfileStatus,
 } from "../util/lockfile";
 import { registerManifestHandlers } from "../util/handlers";
+import { getFsRoutesGuardPolicy } from "../util/guard-policy";
 import path from "path";
 
 export interface DevOptions {
@@ -113,42 +114,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
           realtime: guardConfigFromFile.realtime ?? true,
           exclude: guardConfigFromFile.exclude,
           realtimeOutput: guardFormat,
-          fsRoutes: enableFsRoutes
-            ? {
-                noPageToPage: true,
-                pageCanImport: [
-                  "client/pages",
-                  "client/widgets",
-                  "client/features",
-                  "client/entities",
-                  "client/shared",
-                  "shared/contracts",
-                  "shared/types",
-                  "shared/utils/client",
-                ],
-                layoutCanImport: [
-                  "client/app",
-                  "client/widgets",
-                  "client/shared",
-                  "shared/contracts",
-                  "shared/types",
-                  "shared/utils/client",
-                ],
-                routeCanImport: [
-                  "server/api",
-                  "server/application",
-                  "server/domain",
-                  "server/infra",
-                  "server/core",
-                  "shared/contracts",
-                  "shared/schema",
-                  "shared/types",
-                  "shared/utils/client",
-                  "shared/utils/server",
-                  "shared/env",
-                ],
-              }
-            : undefined,
+          fsRoutes: getFsRoutesGuardPolicy(enableFsRoutes),
         };
 
   if (guardConfig) {

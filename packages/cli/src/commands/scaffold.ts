@@ -5,21 +5,44 @@
  *   mandu scaffold middleware          Generate middleware.ts
  *   mandu scaffold ws <name>           Generate WebSocket route
  *   mandu scaffold session             Generate session storage helper
+ *   mandu scaffold auth                Generate auth helpers and routes
+ *   mandu scaffold collection <name>   Generate content collection scaffold
  */
 
 import path from "path";
 import fs from "fs/promises";
-import { MIDDLEWARE_TEMPLATE, wsTemplate, SESSION_TEMPLATE } from "./scaffold-templates";
+import {
+  getMiddlewareTemplate,
+  normalizeMiddlewarePreset,
+  wsTemplate,
+  SESSION_TEMPLATE,
+} from "./scaffold-templates";
 
-export async function scaffold(type: string, name: string): Promise<boolean> {
+export interface ScaffoldOptions {
+  preset?: string;
+  schema?: string;
+}
+
+export async function scaffold(type: string, name: string, options: ScaffoldOptions = {}): Promise<boolean> {
   const cwd = process.cwd();
 
   switch (type) {
-    case "middleware":
-      return generate(path.join(cwd, "middleware.ts"), MIDDLEWARE_TEMPLATE, "middleware.ts", [
+    case "middleware": {
+      const template = getMiddlewareTemplate(options.preset);
+      if (!template) {
+        console.error(`Unknown middleware preset: ${options.preset}`);
+        console.error("Available presets: default, jwt, all");
+        return false;
+      }
+      const preset = normalizeMiddlewarePreset(options.preset) ?? "default";
+      return generate(path.join(cwd, "middleware.ts"), template, "middleware.ts", [
         "Import and configure in your server entry if needed.",
         "Runs before every request when registered.",
+        preset === "default"
+          ? "Edit the default checks to match your route protection rules."
+          : `Preset applied: ${preset}`,
       ]);
+    }
     case "ws":
       if (!name) {
         console.error("Usage: mandu scaffold ws <name>");
@@ -39,9 +62,20 @@ export async function scaffold(type: string, name: string): Promise<boolean> {
         ["Import { getSession } from 'src/server/session' in your route handlers.",
          "Configure SESSION_SECRET via environment variable before production."],
       );
+    case "auth": {
+      const { authInit } = await import("./auth");
+      return authInit({ strategy: "jwt" });
+    }
+    case "collection": {
+      const { collectionCreate } = await import("./collection");
+      return collectionCreate({
+        name,
+        schema: options.schema ?? options.preset,
+      });
+    }
     default:
       console.error(`Unknown scaffold type: ${type}`);
-      console.error("Available: middleware, ws, session");
+      console.error("Available: middleware, ws, session, auth, collection");
       return false;
   }
 }

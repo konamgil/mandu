@@ -28,6 +28,9 @@ export const seoToolDefinitions: Tool[] = [
   {
     name: "mandu_preview_seo",
     description: "Preview rendered SEO HTML for given metadata. Useful for testing metadata before applying.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -42,6 +45,9 @@ export const seoToolDefinitions: Tool[] = [
   {
     name: "mandu_generate_sitemap_preview",
     description: "Generate sitemap.xml preview from entries",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -74,6 +80,9 @@ export const seoToolDefinitions: Tool[] = [
   {
     name: "mandu_generate_robots_preview",
     description: "Generate robots.txt preview from configuration",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -92,6 +101,9 @@ export const seoToolDefinitions: Tool[] = [
   {
     name: "mandu_create_jsonld",
     description: "Create JSON-LD structured data for SEO. Supports Article, WebSite, Organization, Breadcrumb, FAQ, Product, LocalBusiness, Video, Event types.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -111,6 +123,10 @@ export const seoToolDefinitions: Tool[] = [
   {
     name: "mandu_write_seo_file",
     description: "Write SEO configuration file (sitemap.ts or robots.ts) to app directory",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -130,6 +146,9 @@ export const seoToolDefinitions: Tool[] = [
   {
     name: "mandu_seo_analyze",
     description: "Analyze SEO metadata for common issues and provide recommendations",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {

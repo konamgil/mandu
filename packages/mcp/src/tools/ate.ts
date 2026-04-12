@@ -15,6 +15,9 @@ import type { OracleLevel } from "@mandujs/ate";
 export const ateToolDefinitions: Tool[] = [
   {
     name: "mandu.ate.extract",
+    annotations: {
+      readOnlyHint: false,
+    },
     description:
       "ATE Step 1 — Extract: Statically analyze the Mandu project's AST to build an interaction graph of routes, slots, contracts, and data flow. " +
       "Identifies all testable interactions without running the server. " +
@@ -39,6 +42,9 @@ export const ateToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.ate.generate",
+    annotations: {
+      readOnlyHint: false,
+    },
     description:
       "ATE Step 2 — Generate: Create Playwright test scenarios from the interaction graph produced by mandu.ate.extract. " +
       "Oracle level controls assertion depth: " +
@@ -67,6 +73,9 @@ export const ateToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.ate.run",
+    annotations: {
+      readOnlyHint: false,
+    },
     description:
       "ATE Step 3 — Run: Execute the generated Playwright specs against a running Mandu dev server. " +
       "Collects test artifacts (screenshots, traces, results) in .mandu/ate/runs/{runId}/. " +
@@ -93,6 +102,9 @@ export const ateToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.ate.report",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
       "ATE Step 4 — Report: Generate a test report from run artifacts. " +
       "Produces pass/fail summary, coverage by route, and failure details. " +
@@ -132,6 +144,9 @@ export const ateToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.ate.heal",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
       "ATE Step 5 — Heal: Analyze test failures from a run and generate safe diff suggestions for fixing the code. " +
       "Classifies failures by root cause (schema mismatch, missing handler, wrong status, selector stale, etc.) " +
@@ -149,6 +164,9 @@ export const ateToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.ate.impact",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
       "ATE Optimization — Impact Analysis: Calculate the minimal subset of routes affected by changed files using git diff. " +
       "Avoids running the full test suite when only part of the codebase changed. " +
@@ -166,6 +184,9 @@ export const ateToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.ate.auto_pipeline",
+    annotations: {
+      readOnlyHint: false,
+    },
     description:
       "ATE Full Pipeline — Run the complete ATE cycle in one call: " +
       "Extract AST → Generate Playwright specs → Run tests → Create report → Suggest heals. " +
@@ -202,6 +223,9 @@ export const ateToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.ate.feedback",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
       "ATE Feedback — Evaluate heal suggestions from a failed run and classify which fixes are safe to auto-apply. " +
       "Safe-to-auto-apply: selector-map updates (CSS selector changes). " +
@@ -222,6 +246,10 @@ export const ateToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.ate.apply_heal",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     description:
       "ATE Apply — Apply a specific heal suggestion diff to the codebase. " +
       "Always creates a backup snapshot first (use mandu_rollback to undo). " +

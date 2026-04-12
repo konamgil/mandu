@@ -12,6 +12,9 @@ import fs from "fs/promises";
 export const runtimeToolDefinitions: Tool[] = [
   {
     name: "mandu_get_runtime_config",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
       "Get the Mandu runtime configuration defaults for logger and normalize settings. " +
       "Shows default values for every configurable option along with usage examples. " +
@@ -25,6 +28,9 @@ export const runtimeToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_get_contract_options",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
       "Read the normalize and coerceQueryParams options currently set in a specific contract file. " +
       "These options control how incoming request data is validated and sanitized: " +
@@ -44,6 +50,9 @@ export const runtimeToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_set_contract_normalize",
+    annotations: {
+      readOnlyHint: false,
+    },
     description:
       "Set the normalize mode (and optionally coerceQueryParams) in a route's contract file. " +
       "Normalize modes: " +
@@ -75,6 +84,9 @@ export const runtimeToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_list_logger_options",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
       "List all available logger configuration options with types, defaults, and descriptions. " +
       "Covers: log format, level, header/body logging (security risk warnings), " +
@@ -88,6 +100,10 @@ export const runtimeToolDefinitions: Tool[] = [
   },
   {
     name: "mandu_generate_logger_config",
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
     description:
       "Generate ready-to-use TypeScript logger configuration code for a specific environment. " +
       "Returns an import statement and logger() call with environment-appropriate defaults: " +

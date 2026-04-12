@@ -335,6 +335,11 @@ export interface McpToolPlugin {
   inputSchema: Record<string, unknown>;
 
   /**
+   * MCP tool annotations (hints for clients)
+   */
+  annotations?: Record<string, unknown>;
+
+  /**
    * 도구 실행
    */
   execute: (input: unknown) => unknown | Promise<unknown>;

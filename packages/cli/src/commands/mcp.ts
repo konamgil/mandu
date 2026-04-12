@@ -19,12 +19,44 @@ interface McpCommandOptions {
  * Bootstrap the MCP tool registry for CLI use.
  * Skips server-requiring modules (brain, project) since there is no MCP Server.
  */
-async function ensureRegistry(): Promise<McpToolRegistry> {
+export async function ensureRegistry(): Promise<McpToolRegistry> {
   const { registerBuiltinTools, mcpToolRegistry } = await import("@mandujs/mcp");
   if (mcpToolRegistry.size === 0) {
     registerBuiltinTools(process.cwd());
   }
   return mcpToolRegistry;
+}
+
+export function buildMcpInput(args?: Record<string, string>): Record<string, unknown> {
+  const input: Record<string, unknown> = {};
+
+  if (!args) {
+    return input;
+  }
+
+  for (const [key, value] of Object.entries(args)) {
+    if (key.startsWith("_") || key === "json" || key === "list") continue;
+    if (value === "true") input[key] = true;
+    else if (value === "false") input[key] = false;
+    else if (/^\d+$/.test(value)) input[key] = Number(value);
+    else input[key] = value;
+  }
+
+  return input;
+}
+
+export async function executeMcpTool(
+  tool: string,
+  input: Record<string, unknown>
+): Promise<unknown> {
+  const registry = await ensureRegistry();
+  const plugin = registry.get(tool);
+
+  if (!plugin) {
+    throw new Error(`Tool not found: ${tool}`);
+  }
+
+  return plugin.execute(input);
 }
 
 export async function mcp(options: McpCommandOptions): Promise<boolean> {
@@ -80,21 +112,8 @@ export async function mcp(options: McpCommandOptions): Promise<boolean> {
     return false;
   }
 
-  // Build input from CLI options (strip internal keys)
-  const input: Record<string, unknown> = {};
-  if (options.args) {
-    for (const [key, value] of Object.entries(options.args)) {
-      if (key.startsWith("_") || key === "json" || key === "list") continue;
-      // Attempt to parse booleans and numbers
-      if (value === "true") input[key] = true;
-      else if (value === "false") input[key] = false;
-      else if (/^\d+$/.test(value)) input[key] = Number(value);
-      else input[key] = value;
-    }
-  }
-
   try {
-    const result = await plugin.execute(input);
+    const result = await executeMcpTool(tool, buildMcpInput(options.args));
 
     if (json) {
       console.log(JSON.stringify(result, null, 2));

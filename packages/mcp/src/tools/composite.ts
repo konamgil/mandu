@@ -9,6 +9,7 @@ import { guardTools } from "./guard.js";
 import { contractTools } from "./contract.js";
 import { generateTools } from "./generate.js";
 import { kitchenTools } from "./kitchen.js";
+import { ateTools } from "./ate.js";
 import path from "path";
 import fs from "fs/promises";
 
@@ -18,6 +19,10 @@ export const compositeToolDefinitions: Tool[] = [
     description:
       "Create a complete feature: route + contract + slot + island scaffold in one call. " +
       "Sequentially runs: negotiate -> add_route -> create_contract -> generate -> guard_check.",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -36,6 +41,9 @@ export const compositeToolDefinitions: Tool[] = [
     description:
       "Run all diagnostic checks in parallel and return a unified health report. " +
       "Combines: kitchen_errors + guard_check + validate_contracts + validate_manifest.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -48,6 +56,10 @@ export const compositeToolDefinitions: Tool[] = [
     description:
       "Create an island component with correct @mandujs/core/client imports and hydration strategy. " +
       "Generates a .island.tsx file in app/{route}/ with the island() wrapper.",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -56,6 +68,68 @@ export const compositeToolDefinitions: Tool[] = [
         strategy: { type: "string", enum: ["load", "idle", "visible", "media", "never"], description: "Hydration strategy (default: visible)" },
       },
       required: ["name", "route"],
+    },
+  },
+  {
+    name: "mandu.middleware.add",
+    description:
+      "Create a middleware.ts file from a preset template (jwt, cors, auth, default). " +
+      "Checks if middleware.ts already exists before writing to avoid overwriting.",
+    annotations: {
+      destructiveHint: false,
+      readOnlyHint: false,
+    },
+    inputSchema: {
+      type: "object",
+      properties: {
+        preset: { type: "string", enum: ["jwt", "cors", "auth", "default"], description: "Middleware preset template" },
+        options: { type: "object", additionalProperties: { type: "string" }, description: "Extra options passed into the template" },
+      },
+      required: ["preset"],
+    },
+  },
+  {
+    name: "mandu.test.route",
+    description:
+      "Run the ATE test pipeline on a single route: extract -> generate -> run -> report. " +
+      "Set quick=true to skip extraction and use cached data.",
+    annotations: {
+      readOnlyHint: false,
+    },
+    inputSchema: {
+      type: "object",
+      properties: {
+        routeId: { type: "string", description: "Route ID to test (e.g. 'api-users', 'blog-slug')" },
+        quick: { type: "boolean", description: "Skip extraction, reuse cached graph (default: false)" },
+      },
+      required: ["routeId"],
+    },
+  },
+  {
+    name: "mandu.deploy.check",
+    description:
+      "Pre-deployment validation: runs guard, contract, and manifest checks in parallel. " +
+      "Returns a structured readiness report with pass/fail per check and any blockers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: { type: "string", enum: ["bun", "docker", "node"], description: "Deployment target (informational, default: bun)" },
+      },
+    },
+  },
+  {
+    name: "mandu.cache.manage",
+    description:
+      "Cache management operations. 'stats' reads cache info from Kitchen endpoint. " +
+      "'clear' explains that runtime cache requires server restart or revalidatePath/Tag.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["stats", "clear"], description: "Cache operation" },
+        path: { type: "string", description: "Route path to target (for selective clear)" },
+        tag: { type: "string", description: "Cache tag to target (for tag-based clear)" },
+      },
+      required: ["action"],
     },
   },
 ];
@@ -67,6 +141,7 @@ export function compositeTools(projectRoot: string) {
   const contract = contractTools(projectRoot);
   const generate = generateTools(projectRoot);
   const kitchen = kitchenTools(projectRoot);
+  const ate = ateTools(projectRoot);
 
   return {
     "mandu.feature.create": async (args: Record<string, unknown>) => {
@@ -150,11 +225,82 @@ export function compositeTools(projectRoot: string) {
         nextSteps: [`Import <${name} /> in app/${route}/page.tsx`, "Run mandu_build to compile the client bundle", `Island hydrates on '${strategy}'`],
       };
     },
+
+    "mandu.middleware.add": async (args: Record<string, unknown>) => {
+      const { preset, options = {} } = args as { preset: "jwt" | "cors" | "auth" | "default"; options?: Record<string, string> };
+      const mwPath = path.join(paths.appDir, "middleware.ts");
+      try { await fs.access(mwPath); return { created: false, error: "middleware.ts already exists", path: "app/middleware.ts" }; } catch { /* proceed */ }
+      await fs.mkdir(path.dirname(mwPath), { recursive: true });
+      await Bun.write(mwPath, generateMiddlewareSource(preset, options));
+      return { created: true, path: "app/middleware.ts", preset };
+    },
+
+    "mandu.test.route": async (args: Record<string, unknown>) => {
+      const { routeId, quick = false } = args as { routeId: string; quick?: boolean };
+      const steps: { step: string; result: unknown }[] = [];
+      if (!quick) {
+        steps.push({ step: "extract", result: await ate["mandu.ate.extract"]({ repoRoot: projectRoot, routeGlobs: [`app/${routeId.replace(/-/g, "/")}/**`] }) });
+      }
+      steps.push({ step: "generate", result: await ate["mandu.ate.generate"]({ repoRoot: projectRoot, oracleLevel: "L1", onlyRoutes: [routeId] }) });
+      const runResult = await ate["mandu.ate.run"]({ repoRoot: projectRoot }) as { runId?: string; startedAt?: string; finishedAt?: string; exitCode?: number };
+      steps.push({ step: "run", result: runResult });
+      const report = await ate["mandu.ate.report"]({
+        repoRoot: projectRoot, runId: runResult.runId ?? "unknown",
+        startedAt: runResult.startedAt ?? new Date().toISOString(), finishedAt: runResult.finishedAt ?? new Date().toISOString(),
+        exitCode: runResult.exitCode ?? 1,
+      });
+      steps.push({ step: "report", result: report });
+      const passed = runResult.exitCode === 0;
+      let healSuggestions: unknown | undefined;
+      if (!passed && runResult.runId) {
+        healSuggestions = await ate["mandu.ate.heal"]({ repoRoot: projectRoot, runId: runResult.runId }).catch(() => undefined);
+      }
+      return { passed, routeId, results: steps, ...(healSuggestions ? { healSuggestions } : {}) };
+    },
+
+    "mandu.deploy.check": async (args: Record<string, unknown>) => {
+      const { target = "bun" } = args as { target?: "bun" | "docker" | "node" };
+      const [guardResult, contractResult, manifestResult] = await Promise.all([
+        guard.mandu_guard_check({ autoCorrect: false }).catch((e: Error) => ({ error: e.message })),
+        contract.mandu_validate_contracts().catch((e: Error) => ({ error: e.message })),
+        spec.mandu_validate_manifest().catch((e: Error) => ({ error: e.message })),
+      ]);
+      const status = (r: Record<string, unknown>): "pass" | "fail" => (r.error || r.passed === false || r.valid === false) ? "fail" : "pass";
+      const checks = { guard: status(guardResult as Record<string, unknown>), contracts: status(contractResult as Record<string, unknown>), manifest: status(manifestResult as Record<string, unknown>) };
+      const blockers: string[] = [];
+      const warnings: string[] = [];
+      if (checks.guard === "fail") blockers.push("Guard check failed — fix structural violations before deploying");
+      if (checks.contracts === "fail") blockers.push("Contract validation failed — fix schema mismatches");
+      if (checks.manifest === "fail") warnings.push("Manifest validation has issues — regenerate with mandu_generate");
+      if (target === "docker") warnings.push("Ensure Dockerfile copies .mandu/generated/ into the image");
+      if (target === "node") warnings.push("Node target requires Bun APIs to be polyfilled or avoided");
+      return { ready: blockers.length === 0, target, checks, blockers, warnings };
+    },
+
+    "mandu.cache.manage": async (args: Record<string, unknown>) => {
+      const { action, path: routePath, tag } = args as { action: "stats" | "clear"; path?: string; tag?: string };
+      if (action === "stats") {
+        const info = await kitchen.mandu_kitchen_errors({ clear: false }).catch(() => null);
+        return { action: "stats", result: info ? "Kitchen endpoint reachable — server is running" : "Kitchen endpoint unreachable — is the dev server running?", serverStatus: info ? "up" : "down" };
+      }
+      const target = routePath ? `path=${routePath}` : tag ? `tag=${tag}` : "all";
+      return { action: "clear", target, result: "Runtime cache cannot be cleared via MCP. Use revalidatePath() or revalidateTag() in your route handler, or restart the server to clear all caches." };
+    },
   };
 }
 
 function toPascalCase(kebab: string): string {
   return kebab.split(/[-_]/).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join("");
+}
+
+function generateMiddlewareSource(preset: string, options: Record<string, string>): string {
+  const templates: Record<string, string> = {
+    jwt: `import type { MiddlewareHandler } from "@mandujs/core";\n\nexport const middleware: MiddlewareHandler = async (req, next) => {\n  const token = req.headers.get("Authorization")?.replace("Bearer ", "");\n  if (!token) return new Response("Unauthorized", { status: 401 });\n  // TODO: verify JWT token with your secret\n  return next(req);\n};\n`,
+    cors: `import type { MiddlewareHandler } from "@mandujs/core";\n\nconst ALLOWED_ORIGINS = ${JSON.stringify(options.origins?.split(",") ?? ["*"])};\n\nexport const middleware: MiddlewareHandler = async (req, next) => {\n  const origin = req.headers.get("Origin") ?? "";\n  const res = await next(req);\n  if (ALLOWED_ORIGINS.includes("*") || ALLOWED_ORIGINS.includes(origin)) {\n    res.headers.set("Access-Control-Allow-Origin", origin || "*");\n    res.headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");\n    res.headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");\n  }\n  return res;\n};\n`,
+    auth: `import type { MiddlewareHandler } from "@mandujs/core";\n\nconst PUBLIC_PATHS = ["/", "/login", "/api/auth"];\n\nexport const middleware: MiddlewareHandler = async (req, next) => {\n  const url = new URL(req.url);\n  if (PUBLIC_PATHS.some((p) => url.pathname.startsWith(p))) return next(req);\n  const session = req.headers.get("Cookie")?.includes("session=");\n  if (!session) return Response.redirect(new URL("/login", req.url));\n  return next(req);\n};\n`,
+    default: `import type { MiddlewareHandler } from "@mandujs/core";\n\nexport const middleware: MiddlewareHandler = async (req, next) => {\n  const start = Date.now();\n  const res = await next(req);\n  res.headers.set("X-Response-Time", \`\${Date.now() - start}ms\`);\n  return res;\n};\n`,
+  };
+  return templates[preset] ?? templates.default;
 }
 
 function generateIslandSource(name: string, strategy: string): string {

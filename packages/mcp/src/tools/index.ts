@@ -9,6 +9,7 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import type { ActivityMonitor } from "../activity-monitor.js";
 import { mcpToolRegistry } from "../registry/mcp-tool-registry.js";
 import { moduleToPlugins } from "../adapters/tool-adapter.js";
+import { type McpProfile, getProfileCategories } from "../profiles.js";
 
 // 도구 모듈 export
 export { specTools, specToolDefinitions } from "./spec.js";
@@ -104,9 +105,19 @@ const TOOL_MODULES: ToolModule[] = [
 export function registerBuiltinTools(
   projectRoot: string,
   server?: Server,
-  monitor?: ActivityMonitor
+  monitor?: ActivityMonitor,
+  options?: { profile?: McpProfile }
 ): void {
+  const allowedCategories = options?.profile
+    ? getProfileCategories(options.profile)
+    : null;
+
   for (const module of TOOL_MODULES) {
+    // Profile filtering: skip categories not in the allowed list
+    if (allowedCategories && !allowedCategories.includes(module.category)) {
+      continue;
+    }
+
     // Server가 필요한 모듈은 Server가 있을 때만 등록
     if (module.requiresServer && !server) {
       continue;

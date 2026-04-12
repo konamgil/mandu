@@ -239,8 +239,19 @@ export const MANDU_HELP: HelpDefinition = {
     { name: "dev", description: "Start development server with HMR" },
     { name: "build", description: "Build for production" },
     { name: "start", description: "Start production server" },
+    { name: "preview", description: "Build then start the production server" },
+    { name: "check", description: "Run integrated project validation" },
     { name: "guard", description: "Check architecture violations", aliases: ["g"] },
     { name: "routes", description: "Manage file-system routes" },
+    { name: "generate", description: "Generate FS routes and resource artifacts" },
+    { name: "middleware", description: "Generate middleware scaffolding" },
+    { name: "auth", description: "Generate auth scaffolding and example routes" },
+    { name: "session", description: "Generate session storage scaffolding" },
+    { name: "ws", description: "Generate a WebSocket route scaffold" },
+    { name: "collection", description: "Create content collection scaffolding" },
+    { name: "fix", description: "Analyze or apply Guard auto-fixes" },
+    { name: "explain", description: "Explain Guard rule violations" },
+    { name: "mcp", description: "Run built-in MCP tools from the terminal" },
     { name: "openapi", description: "Generate OpenAPI spec" },
     { name: "brain", description: "Setup local AI with Ollama" },
   ],
@@ -248,21 +259,29 @@ export const MANDU_HELP: HelpDefinition = {
     { flags: "--version, -v", description: "Show version number" },
     { flags: "--help, -h", description: "Show help" },
     { flags: "--json", description: "Output in JSON format" },
+    { flags: "--preset <name>", description: "Select a guard or scaffold preset" },
+    { flags: "--apply", description: "Apply available fixes for mutating commands" },
     { flags: "--no-color", description: "Disable colored output" },
     { flags: "--verbose", description: "Enable verbose logging" },
   ],
   examples: [
     ["mandu init my-app", "Create a new project"],
     ["mandu dev --port 4000", "Start dev server on port 4000"],
-    ["mandu build --prod", "Build for production"],
-    ["mandu guard --fix", "Check and auto-fix violations"],
+    ["mandu build", "Build for production"],
+    ["mandu middleware init --preset jwt", "Scaffold JWT middleware"],
+    ["mandu auth init --strategy jwt", "Scaffold JWT auth helpers and routes"],
+    ["mandu ws chat", "Create a WebSocket route scaffold"],
+    ["mandu collection create blog --schema markdown", "Create a markdown content collection"],
+    ["mandu fix --apply", "Apply available architecture fixes"],
+    ["mandu explain layer-violation --from client --to server", "Explain a guard rule"],
   ],
   sections: [
     {
-      title: "Environment Variables:",
-      content: `  MANDU_OUTPUT    Output format (json|pretty|plain)
-  NO_COLOR        Disable colors (set to any value)
-  FORCE_COLOR     Force colors even in non-TTY`,
+      title: "Command Groups:",
+      content: `  Core       init, dev, build, start, preview
+  Validate   check, guard, fix, explain
+  Generate   routes, generate, middleware, auth, session, ws, collection
+  Tooling    mcp, openapi, contract, lock, brain`,
     },
   ],
   seeAlso: [

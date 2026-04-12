@@ -12,6 +12,9 @@ export const transactionToolDefinitions: Tool[] = [
     name: "mandu_begin",
     description:
       "Begin a new transaction. Creates a snapshot of the current spec state for safe rollback.",
+    annotations: {
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -26,6 +29,9 @@ export const transactionToolDefinitions: Tool[] = [
   {
     name: "mandu_commit",
     description: "Commit the current transaction, finalizing all changes",
+    annotations: {
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {},
@@ -35,6 +41,10 @@ export const transactionToolDefinitions: Tool[] = [
   {
     name: "mandu_rollback",
     description: "Rollback the current transaction, restoring the previous state",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -49,6 +59,9 @@ export const transactionToolDefinitions: Tool[] = [
   {
     name: "mandu_tx_status",
     description: "Get the current transaction status",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {},

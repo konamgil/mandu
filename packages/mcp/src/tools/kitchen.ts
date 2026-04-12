@@ -12,12 +12,10 @@ export const kitchenToolDefinitions: Tool[] = [
   {
     name: "mandu_kitchen_errors",
     description:
-      "Read client-side errors captured by the Mandu Kitchen DevTools in the browser. " +
-      "Errors are automatically reported from the browser to the dev server when they occur " +
-      "(runtime exceptions, unhandled promise rejections, React errors, network failures). " +
-      "Use this tool to diagnose client-side issues without asking the user to copy-paste error messages. " +
-      "Returns the error list with stack traces, source locations, and timestamps. " +
-      "Call with clear=true to acknowledge and clear processed errors.",
+      "Read client-side errors captured by Kitchen DevTools. Use clear=true to clear after reading.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -90,6 +88,7 @@ export function kitchenTools(projectRoot: string) {
           message: `${data.count} client-side error(s) captured.${clear ? " Errors cleared." : ""}`,
           errors: data.errors,
           count: data.count,
+          relatedSkills: ["mandu-debug"],
         };
       } catch {
         return {

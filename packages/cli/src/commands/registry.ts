@@ -180,7 +180,7 @@ registerCommand({
 registerCommand({
   id: "guard",
   description: "Architecture violation check",
-  subcommands: ["arch", "legacy", "spec"],
+  subcommands: ["arch", "legacy", "spec", "manifest"],
   defaultSubcommand: "arch",
   async run(ctx) {
     const subCommand = ctx.args[1];
@@ -197,6 +197,7 @@ registerCommand({
         return guardArch(guardOptions);
       }
       case "legacy":
+      case "manifest":
       case "spec": {
         const { guardCheck } = await import("./guard-check");
         return guardCheck();
@@ -489,35 +490,134 @@ registerCommand({
     return cache(action, {
       tag: ctx.options.tag,
       all: ctx.options.all === "true",
+      path: ctx.args[2] || (action === "clear" ? ctx.options._positional : undefined),
+    });
+  },
+});
+
+registerCommand({
+  id: "middleware",
+  description: "Generate middleware scaffolds",
+  subcommands: ["init"],
+  exitOnSuccess: true,
+  async run(ctx) {
+    const subCommand = ctx.args[1];
+    if (subCommand !== "init") return false;
+    const { middlewareInit } = await import("./middleware");
+    return middlewareInit({ preset: ctx.options.preset });
+  },
+});
+
+registerCommand({
+  id: "session",
+  description: "Generate session storage scaffolding",
+  subcommands: ["init"],
+  exitOnSuccess: true,
+  async run(ctx) {
+    const subCommand = ctx.args[1];
+    if (subCommand !== "init") return false;
+    const { sessionInit } = await import("./session");
+    return sessionInit();
+  },
+});
+
+registerCommand({
+  id: "auth",
+  description: "Generate auth scaffolding and example routes",
+  subcommands: ["init"],
+  exitOnSuccess: true,
+  async run(ctx) {
+    const subCommand = ctx.args[1];
+    if (subCommand !== "init") return false;
+    const { authInit } = await import("./auth");
+    return authInit({ strategy: ctx.options.strategy });
+  },
+});
+
+registerCommand({
+  id: "ws",
+  description: "Generate a WebSocket route scaffold",
+  exitOnSuccess: true,
+  async run(ctx) {
+    const { ws } = await import("./ws");
+    return ws({
+      name: ctx.args[1] || ctx.options._positional,
+    });
+  },
+});
+
+registerCommand({
+  id: "collection",
+  description: "Create content collection scaffolding",
+  subcommands: ["create"],
+  exitOnSuccess: true,
+  async run(ctx) {
+    const subCommand = ctx.args[1];
+    if (subCommand !== "create") return false;
+    const { collectionCreate } = await import("./collection");
+    return collectionCreate({
+      name: ctx.args[2] || ctx.options._positional,
+      schema: ctx.options.schema,
+    });
+  },
+});
+
+registerCommand({
+  id: "fix",
+  description: "Analyze or apply architecture auto-fixes",
+  exitOnSuccess: true,
+  async run(ctx) {
+    const { fix } = await import("./fix");
+    return fix({
+      apply: ctx.options.apply === "true" || ctx.options["auto-fix"] === "true",
+      file: ctx.options.file,
+      json: ctx.options.json === "true",
+      preset: ctx.options.preset,
+    });
+  },
+});
+
+registerCommand({
+  id: "explain",
+  description: "Explain a Guard rule or violation pattern",
+  exitOnSuccess: true,
+  async run(ctx) {
+    const { explain } = await import("./explain");
+    return explain({
+      codeOrType: ctx.args[1] || ctx.options._positional,
+      fromLayer: ctx.options.from || ctx.options.fromLayer,
+      json: ctx.options.json === "true",
+      preset: ctx.options.preset,
+      toLayer: ctx.options.to || ctx.options.toLayer,
     });
   },
 });
 
 registerCommand({
   id: "scaffold",
-  description: "Generate boilerplate (middleware, ws, session)",
-  subcommands: ["middleware", "ws", "session"],
+  description: "Generate boilerplate (middleware, ws, session, auth, collection)",
+  subcommands: ["middleware", "ws", "session", "auth", "collection"],
   exitOnSuccess: true,
   async run(ctx) {
     const type = ctx.args[1];
     if (!type || type.startsWith("--")) return false;
     const name = ctx.args[2] || ctx.options._positional || "";
     const { scaffold } = await import("./scaffold");
-    return scaffold(type, name);
+    return scaffold(type, name, { preset: ctx.options.preset, schema: ctx.options.schema });
   },
 });
 
 registerCommand({
   id: "new",
   description: "Alias for scaffold",
-  subcommands: ["middleware", "ws", "session"],
+  subcommands: ["middleware", "ws", "session", "auth", "collection"],
   exitOnSuccess: true,
   async run(ctx) {
     const type = ctx.args[1];
     if (!type || type.startsWith("--")) return false;
     const name = ctx.args[2] || ctx.options._positional || "";
     const { scaffold } = await import("./scaffold");
-    return scaffold(type, name);
+    return scaffold(type, name, { preset: ctx.options.preset, schema: ctx.options.schema });
   },
 });
 
@@ -531,5 +631,40 @@ registerCommand({
     const json = ctx.options.json === "true";
     const list = !tool || ctx.options.list === "true";
     return mcp({ tool, args: ctx.options, json, list });
+  },
+});
+
+registerCommand({
+  id: "deploy",
+  description: "Validate, build, and generate deployment artifacts",
+  exitOnSuccess: true,
+  async run(ctx) {
+    const { deploy } = await import("./deploy");
+    return deploy({ target: ctx.options.target });
+  },
+});
+
+registerCommand({
+  id: "upgrade",
+  description: "Check for or install latest @mandujs package versions",
+  exitOnSuccess: true,
+  async run(ctx) {
+    const { upgrade } = await import("./upgrade");
+    return upgrade({ check: ctx.options.check === "true" || ctx.options.check === "" });
+  },
+});
+
+registerCommand({
+  id: "completion",
+  description: "Output shell completion script (bash, zsh, fish)",
+  exitOnSuccess: true,
+  async run(ctx) {
+    const shell = ctx.args[1] || ctx.options._positional;
+    if (!shell || shell.startsWith("--")) {
+      console.error("Usage: mandu completion <bash|zsh|fish>");
+      return false;
+    }
+    const { completion } = await import("./completion");
+    return completion(shell);
   },
 });

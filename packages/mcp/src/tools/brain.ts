@@ -34,6 +34,9 @@ export const brainToolDefinitions: Tool[] = [
     name: "mandu_doctor",
     description:
       "Analyze Guard failures and suggest patches. Works with or without LLM - template-based analysis is always available.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -50,6 +53,9 @@ export const brainToolDefinitions: Tool[] = [
     name: "mandu_watch_start",
     description:
       "Start file watching with architecture rule warnings. Watches for common mistakes and emits warnings (no blocking).",
+    annotations: {
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -65,6 +71,9 @@ export const brainToolDefinitions: Tool[] = [
     name: "mandu_watch_status",
     description:
       "Get the current watch status including recent warnings and active rules.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {},
@@ -75,6 +84,9 @@ export const brainToolDefinitions: Tool[] = [
     name: "mandu_watch_stop",
     description:
       "Stop file watching and clean up MCP notification subscriptions.",
+    annotations: {
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {},
@@ -86,6 +98,9 @@ export const brainToolDefinitions: Tool[] = [
     name: "mandu_check_location",
     description:
       "Check if a file location follows project architecture rules. Call this BEFORE creating or moving files to ensure proper placement.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -105,6 +120,9 @@ export const brainToolDefinitions: Tool[] = [
     name: "mandu_check_import",
     description:
       "Check if imports in a file follow architecture rules. Call this to validate imports before adding them.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -125,6 +143,9 @@ export const brainToolDefinitions: Tool[] = [
     name: "mandu_get_architecture",
     description:
       "Get the project architecture rules and folder structure. Use this to understand where to place new files.",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {

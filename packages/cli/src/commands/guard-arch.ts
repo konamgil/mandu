@@ -25,6 +25,7 @@ import {
 } from "@mandujs/core";
 import { writeFile } from "fs/promises";
 import { isDirectory, resolveFromCwd } from "../util/fs";
+import { getFsRoutesGuardPolicy } from "../util/guard-policy";
 import { resolveOutputFormat, type OutputFormat } from "../util/output";
 import path from "path";
 
@@ -121,42 +122,7 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     realtime: watch,
     realtimeOutput: resolvedFormat,
     exclude: guardConfigFromFile.exclude,
-    fsRoutes: enableFsRoutes
-      ? {
-          noPageToPage: true,
-          pageCanImport: [
-            "client/pages",
-            "client/widgets",
-            "client/features",
-            "client/entities",
-            "client/shared",
-            "shared/contracts",
-            "shared/types",
-            "shared/utils/client",
-          ],
-          layoutCanImport: [
-            "client/app",
-            "client/widgets",
-            "client/shared",
-            "shared/contracts",
-            "shared/types",
-            "shared/utils/client",
-          ],
-          routeCanImport: [
-            "server/api",
-            "server/application",
-            "server/domain",
-            "server/infra",
-            "server/core",
-            "shared/contracts",
-            "shared/schema",
-            "shared/types",
-            "shared/utils/client",
-            "shared/utils/server",
-            "shared/env",
-          ],
-        }
-      : undefined,
+    fsRoutes: getFsRoutesGuardPolicy(enableFsRoutes),
   };
 
   // Real-time watch mode

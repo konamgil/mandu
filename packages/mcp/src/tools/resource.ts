@@ -25,6 +25,10 @@ import fs from "fs/promises";
 export const resourceToolDefinitions: Tool[] = [
   {
     name: "mandu.resource.create",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     description:
       "Create a new resource with schema definition. " +
       "Generates schema file in spec/resources/{name}/schema.ts and creates " +
@@ -93,6 +97,9 @@ export const resourceToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.resource.list",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
       "List all resources in the project. " +
       "Scans spec/resources/ directory and returns resource names with field summaries.",
@@ -104,6 +111,9 @@ export const resourceToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.resource.get",
+    annotations: {
+      readOnlyHint: true,
+    },
     description:
       "Get detailed information about a specific resource. " +
       "Returns full schema definition including fields, types, and options.",
@@ -120,6 +130,9 @@ export const resourceToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.resource.addField",
+    annotations: {
+      readOnlyHint: false,
+    },
     description:
       "Add a new field to an existing resource schema. " +
       "⚠️ IMPORTANT: Preserves custom slot logic by using force: false during regeneration. " +
@@ -168,6 +181,10 @@ export const resourceToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.resource.removeField",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     description:
       "Remove a field from an existing resource schema. " +
       "Updates schema file and regenerates artifacts with force: false to preserve slots.",

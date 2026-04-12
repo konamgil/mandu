@@ -51,6 +51,7 @@ import { resourceHandlers, resourceDefinitions } from "./resources/handlers.js";
 import { findProjectRoot } from "./utils/project.js";
 import { applyWarningInjection } from "./utils/withWarnings.js";
 import { ActivityMonitor } from "./activity-monitor.js";
+import { type McpProfile, isValidProfile } from "./profiles.js";
 
 /**
  * MCP 서버 버전
@@ -69,10 +70,15 @@ export class ManduMcpServer {
   private config?: ManduConfig;
   private configWatcher?: McpConfigWatcher;
   private toolExecutor: ToolExecutor;
+  private profile: McpProfile;
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
     this.monitor = new ActivityMonitor(projectRoot);
+
+    // Resolve profile from environment variable (default: "full")
+    const envProfile = process.env.MANDU_MCP_PROFILE ?? "full";
+    this.profile = isValidProfile(envProfile) ? envProfile : "full";
 
     // MCP Server 초기화
     this.server = new Server(
@@ -91,7 +97,9 @@ export class ManduMcpServer {
     );
 
     // DNA-001: 플러그인 기반 도구 등록
-    registerBuiltinTools(projectRoot, this.server, this.monitor);
+    registerBuiltinTools(projectRoot, this.server, this.monitor, {
+      profile: this.profile,
+    });
 
     // DNA-008: 로깅 통합
     setupMcpLogging({ consoleOutput: false });
@@ -334,6 +342,7 @@ export class ManduMcpServer {
     const summary = getToolsSummary();
     console.error(`Mandu MCP Server v${MCP_VERSION} running`);
     console.error(`  Project: ${this.projectRoot}`);
+    console.error(`  Profile: ${this.profile}`);
     console.error(`  Tools: ${summary.total} (${summary.categories.join(", ")})`);
   }
 

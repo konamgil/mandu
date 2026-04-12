@@ -10,6 +10,9 @@ export const historyToolDefinitions: Tool[] = [
   {
     name: "mandu_list_history",
     description: "List the change history with snapshots",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -24,6 +27,9 @@ export const historyToolDefinitions: Tool[] = [
   {
     name: "mandu_get_snapshot",
     description: "Get details of a specific snapshot",
+    annotations: {
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -38,6 +44,10 @@ export const historyToolDefinitions: Tool[] = [
   {
     name: "mandu_prune_history",
     description: "Remove old snapshots to free up space",
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+    },
     inputSchema: {
       type: "object",
       properties: {
