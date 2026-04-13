@@ -395,7 +395,7 @@ registerCommand({
 
 registerCommand({
   id: "monitor",
-  description: "MCP Activity Monitor (--type, --severity, --stats)",
+  description: "Observability event monitor (--type, --severity, --stats, --trace, --export)",
   async run(ctx) {
     const { monitor } = await import("./monitor");
     return monitor({
@@ -409,6 +409,9 @@ registerCommand({
       trace: ctx.options.trace,
       source: ctx.options.source,
       noServer: ctx.options["no-server"] === "true",
+      // Phase 6-3: --export jsonl|otlp
+      export: ctx.options.export as import("./monitor").ExportFormat | undefined,
+      limit: ctx.options.limit ? Number(ctx.options.limit) : undefined,
     });
   },
 });

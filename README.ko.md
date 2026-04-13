@@ -1259,6 +1259,345 @@ Mandu의 MCP 서버는 아키텍처 위반을 감지하면 AI 에이전트에게
 
 ---
 
+## Filling API
+
+8단계 lifecycle을 fluent 체이닝으로 정의하는 라우트 핸들러.
+
+```typescript
+// app/api/todos/route.ts
+import { Mandu } from "@mandujs/core";
+import { db } from "@/server/infra/db";
+import { jwtMiddleware, corsMiddleware } from "@mandujs/core/middleware";
+
+export default Mandu.filling()
+  // 1. Middleware (조합 가능)
+  .use(corsMiddleware({ origin: "*" }))
+  .use(jwtMiddleware({ secret: process.env.JWT_SECRET! }))
+
+  // 2. Guard (인증/권한 early return)
+  .guard((ctx) => {
+    if (!ctx.user) return ctx.unauthorized("Login required");
+  })
+
+  // 3. Loader (ISR 캐싱)
+  .loader(async (ctx) => {
+    return { todos: await db.todos.list(ctx.user.id) };
+  }, { revalidate: 30, tags: ["todos"] })
+
+  // 4. 명명 액션 (변경 후 자동 revalidation)
+  .action("create", async (ctx) => {
+    const { title } = await ctx.body<{ title: string }>();
+    return ctx.created({ todo: await db.todos.create(ctx.user.id, title) });
+  })
+
+  // 5. Render mode
+  .render("isr", { revalidate: 60 });
+```
+
+### Render Modes
+
+| Mode | 동작 |
+|------|------|
+| `dynamic` | 항상 fresh SSR (기본) |
+| `isr` | 전체 HTML 캐시, stale 또는 태그 무효화 시 재생성 |
+| `swr` | stale 즉시 응답, 백그라운드 재생성 |
+| `ppr` | shell만 캐시, 동적 데이터는 요청별 fresh |
+
+---
+
+## Contract API
+
+Zod 스키마 1개로 타입 추론 + 런타임 검증 + OpenAPI 3.0 생성.
+
+```typescript
+import { Mandu } from "@mandujs/core";
+import { z } from "zod";
+
+const userContract = Mandu.contract({
+  request: {
+    POST: { body: z.object({ name: z.string(), email: z.string().email() }) }
+  },
+  response: {
+    201: z.object({ user: z.object({ id: z.string(), name: z.string() }) }),
+    400: z.object({ error: z.string() })
+  }
+});
+
+// 타입 안전 핸들러
+const handlers = Mandu.handler(userContract, {
+  POST: (ctx) => ({ user: createUser(ctx.body) })
+});
+
+// 타입 안전 클라이언트
+const client = Mandu.client(userContract, { baseUrl: "/api/users" });
+const result = await client.POST({ body: { name: "Alice", email: "a@b.com" } });
+```
+
+---
+
+## Middleware
+
+내장 미들웨어 5종. 모두 `MiddlewarePlugin` (beforeHandle + afterHandle + mapResponse) 형태.
+
+```typescript
+import {
+  corsMiddleware,
+  jwtMiddleware,
+  compressMiddleware,
+  loggerMiddleware,
+  timeoutMiddleware,
+} from "@mandujs/core/middleware";
+
+export default Mandu.filling()
+  .use(corsMiddleware({ origin: ["https://example.com"] }))
+  .use(jwtMiddleware({ secret: process.env.JWT_SECRET!, algorithms: ["HS256"] }))
+  .use(compressMiddleware({ threshold: 1024 }))
+  .use(loggerMiddleware())
+  .use(timeoutMiddleware({ ms: 30_000 }));
+```
+
+| Middleware | 기능 |
+|------------|------|
+| `corsMiddleware` | Origin allowlist, credentials, preflight |
+| `jwtMiddleware` | HS256/HS384/HS512, algorithm allowlist, nbf 검증, 8KB 제한 |
+| `compressMiddleware` | gzip/deflate + threshold |
+| `loggerMiddleware` | 구조화된 요청 로깅 |
+| `timeoutMiddleware` | per-request 타임아웃 + abort |
+
+---
+
+## Session Management
+
+HMAC 서명 + secret rotation 지원 쿠키 세션.
+
+```typescript
+import { createCookieSessionStorage } from "@mandujs/core";
+
+const sessionStorage = createCookieSessionStorage({
+  cookie: {
+    name: "_mandu_session",
+    secrets: [process.env.SESSION_SECRET!, process.env.OLD_SECRET], // rotation
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    httpOnly: true,
+    maxAge: 60 * 60 * 24 * 7,
+  },
+});
+
+// 라우트에서 사용
+.action("login", async (ctx) => {
+  const session = await sessionStorage.getSession(ctx.request.headers.get("cookie"));
+  session.set("user", { id: 1, name: "Alice" });
+  session.flash("message", "Welcome back!"); // 1회용
+  return ctx.ok({ ok: true }, {
+    headers: { "Set-Cookie": await sessionStorage.commitSession(session) },
+  });
+});
+```
+
+---
+
+## Cache (ISR / SWR / PPR)
+
+내장 incremental static regeneration + 태그 기반 무효화.
+
+```typescript
+import { Mandu, revalidatePath, revalidateTag } from "@mandujs/core";
+
+// 60초 캐시, "posts" 태그
+export default Mandu.filling()
+  .loader(async () => ({ posts: await db.posts.list() }), {
+    revalidate: 60,
+    tags: ["posts"],
+  });
+
+// 변경 핸들러에서 무효화
+export async function POST() {
+  await db.posts.create({ ... });
+  revalidateTag("posts");      // 태그된 캐시 전체 무효화
+  revalidatePath("/blog");     // 특정 경로 무효화
+  return new Response(null, { status: 201 });
+}
+```
+
+| Mode | 동작 |
+|------|------|
+| **ISR** | 전체 HTML 캐시, stale/태그 시 재생성 |
+| **SWR** | stale 즉시 응답 + 백그라운드 재생성 |
+| **PPR** | shell 캐시 + 동적 데이터 요청별 fresh |
+
+---
+
+## Observability
+
+EventBus 기반 관찰성 — HTTP 요청, MCP 도구 호출, Guard 위반, 빌드 이벤트가 모두 통합 버스를 통해 흐릅니다.
+
+### EventBus
+
+```typescript
+import { eventBus } from "@mandujs/core/observability";
+
+// 모든 이벤트 구독
+eventBus.on("*", (event) => {
+  console.log(event.type, event.message, event.duration);
+});
+
+// 특정 타입만
+eventBus.on("http", (event) => {
+  if (event.severity === "error") console.error(event.message);
+});
+
+// 커스텀 이벤트 emit
+eventBus.emit({
+  type: "build", severity: "info", source: "my-plugin",
+  message: "Custom step done", duration: 120,
+});
+```
+
+### Correlation ID 추적
+
+모든 HTTP 요청은 `correlationId`를 받습니다 (`x-mandu-request-id` 헤더 또는 자동 UUID). 같은 요청이 발생시키는 모든 이벤트는 동일 ID를 공유 → 분산 트레이싱.
+
+### `mandu monitor` CLI
+
+```bash
+mandu monitor                       # 라이브 스트림
+mandu monitor --type mcp            # MCP 도구만
+mandu monitor --severity error      # 에러만
+mandu monitor --trace req-abc-123   # 특정 요청 추적
+mandu monitor --stats --since 5m    # 5분 통계
+mandu monitor --export jsonl        # SQLite 저장소에서 JSONL 내보내기
+mandu monitor --export otlp         # OpenTelemetry 형식 내보내기
+```
+
+### Kitchen DevTools 7개 탭
+
+`http://localhost:3333/__kitchen` 방문:
+
+| 탭 | 설명 |
+|----|------|
+| **Errors** | 영속 에러 로그 (`.mandu/errors.jsonl`) |
+| **Network** | fetch/XHR 프록시 |
+| **Islands** | 활성 island 번들 + hydration 상태 |
+| **Requests** | HTTP 요청 + correlation 연결 상세뷰 |
+| **MCP** | MCP 도구 호출 타임라인 (correlation 그룹화) |
+| **Cache** | ISR/SWR 통계 (entries, hit rate, stale, tags) |
+| **Metrics** | TTFB p50/p95/p99, MCP 평균 시간, 에러율 |
+
+### SQLite 영구 저장
+
+```typescript
+import {
+  startSqliteStore, queryEvents, queryStats,
+  exportJsonl, exportOtlp,
+} from "@mandujs/core/observability";
+
+// dev 시 자동 시작 (.mandu/observability.db)
+await startSqliteStore(rootDir);
+
+// 시계열 쿼리
+const events = queryEvents({
+  type: "http", severity: "error",
+  sinceMs: Date.now() - 60_000, limit: 100,
+});
+
+// 5분 통계
+const stats = queryStats(5 * 60 * 1000);
+
+// 외부 도구용 export
+const jsonl = exportJsonl({ type: "http" });
+const otlp = exportOtlp({}); // OpenTelemetry 호환
+```
+
+### AI 에이전트용 MCP 리소스
+
+```
+mandu://activity → 최근 20개 이벤트 + 5분 통계
+```
+
+AI 에이전트가 로그 파일 파싱 없이 MCP를 통해 직접 관찰성 데이터를 조회.
+
+---
+
+## ATE (Automation Test Engine)
+
+AI 기반 E2E 테스트 자동화 — 추출 → 생성 → 실행 → 자가치유.
+
+### Quick Start
+
+```bash
+bunx mandu add test           # ATE 셋업
+bunx mandu test:auto          # 전체 파이프라인 실행
+bunx mandu test:heal          # 실패한 테스트 자동 복구
+```
+
+### Phase 4 — Heal 지능 (7종 분류)
+
+| 카테고리 | 설명 | 자동 적용 |
+|---------|------|----------|
+| `selector-stale` | DOM 구조 변경 — 단일 selector | ✅ |
+| `api-shape-changed` | API 응답 스키마 변경 | ❌ (수동 검토) |
+| `component-restructured` | 컴포넌트 리팩토링 (>=3개 selector 실패) | ❌ |
+| `race-condition` | 타이밍/race 이슈 (detached, intercepted) | ❌ |
+| `timeout` | 네트워크/렌더링 지연 | ❌ |
+| `assertion-mismatch` | 예상 값 변경 | ❌ |
+| `unknown` | 자동 분류 불가 | ❌ |
+
+이력 기반 신뢰도: 동일 패턴 성공률 ≥80% → 우선순위 +2.
+
+### Phase 5 — AI 에이전트 통합
+
+```typescript
+import { smartSelectRoutes, detectCoverageGaps, precommitCheck } from "@mandujs/ate";
+
+// git diff → 우선순위 점수 → 라우트 선택
+const result = await smartSelectRoutes({ repoRoot, maxRoutes: 10 });
+// HIGH: contract/guard, MEDIUM: route/page/layout, LOW: shared
+
+// 커버리지 갭 감지
+const gaps = detectCoverageGaps(repoRoot);
+console.log(`Coverage: ${gaps.coveragePercent}%`);
+
+// Pre-commit 자동 판단
+const check = await precommitCheck(repoRoot);
+if (check.shouldTest) process.exit(1);
+```
+
+### MCP 도구 (12개)
+
+```
+mandu.ate.auto_pipeline    # 전체 파이프라인
+mandu.ate.extract/generate/run/report/heal/impact
+mandu.ate.feedback/apply_heal
+mandu.test.smart           # Phase 5: 스마트 선택
+mandu.test.coverage        # Phase 5: 커버리지 갭
+mandu.test.precommit       # Phase 5: pre-commit 훅
+```
+
+---
+
+## Claude Code Skills
+
+`@mandujs/skills` 패키지로 9개 SKILL.md 플러그인 제공.
+
+```bash
+bunx @mandujs/skills install
+```
+
+| Skill | 목적 |
+|-------|------|
+| `create-feature` | Guard 검증 포함 feature 스캐폴딩 |
+| `create-api` | API route + Contract + Filling 생성 |
+| `debug` | Mandu 관찰성 기반 root cause 분석 |
+| `explain` | 프레임워크 컨텍스트 포함 코드 설명 |
+| `guard-guide` | 아키텍처 프리셋 선택 가이드 |
+| `deploy` | 프로덕션 배포 체크리스트 |
+| `slot` | semantic 제약 포함 슬롯 작성 |
+| `fs-routes` | FS Routes 패턴 & 컨벤션 |
+| `hydration` | Island hydration 전략 선택 |
+
+---
+
 ## 에러 처리 시스템
 
 ### 에러 분류

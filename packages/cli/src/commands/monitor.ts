@@ -31,6 +31,8 @@ type MonitorOutput = "console" | "json";
 export type EventType = "http" | "mcp" | "guard" | "build" | "error" | "cache" | "ws";
 export type SeverityLevel = "info" | "warn" | "error";
 
+export type ExportFormat = "jsonl" | "otlp";
+
 export interface MonitorOptions {
   follow?: boolean;
   summary?: boolean;
@@ -42,6 +44,10 @@ export interface MonitorOptions {
   trace?: string;
   source?: string;
   noServer?: boolean;
+  /** Phase 6-3: export historical events from SQLite store as jsonl or otlp */
+  export?: ExportFormat;
+  /** Output limit for export mode (default: 10000) */
+  limit?: number;
 }
 
 /** Shape of an event coming from the EventBus SSE stream. */
@@ -411,6 +417,37 @@ export async function monitor(options: MonitorOptions = {}): Promise<boolean> {
   const rootDir = resolveFromCwd(".");
   const resolved = resolveOutputFormat();
   const output: MonitorOutput = resolved === "json" || resolved === "agent" ? "json" : "console";
+
+  // Phase 6-3: Export mode — read historical events directly from SQLite store
+  if (options.export) {
+    if (options.export !== "jsonl" && options.export !== "otlp") {
+      console.error(`Invalid --export format "${options.export}". Expected: jsonl, otlp.`);
+      return false;
+    }
+    try {
+      const obs = await import("@mandujs/core/observability");
+      // Initialize store to read existing data (no-op if already started)
+      await obs.startSqliteStore(rootDir);
+      const queryOpts = {
+        type: options.type,
+        severity: options.severity,
+        source: options.source,
+        correlationId: options.trace,
+        sinceMs: options.since ? Date.now() - (parseDuration(options.since) ?? 0) : undefined,
+        limit: options.limit ?? 10_000,
+      };
+      const text = options.export === "jsonl"
+        ? obs.exportJsonl(queryOpts)
+        : obs.exportOtlp(queryOpts);
+      process.stdout.write(text);
+      if (options.export === "jsonl") process.stdout.write("\n");
+      return true;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.error(`Export failed: ${detail}`);
+      return false;
+    }
+  }
 
   // 1. Try connecting to a running dev server (unless --no-server / --file).
   const useServer = !options.noServer && !options.file;

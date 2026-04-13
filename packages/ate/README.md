@@ -507,6 +507,97 @@ ateGenerate({
 });
 ```
 
+### `smartSelectRoutes(input)` — Phase 5 🆕
+
+Intelligently select which routes to test based on git diff with priority scoring.
+
+```typescript
+import { smartSelectRoutes } from "@mandujs/ate";
+
+const result = await smartSelectRoutes({
+  repoRoot: process.cwd(),
+  // changedFiles: ["app/api/users/route.ts"],  // optional, defaults to git diff HEAD
+  maxRoutes: 10,
+});
+
+console.log(result.selectedRoutes);  // Sorted by priority
+console.log(result.reasoning);       // routeId -> why selected
+console.log(result.totalAffected);
+```
+
+**Priority scoring:**
+- HIGH: contract files (`*.contract.ts`), guard files
+- MEDIUM: routes (`route.ts`), pages (`page.tsx`), layouts, islands, slots
+- LOW: shared, utils, lib, non-source
+
+### `detectCoverageGaps(repoRoot)` — Phase 5 🆕
+
+Find untested edges in the interaction graph.
+
+```typescript
+import { detectCoverageGaps } from "@mandujs/ate";
+
+const result = detectCoverageGaps(process.cwd());
+
+console.log(`Coverage: ${result.coveragePercent}%`);
+console.log(`${result.gaps.length} gaps found`);
+
+for (const gap of result.gaps) {
+  console.log(`[${gap.type}] ${gap.from} → ${gap.to}: ${gap.suggestion}`);
+}
+```
+
+**Gap types:**
+- `route-transition` — navigation between routes without test
+- `api-call` — API endpoint with no client test
+- `form-action` — form submission without test
+- `island-interaction` — interactive island without test
+
+### `precommitCheck(repoRoot)` — Phase 5 🆕
+
+Determine if tests should run before committing based on staged files.
+
+```typescript
+import { precommitCheck } from "@mandujs/ate";
+
+const result = await precommitCheck(process.cwd());
+
+if (result.shouldTest) {
+  console.log(`Run tests for: ${result.routes.join(", ")}`);
+  console.log(`Reason: ${result.reason}`);
+  process.exit(1); // Block commit
+}
+```
+
+### `analyzeFeedback(input)` — Phase 4 🆕
+
+7-category failure classification with history-based confidence.
+
+```typescript
+import { analyzeFeedback, recordHealResult } from "@mandujs/ate";
+
+const analysis = analyzeFeedback({
+  repoRoot: process.cwd(),
+  runId: "latest",
+  autoApply: false,
+});
+
+console.log(analysis.category);  // selector-stale | api-shape-changed | race-condition | ...
+console.log(analysis.priority);  // 1-10 (with history boost)
+console.log(analysis.reasoning);
+console.log(analysis.autoApplicable);
+
+// Manually record outcomes for history learning
+recordHealResult(process.cwd(), {
+  timestamp: Date.now(),
+  runId: "latest",
+  category: "selector-stale",
+  selector: "[data-testid='foo']",
+  applied: true,
+  success: true,
+});
+```
+
 ---
 
 ## 💡 Examples
@@ -812,28 +903,74 @@ await expect(page).toHaveScreenshot("homepage.png", { maxDiffPixels: 100 });
 
 ## 🗺️ Roadmap
 
-### Current (v0.1.0)
+### Current (v0.18.x — Released)
 
-- ✅ L0-L1 Oracle
+**Phase 1: Pipeline & Oracle**
+- ✅ L0-L1 Oracle (smoke + structural)
+- ⚠️ L2 Oracle (basic — full Zod contract validation pending)
+- ⚠️ L3 Oracle (basic — LLM behavioral assertions pending)
 - ✅ Route smoke tests
-- ✅ Interaction graph extraction
+- ✅ Interaction graph extraction (AST-based)
 - ✅ Playwright spec generation
-- ✅ Basic healing (selector suggestions)
-- ✅ Impact analysis (git diff)
 
-### Near Future (v0.2.0)
+**Phase 2: Mandu-specific scenarios**
+- ✅ `ssr-verify` — HTML structure, Zero-JS, PPR shell verification
+- ✅ `island-hydration` — `[data-mandu-island]` + post-hydration interaction
+- ✅ `sse-stream` — EventSource connection + token/done events
+- ✅ `form-action` — Progressive Enhancement form testing
+- ✅ AST detection: `hasIsland`, `hasContract`, `hasSse`, `hasAction`
 
-- 🔄 L2 Oracle: Accessibility (axe-core), Performance (Web Vitals)
-- 🔄 Selector stability scoring
-- 🔄 Parallel test execution optimization
-- 🔄 Enhanced healing with DOM snapshot analysis
+**Phase 3: Test infrastructure**
+- ✅ `--grep` route filtering in runner
+- ✅ `testFilling` unit codegen (Bun unit tests alongside Playwright E2E)
+- ⚠️ Watch mode (`mandu test --watch`) — pending
+- ⚠️ a11y testing (`@axe-core/playwright`) — pending
 
-### Long Term (v0.3.0+)
+**Phase 4: Heal Intelligence** 🆕
+- ✅ **7-category failure classification**: `selector-stale`, `api-shape-changed`, `component-restructured`, `race-condition`, `timeout`, `assertion-mismatch`, `unknown`
+- ✅ Pattern-based classification from Playwright report (race detection, contract mismatch, multi-selector)
+- ✅ Differentiated remediation per category (auto-applicable for selector-stale only)
+- ✅ **Heal history learning** — `.mandu/ate/heal-history.json` with success rate tracking
+- ✅ History-based confidence boost: ≥80% success → priority +2, ≥50% → +1
+- ✅ Records both success and failure outcomes in `applyHeal()`
 
-- 🔮 L3 Oracle: Visual regression (Playwright screenshots)
-- 🔮 Modal/Action interaction tests
+**Phase 5: AI Agent Integration** 🆕
+- ✅ **`smartSelectRoutes`** — Git diff → priority-scored route selection
+  - HIGH: contract files, guard files
+  - MEDIUM: routes, pages, layouts, islands, slots
+  - LOW: shared, utils, lib
+  - Transitive dependency analysis (when graph available)
+- ✅ **`detectCoverageGaps`** — Find untested edges in interaction graph
+  - 4 gap types: route-transition, api-call, form-action, island-interaction
+  - Coverage percentage calculation
+  - Synthetic edges for orphan API routes and island hydration
+- ✅ **`precommitCheck`** — Pre-commit hook helper
+  - Reads staged files via `git diff --cached --name-only`
+  - Filters source files, delegates to smart-select
+  - Returns `{shouldTest, routes, reason}`
+- ✅ **3 new MCP tools**: `mandu.test.smart`, `mandu.test.coverage`, `mandu.test.precommit`
+
+**Phase 6: Coverage gap resolution**
+- ✅ SSR rendering tests (36 tests in `packages/core/tests/runtime/ssr-rendering.test.ts`)
+- ✅ DevTools error-catcher tests (22 tests)
+- ✅ Config validate-errors tests (29 tests)
+- ✅ Test factory expansion: `createTestManifest`, `createTestIsland`
+- ⚠️ devtools/brain/watcher tests — partial coverage
+- ⚠️ CI E2E job + codecov — basic ATE in CI but no dedicated Playwright job
+
+### Next (v0.19.x)
+
+- 🔄 L2 Oracle deep Zod contract validation + edge case generation
+- 🔄 L3 Oracle behavioral verification (LLM integration)
+- 🔄 ATE Watch mode
+- 🔄 a11y testing with `@axe-core/playwright`
+- 🔄 Dedicated Playwright E2E CI job
+
+### Long Term (v0.20.x+)
+
+- 🔮 Visual regression (Playwright screenshots)
 - 🔮 Cross-browser compatibility matrix
-- 🔮 AI-powered test generation (LLM integration)
+- 🔮 LLM-powered test generation
 - 🔮 Real user monitoring (RUM) integration
 
 ---
