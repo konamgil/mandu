@@ -1473,6 +1473,30 @@ export async function buildClientBundles(
   // Hydration 라우트가 없어도 빈 매니페스트를 저장해야 함
   // (이전 빌드의 stale 매니페스트 참조 방지)
   if (hydratedRoutes.length === 0) {
+    // #185: skipFrameworkBundles 모드에서는 기존 manifest를 그대로 유지 (devtools 재빌드도 스킵)
+    if (options.skipFrameworkBundles) {
+      try {
+        const existing = JSON.parse(
+          await fs.readFile(path.join(rootDir, ".mandu/manifest.json"), "utf-8"),
+        ) as BundleManifest;
+        return {
+          success: true,
+          outputs: [],
+          errors: [],
+          manifest: existing,
+          stats: {
+            totalSize: 0,
+            totalGzipSize: 0,
+            largestBundle: { routeId: "", size: 0 },
+            buildTime: 0,
+            bundleCount: 0,
+          },
+        };
+      } catch {
+        // 기존 manifest 없으면 full path로 fallback
+      }
+    }
+
     // Dev 모드에서는 DevTools 번들 빌드 (island 없어도 동작해야 함)
     const isDev = env === "development";
     if (isDev) {
@@ -1506,13 +1530,18 @@ export async function buildClientBundles(
   if (options.targetRouteIds && options.targetRouteIds.length > 0) {
     const targetRoutes = hydratedRoutes.filter((r) => options.targetRouteIds!.includes(r.id));
 
-    for (const route of targetRoutes) {
-      try {
-        const result = await buildIsland(route, rootDir, outDir, options);
-        outputs.push(result);
-      } catch (error) {
-        errors.push(`[${route.id}] ${String(error)}`);
-      }
+    const targetResults = await Promise.all(
+      targetRoutes.map(async (route) => {
+        try {
+          return { ok: true as const, result: await buildIsland(route, rootDir, outDir, options) };
+        } catch (error) {
+          return { ok: false as const, routeId: route.id, error: String(error) };
+        }
+      }),
+    );
+    for (const r of targetResults) {
+      if (r.ok) outputs.push(r.result);
+      else errors.push(`[${r.routeId}] ${r.error}`);
     }
 
     // 기존 매니페스트를 읽어 변경된 Island만 갱신
@@ -1547,6 +1576,104 @@ export async function buildClientBundles(
       );
     }
     // When all builds failed, do NOT overwrite manifest — keep previous good state
+
+    const stats = calculateStats(outputs, startTime);
+    return { success: errors.length === 0, outputs, errors, manifest: existingManifest, stats };
+  }
+
+  // #185: Framework-internal 번들 스킵 모드
+  // 사용자 코드(src/shared 등) 변경 시 runtime/router/vendor/devtools 재빌드는 낭비.
+  // 기존 매니페스트를 로드해 framework 출력 경로만 재사용하고 사용자 island만 재빌드.
+  if (options.skipFrameworkBundles) {
+    let existingManifest: BundleManifest;
+    try {
+      const manifestData = await fs.readFile(path.join(rootDir, ".mandu/manifest.json"), "utf-8");
+      existingManifest = JSON.parse(manifestData) as BundleManifest;
+    } catch {
+      // 기존 매니페스트 없으면 full build로 fallback
+      return buildClientBundles(manifest, rootDir, { ...options, skipFrameworkBundles: false });
+    }
+
+    // Pre-build validation + 병렬 island 빌드 (framework 번들은 스킵)
+    for (const route of hydratedRoutes) {
+      if (!route.clientModule) continue;
+      const clientModulePath = path.join(rootDir, route.clientModule);
+      try {
+        const source = await fs.readFile(clientModulePath, "utf-8");
+        const wrongImportPattern = /(?:import|from)\s+['"]@mandujs\/core['"]|require\s*\(\s*['"]@mandujs\/core['"]\s*\)/;
+        if (wrongImportPattern.test(source)) {
+          errors.push(
+            `[${route.id}] Island file "${route.clientModule}" imports from "@mandujs/core" which is a server-side module.\n` +
+            `  Fix: Change the import to "@mandujs/core/client".`,
+          );
+        }
+      } catch {
+        // 파일 읽기 실패는 나중 빌드에서 catch됨
+      }
+    }
+
+    const islandResults = await Promise.all(
+      hydratedRoutes.map(async (route) => {
+        try {
+          return { ok: true as const, result: await buildIsland(route, rootDir, outDir, options) };
+        } catch (error) {
+          return { ok: false as const, routeId: route.id, error: String(error) };
+        }
+      }),
+    );
+    for (const r of islandResults) {
+      if (r.ok) outputs.push(r.result);
+      else errors.push(`[${r.routeId}] ${r.error}`);
+    }
+
+    // Per-island bundle 재빌드 (이미 병렬)
+    const islandFiles = await scanIslandFiles(hydratedRoutes, rootDir);
+    const perIslandBundles: Array<{ name: string; js: string; route: string; priority: IslandFileEntry["priority"] }> = [];
+    if (islandFiles.length > 0) {
+      const perIslandResults = await Promise.all(
+        islandFiles.map(async (entry) => {
+          try {
+            return await buildPerIslandBundle(entry, outDir, options);
+          } catch (error) {
+            errors.push(`[island:${entry.name}] ${String(error)}`);
+            return null;
+          }
+        }),
+      );
+      for (const result of perIslandResults) {
+        if (result) perIslandBundles.push(result);
+      }
+    }
+
+    // 기존 manifest를 기반으로 bundles / islands 엔트리만 교체 (framework 경로는 유지)
+    for (const output of outputs) {
+      if (existingManifest.bundles[output.routeId]) {
+        existingManifest.bundles[output.routeId].js = output.outputPath;
+      } else {
+        const route = hydratedRoutes.find((r) => r.id === output.routeId);
+        const hydration = route ? getRouteHydration(route) : null;
+        existingManifest.bundles[output.routeId] = {
+          js: output.outputPath,
+          dependencies: ["_runtime", "_react"],
+          priority: hydration?.priority || HYDRATION.DEFAULT_PRIORITY,
+        };
+      }
+    }
+    if (perIslandBundles.length > 0) {
+      existingManifest.islands = existingManifest.islands || {};
+      for (const ib of perIslandBundles) {
+        existingManifest.islands[ib.name] = {
+          js: ib.js,
+          route: ib.route,
+          priority: ib.priority,
+        };
+      }
+    }
+
+    await fs.writeFile(
+      path.join(rootDir, ".mandu/manifest.json"),
+      JSON.stringify(existingManifest, null, 2),
+    );
 
     const stats = calculateStats(outputs, startTime);
     return { success: errors.length === 0, outputs, errors, manifest: existingManifest, stats };
@@ -1602,23 +1729,30 @@ export async function buildClientBundles(
     }
   }
 
-  // 5. 각 Island 번들 빌드
-  for (const route of hydratedRoutes) {
-    try {
-      const result = await buildIsland(route, rootDir, outDir, options);
-      outputs.push(result);
-    } catch (error) {
-      const errorStr = String(error);
-      // Detect common mistake: importing @mandujs/core (server module) in client island
+  // 5. 각 Island 번들 병렬 빌드 (#185: L1631의 per-island와 일관성 확보)
+  const fullIslandResults = await Promise.all(
+    hydratedRoutes.map(async (route) => {
+      try {
+        return { ok: true as const, result: await buildIsland(route, rootDir, outDir, options) };
+      } catch (error) {
+        return { ok: false as const, route, error: String(error) };
+      }
+    }),
+  );
+  for (const r of fullIslandResults) {
+    if (r.ok) {
+      outputs.push(r.result);
+    } else {
+      const errorStr = r.error;
       if (errorStr.includes("AggregateError") || errorStr.includes("Could not resolve")) {
-        const clientModule = route.clientModule || "";
+        const clientModule = r.route.clientModule || "";
         errors.push(
-          `[${route.id}] ${errorStr}\n` +
+          `[${r.route.id}] ${errorStr}\n` +
           `  💡 Hint: If your island imports from "@mandujs/core", change it to "@mandujs/core/client".\n` +
-          `     Client islands cannot use server-side modules. File: ${clientModule}`
+          `     Client islands cannot use server-side modules. File: ${clientModule}`,
         );
       } else {
-        errors.push(`[${route.id}] ${errorStr}`);
+        errors.push(`[${r.route.id}] ${errorStr}`);
       }
     }
   }

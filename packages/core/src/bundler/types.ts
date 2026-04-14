@@ -137,4 +137,12 @@ export interface BundlerOptions {
    * - 미지정 시 전체 빌드 (기본값)
    */
   targetRouteIds?: string[];
+  /**
+   * Framework-internal 번들 (runtime/router/vendor/devtools) 스킵 (#185)
+   * - true: 사용자 island만 재빌드, runtime/router/vendor/devtools 출력은 기존 매니페스트에서 재사용
+   * - 주 용도: 공통 디렉토리(src/shared 등) 파일 변경 시 dev watcher가 수행하는 rebuild.
+   *   사용자 코드 변경은 framework 번들 출력에 영향을 주지 않으므로 재빌드 불필요.
+   * - 안전성: 기존 `.mandu/manifest.json` 이 없으면 자동으로 full build로 fallback.
+   */
+  skipFrameworkBundles?: boolean;
 }

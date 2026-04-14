@@ -10,6 +10,12 @@ import { PORTS, TIMEOUTS } from "../constants";
 import path from "path";
 import fs from "fs";
 
+/**
+ * #184: 공통 디렉토리 변경 시 사용하는 sentinel.
+ * `onSSRChange`에 특정 파일 경로 대신 이 상수를 전달하면 "전체 SSR 레지스트리 invalidate" 의미.
+ */
+export const SSR_CHANGE_WILDCARD = "*";
+
 export interface DevBundlerOptions {
   /** 프로젝트 루트 */
   rootDir: string;
@@ -21,14 +27,16 @@ export interface DevBundlerOptions {
   onError?: (error: Error, routeId?: string) => void;
   /**
    * SSR 파일 변경 콜백 (page.tsx, layout.tsx 등)
-   * 클라이언트 번들 리빌드 없이 서버 핸들러 재등록이 필요한 경우 호출
+   * 클라이언트 번들 리빌드 없이 서버 핸들러 재등록이 필요한 경우 호출.
+   * `SSR_CHANGE_WILDCARD` ("*")를 받으면 전체 레지스트리 invalidate 의미 (#184).
+   * Promise 반환 시 await 되므로 레지스트리 clear가 완료된 후 HMR reload broadcast 가능.
    */
-  onSSRChange?: (filePath: string) => void;
+  onSSRChange?: (filePath: string) => void | Promise<void>;
   /**
    * API route 파일 변경 콜백 (route.ts 등)
    * API 핸들러 재등록이 필요한 경우 호출
    */
-  onAPIChange?: (filePath: string) => void;
+  onAPIChange?: (filePath: string) => void | Promise<void>;
   /**
    * 추가 watch 디렉토리 (공통 컴포넌트 등)
    * 상대 경로 또는 절대 경로 모두 지원
@@ -249,19 +257,33 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
   const _doBuild = async (changedFile: string) => {
     const normalizedPath = normalizeFsPath(changedFile);
 
-    // 공통 컴포넌트 디렉토리 변경 → 전체 재빌드 (targetRouteIds 없이)
+    // 공통 컴포넌트 디렉토리 변경 → Island만 재빌드 + SSR 레지스트리 invalidate (#184, #185)
     if (isInCommonDir(changedFile)) {
       console.log(`\n🔄 Common file changed: ${path.basename(changedFile)}`);
-      console.log(`   Rebuilding all islands...`);
+      console.log(`   Rebuilding islands (framework bundles skipped)...`);
       const startTime = performance.now();
 
       try {
+        // #185: framework 번들 (runtime/router/vendor/devtools) 스킵 — 사용자 코드 변경 시 불필요
         const result = await buildClientBundles(manifest, rootDir, {
           minify: false,
           sourcemap: true,
+          skipFrameworkBundles: true,
         });
 
         const buildTime = performance.now() - startTime;
+
+        // #184: common dir 변경은 SSR 모듈 캐시 invalidation이 필요 — wildcard 시그널
+        // 주의: Bun의 transitive ESM 캐시는 프로세스 레벨이라 이 시그널만으로는
+        //      `src/shared/**`을 transitive하게 import하는 SSR 모듈까지 완전히 갱신되지 않음.
+        //      진짜 해결은 subprocess/worker 기반 SSR eval이 필요 (follow-up 이슈).
+        if (onSSRChange) {
+          try {
+            await Promise.resolve(onSSRChange(SSR_CHANGE_WILDCARD));
+          } catch (ssrError) {
+            console.warn(`⚠️  SSR invalidation failed:`, ssrError instanceof Error ? ssrError.message : ssrError);
+          }
+        }
 
         if (result.success) {
           console.log(`✅ Rebuilt ${result.stats.bundleCount} islands in ${buildTime.toFixed(0)}ms`);

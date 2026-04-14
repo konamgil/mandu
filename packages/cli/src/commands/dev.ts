@@ -1,6 +1,7 @@
 import {
   startServer,
   startDevBundler,
+  SSR_CHANGE_WILDCARD,
   buildClientBundles,
   createHMRServer,
   needsHydration,
@@ -305,25 +306,37 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   };
 
   // SSR file change callback (page.tsx, layout.tsx -> re-register server handlers + browser reload)
+  // #184: wildcard ("*") 입력 시 전체 레지스트리 invalidate (common dir 변경)
   const handleSSRChange = async (filePath: string) => {
-    logDevEvent("SSR change detected", [
-      `File: ${path.relative(rootDir, filePath)}`,
-      "Action: re-register handlers",
-      "Browser: full reload",
-    ]);
+    const isWildcard = filePath === SSR_CHANGE_WILDCARD;
+    if (isWildcard) {
+      logDevEvent("Common dir changed", [
+        "Action: clear SSR registry + re-register handlers",
+        "Note: Bun의 transitive ESM 캐시 때문에 transitive 의존성까지 완전히 갱신되지 않을 수 있음",
+      ]);
+    } else {
+      logDevEvent("SSR change detected", [
+        `File: ${path.relative(rootDir, filePath)}`,
+        "Action: re-register handlers",
+        "Browser: full reload",
+      ]);
+    }
+
     clearDefaultRegistry();
     registeredLayouts.clear();
     await registerHandlers(manifest, true);
 
-    // Broadcast file change for Kitchen Preview
-    hmrServer?.broadcast({
-      type: "kitchen:file-change",
-      data: {
-        file: filePath,
-        changeType: "change",
-        timestamp: Date.now(),
-      },
-    });
+    // Kitchen Preview에는 파일 경로가 있을 때만 broadcast (wildcard는 파일 경로 없음)
+    if (!isWildcard) {
+      hmrServer?.broadcast({
+        type: "kitchen:file-change",
+        data: {
+          file: filePath,
+          changeType: "change",
+          timestamp: Date.now(),
+        },
+      });
+    }
 
     hmrServer?.broadcast({
       type: "reload",
