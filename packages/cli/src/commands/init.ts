@@ -70,6 +70,7 @@ interface CopyOptions {
   theme: boolean;
   coreVersion: string;
   cliVersion: string;
+  mcpVersion: string;
 }
 
 function shouldSkipFile(relativePath: string, options: CopyOptions): boolean {
@@ -129,6 +130,7 @@ async function copyDir(
       content = content.replace(/\{\{PROJECT_NAME\}\}/g, options.projectName);
       content = content.replace(/\{\{CORE_VERSION\}\}/g, options.coreVersion);
       content = content.replace(/\{\{CLI_VERSION\}\}/g, options.cliVersion);
+      content = content.replace(/\{\{MCP_VERSION\}\}/g, options.mcpVersion);
 
       // Add dark mode CSS variables if theme is enabled
       if (options.theme && currentRelativePath === "app/globals.css") {
@@ -182,31 +184,42 @@ function getTemplatesDir(): string {
  * Reads CLI/Core package versions at runtime and returns them as ^major.minor.0
  * Used to replace {{CORE_VERSION}}, {{CLI_VERSION}} in template package.json
  */
-async function resolvePackageVersions(): Promise<{ coreVersion: string; cliVersion: string }> {
+async function resolvePackageVersions(): Promise<{
+  coreVersion: string;
+  cliVersion: string;
+  mcpVersion: string;
+}> {
   const cliPkgPath = path.resolve(import.meta.dir, "../../package.json");
   const cliPkg = JSON.parse(await fs.readFile(cliPkgPath, "utf-8"));
   const cliVersion = cliPkg.version ?? "0.0.0";
 
-  // Read core from CLI's node_modules or workspace
-  let coreVersion = cliVersion; // fallback: same as CLI version
-  try {
-    const corePkgPath = require.resolve("@mandujs/core/package.json", { paths: [path.resolve(import.meta.dir, "../..")] });
-    const corePkg = JSON.parse(await fs.readFile(corePkgPath, "utf-8"));
-    coreVersion = corePkg.version ?? coreVersion;
-  } catch {
-    // workspace environment: try direct path
+  const resolveSibling = async (pkgName: string, workspaceDir: string): Promise<string> => {
     try {
-      const workspacePath = path.resolve(import.meta.dir, "../../../core/package.json");
-      const corePkg = JSON.parse(await fs.readFile(workspacePath, "utf-8"));
-      coreVersion = corePkg.version ?? coreVersion;
+      const pkgPath = require.resolve(`${pkgName}/package.json`, {
+        paths: [path.resolve(import.meta.dir, "../..")],
+      });
+      const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8"));
+      if (pkg.version) return pkg.version;
+    } catch {
+      // fall through to workspace lookup
+    }
+    try {
+      const workspacePath = path.resolve(import.meta.dir, "../../../", workspaceDir, "package.json");
+      const pkg = JSON.parse(await fs.readFile(workspacePath, "utf-8"));
+      if (pkg.version) return pkg.version;
     } catch {
       // keep fallback
     }
-  }
+    return cliVersion;
+  };
+
+  const coreVersion = await resolveSibling("@mandujs/core", "core");
+  const mcpVersion = await resolveSibling("@mandujs/mcp", "mcp");
 
   return {
     coreVersion: `^${coreVersion}`,
     cliVersion: `^${cliVersion}`,
+    mcpVersion: `^${mcpVersion}`,
   };
 }
 
@@ -331,7 +344,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     return false;
   }
 
-  const { coreVersion, cliVersion } = await resolvePackageVersions();
+  const { coreVersion, cliVersion, mcpVersion } = await resolvePackageVersions();
 
   const copyOptions: CopyOptions = {
     projectName,
@@ -340,6 +353,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     theme: themeEnabled,
     coreVersion,
     cliVersion,
+    mcpVersion,
   };
 
   // Run structured steps with progress
