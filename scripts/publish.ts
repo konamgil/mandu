@@ -25,6 +25,9 @@ const skipCheck = process.argv.includes("--skip-check");
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GPR_REGISTRY = "https://npm.pkg.github.com";
+// 명시적 npm registry — ~/.npmrc의 registry= 라인이 verdaccio 등으로 설정돼 있어도
+// public npmjs.org로 보내기 위함. NPM_REGISTRY 환경변수로 override 가능.
+const NPM_REGISTRY = process.env.NPM_REGISTRY ?? "https://registry.npmjs.org/";
 
 // Pre-publish check
 if (!skipCheck) {
@@ -47,7 +50,8 @@ interface PackageJson {
 
 async function getPublishedVersion(name: string): Promise<string | null> {
   try {
-    const result = await $`npm view ${name} version`.text();
+    // ~/.npmrc의 registry=가 verdaccio로 설정돼 있어도 public npm에서 조회
+    const result = await $`npm view ${name} version --registry=${NPM_REGISTRY}`.text();
     return result.trim();
   } catch {
     return null;
@@ -184,10 +188,10 @@ async function main() {
       if (alreadyOnNpm) {
         console.log(`   ⏭️  npm: already published, skipping`);
       } else if (isDryRun) {
-        const result = await $`cd ${pkgPath} && bun publish --dry-run`.text();
+        const result = await $`cd ${pkgPath} && bun publish --dry-run --registry=${NPM_REGISTRY}`.text();
         console.log(result);
       } else {
-        const result = await $`cd ${pkgPath} && bun publish --access public`.text();
+        const result = await $`cd ${pkgPath} && bun publish --access public --registry=${NPM_REGISTRY}`.text();
         console.log(`   ✅ Published to npm`);
         console.log(result);
       }
