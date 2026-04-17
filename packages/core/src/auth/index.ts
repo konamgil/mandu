@@ -43,6 +43,22 @@ export {
   type LoginOptions,
 } from "./login";
 
+// ── Email verification (Phase 5.3) ──
+// The underlying token store (./tokens) is deliberately NOT re-exported —
+// it's the shared plumbing for verification + reset, not a public primitive.
+export {
+  createEmailVerification,
+  type VerificationFlow,
+  type VerificationFlowOptions,
+} from "./verification";
+
+// ── Password reset (Phase 5.3) ──
+export {
+  createPasswordReset,
+  type ResetFlow,
+  type ResetFlowOptions,
+} from "./reset";
+
 // ── Error classes, guards, and user types (re-exported from filling/auth) ──
 // We DO NOT re-export the factory functions (`createAuthGuard`, `createRoleGuard`)
 // here — those are broader "beforeHandle" plumbing that lives on the filling

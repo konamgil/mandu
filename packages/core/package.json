@@ -10,6 +10,8 @@
     "./auth": "./src/auth/index.ts",
     "./auth/login": "./src/auth/login.ts",
     "./auth/password": "./src/auth/password.ts",
+    "./auth/reset": "./src/auth/reset.ts",
+    "./auth/verification": "./src/auth/verification.ts",
     "./client": "./src/client/index.ts",
     "./db": "./src/db/index.ts",
     "./email": "./src/email/index.ts",
