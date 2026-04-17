@@ -41,6 +41,7 @@ import {
   buildTraceReport,
   type TraceReport,
 } from "./trace";
+import { newShortId } from "../id";
 
 // ============================================
 // Types
@@ -214,11 +215,11 @@ const COLORS = {
 // ============================================
 
 /**
- * Request ID 생성
+ * Request ID 생성 — 짧은 8자 hex prefix. v7 기반이면 시간 정렬됨.
  */
 function generateRequestId(): string {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID().slice(0, 8);
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return newShortId();
   }
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }

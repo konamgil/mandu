@@ -21,6 +21,7 @@ import { PORTS, TIMEOUTS } from "../constants";
 import { escapeHtmlAttr, escapeHtmlText, escapeJsonForInlineScript, escapeJsString } from "./escape";
 import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
 import { getRenderToString } from "./react-renderer";
+import { mark, measure } from "../perf";
 
 // ========== Types ==========
 
@@ -676,6 +677,7 @@ export async function renderToStream(
   element: ReactElement,
   options: StreamingSSROptions = {}
 ): Promise<ReadableStream<Uint8Array>> {
+  mark("ssr:render");
   const {
     onShellReady,
     onAllReady,
@@ -827,6 +829,7 @@ export async function renderToStream(
       controller.enqueue(encoder.encode(htmlShell));
       shellSent = true;
       metrics.shellReadyTime = Date.now() - metrics.startTime;
+      measure("ssr:render", "ssr:render");
       onShellReady?.();
     },
 

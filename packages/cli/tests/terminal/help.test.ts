@@ -2,7 +2,7 @@
  * DNA-015: Semantic Help System Tests
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import {
   formatHelpExample,
   formatHelpExampleGroup,

@@ -84,6 +84,6 @@ describe("init command mcp backup naming", () => {
     const geminiPath = path.join(dir, ".gemini", "settings.json");
     const content = JSON.parse(await fs.readFile(geminiPath, "utf-8"));
     expect(content.mcpServers.mandu.command).toBe("bunx");
-    expect(content.mcpServers.mandu.args).toEqual(["@mandujs/mcp"]);
+    expect(content.mcpServers.mandu.args).toEqual(["mandu-mcp"]);
   });
 });

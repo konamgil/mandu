@@ -58,6 +58,7 @@ import { createFetchHandler } from "./handler";
 import { wrapBunWebSocket, type WSUpgradeData } from "../filling/ws";
 import { handleImageRequest } from "./image-handler";
 import { extractShellHtml, createPPRResponse } from "./ppr";
+import { newId } from "../id";
 
 export interface RateLimitOptions {
   windowMs?: number;
@@ -1165,7 +1166,7 @@ async function handleInternalCacheControlRequest(
 async function handleRequest(req: Request, router: Router, registry: ServerRegistry): Promise<Response> {
   const requestStart = Date.now();
   // Phase 1-4: Correlation ID — 한 요청에서 발생하는 모든 이벤트를 추적
-  const correlationId = req.headers.get("x-mandu-request-id") ?? crypto.randomUUID();
+  const correlationId = req.headers.get("x-mandu-request-id") ?? newId();
   const result = await handleRequestInternal(req, router, registry);
 
   if (!result.ok) {
@@ -2203,7 +2204,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
           const match = router.match(url.pathname);
           if (match && registry.wsHandlers.has(match.route.id)) {
             const upgraded = (bunServer as any).upgrade(req, {
-              data: { routeId: match.route.id, params: match.params, id: crypto.randomUUID() },
+              data: { routeId: match.route.id, params: match.params, id: newId() },
             });
             return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
           }

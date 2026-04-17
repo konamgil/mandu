@@ -5,7 +5,9 @@
 
 import { execSync } from "child_process";
 import { readFileSync } from "fs";
-import { resolve } from "path";
+import * as fs from "fs/promises";
+import { tmpdir } from "os";
+import { join, resolve } from "path";
 
 interface PackageJson {
   name: string;
@@ -23,6 +25,9 @@ function checkPackage(pkgPath: string): { name: string; issues: string[] } {
   const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
 
   for (const [dep, version] of Object.entries(allDeps)) {
+    // Catalog refs in the SOURCE package.json are legitimate and are
+    // substituted by `bun publish` / `bun pm pack`. The staged-tarball
+    // assertion below is what actually guards the published output.
     if (WORKSPACE_PACKAGES.includes(dep)) {
       if (version.includes("workspace:")) {
         issues.push(`❌ ${dep}: ${version} (workspace protocol not resolved!)`);
@@ -33,6 +38,55 @@ function checkPackage(pkgPath: string): { name: string; issues: string[] } {
   }
 
   return { name: pkg.name, issues };
+}
+
+/**
+ * Stage a tarball via `bun pm pack` and assert the extracted package.json
+ * contains no unsubstituted `workspace:` or `catalog:` specifiers.
+ *
+ * Runs serially per package (Bun's pack writes into a temp dir we control).
+ */
+async function assertNoLeakedSpecifiers(pkgDir: string): Promise<string[]> {
+  const issues: string[] = [];
+  const tmp = await fs.mkdtemp(join(tmpdir(), "mandu-publish-check-"));
+  try {
+    execSync(`bun pm pack --destination "${tmp}"`, {
+      cwd: pkgDir,
+      stdio: "pipe",
+    });
+    const entries = await fs.readdir(tmp);
+    const tarball = entries.find(e => e.endsWith(".tgz"));
+    if (!tarball) {
+      issues.push(`❌ ${pkgDir}: bun pm pack produced no tarball`);
+      return issues;
+    }
+    // Use bsdtar on Windows (System32\tar.exe) which handles drive letters;
+    // msys tar (/usr/bin/tar) treats "C:" as a remote host spec and fails.
+    const tarCmd = process.platform === "win32"
+      ? `"${join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe")}" -xzf "${join(tmp, tarball)}" -C "${tmp}"`
+      : `tar -xzf "${join(tmp, tarball)}" -C "${tmp}"`;
+    execSync(tarCmd, { stdio: "pipe" });
+    const stagedPkgPath = join(tmp, "package", "package.json");
+    const staged = await fs.readFile(stagedPkgPath, "utf-8");
+    const parsed: PackageJson = JSON.parse(staged);
+    for (const block of [parsed.dependencies, parsed.devDependencies] as const) {
+      if (!block) continue;
+      for (const [name, spec] of Object.entries(block)) {
+        if (spec.startsWith("catalog:")) {
+          issues.push(`❌ ${parsed.name}: ${name}@${spec} (catalog ref leaked into tarball!)`);
+        }
+        if (spec.startsWith("workspace:")) {
+          issues.push(`❌ ${parsed.name}: ${name}@${spec} (workspace ref leaked into tarball!)`);
+        }
+      }
+    }
+    if (issues.length === 0) {
+      console.log(`  ✅ ${parsed.name} tarball: no leaked catalog:/workspace: specifiers`);
+    }
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+  return issues;
 }
 
 console.log("🔍 Pre-publish check: workspace 의존성 검증\n");
@@ -73,8 +127,27 @@ for (const pkgDir of packages) {
   }
 }
 
-// 3. 버전 일관성 검증
-console.log("🔢 Step 3: 버전 일관성 검증...\n");
+// 3. 스테이지된 tarball 검증 (catalog:/workspace: 누설 방지)
+console.log("📦 Step 3: 스테이지된 tarball 검증...\n");
+
+const publishablePackages = ["packages/core", "packages/cli", "packages/mcp", "packages/ate", "packages/skills"];
+for (const pkgDir of publishablePackages) {
+  const abs = resolve(process.cwd(), pkgDir);
+  try {
+    const leakIssues = await assertNoLeakedSpecifiers(abs);
+    if (leakIssues.length > 0) {
+      hasIssues = true;
+      leakIssues.forEach(issue => console.log(`  ${issue}`));
+    }
+  } catch (err) {
+    hasIssues = true;
+    console.error(`❌ Tarball check failed for ${pkgDir}:`, err instanceof Error ? err.message : String(err));
+  }
+}
+console.log();
+
+// 4. 버전 일관성 검증
+console.log("🔢 Step 4: 버전 일관성 검증...\n");
 
 const versions = new Map<string, string>();
 for (const pkgDir of packages) {

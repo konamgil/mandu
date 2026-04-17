@@ -14,6 +14,8 @@ import type {
   IslandFileEntry,
 } from "./types";
 import { HYDRATION } from "../constants";
+import { safeBuild } from "./safe-build";
+import { mark, measure } from "../perf";
 import path from "path";
 import fs from "fs/promises";
 
@@ -53,7 +55,7 @@ async function buildPerIslandBundle(
   const outputName = `${entry.name}.island.js`;
   try {
     await Bun.write(entryPath, generateIslandEntry(entry.name, entry.filePath));
-    const result = await Bun.build({
+    const result = await safeBuild({
       entrypoints: [entryPath],
       outdir: outDir,
       naming: outputName,
@@ -971,7 +973,7 @@ if (typeof window !== 'undefined') {
   try {
     await Bun.write(srcPath, source);
 
-    const result = await Bun.build({
+    const result = await safeBuild({
       entrypoints: [srcPath],
       outdir: outDir,
       naming: outputName,
@@ -1025,7 +1027,7 @@ async function buildRouterRuntime(
   try {
     await Bun.write(routerPath, generateRouterRuntimeSource());
 
-    const result = await Bun.build({
+    const result = await safeBuild({
       entrypoints: [routerPath],
       outdir: outDir,
       naming: outputName,
@@ -1100,7 +1102,7 @@ async function buildRuntime(
     await Bun.write(runtimePath, generateRuntimeSource());
 
     // 빌드
-    const result = await Bun.build({
+    const result = await safeBuild({
       entrypoints: [runtimePath],
       outdir: outDir,
       naming: outputName,
@@ -1208,7 +1210,7 @@ async function buildVendorShims(
         shimExternal = ["react"];
       }
 
-      const result = await Bun.build({
+      const result = await safeBuild({
         entrypoints: [srcPath],
         outdir: outDir,
         naming: outputName,
@@ -1284,7 +1286,7 @@ async function buildIsland(
 
     // 빌드
     // splitting 옵션: true면 공통 코드를 별도 청크로 추출
-    const result = await Bun.build({
+    const result = await safeBuild({
       entrypoints: [entryPath],
       outdir: outDir,
       naming: options.splitting ? "[name]-[hash].js" : outputName,
@@ -1456,6 +1458,7 @@ export async function buildClientBundles(
   rootDir: string,
   options: BundlerOptions = {}
 ): Promise<BundleResult> {
+  mark("bundler:full");
   const startTime = performance.now();
   const outputs: BundleOutput[] = [];
   const errors: string[] = [];
@@ -1828,6 +1831,7 @@ export async function buildClientBundles(
   // 7. 통계 계산
   const stats = calculateStats(outputs, startTime);
 
+  measure("bundler:full", "bundler:full");
   return {
     success: errors.length === 0,
     outputs,

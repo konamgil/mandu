@@ -1,2 +1,10 @@
+[install]
+# Isolated linker: per-package node_modules with symlinks to node_modules/.bun
+# store. Prevents phantom-dependency bugs where a package silently resolves a
+# transitive dep. All 1955 tests pass under this layout; bundled-importer
+# (cli/src/util/bun.ts) works because its external list is built from
+# package.json deps rather than relying on hoisting.
+linker = "isolated"
+
 [test]
 root = "./packages"

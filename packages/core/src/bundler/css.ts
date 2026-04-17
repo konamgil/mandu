@@ -16,6 +16,7 @@ import { spawn } from "bun";
 import path from "path";
 import fs from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
+import { withPerf } from "../perf";
 
 /**
  * Tailwind CLI 실행 명령어를 결정한다.
@@ -161,18 +162,20 @@ async function runCSSBuild(
  * CSS 일회성 빌드 (production용)
  */
 export async function buildCSS(options: CSSBuildOptions): Promise<CSSBuildResult> {
-  const {
-    rootDir,
-    input = DEFAULT_INPUT,
-    output = DEFAULT_OUTPUT,
-    minify = true,
-  } = options;
+  return withPerf("bundler:css", async () => {
+    const {
+      rootDir,
+      input = DEFAULT_INPUT,
+      output = DEFAULT_OUTPUT,
+      minify = true,
+    } = options;
 
-  const inputPath = path.join(rootDir, input);
-  const outputPath = path.join(rootDir, output);
+    const inputPath = path.join(rootDir, input);
+    const outputPath = path.join(rootDir, output);
 
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  return runCSSBuild(rootDir, inputPath, outputPath, minify);
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    return runCSSBuild(rootDir, inputPath, outputPath, minify);
+  });
 }
 
 // ========== Watch ==========

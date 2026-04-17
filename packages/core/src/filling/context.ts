@@ -9,6 +9,7 @@ import type { ZodSchema } from "zod";
 import type { ContractSchema, ContractMethod } from "../contract/schema";
 import type { InferBody, InferHeaders, InferParams, InferQuery, InferResponse } from "../contract/types";
 import { ContractValidator, type ContractValidatorOptions } from "../contract/validator";
+import { getCookieCodec } from "./cookie-codec";
 import { type FillingDeps, globalDeps } from "./deps";
 import { createSSEConnection, type SSEOptions, type SSEConnection } from "./sse";
 
@@ -45,39 +46,30 @@ export interface CookieOptions {
 
 /**
  * Cookie Manager - 쿠키 읽기/쓰기 관리
+ *
+ * Parse + serialize I/O is delegated to a {@link CookieCodec} selected at
+ * module load time (Bun.CookieMap when available, pure-JS legacy codec
+ * otherwise). The codec is a private implementation detail; the public API
+ * on this class is unchanged.
  */
 export class CookieManager {
   private requestCookies: Map<string, string>;
   private responseCookies: Map<string, { value: string; options: CookieOptions }>;
   private deletedCookies: Set<string>;
+  /**
+   * Pre-serialized Set-Cookie strings queued for the response. Bypasses the
+   * codec serializer — used when the Set-Cookie value was produced by an
+   * upstream source (e.g. `SessionStorage.commitSession`) that already
+   * emitted a fully-formed header. Advanced escape hatch; prefer `set()`.
+   */
+  private extraSetCookie: string[] = [];
 
   constructor(request: Request) {
-    this.requestCookies = this.parseRequestCookies(request);
+    this.requestCookies = getCookieCodec().parseRequestHeader(
+      request.headers.get("cookie")
+    );
     this.responseCookies = new Map();
     this.deletedCookies = new Set();
-  }
-
-  private parseRequestCookies(request: Request): Map<string, string> {
-    const cookies = new Map<string, string>();
-    const cookieHeader = request.headers.get("cookie");
-
-    if (cookieHeader) {
-      const pairs = cookieHeader.split(";");
-      for (const pair of pairs) {
-        const [name, ...rest] = pair.trim().split("=");
-        if (name) {
-          const rawValue = rest.join("=");
-          try {
-            cookies.set(name, decodeURIComponent(rawValue));
-          } catch {
-            // 잘못된 URL 인코딩 시 원본 값 사용
-            cookies.set(name, rawValue);
-          }
-        }
-      }
-    }
-
-    return cookies;
   }
 
   /**
@@ -133,63 +125,38 @@ export class CookieManager {
   }
 
   /**
-   * Set-Cookie 헤더 값들 생성
+   * Append a pre-serialized Set-Cookie header value, bypassing the codec.
+   *
+   * Intended for integrations that produce their own fully-formed Set-Cookie
+   * strings (e.g. `SessionStorage.commitSession()`). Coexists with `set()` —
+   * both land in the final header list emitted by {@link applyToResponse}.
+   *
+   * Empty / non-string inputs are silently ignored so callers can pass the
+   * output of an async producer without null-guarding.
    */
-  getSetCookieHeaders(): string[] {
-    const headers: string[] = [];
-
-    for (const [name, { value, options }] of this.responseCookies) {
-      headers.push(this.serializeCookie(name, value, options));
+  appendRawSetCookie(setCookieString: string): void {
+    if (typeof setCookieString === "string" && setCookieString.length > 0) {
+      this.extraSetCookie.push(setCookieString);
     }
-
-    return headers;
   }
 
   /**
-   * 쿠키를 Set-Cookie 헤더 형식으로 직렬화
+   * Set-Cookie 헤더 값들 생성
    */
-  private serializeCookie(name: string, value: string, options: CookieOptions): string {
-    const parts: string[] = [`${encodeURIComponent(name)}=${encodeURIComponent(value)}`];
-
-    if (options.maxAge !== undefined) {
-      parts.push(`Max-Age=${options.maxAge}`);
+  getSetCookieHeaders(): string[] {
+    const codec = getCookieCodec();
+    const headers: string[] = [];
+    for (const [name, { value, options }] of this.responseCookies) {
+      headers.push(codec.serializeSetCookie(name, value, options));
     }
-
-    if (options.expires) {
-      const expires =
-        options.expires instanceof Date
-          ? options.expires.toUTCString()
-          : options.expires;
-      parts.push(`Expires=${expires}`);
+    // Raw-appended strings emit after codec-serialized cookies so that order
+    // in the final `Set-Cookie` header list mirrors call order: `set()` first,
+    // then `appendRawSetCookie()`. Callers relying on "last write wins" for
+    // a given cookie name should prefer `set()`.
+    for (const raw of this.extraSetCookie) {
+      headers.push(raw);
     }
-
-    if (options.domain) {
-      parts.push(`Domain=${options.domain}`);
-    }
-
-    if (options.path) {
-      parts.push(`Path=${options.path}`);
-    } else {
-      parts.push("Path=/"); // 기본값
-    }
-
-    if (options.secure) {
-      parts.push("Secure");
-    }
-
-    if (options.httpOnly) {
-      parts.push("HttpOnly");
-    }
-
-    if (options.sameSite) {
-      parts.push(`SameSite=${options.sameSite.charAt(0).toUpperCase() + options.sameSite.slice(1)}`);
-    }
-
-    if (options.partitioned) {
-      parts.push("Partitioned");
-    }
-
-    return parts.join("; ");
+    return headers;
   }
 
   /**
@@ -220,7 +187,7 @@ export class CookieManager {
    * 응답에 적용할 쿠키가 있는지 확인
    */
   hasPendingCookies(): boolean {
-    return this.responseCookies.size > 0;
+    return this.responseCookies.size > 0 || this.extraSetCookie.length > 0;
   }
 
   /**

@@ -23,6 +23,7 @@ import {
   type Violation,
   type CSSWatcher,
 } from "@mandujs/core";
+import { newId } from "@mandujs/core/id";
 import { resolveFromCwd } from "../util/fs";
 import { resolveOutputFormat } from "../util/output";
 import { CLI_ERROR_CODES, printCLIError } from "../errors";
@@ -205,7 +206,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     islandCount: manifest.routes.filter((route) => route.kind === "page" && route.clientModule).length,
   };
   const hmrEnabled = devConfig.hmr ?? true;
-  const managementToken = crypto.randomUUID();
+  const managementToken = newId();
 
   let port: number;
   try {

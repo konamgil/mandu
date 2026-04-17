@@ -12,6 +12,7 @@ import {
   type RoutesManifest,
   type BundleManifest,
 } from "@mandujs/core";
+import { newId } from "@mandujs/core/id";
 import { resolveFromCwd } from "../util/fs";
 import { CLI_ERROR_CODES, printCLIError } from "../errors";
 import { resolveManifest } from "../util/manifest";
@@ -62,7 +63,7 @@ export async function start(options: StartOptions = {}): Promise<void> {
   const serverConfig = config.server ?? {};
   const plugins = config.plugins ?? [];
   const configHooks = config.hooks;
-  const managementToken = crypto.randomUUID();
+  const managementToken = newId();
 
   console.log(`🥟 Mandu Production Server`);
 

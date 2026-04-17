@@ -27,6 +27,7 @@ import {
   sortRoutesByPriority,
   getPatternShape,
 } from "./fs-patterns";
+import { mark, measure } from "../perf";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Scanner Class
@@ -55,6 +56,7 @@ export class FSScanner {
    * @returns 스캔 결과
    */
   async scan(rootDir: string): Promise<ScanResult> {
+    mark("router:scan");
     const startTime = Date.now();
     const routesDir = join(rootDir, this.config.routesDir);
 
@@ -87,6 +89,7 @@ export class FSScanner {
     // 통계 계산
     const stats = this.calculateStats(files, routes, Date.now() - startTime);
 
+    measure("router:scan", "router:scan");
     return {
       files,
       routes: sortRoutesByPriority(routes),

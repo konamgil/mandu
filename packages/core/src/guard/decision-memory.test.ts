@@ -275,10 +275,31 @@ describe("Decision Memory", () => {
 
   describe("getNextDecisionId", () => {
     it("should return next sequential ID", async () => {
-      // ADR-003을 추가했으므로 다음은 ADR-004
-      const nextId = await getNextDecisionId(TEST_DIR);
+      // Use an isolated tempdir so other tests in this suite (which assert
+      // on the shared TEST_DIR's ADR count) are not polluted by the fixture
+      // this test needs.
+      const localDir = await mkdtemp(join(tmpdir(), "next-id-test-"));
+      try {
+        await mkdir(join(localDir, "spec", "decisions"), { recursive: true });
+        await Bun.write(
+          join(localDir, "spec", "decisions", "ADR-001-a.md"),
+          "**ID:** ADR-001\n"
+        );
+        await Bun.write(
+          join(localDir, "spec", "decisions", "ADR-002-b.md"),
+          "**ID:** ADR-002\n"
+        );
+        await Bun.write(
+          join(localDir, "spec", "decisions", "ADR-003-c.md"),
+          "**ID:** ADR-003\n"
+        );
 
-      expect(nextId).toBe("ADR-004");
+        const nextId = await getNextDecisionId(localDir);
+
+        expect(nextId).toBe("ADR-004");
+      } finally {
+        await rm(localDir, { recursive: true, force: true });
+      }
     });
 
     it("should return ADR-001 for empty project", async () => {

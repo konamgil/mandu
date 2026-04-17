@@ -34,6 +34,7 @@
 import path from "path";
 import { pathToFileURL } from "url";
 import { mkdir, readdir, unlink, readFile } from "fs/promises";
+import { safeBuild } from "@mandujs/core/bundler/safe-build";
 
 export function importFresh<T = unknown>(modulePath: string): Promise<T> {
   const url = Bun.pathToFileURL(modulePath);
@@ -197,7 +198,7 @@ export function createBundledImporter(
 
     let result;
     try {
-      result = await Bun.build({
+      result = await safeBuild({
         entrypoints: [absPath],
         outdir: cacheDir,
         naming,

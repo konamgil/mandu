@@ -7,6 +7,7 @@ import type { RoutesManifest, RouteSpec } from "../spec/schema";
 import { buildClientBundles } from "./build";
 import type { BundleResult } from "./types";
 import { PORTS, TIMEOUTS } from "../constants";
+import { mark, measure } from "../perf";
 import path from "path";
 import fs from "fs";
 
@@ -235,9 +236,11 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     }
 
     isBuilding = true;
+    mark("dev:rebuild");
     try {
       await _doBuild(changedFile);
     } finally {
+      measure("dev:rebuild", "dev:rebuild");
       isBuilding = false;
       // 빌드 중 대기 중인 파일이 있으면 즉시 처리
       if (pendingBuildFile) {

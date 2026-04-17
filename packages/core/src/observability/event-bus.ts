@@ -1,5 +1,7 @@
 /** Mandu Unified EventBus -- foundation for the observability system. */
 
+import { newId } from "../id";
+
 export type EventType = "http" | "mcp" | "guard" | "build" | "error" | "cache" | "ws";
 export type ObservabilitySeverity = "info" | "warn" | "error";
 
@@ -35,7 +37,7 @@ class ManduEventBus {
   emit(event: Omit<ObservabilityEvent, "id" | "timestamp">): void {
     const full: ObservabilityEvent = {
       ...event,
-      id: crypto.randomUUID(),
+      id: newId(),
       timestamp: Date.now(),
     };
     this.recent.push(full);

@@ -4,6 +4,7 @@
  */
 
 import { type CookieManager, type CookieOptions } from "./context";
+import { newId } from "../id";
 
 // ========== Types ==========
 
@@ -41,11 +42,20 @@ export interface CookieSessionOptions {
 export class Session {
   private data: SessionData;
   private flash: Map<string, unknown> = new Map();
+  /**
+   * Dirty bit — set by any mutation (`set`/`unset`/`setFlash`/`clear`) and
+   * cleared by `markClean()` after a successful commit. Middleware/helpers use
+   * this to skip no-op commits.
+   *
+   * Intentionally private; observed via `isDirty()` to keep the invariant
+   * that only in-class mutations can flip it.
+   */
+  private _dirty = false;
   readonly id: string;
 
   constructor(data: SessionData = {}, id?: string) {
     this.data = { ...data };
-    this.id = id ?? crypto.randomUUID();
+    this.id = id ?? newId();
   }
 
   get<T = unknown>(key: string): T | undefined {
@@ -60,6 +70,7 @@ export class Session {
 
   set(key: string, value: unknown): void {
     this.data[key] = value;
+    this._dirty = true;
   }
 
   has(key: string): boolean {
@@ -67,7 +78,11 @@ export class Session {
   }
 
   unset(key: string): void {
+    // Preserve original unconditional-delete semantics; flip dirty regardless
+    // so callers can observe intent via `isDirty()` even when the key was
+    // already absent.
     delete this.data[key];
+    this._dirty = true;
   }
 
   /**
@@ -78,6 +93,36 @@ export class Session {
     this.flash.set(key, value);
     // flash 데이터도 직렬화에 포함
     this.data[`__flash_${key}`] = value;
+    this._dirty = true;
+  }
+
+  /**
+   * Whether this session has been mutated since it was constructed or last
+   * cleaned via {@link markClean}. `saveSession` consults this to avoid
+   * re-committing unchanged sessions.
+   */
+  isDirty(): boolean {
+    return this._dirty;
+  }
+
+  /**
+   * Reset the dirty bit. Called by `saveSession` after a successful
+   * `commitSession`. Not intended for handler code.
+   *
+   * @internal
+   */
+  markClean(): void {
+    this._dirty = false;
+  }
+
+  /**
+   * Wipe in-memory data + flash. Called by `destroySession` so subsequent
+   * handler code sees an empty session. Flips the dirty bit.
+   */
+  clear(): void {
+    this.data = {};
+    this.flash.clear();
+    this._dirty = true;
   }
 
   /** 내부 직렬화용 */
@@ -105,6 +150,10 @@ export class Session {
       delete session.data[key];
     }
 
+    // Loaded-from-cookie state is, by definition, clean until handler code
+    // mutates it. This runs after data population so any mutations above
+    // don't accidentally leave _dirty=true.
+    session._dirty = false;
     return session;
   }
 }

@@ -264,7 +264,9 @@ describe("generateResourceArtifacts", () => {
 });
 
 describe("Generated Content Validation", () => {
-  test("contract should contain Mandu.contract definition", async () => {
+  beforeAll(async () => {
+    // Generate artifacts once for the whole describe block so tests are
+    // order-independent (previously the first test generated for the others).
     const parsed = createTestParsedResource("test", {
       name: "test",
       fields: {
@@ -277,7 +279,9 @@ describe("Generated Content Validation", () => {
       rootDir: testDir,
       force: false,
     });
+  });
 
+  test("contract should contain Mandu.contract definition", async () => {
     const paths = resolveGeneratedPaths(testDir);
     const contractPath = path.join(paths.resourceContractsDir, "test.contract.ts");
     const contractContent = await fs.readFile(contractPath, "utf-8");

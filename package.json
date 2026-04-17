@@ -5,14 +5,19 @@
   "license": "MPL-2.0",
   "author": "Liam Ko",
   "type": "module",
-  "packageManager": "bun@1.2.0",
+  "packageManager": "bun@1.3.12",
   "engines": {
-    "bun": ">=1.0.0"
+    "bun": ">=1.3.0"
   },
-  "workspaces": [
-    "packages/*",
-    "demo/*"
-  ],
+  "workspaces": {
+    "packages": [
+      "packages/*",
+      "demo/*"
+    ],
+    "catalog": {
+      "fast-glob": "^3.3.2"
+    }
+  },
   "scripts": {
     "test": "bun test",
     "test:core": "bun test packages/core/src packages/core/tests",

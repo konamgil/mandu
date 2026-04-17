@@ -2,9 +2,9 @@
   "name": "{{PROJECT_NAME}}",
   "version": "0.1.0",
   "type": "module",
-  "packageManager": "bun@1.2.0",
+  "packageManager": "bun@1.3.12",
   "engines": {
-    "bun": ">=1.0.0"
+    "bun": ">=1.3.0"
   },
   "scripts": {
     "dev": "mandu dev",

@@ -9,6 +9,7 @@
 
 import path from "path";
 import { FileTailer } from "./file-tailer";
+import { newId } from "../../id";
 
 interface SSEClient {
   id: string;
@@ -82,7 +83,7 @@ export class ActivitySSEBroadcaster {
 
   /** Create an SSE Response for a new client connection */
   createResponse(): Response {
-    const clientId = crypto.randomUUID();
+    const clientId = newId();
 
     const stream = new ReadableStream<Uint8Array>({
       start: (controller) => {

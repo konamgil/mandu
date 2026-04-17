@@ -2,7 +2,7 @@
  * DNA-016: Pre-Action Hooks Tests
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import {
   preActionRegistry,
   runPreAction,
@@ -28,7 +28,7 @@ describe("DNA-016: Pre-Action Hooks", () => {
 
   describe("preActionRegistry", () => {
     it("should register and run hooks", async () => {
-      const hook = vi.fn();
+      const hook = mock(() => {});
       preActionRegistry.register(hook);
 
       await preActionRegistry.runAll({
@@ -42,7 +42,7 @@ describe("DNA-016: Pre-Action Hooks", () => {
     });
 
     it("should unregister hooks", () => {
-      const hook = vi.fn();
+      const hook = mock(() => {});
       preActionRegistry.register(hook);
       expect(preActionRegistry.size).toBe(1);
 
@@ -150,7 +150,7 @@ describe("DNA-016: Pre-Action Hooks", () => {
     });
 
     it("should run registered hooks", async () => {
-      const hook = vi.fn();
+      const hook = mock(() => {});
       registerPreActionHook(hook);
 
       await runPreAction({
@@ -164,7 +164,7 @@ describe("DNA-016: Pre-Action Hooks", () => {
 
   describe("registerPreActionHook", () => {
     it("should return unregister function", async () => {
-      const hook = vi.fn();
+      const hook = mock(() => {});
       const unregister = registerPreActionHook(hook);
 
       expect(preActionRegistry.size).toBe(1);

@@ -1,23 +1,22 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, mock, spyOn, beforeEach, afterAll } from "bun:test";
 
-const getCommandMock = vi.fn();
-const getAllCommandRegistrationsMock = vi.fn(() => []);
+const getCommandMock = mock(() => {});
+const getAllCommandRegistrationsMock = mock(() => []);
 
-vi.mock("../src/commands/registry", () => ({
+mock.module("../src/commands/registry", () => ({
   commandRegistry: new Map(),
   getCommand: getCommandMock,
   getAllCommandRegistrations: getAllCommandRegistrationsMock,
 }));
 
-vi.mock("../src/terminal", () => ({
-  shouldShowBanner: () => false,
-  renderHeroBanner: vi.fn(),
-  renderHelp: () => "help",
-  MANDU_HELP: { description: "Agent-Native Web Framework" },
-}));
+process.env.MANDU_NO_BANNER = "1";
 
 describe("CLI main lifecycle", () => {
-  const exitSpy = vi.spyOn(process, "exit");
+  const exitSpy = spyOn(process, "exit");
+
+  afterAll(() => {
+    delete process.env.MANDU_NO_BANNER;
+  });
 
   beforeEach(() => {
     getCommandMock.mockReset();
@@ -27,13 +26,9 @@ describe("CLI main lifecycle", () => {
     }) as never);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it("does not force process.exit(0) after a successful command", async () => {
     getCommandMock.mockReturnValue({
-      run: vi.fn().mockResolvedValue(true),
+      run: mock(async () => true),
     });
 
     const { main } = await import("../src/main");
@@ -47,7 +42,7 @@ describe("CLI main lifecycle", () => {
   it("exits after a successful one-shot command when requested", async () => {
     getCommandMock.mockReturnValue({
       exitOnSuccess: true,
-      run: vi.fn().mockResolvedValue(true),
+      run: mock(async () => true),
     });
 
     const { main } = await import("../src/main");
