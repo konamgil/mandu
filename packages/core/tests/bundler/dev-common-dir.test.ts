@@ -44,7 +44,10 @@ function createTempProject(): string {
   return root;
 }
 
-describe("dev bundler — common-dir change path (#184, #185)", () => {
+// Gated — see build.test.ts for rationale. Bun.build cross-worker races
+// under bun:test parallel execution; MANDU_SKIP_BUNDLER_TESTS=1 is set by
+// CI's randomize-mode step, and the un-randomized serial step runs this.
+describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")("dev bundler — common-dir change path (#184, #185)", () => {
   let rootDir: string;
   let close: (() => void) | null = null;
 

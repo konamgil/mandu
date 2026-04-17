@@ -226,24 +226,33 @@ describe("Decision Memory", () => {
 
   describe("saveDecision", () => {
     it("should save new decision as markdown file", async () => {
-      const newDecision: Omit<ArchitectureDecision, "date"> = {
-        id: "ADR-003",
-        title: "Use Feature Flags",
-        status: "proposed",
-        tags: ["feature", "deployment"],
-        context: "Need controlled rollout",
-        decision: "Use feature flags for gradual rollout",
-        consequences: ["Need flag management system"],
-      };
+      // Local tempdir so the added ADR-003 does not leak into the shared
+      // TEST_DIR used by getAllDecisions / searchDecisions / …, which
+      // assert exact counts or specific ADR contents under --randomize.
+      const localDir = await mkdtemp(join(tmpdir(), "save-decision-test-"));
+      try {
+        await mkdir(join(localDir, "spec", "decisions"), { recursive: true });
+        const newDecision: Omit<ArchitectureDecision, "date"> = {
+          id: "ADR-003",
+          title: "Use Feature Flags",
+          status: "proposed",
+          tags: ["feature", "deployment"],
+          context: "Need controlled rollout",
+          decision: "Use feature flags for gradual rollout",
+          consequences: ["Need flag management system"],
+        };
 
-      const result = await saveDecision(TEST_DIR, newDecision);
+        const result = await saveDecision(localDir, newDecision);
 
-      expect(result.success).toBe(true);
-      expect(result.filePath).toContain("ADR-003");
+        expect(result.success).toBe(true);
+        expect(result.filePath).toContain("ADR-003");
 
-      // 파일이 실제로 생성되었는지 확인
-      const content = await readFile(result.filePath, "utf-8");
-      expect(content).toContain("Use Feature Flags");
+        // 파일이 실제로 생성되었는지 확인
+        const content = await readFile(result.filePath, "utf-8");
+        expect(content).toContain("Use Feature Flags");
+      } finally {
+        await rm(localDir, { recursive: true, force: true });
+      }
     });
   });
 

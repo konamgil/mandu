@@ -21,10 +21,18 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
-      - run: bun run test:core -- --retry=2
-      - run: bun run test:cli -- --retry=2
-      - run: bun run test:mcp -- --retry=2
-      - run: bun run test:ate -- --retry=2
+      # Randomized run with bundler tests gated off (Bun.build cross-worker
+      # races make them flaky under --randomize — they're run sequentially
+      # in the next step).
+      - name: Tests (randomized, bundler gated)
+        run: bun run test:core -- --randomize --retry=2 --seed=${{ github.run_id }}
+        env:
+          MANDU_SKIP_BUNDLER_TESTS: "1"
+      - name: Tests (bundler, sequential)
+        run: bun test packages/core/src/bundler/build.test.ts packages/core/tests/bundler/dev-common-dir.test.ts --retry=2
+      - run: bun run test:cli -- --randomize --retry=2 --seed=${{ github.run_id }}
+      - run: bun run test:mcp -- --randomize --retry=2 --seed=${{ github.run_id }}
+      - run: bun run test:ate -- --randomize --retry=2 --seed=${{ github.run_id }}
 
   compatibility:
     name: Compatibility (ubuntu-latest, Bun 1.3.0)
@@ -36,10 +44,15 @@ jobs:
           bun-version: 1.3.0
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
-      - run: bun run test:core -- --retry=2
-      - run: bun run test:cli -- --retry=2
-      - run: bun run test:mcp -- --retry=2
-      - run: bun run test:ate -- --retry=2
+      - name: Tests (randomized, bundler gated)
+        run: bun run test:core -- --randomize --retry=2 --seed=${{ github.run_id }}
+        env:
+          MANDU_SKIP_BUNDLER_TESTS: "1"
+      - name: Tests (bundler, sequential)
+        run: bun test packages/core/src/bundler/build.test.ts packages/core/tests/bundler/dev-common-dir.test.ts --retry=2
+      - run: bun run test:cli -- --randomize --retry=2 --seed=${{ github.run_id }}
+      - run: bun run test:mcp -- --randomize --retry=2 --seed=${{ github.run_id }}
+      - run: bun run test:ate -- --randomize --retry=2 --seed=${{ github.run_id }}
 
   official-demo:
     name: Official Demo (ubuntu-latest, Bun latest)

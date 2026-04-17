@@ -62,7 +62,14 @@ afterAll(async () => {
   }
 });
 
-describe("buildClientBundles vendor shims", () => {
+// Bun.build has observed cross-worker races under bun:test's parallel file
+// execution — when tests shuffle under --randomize, this file sometimes
+// collides with another bundler test in a sibling worker and fails with
+// "AggregateError: Bundle failed" + missing shim outputs. Gate on an env
+// var so CI can run randomize-mode across everything else, then run this
+// suite in a dedicated serial pass. Local `bun run test:core` (no env set)
+// still runs these tests fully. Tracked as Phase 0.6.
+describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")("buildClientBundles vendor shims", () => {
   test("build succeeds", () => {
     if (!result.success) {
       console.error("[build.test] errors:", result.errors);
