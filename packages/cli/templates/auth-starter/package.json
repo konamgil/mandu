@@ -1,0 +1,36 @@
+{
+  "name": "{{PROJECT_NAME}}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.12",
+  "engines": {
+    "bun": ">=1.3.12"
+  },
+  "scripts": {
+    "dev": "mandu dev",
+    "dev:safe": "mandu lock && mandu dev",
+    "build": "mandu build",
+    "start": "mandu start",
+    "check": "mandu check",
+    "guard": "mandu guard",
+    "test:e2e": "playwright test --config=tests/e2e/playwright.config.ts",
+    "test:e2e:ci": "playwright test --config=tests/e2e/playwright.config.ts --reporter=html,json,junit"
+  },
+  "dependencies": {
+    "@mandujs/core": "^1.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@mandujs/cli": "^1.0.0",
+    "@mandujs/mcp": "^1.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.0.0",
+    "@tailwindcss/cli": "^4.1.0",
+    "tailwindcss": "^4.1.0",
+    "@playwright/test": "^1.59.1",
+    "playwright": "^1.59.1"
+  }
+}

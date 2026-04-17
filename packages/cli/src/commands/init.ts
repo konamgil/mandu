@@ -31,7 +31,7 @@ export interface InitOptions {
   exitOnSuccess?: boolean;
 }
 
-const ALLOWED_TEMPLATES = ["default", "realtime-chat"] as const;
+const ALLOWED_TEMPLATES = ["default", "realtime-chat", "auth-starter"] as const;
 const DEFAULT_MAX_BACKUP_SUFFIX_ATTEMPTS = 50;
 const BACKUP_SUFFIX_START_INDEX = 1;
 type AllowedTemplate = (typeof ALLOWED_TEMPLATES)[number];

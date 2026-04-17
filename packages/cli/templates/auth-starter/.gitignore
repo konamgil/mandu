@@ -1,0 +1,8 @@
+node_modules/
+.mandu/
+.uploads/
+test-results/
+playwright-report/
+*.log
+.env
+.env.local
