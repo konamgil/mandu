@@ -6,3 +6,12 @@ playwright-report/
 *.log
 .env
 .env.local
+
+# Phase 4c demo SQLite database — created at runtime by `mandu db apply`
+app.db
+app.db-journal
+app.db-wal
+app.db-shm
+
+# Generated reports from `mandu generate` / `mandu check`
+mandu-report.json

@@ -413,6 +413,42 @@ describeIfBunSql("dbApply", () => {
     expect(code).toBe(3);
   });
 
+  it("TC-8a: apply writes .mandu/schema/applied.json so next plan sees current DB state", async () => {
+    // Seed a resource so apply has something to snapshot.
+    writeResource(f, "user", basicUserResource());
+
+    // Run plan → produces 0001_auto_*.sql.
+    await dbPlan({ cwd: f.root, ci: true });
+
+    // Apply the generated migration.
+    const code = await dbApply({ cwd: f.root });
+    expect(code).toBe(0);
+
+    // applied.json MUST now exist and be a valid snapshot with our user resource.
+    expect(existsSync(f.appliedPath)).toBe(true);
+    const raw = await fs.readFile(f.appliedPath, "utf8");
+    const { parseSnapshot } = await import("@mandujs/core/resource/ddl/snapshot");
+    const snap = parseSnapshot(raw);
+    expect(snap.provider).toBe("sqlite");
+    expect(snap.resources.map((r) => r.name)).toContain("users");
+
+    // And a second plan with no resource changes must emit zero — this is
+    // the contract that G1 regressed without applied.json being written.
+    const second = await dbPlan({ cwd: f.root, ci: true });
+    expect(second).toBe(0);
+    const migrations = (await fs.readdir(f.migrationsDir)).filter((n) => n.endsWith(".sql"));
+    expect(migrations.length).toBe(1);
+  });
+
+  it("TC-8b: --dry-run does NOT write applied.json", async () => {
+    writeResource(f, "user", basicUserResource());
+    await dbPlan({ cwd: f.root, ci: true });
+
+    const code = await dbApply({ cwd: f.root, dryRun: true });
+    expect(code).toBe(0);
+    expect(existsSync(f.appliedPath)).toBe(false);
+  });
+
   it("TC-8: SQL error mid-migration → exit 1, previous migrations remain", async () => {
     // First migration succeeds; second fails.
     writeFileSync(

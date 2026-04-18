@@ -80,9 +80,33 @@ export interface EventBusDeps {
  */
 export interface FillingDeps {
   /**
-   * 데이터베이스 접근
+   * 데이터베이스 접근 (legacy shape — query/transaction).
+   * Kept for backward compatibility. New code should prefer `sql` below.
    */
   db?: DbDeps;
+
+  /**
+   * Phase 4c — Bun.sql-backed `Db` handle.
+   *
+   * This is the tagged-template callable shape produced by
+   * `@mandujs/core/db`'s `createDb()`. Generated resource repos
+   * (`createXRepo(db)` from `*.repo.ts`) consume this directly.
+   *
+   * Typed as `unknown` here to avoid a circular type import from
+   * `@mandujs/core/db` into the filling layer. Consumers cast via
+   * `import type { Db } from "@mandujs/core/db"` at the call site:
+   *
+   * @example
+   * ```ts
+   * import type { Db } from "@mandujs/core/db";
+   * export default Mandu.filling().get((ctx) => {
+   *   const db = ctx.deps.sql as Db;
+   *   const repo = createUsersRepo(db);
+   *   return ctx.ok(await repo.findMany());
+   * });
+   * ```
+   */
+  sql?: unknown;
 
   /**
    * 캐시 접근

@@ -71,6 +71,36 @@ export interface ResourceOptions {
     defaultLimit?: number;
     maxLimit?: number;
   };
+  /**
+   * Opt-in DB persistence config (Phase 4c).
+   *
+   * When set, the resource generator emits an additional `<name>.repo.ts`
+   * artifact with typed CRUD backed by `@mandujs/core/db`, and the schema
+   * pipeline (`mandu db plan` / `computeSchemaGeneration`) includes this
+   * resource in migrations.
+   *
+   * The concrete shape lives in
+   * `@mandujs/core/resource/ddl/persistence-types` — imported lazily to
+   * keep `ResourceOptions` usable on runtimes without the DDL subsystem.
+   * Non-persistent resources simply omit this field (existing behavior).
+   *
+   * @example
+   * ```ts
+   * defineResource({
+   *   name: "post",
+   *   fields: { ... },
+   *   options: {
+   *     persistence: {
+   *       provider: "sqlite",
+   *       primaryKey: "id",
+   *       indexes: [{ name: "posts_user_idx", fields: ["userId"], unique: false }],
+   *       fieldOverrides: { id: { primary: true }, userId: { indexed: true } },
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  persistence?: import("./ddl/persistence-types").ExtendedResourcePersistence;
 }
 
 // ============================================

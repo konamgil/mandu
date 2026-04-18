@@ -31,6 +31,7 @@
 
 import path from "node:path";
 import { existsSync, promises as fs } from "node:fs";
+import { Glob } from "bun";
 
 import {
   MigrationTamperedError,
@@ -38,6 +39,14 @@ import {
   createMigrationRunner,
   type MigrationRunner,
 } from "@mandujs/core/db/migrations/runner";
+import {
+  parseResourceSchemas,
+  validateResourceUniqueness,
+} from "@mandujs/core/resource";
+import {
+  snapshotFromResources,
+  serializeSnapshot,
+} from "@mandujs/core/resource/ddl/snapshot";
 import type {
   AppliedMigration,
   PendingMigration,
@@ -156,6 +165,13 @@ export async function dbApply(options: DbApplyOptions = {}): Promise<number> {
     // 5) Apply — stream per-migration progress.
     const applied = await applyWithStreaming(runner, pending, options);
 
+    // 6) Write applied.json so the next `mandu db plan` sees the current
+    //    DB state. This is Agent C's "ownership" of the snapshot file:
+    //    plan only READS it, reset WIPES it, apply WRITES it. See
+    //    docs/bun/phase-4c-team-plan.md §2 and plan.ts header for the
+    //    contract.
+    await writeAppliedSnapshot(cwd, options);
+
     finish(options, { applied, pending: [], dryRun: false });
     await safeClose(db);
     return EXIT_OK;
@@ -259,5 +275,71 @@ async function safeClose(db: { close: () => Promise<void> } | undefined): Promis
     await db.close();
   } catch {
     /* swallow — already closed or caller will exit */
+  }
+}
+
+// =====================================================================
+// applied.json writer — Agent C's snapshot ownership surface
+// =====================================================================
+
+/**
+ * After a successful apply, persist the current resource snapshot to
+ * `.mandu/schema/applied.json` so the next `mandu db plan` diffs
+ * against the live DB state rather than re-emitting the same changes.
+ *
+ * Soft-fails on any error: the migration already succeeded, and the
+ * snapshot is only used by `plan` (not by the runtime). A mismatch
+ * surfaces the next time the user runs plan, which is noisy but
+ * recoverable; losing DB data because we refused to exit 0 after a
+ * successful apply is not.
+ *
+ * Dry-runs skip writing entirely — nothing was applied.
+ */
+async function writeAppliedSnapshot(
+  cwd: string,
+  options: DbApplyOptions,
+): Promise<void> {
+  if (options.dryRun === true) return;
+
+  const resourcesDir = path.join(cwd, "spec", "resources");
+  const schemaDir = path.join(cwd, ".mandu", "schema");
+  const appliedPath = path.join(schemaDir, "applied.json");
+
+  try {
+    if (!existsSync(resourcesDir)) {
+      // No resources → nothing to snapshot. Leave any existing file
+      // alone (reset is the only path that wipes applied.json).
+      return;
+    }
+
+    const files: string[] = [];
+    const glob = new Glob("*.resource.ts");
+    for await (const entry of glob.scan({
+      cwd: resourcesDir,
+      absolute: true,
+      onlyFiles: true,
+    })) {
+      files.push(entry);
+    }
+    files.sort();
+    if (files.length === 0) return;
+
+    const parsed = await parseResourceSchemas(files);
+    validateResourceUniqueness(parsed);
+    const snapshot = snapshotFromResources(parsed);
+
+    await fs.mkdir(schemaDir, { recursive: true });
+    await fs.writeFile(appliedPath, serializeSnapshot(snapshot), "utf8");
+  } catch (err) {
+    // Never fail the apply on snapshot-write errors — the migration is
+    // already committed. Warn the operator so they know plan may be
+    // stale until the next successful apply.
+    if (options.json !== true) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(
+        `  ${theme.warn("warn:")} applied.json not updated: ${msg}\n` +
+          `  ${theme.dim("next:")} rerun ${theme.command("mandu db plan")} — if it re-emits, remove the stale snapshot.\n\n`,
+      );
+    }
   }
 }

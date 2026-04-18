@@ -265,6 +265,66 @@ test.describe("auth flow", () => {
     await expect(page.getByTestId("not-found-heading")).toHaveText("404 — Not Found");
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Phase 4c: persistent posts via resource → migration → generated repo
+  // ─────────────────────────────────────────────────────────────────────────
+
+  test("unauthenticated /posts redirects to /login", async ({ page }) => {
+    await page.goto("/posts");
+    await page.waitForURL("**/login");
+    await expect(page.getByTestId("login-form")).toBeVisible();
+  });
+
+  test("logged-in user sees empty posts list then creates one that persists", async ({ page }) => {
+    const email = freshEmail("posts");
+
+    // Sign up → lands on /dashboard, then navigate to /posts.
+    await page.goto("/signup");
+    await page.getByTestId("signup-email").fill(email);
+    await page.getByTestId("signup-password").fill(STRONG_PASSWORD);
+    await page.getByTestId("signup-confirm").fill(STRONG_PASSWORD);
+    await page.getByTestId("signup-submit").click();
+    await page.waitForURL("**/dashboard");
+
+    await page.goto("/posts");
+    // Empty-state only holds when nobody else has authored under this
+    // user id — since the in-memory user store gives every fresh signup a
+    // brand-new uid, the list is guaranteed empty.
+    await expect(page.getByTestId("posts-empty")).toBeVisible();
+
+    // Create a post via the inline form.
+    const title = `hello-${Date.now()}`;
+    const body = `content-${Math.random().toString(36).slice(2, 10)}`;
+    await page.getByTestId("posts-title").fill(title);
+    await page.getByTestId("posts-body").fill(body);
+    await page.getByTestId("posts-submit").click();
+    await page.waitForURL("**/posts");
+
+    // Item shows up in the list with the submitted title/body.
+    const item = page.getByTestId("posts-item").first();
+    await expect(item).toBeVisible();
+    await expect(page.getByTestId("posts-item-title").first()).toHaveText(title);
+    await expect(page.getByTestId("posts-item-body").first()).toHaveText(body);
+
+    // Reload + re-navigate to confirm the row survived a round trip through
+    // SQLite (not held only in-memory on the filling loader).
+    await page.reload();
+    await expect(page.getByTestId("posts-item-title").first()).toHaveText(title);
+  });
+
+  test("posts form without CSRF token is rejected (403)", async ({ baseURL }) => {
+    const ctx = await apiRequest.newContext({ baseURL: baseURL ?? "http://localhost:3333" });
+    try {
+      const res = await ctx.post("/api/posts", {
+        form: { title: "x", body: "y" },
+        maxRedirects: 0,
+      });
+      expect(res.status()).toBe(403);
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
   test("avatar upload rejects non-image files (400 + dashboard error banner)", async ({ page }) => {
     const email = freshEmail("avatar-bad");
 

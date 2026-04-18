@@ -264,6 +264,11 @@ function renderRowType(pascalName: string, fields: Array<[string, ResourceField]
     const optional = field.required === true ? "" : "?";
     return `  ${name}${optional}: ${tsType};`;
   });
+  // Index signature satisfies `Db`'s `Row = Record<string, unknown>`
+  // constraint so the generated repo type-checks when the callers pass
+  // `${pascalName}` as the row type param to `db<${pascalName}>` / `db.one<${pascalName}>`.
+  // Concrete fields above retain their precise types — the signature
+  // only widens unknown keys.
   return `/**
  * Row shape for the \`${pascalName}\` resource. Mirrors the contract's
  * Zod schema — if you add or remove fields in the resource definition,
@@ -271,6 +276,7 @@ function renderRowType(pascalName: string, fields: Array<[string, ResourceField]
  */
 export interface ${pascalName} {
 ${lines.join("\n")}
+  [key: string]: unknown;
 }`;
 }
 
