@@ -52,12 +52,25 @@ function createMethodDispatcher(module: RouteModule, routeId: string) {
 }
 
 export interface RegisterHandlersOptions {
-  /** Module import function (dev: importFresh, start: standard import) */
-  importFn: (modulePath: string) => Promise<any>;
+  /**
+   * Module import function (dev: importFresh, start: standard import).
+   * The optional `opts.changedFile` is forwarded into Phase 7.0 B5's
+   * incremental bundled-import: when the changed file is not in the
+   * module's import graph, `importFn` returns the cached bundle in ~0.1 ms
+   * instead of re-running Bun.build.
+   */
+  importFn: (modulePath: string, opts?: { changedFile?: string }) => Promise<any>;
   /** Set for tracking already registered layout paths */
   registeredLayouts: Set<string>;
   /** Clear layout cache on reload */
   isReload?: boolean;
+  /**
+   * Phase 7.0 B5 wire-up — on a live SSR reload, the changed file that
+   * triggered the reload. Omit for cold boot / wildcard (full
+   * invalidation). Forwarded to `importFn` so the incremental
+   * `bundledImport` can skip rebuilds for modules the file isn't part of.
+   */
+  changedFile?: string;
 }
 
 /**
@@ -69,7 +82,9 @@ export async function registerManifestHandlers(
   rootDir: string,
   options: RegisterHandlersOptions
 ): Promise<void> {
-  const { importFn, registeredLayouts, isReload = false } = options;
+  const { importFn, registeredLayouts, isReload = false, changedFile } = options;
+  const importOpts: { changedFile?: string } | undefined =
+    changedFile !== undefined ? { changedFile } : undefined;
 
   if (isReload) {
     registeredLayouts.clear();
@@ -79,7 +94,7 @@ export async function registerManifestHandlers(
     if (route.kind === "api") {
       const modulePath = path.resolve(rootDir, route.module);
       try {
-        const module = await importFn(modulePath);
+        const module = await importFn(modulePath, importOpts);
         let handler = module.default || module.handler || module;
 
         // 1) ManduFilling instance
@@ -123,7 +138,7 @@ export async function registerManifestHandlers(
           if (!registeredLayouts.has(layoutPath)) {
             const absLayoutPath = path.resolve(rootDir, layoutPath);
             registerLayoutLoader(layoutPath, async () => {
-              return importFn(absLayoutPath);
+              return importFn(absLayoutPath, importOpts);
             });
             registeredLayouts.add(layoutPath);
             console.log(`  🎨 Layout: ${layoutPath}`);
@@ -134,7 +149,7 @@ export async function registerManifestHandlers(
       // Use PageHandler if slotModule exists (filling.loader support)
       if (route.slotModule) {
         registerPageHandler(route.id, async () => {
-          const module = await importFn(componentPath);
+          const module = await importFn(componentPath, importOpts);
           // Normalize the page module shape. Users write pages in two styles:
           //   (a) `export default function Page() {…}` + `export const filling = …`
           //   (b) `export default { component: …, filling: … }`
@@ -173,7 +188,7 @@ export async function registerManifestHandlers(
           `  📄 Page: ${route.pattern} -> ${route.id} (with loader)${isIsland ? " 🏝️" : ""}${hasLayout ? " 🎨" : ""}`
         );
       } else {
-        registerPageLoader(route.id, () => importFn(componentPath));
+        registerPageLoader(route.id, () => importFn(componentPath, importOpts));
         console.log(
           `  📄 Page: ${route.pattern} -> ${route.id}${isIsland ? " 🏝️" : ""}${hasLayout ? " 🎨" : ""}`
         );
@@ -183,7 +198,7 @@ export async function registerManifestHandlers(
 
   // Phase 6.3: register `app/not-found.tsx` if it exists. Global, one per
   // app — the server falls through to the built-in 404 if unregistered.
-  await registerAppNotFound(rootDir, importFn);
+  await registerAppNotFound(rootDir, importFn, importOpts);
 }
 
 /**
@@ -193,7 +208,8 @@ export async function registerManifestHandlers(
  */
 async function registerAppNotFound(
   rootDir: string,
-  importFn: (modulePath: string) => Promise<unknown>,
+  importFn: (modulePath: string, opts?: { changedFile?: string }) => Promise<unknown>,
+  importOpts?: { changedFile?: string },
 ): Promise<void> {
   const candidates = [
     "app/not-found.tsx",
@@ -209,7 +225,7 @@ async function registerAppNotFound(
       continue;
     }
     registerNotFoundHandler(async () => {
-      const module = (await importFn(abs)) as Record<string, unknown>;
+      const module = (await importFn(abs, importOpts)) as Record<string, unknown>;
       const rawDefault = module.default as unknown;
       if (typeof rawDefault === "function") {
         return {

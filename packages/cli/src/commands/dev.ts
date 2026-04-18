@@ -172,12 +172,20 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   // 출력 → 새 URL로 import → Bun이 전혀 새 모듈로 인식 → 모든 변경이 반영.
   const bundledImport = createBundledImporter({ rootDir });
 
-  // Handler registration function (uses shared utility)
-  const registerHandlers = async (m: RoutesManifest, isReload = false) => {
+  // Handler registration function (uses shared utility).
+  // Phase 7.0 B5 wire-up: `changedFile` threads through to
+  // `createBundledImporter` so unrelated routes hit the incremental
+  // cache instead of rebuilding (0.075 ms vs 20 ms).
+  const registerHandlers = async (
+    m: RoutesManifest,
+    isReload = false,
+    changedFile?: string,
+  ) => {
     await registerManifestHandlers(m, rootDir, {
       importFn: bundledImport,
       registeredLayouts,
       isReload,
+      changedFile,
     });
   };
 
@@ -348,8 +356,12 @@ export async function dev(options: DevOptions = {}): Promise<void> {
         registeredLayouts.clear();
         measure(HMR_PERF.SSR_CLEAR_REGISTRY, HMR_PERF.SSR_CLEAR_REGISTRY);
 
+        // Phase 7.0 B5 wire-up — pass the changed file to registerHandlers
+        // so B's incremental `bundledImport` can cache-hit on routes whose
+        // import graph doesn't contain this file. Wildcard stays undefined
+        // = full invalidation (common-dir path is intentionally cold).
         await withPerf(HMR_PERF.SSR_REGISTER_HANDLERS, () =>
-          registerHandlers(manifest, true),
+          registerHandlers(manifest, true, isWildcard ? undefined : filePath),
         );
 
         // Kitchen Preview에는 파일 경로가 있을 때만 broadcast (wildcard는 파일 경로 없음)
@@ -475,7 +487,8 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       `File: ${path.relative(rootDir, filePath)}`,
       "Action: re-register API handler",
     ]);
-    await registerHandlers(manifest, true);
+    // Phase 7.0 B5 wire-up — single-file change, let incremental path hit.
+    await registerHandlers(manifest, true, filePath);
 
     // Broadcast file change for Kitchen Preview
     hmrServer?.broadcast({
