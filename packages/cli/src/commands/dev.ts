@@ -65,16 +65,19 @@ function logDevEvent(title: string, details: string[] = []): void {
 export async function dev(options: DevOptions = {}): Promise<void> {
   const devStartTime = performance.now();
   const rootDir = resolveFromCwd(".");
-  const config = await validateAndReport(rootDir);
+
+  // Phase 7.1 R1 Agent C — B_gap marker #1: config validation.
+  // `validateAndReport` is the boot seed — lockfile validation, env loading,
+  // and SQLite observability all key off `config`. We must NOT parallelize
+  // this with anything (line 68 in the pre-7.1 dev.ts was strictly serial).
+  const config = await withPerf(HMR_PERF.BOOT_VALIDATE_CONFIG, () =>
+    validateAndReport(rootDir),
+  );
 
   if (!config) {
     printCLIError(CLI_ERROR_CODES.CONFIG_VALIDATION_FAILED);
     process.exit(1);
   }
-
-  // Lockfile validation (config integrity)
-  const { lockfile, lockResult, action, bypassed } = await validateRuntimeLockfile(config, rootDir);
-  handleBlockedLockfile(action, lockResult);
 
   const serverConfig = config.server ?? {};
   const devConfig = config.dev ?? {};
@@ -83,27 +86,93 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   const hooks = config.hooks;
   const HMR_OFFSET = 1;
 
+  // Phase 7.1 R1 Agent C — boot parallelization (Tier 1, -40~70ms).
+  //
+  // `validateAndReport` is the required seed — its `config` feeds the three
+  // independent downstream tasks:
+  //   1. `validateRuntimeLockfile(config, rootDir)` — reads `bun.lock` + runs
+  //      hash validation against config. I/O bound, ~5-10 ms.
+  //   2. `loadEnv({ rootDir, env: "development" })` — reads `.env*` files.
+  //      I/O bound, ~3-8 ms. No runtime dependency on lockfile.
+  //   3. `startSqliteStore(rootDir)` — dynamic-imports `bun:sqlite`, opens
+  //      `.mandu/observability.db`, runs schema. I/O bound, ~20-40 ms.
+  //      Previously awaited on the critical path — the observability store
+  //      is an EventBus subscriber, so boot does not need to block on it.
+  //
+  // Ordering rules (still enforced):
+  //   - `handleBlockedLockfile` MUST run before the server starts (exit 1
+  //     on block). We check it as soon as the lockfile promise settles.
+  //   - Env result log is printed once Promise.allSettled resolves, so the
+  //     ordering of the "Env loaded:" line is preserved relative to other
+  //     boot logs (no interleaving with the SQLite import).
+  //
+  // Failure handling: `Promise.allSettled` is used instead of `Promise.all`
+  // so that a failure in one task (e.g. corrupt `.env`) does not silently
+  // abort the others — each failure is reported individually by its own
+  // handler, matching the pre-7.1 behaviour.
   console.log("Starting dev server...");
 
-  // Print lockfile status
+  mark(HMR_PERF.BOOT_SQLITE_START);
+  // startSqliteStore is fire-and-forget: the SQLite store is an EventBus
+  // subscriber and dropped events before ready return `[]` from
+  // `queryEvents` (sqlite-store.ts:122). Promise is captured for cleanup
+  // and is awaited during `stopSqliteStore` so we don't race on shutdown.
+  const sqliteStorePromise: Promise<void> =
+    devConfig.observability !== false
+      ? import("@mandujs/core/observability")
+          .then((m) => m.startSqliteStore(rootDir))
+          .then(() => {
+            measure(HMR_PERF.BOOT_SQLITE_START, HMR_PERF.BOOT_SQLITE_START);
+          })
+          .catch((err) => {
+            // Silent in "SQLite unavailable" environments (e.g. non-Bun)
+            // but surface the error when perf tracing is on so regressions
+            // don't hide.
+            if (process.env.MANDU_PERF === "1") {
+              console.warn(
+                "[perf] startSqliteStore failed (non-fatal):",
+                err instanceof Error ? err.message : String(err),
+              );
+            }
+          })
+      : Promise.resolve();
+
+  const [lockfileSettled, envSettled] = await Promise.allSettled([
+    withPerf(HMR_PERF.BOOT_LOCKFILE_CHECK, () =>
+      validateRuntimeLockfile(config, rootDir),
+    ),
+    withPerf(HMR_PERF.BOOT_LOAD_ENV, () =>
+      loadEnv({ rootDir, env: "development" }),
+    ),
+  ]);
+
+  // Lockfile validation is mandatory — failures here must not swallow the
+  // original exception or bypass the `handleBlockedLockfile` exit.
+  if (lockfileSettled.status === "rejected") {
+    throw lockfileSettled.reason;
+  }
+  const { lockfile, lockResult, action, bypassed } = lockfileSettled.value;
+  handleBlockedLockfile(action, lockResult);
+
+  // Print lockfile status (preserves pre-7.1 log ordering).
   printRuntimeLockfileStatus(action, bypassed, lockfile, lockResult);
 
-  // Load .env files
-  const envResult = await loadEnv({
-    rootDir,
-    env: "development",
-  });
-
-  if (envResult.loaded.length > 0) {
-    console.log(`Env loaded: ${envResult.loaded.join(", ")}`);
-  }
-
-  // Phase 6-1: SQLite observability store 시작 (옵션)
-  if (devConfig.observability !== false) {
-    try {
-      const { startSqliteStore } = await import("@mandujs/core/observability");
-      await startSqliteStore(rootDir);
-    } catch { /* SQLite 미사용 환경에서는 무시 */ }
+  // Env loading is advisory — a failure prints a warning but never blocks
+  // dev start. This matches the pre-7.1 behaviour where `loadEnv` errors
+  // were accumulated in `envResult.errors` (not thrown).
+  if (envSettled.status === "fulfilled") {
+    const envResult = envSettled.value;
+    if (envResult.loaded.length > 0) {
+      console.log(`Env loaded: ${envResult.loaded.join(", ")}`);
+    }
+  } else {
+    console.warn(
+      `[Mandu] loadEnv failed (non-fatal): ${
+        envSettled.reason instanceof Error
+          ? envSettled.reason.message
+          : String(envSettled.reason)
+      }`,
+    );
   }
 
   // Scan routes (FS Routes first, fallback to spec manifest)
@@ -148,7 +217,9 @@ export async function dev(options: DevOptions = {}): Promise<void> {
         };
 
   if (guardConfig) {
-    const preflightReport = await checkDirectory(guardConfig, rootDir);
+    const preflightReport = await withPerf(HMR_PERF.BOOT_GUARD_PREFLIGHT, () =>
+      checkDirectory(guardConfig, rootDir),
+    );
     if (preflightReport.bySeverity.error > 0) {
       if (guardFormat === "json") {
         console.log(formatReportAsAgentJSON(preflightReport, guardPreset));
@@ -220,12 +291,14 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   let port: number;
   try {
-    const resolved = await resolveAvailablePort(desiredPort, {
-      hostname: serverConfig.hostname,
-      // HMR 활성화 시 항상 HMR 포트 예약 (island 유무 무관)
-      offsets: hmrEnabled ? [0, HMR_OFFSET] : [0],
-      strict: isExplicitPort,
-    });
+    const resolved = await withPerf(HMR_PERF.BOOT_RESOLVE_PORT, () =>
+      resolveAvailablePort(desiredPort, {
+        hostname: serverConfig.hostname,
+        // HMR 활성화 시 항상 HMR 포트 예약 (island 유무 무관)
+        offsets: hmrEnabled ? [0, HMR_OFFSET] : [0],
+        strict: isExplicitPort,
+      }),
+    );
     port = resolved.port;
   } catch (error) {
     if (isExplicitPort) {
@@ -637,9 +710,11 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   if (hmrEnabled) {
     // HMR 서버는 island 유무와 무관하게 시작 (SSR 페이지에서도 CSS/페이지 리로드 필요)
+    mark(HMR_PERF.BOOT_HMR_SERVER);
     hmrServer = createHMRServer(port, {
       hostname: serverConfig.hostname || "localhost",
     });
+    measure(HMR_PERF.BOOT_HMR_SERVER, HMR_PERF.BOOT_HMR_SERVER);
     hmrServer.setRestartHandler(async () => {
       await restartDevServer();
     });
@@ -660,6 +735,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   }
 
   // Start main server
+  mark(HMR_PERF.BOOT_START_SERVER);
   const server = startServer(manifest, {
     port,
     hostname: serverConfig.hostname,
@@ -676,6 +752,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     cache: true,
     managementToken,
   });
+  measure(HMR_PERF.BOOT_START_SERVER, HMR_PERF.BOOT_START_SERVER);
 
   const actualPort = server.server.port ?? port;
   if (actualPort !== port) {
@@ -726,30 +803,32 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   });
 
   // FS Routes real-time watching
-  const routesWatcher = await watchFSRoutes(rootDir, {
-    onChange: async (result) => {
-      // Clear registry (including layout cache)
-      clearDefaultRegistry();
+  const routesWatcher = await withPerf(HMR_PERF.BOOT_WATCH_FS_ROUTES, () =>
+    watchFSRoutes(rootDir, {
+      onChange: async (result) => {
+        // Clear registry (including layout cache)
+        clearDefaultRegistry();
 
-      // Update server with new manifest
-      manifest = result.manifest;
-      logDevEvent("Route manifest updated", [
-        `Routes: ${manifest.routes.length}`,
-        "Browser: full reload",
-      ]);
+        // Update server with new manifest
+        manifest = result.manifest;
+        logDevEvent("Route manifest updated", [
+          `Routes: ${manifest.routes.length}`,
+          "Browser: full reload",
+        ]);
 
-      // Re-register routes (isReload = true)
-      await registerHandlers(manifest, true);
+        // Re-register routes (isReload = true)
+        await registerHandlers(manifest, true);
 
-      // HMR broadcast (full reload)
-      if (hmrServer) {
-        hmrServer.broadcast({
-          type: "reload",
-          data: { timestamp: Date.now() },
-        });
-      }
-    },
-  });
+        // HMR broadcast (full reload)
+        if (hmrServer) {
+          hmrServer.broadcast({
+            type: "reload",
+            data: { timestamp: Date.now() },
+          });
+        }
+      },
+    }),
+  );
 
   // Architecture Guard real-time watch (optional)
   let archGuardWatcher: ReturnType<typeof createGuardWatcher> | null = null;
@@ -768,7 +847,17 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     archGuardWatcher?.close();
     shortcutCleanup?.();
     // Phase 6-1: SQLite store 정리
-    void import("@mandujs/core/observability").then((m) => m.stopSqliteStore?.()).catch(() => {});
+    // Phase 7.1 R1 Agent C — wait for the fire-and-forget startSqliteStore
+    // promise before calling stop. If the user hits Ctrl-C while the store
+    // is still initializing, stopSqliteStore would be a no-op (dbInstance
+    // still null), leaking the file descriptor. Awaiting first ensures we
+    // either (a) stop a fully-open db, or (b) the promise rejection path
+    // ran and stop is still a safe no-op.
+    void sqliteStorePromise
+      .then(() =>
+        import("@mandujs/core/observability").then((m) => m.stopSqliteStore?.()),
+      )
+      .catch(() => {});
     void removeRuntimeControl(rootDir).finally(() => {
       process.exit(0);
     });

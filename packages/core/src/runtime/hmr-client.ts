@@ -199,6 +199,16 @@ export function createManduHot(moduleUrl: string): ManduHot {
  * self-accept. Called when the server says "module X was replaced" and
  * X was registered as self-accepting.
  *
+ * Phase 7.1 B-4 extension: after the user-supplied accept callback
+ * runs, if the module URL is registered with the browser-side Fast
+ * Refresh registry (`window.__MANDU_HMR__.isBoundary`), queue a
+ * `performReactRefresh()`. This is how Mandu composes Bun's source
+ * transform (`$RefreshReg$` / `$RefreshSig$` injection) with React's
+ * component-tree swap logic — without it, the new module loads but
+ * React doesn't know to re-render. Coalescing is handled inside
+ * `performReactRefresh` so multiple dispatches in the same tick yield a
+ * single refresh pass.
+ *
  * Returns `true` if the module had a self-accept registration and the
  * callback ran (possibly a no-op), `false` if there was no handler
  * (meaning the caller should escalate to a full reload).
@@ -229,6 +239,35 @@ export function dispatchReplacement(
   rec.disposeCallbacks = [];
 
   cb(newModule);
+
+  // Phase 7.1 B-4: trigger React Fast Refresh if this module was
+  // registered as a boundary by the bundler-emitted onLoad epilogue.
+  // The guard is defensive: SSR (no window), missing preamble, and
+  // production builds (no `__MANDU_HMR__` installed) all short-circuit
+  // without throwing. Wrapped in try/catch because the refresh runtime
+  // is third-party code and we must not wedge the HMR client if it
+  // throws.
+  try {
+    const w =
+      typeof globalThis !== "undefined"
+        ? (globalThis as unknown as {
+            __MANDU_HMR__?: {
+              isBoundary(url: string): boolean;
+              performReactRefresh(): void;
+            };
+          })
+        : null;
+    const hmr = w?.__MANDU_HMR__;
+    if (hmr && hmr.isBoundary(moduleUrl)) {
+      hmr.performReactRefresh();
+    }
+  } catch (err) {
+    console.error(
+      `[Mandu HMR] Fast Refresh dispatch for ${moduleUrl} threw:`,
+      err,
+    );
+  }
+
   return true;
 }
 

@@ -8,6 +8,7 @@
         "chokidar": "^5.0.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
+        "react-refresh": "^0.18.0",
         "zod": "^3.22.0",
       },
       "devDependencies": {
@@ -44,7 +45,7 @@
     },
     "demo/auth-starter": {
       "name": "mandu-auth-starter",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -98,7 +99,7 @@
     },
     "packages/ate": {
       "name": "@mandujs/ate",
-      "version": "0.18.1",
+      "version": "0.18.2",
       "dependencies": {
         "fast-glob": "catalog:",
         "ts-morph": "^26.0.0",
@@ -110,7 +111,7 @@
     },
     "packages/cli": {
       "name": "@mandujs/cli",
-      "version": "0.22.1",
+      "version": "0.23.0",
       "bin": {
         "mandu": "src/main.ts",
       },
@@ -124,7 +125,7 @@
     },
     "packages/core": {
       "name": "@mandujs/core",
-      "version": "0.21.0",
+      "version": "0.22.0",
       "dependencies": {
         "chokidar": "^5.0.0",
         "fast-glob": "catalog:",
@@ -147,7 +148,7 @@
     },
     "packages/mcp": {
       "name": "@mandujs/mcp",
-      "version": "0.19.5",
+      "version": "0.19.6",
       "bin": {
         "mandu-mcp": "./src/index.ts",
         "mandujs-mcp": "./src/index.ts",
@@ -161,7 +162,7 @@
     },
     "packages/skills": {
       "name": "@mandujs/skills",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "bin": {
         "mandu-skills": "./src/cli.ts",
       },
@@ -684,6 +685,8 @@
     "react": ["react@19.2.4", "", {}, "sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ=="],
 
     "react-dom": ["react-dom@19.2.4", "", { "dependencies": { "scheduler": "0.27.0" }, "peerDependencies": { "react": "19.2.4" } }, "sha512-AXJdLo8kgMbimY95O2aKQqsz2iWi9jMgKJhRBAxECE4IFxfcazB2LmzloIoibJI3C12IlY20+KFaLv+71bUJeQ=="],
+
+    "react-refresh": ["react-refresh@0.18.0", "", {}, "sha512-QgT5//D3jfjJb6Gsjxv0Slpj23ip+HtOpnNgnb2S5zU3CB26G/IDPGoy4RJB42wzFE46DRsstbW6tKHoKbhAxw=="],
 
     "read-yaml-file": ["read-yaml-file@1.1.0", "", { "dependencies": { "graceful-fs": "^4.1.5", "js-yaml": "^3.6.1", "pify": "^4.0.1", "strip-bom": "^3.0.0" } }, "sha512-VIMnQi/Z4HT2Fxuwg5KrY174U1VdUIASQVWXXyqtNRtxSr9IYkn1rsI6Tb6HsrHCmB7gVpNwX6JxPTHcH6IoTA=="],
 

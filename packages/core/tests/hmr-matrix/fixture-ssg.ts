@@ -88,6 +88,12 @@ export function scaffoldSSG(rootDir: string): RoutesManifest {
   // Manifest — single SSR-only route with `hydration.strategy: "none"`.
   // `componentModule` is required so the watcher registers `app/page.tsx`
   // in `serverModuleSet`; without it the SSR change path is a no-op.
+  //
+  // Phase 7.1 — `slotModule` is set so `startDevBundler` registers
+  // `app/page.slot.ts` in `serverModuleSet`. The slot file itself is
+  // created above. Before Phase 7.1 this field was omitted, and the
+  // bundler had no way to see slot edits — see `KNOWN_BUNDLER_GAPS`
+  // in matrix.spec.ts (now with `"app/slot.ts"` removed).
   return {
     version: 1,
     routes: [
@@ -97,6 +103,7 @@ export function scaffoldSSG(rootDir: string): RoutesManifest {
         pattern: "/",
         module: "app/page.tsx",
         componentModule: "app/page.tsx",
+        slotModule: "app/page.slot.ts",
         layoutChain: ["app/layout.tsx"],
         hydration: { strategy: "none" },
       },

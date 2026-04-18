@@ -74,6 +74,13 @@ export function scaffoldHybrid(rootDir: string): RoutesManifest {
   // Manifest: one island route (for island tests) + implicit SSR fallback.
   // Setting `clientModule` makes `startDevBundler` register the path in
   // `clientModuleToRoute` so the watcher dispatches island-update signals.
+  //
+  // Phase 7.1 — `slotModule` is set so `startDevBundler` registers
+  // `app/page.slot.ts` in `serverModuleSet`. Slot changes in a hybrid
+  // project fire `onSSRChange(filePath)` which the CLI composes into a
+  // full-reload (slot-loaded data is embedded in the SSR HTML, so the
+  // browser state is invalidated regardless of whether there's an
+  // island on the page).
   return {
     version: 1,
     routes: [
@@ -83,6 +90,7 @@ export function scaffoldHybrid(rootDir: string): RoutesManifest {
         pattern: "/",
         module: "app/page.tsx",
         componentModule: "app/page.tsx",
+        slotModule: "app/page.slot.ts",
         clientModule: "app/widget.client.tsx",
         layoutChain: ["app/layout.tsx"],
         hydration: {

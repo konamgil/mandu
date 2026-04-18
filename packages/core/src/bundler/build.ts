@@ -15,16 +15,42 @@ import type {
 } from "./types";
 import { HYDRATION } from "../constants";
 import { safeBuild } from "./safe-build";
+import { fastRefreshPlugin } from "./fast-refresh-plugin";
 import { mark, measure } from "../perf";
 import path from "path";
 import fs from "fs/promises";
 
-/** Scan for *.island.tsx / *.island.ts files across hydrated route directories. */
+/**
+ * Scan for *.island.tsx / *.island.ts files across hydrated route directories.
+ *
+ * Phase 7.1 R1 Agent C — per-island conditional skip defence.
+ *
+ * Callers (the two `buildClientBundles` paths at L1643 and L1817) feed us
+ * `hydratedRoutes` (from `getHydratedRoutes`), which already filters for
+ * `route.kind === "page" && route.clientModule && needsHydration(route)`.
+ * We re-assert the `needsHydration` predicate here for two reasons:
+ *
+ *   1. Defence-in-depth — if a future caller forgets the filter, we still
+ *      skip routes with `hydration.strategy === "none"`. Each skipped route
+ *      saves one `fs.readdir` + O(files) regex matches (~1-2 ms on Windows
+ *      NTFS per skipped dir, per diagnostic R0.3).
+ *
+ *   2. Cold-start regression guard — the R0 → R3 F breakdown attributes
+ *      +40-80 ms of cold start to per-island splitting (commit b503c36).
+ *      The unit test `per-island-scan-skips-non-hydrated` pins this so a
+ *      refactor cannot silently re-introduce the scan overhead for routes
+ *      that opt out of hydration.
+ */
 async function scanIslandFiles(routes: RouteSpec[], rootDir: string): Promise<IslandFileEntry[]> {
   const entries: IslandFileEntry[] = [];
   const seenDirs = new Set<string>();
 
   for (const route of routes) {
+    // Defensive guard — see the block comment above for rationale. Without
+    // this, a hypothetical caller passing `manifest.routes` directly would
+    // readdir every page route, including pure-SSR ones.
+    if (!needsHydration(route)) continue;
+
     const dir = path.dirname(path.join(rootDir, route.componentModule ?? route.module));
     if (seenDirs.has(dir)) continue;
     seenDirs.add(dir);
@@ -47,12 +73,35 @@ async function scanIslandFiles(routes: RouteSpec[], rootDir: string): Promise<Is
   return entries;
 }
 
+/**
+ * Test-only accessor for the island-file scanner. Allows the cold-start
+ * test suite (`__tests__/cold-start.test.ts`) to assert the per-island
+ * conditional skip without having to spin up a full `buildClientBundles`
+ * invocation (which would also run `safeBuild`).
+ *
+ * @internal
+ */
+export const _testOnly_scanIslandFiles = scanIslandFiles;
+
+/**
+ * Test-only accessor for the hydrated-routes filter. Mirrors the rationale
+ * above — lets tests verify that `getHydratedRoutes` really does drop
+ * `hydration.strategy: "none"` routes without rebuilding its logic.
+ *
+ * @internal
+ */
+export const _testOnly_getHydratedRoutes = getHydratedRoutes;
+
 /** Build a single per-island bundle. */
 async function buildPerIslandBundle(
   entry: IslandFileEntry, outDir: string, options: BundlerOptions
 ): Promise<{ name: string; js: string; route: string; priority: IslandFileEntry["priority"] }> {
   const entryPath = path.join(outDir, `_entry_island_${entry.name}.js`);
   const outputName = `${entry.name}.island.js`;
+  // Phase 7.1 B-1/B-4: wire Bun's native React Fast Refresh transform +
+  // Mandu's boundary injection plugin — but only in dev. Production
+  // bundles stay clean of `$RefreshReg$` / `$RefreshSig$` stubs.
+  const isDev = (options.minify ?? process.env.NODE_ENV === "production") === false;
   try {
     await Bun.write(entryPath, generateIslandEntry(entry.name, entry.filePath));
     const result = await safeBuild({
@@ -62,6 +111,8 @@ async function buildPerIslandBundle(
       minify: options.minify ?? process.env.NODE_ENV === "production",
       sourcemap: options.sourcemap ? "external" : "none",
       target: "browser",
+      ...(isDev ? { reactFastRefresh: true } : {}),
+      plugins: isDev ? [fastRefreshPlugin()] : [],
       external: ["react", "react-dom", "react-dom/client", ...(options.external || [])],
       define: { "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"), ...options.define },
     });
@@ -1163,7 +1214,71 @@ interface VendorBuildResult {
   reactDomClient: string;
   jsxRuntime: string;
   jsxDevRuntime: string;
+  /**
+   * Phase 7.1 B-2: bundled `react-refresh/runtime` — emitted ONLY in
+   * dev mode. Empty string in production. Consumed by the HTML
+   * preamble (`bundler/dev.ts`) via a dynamic import.
+   */
+  reactRefreshRuntime: string;
+  /**
+   * Phase 7.1 B-2: Mandu's `__MANDU_HMR__` glue module — also dev-only.
+   * Imported once by the HTML preamble which then calls `installGlobal`
+   * with the already-loaded refresh runtime.
+   */
+  fastRefreshRuntime: string;
   errors: string[];
+}
+
+/**
+ * Phase 7.1 B-2 — source generator for the `react-refresh/runtime` shim.
+ *
+ * The shim simply re-exports the upstream module under a default export
+ * that `fast-refresh-runtime.ts`'s `installGlobal({ runtimeImport })`
+ * can consume. Mirrors the pattern Vite uses for its `/@react-refresh`
+ * endpoint.
+ */
+function generateReactRefreshRuntimeShimSource(): string {
+  return `
+/**
+ * Mandu React Refresh Runtime Shim (Generated, dev-only)
+ * Re-exports the upstream react-refresh/runtime so the bundler can
+ * pre-bundle it without leaking the CommonJS entry into the app graph.
+ */
+import * as Runtime from 'react-refresh/runtime';
+export const injectIntoGlobalHook = Runtime.injectIntoGlobalHook;
+export const register = Runtime.register;
+export const createSignatureFunctionForTransform = Runtime.createSignatureFunctionForTransform;
+export const performReactRefresh = Runtime.performReactRefresh;
+export default {
+  injectIntoGlobalHook,
+  register,
+  createSignatureFunctionForTransform,
+  performReactRefresh,
+};
+`;
+}
+
+/**
+ * Phase 7.1 B-2 — source generator for the Mandu Fast Refresh glue.
+ *
+ * This re-exports `installGlobal` / `manduHMR` / helpers from
+ * `runtime/fast-refresh-runtime.ts`. By routing through a generated
+ * shim we keep the absolute path to core resolved once at build time
+ * (same pattern as `_devtools.js`).
+ */
+function generateFastRefreshRuntimeShimSource(): string {
+  const runtimePath = path
+    .resolve(import.meta.dir, "..", "runtime", "fast-refresh-runtime.ts")
+    .replace(/\\/g, "/");
+  return `
+/**
+ * Mandu Fast Refresh Runtime Shim (Generated, dev-only)
+ * Wires the react-refresh runtime to window.__MANDU_HMR__.
+ */
+export * from "${runtimePath}";
+import { installGlobal } from "${runtimePath}";
+export { installGlobal };
+`;
 }
 
 /**
@@ -1175,14 +1290,29 @@ async function buildVendorShims(
   options: BundlerOptions
 ): Promise<VendorBuildResult> {
   const errors: string[] = [];
-  type VendorShimKey = "react" | "reactDom" | "reactDomClient" | "jsxRuntime" | "jsxDevRuntime";
+  type VendorShimKey =
+    | "react"
+    | "reactDom"
+    | "reactDomClient"
+    | "jsxRuntime"
+    | "jsxDevRuntime"
+    | "reactRefreshRuntime"
+    | "fastRefreshRuntime";
   const results: Record<VendorShimKey, string> = {
     react: "",
     reactDom: "",
     reactDomClient: "",
     jsxRuntime: "",
     jsxDevRuntime: "",
+    reactRefreshRuntime: "",
+    fastRefreshRuntime: "",
   };
+
+  // Phase 7.1 B-2: dev-only Fast Refresh shims. In production we skip
+  // them entirely so `react-refresh/runtime` is never bundled and the
+  // attack surface / bundle size regressions stay zero for deploys.
+  const isDev =
+    (options.minify ?? process.env.NODE_ENV === "production") === false;
 
   const shims: Array<{ name: string; source: string; key: VendorShimKey }> = [
     { name: "_react", source: generateReactShimSource(), key: "react" },
@@ -1191,6 +1321,20 @@ async function buildVendorShims(
     { name: "_jsx-runtime", source: generateJsxRuntimeShimSource(), key: "jsxRuntime" },
     { name: "_jsx-dev-runtime", source: generateJsxDevRuntimeShimSource(), key: "jsxDevRuntime" },
   ];
+  if (isDev) {
+    shims.push(
+      {
+        name: "_vendor-react-refresh",
+        source: generateReactRefreshRuntimeShimSource(),
+        key: "reactRefreshRuntime",
+      },
+      {
+        name: "_fast-refresh-runtime",
+        source: generateFastRefreshRuntimeShimSource(),
+        key: "fastRefreshRuntime",
+      },
+    );
+  }
 
   const buildShim = async (
     shim: { name: string; source: string; key: VendorShimKey }
@@ -1209,6 +1353,9 @@ async function buildVendorShims(
       } else if (shim.name === "_jsx-runtime" || shim.name === "_jsx-dev-runtime") {
         shimExternal = ["react"];
       }
+      // `_vendor-react-refresh` and `_fast-refresh-runtime` are
+      // self-contained: we WANT react-refresh bundled in so the
+      // preamble's single dynamic import pulls the whole graph.
 
       const result = await safeBuild({
         entrypoints: [srcPath],
@@ -1263,6 +1410,8 @@ async function buildVendorShims(
     reactDomClient: results.reactDomClient,
     jsxRuntime: results.jsxRuntime,
     jsxDevRuntime: results.jsxDevRuntime,
+    reactRefreshRuntime: results.reactRefreshRuntime,
+    fastRefreshRuntime: results.fastRefreshRuntime,
     errors,
   };
 }
@@ -1280,6 +1429,10 @@ async function buildIsland(
   const entryPath = path.join(outDir, `_entry_${route.id}.js`);
   const outputName = `${route.id}.island.js`;
 
+  // Phase 7.1 B-1/B-4: wire native Fast Refresh transform + Mandu's
+  // boundary injection plugin. Dev-only; prod bundles remain clean.
+  const isDev =
+    (options.minify ?? process.env.NODE_ENV === "production") === false;
   try {
     // 엔트리 래퍼 생성
     await Bun.write(entryPath, generateIslandEntry(route.id, clientModulePath));
@@ -1294,6 +1447,8 @@ async function buildIsland(
       sourcemap: options.sourcemap ? "external" : "none",
       target: "browser",
       splitting: options.splitting ?? (process.env.NODE_ENV === "production"),
+      ...(isDev ? { reactFastRefresh: true } : {}),
+      plugins: isDev ? [fastRefreshPlugin()] : [],
       external: ["react", "react-dom", "react-dom/client", ...(options.external || [])],
       define: {
         "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),
@@ -1387,6 +1542,17 @@ function createBundleManifest(
     }
   }
 
+  // Phase 7.1 B-2: expose Fast Refresh dev bundles so the HTML
+  // preamble can inject a dynamic import pointing at them. Only
+  // populated when buildVendorShims ran in dev mode.
+  const fastRefresh =
+    vendorResult.reactRefreshRuntime && vendorResult.fastRefreshRuntime
+      ? {
+          runtime: vendorResult.reactRefreshRuntime,
+          glue: vendorResult.fastRefreshRuntime,
+        }
+      : undefined;
+
   return {
     version: 1,
     buildTime: new Date().toISOString(),
@@ -1397,6 +1563,7 @@ function createBundleManifest(
       runtime: runtimePath,
       vendor: vendorResult.react, // primary vendor for backwards compatibility
       router: routerPath, // Client-side Router
+      ...(fastRefresh ? { fastRefresh } : {}),
     },
     importMap: {
       imports: {

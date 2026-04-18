@@ -73,6 +73,17 @@ export interface BundleManifest {
     vendor: string;
     /** Client-side Router 런타임 */
     router?: string;
+    /**
+     * Phase 7.1 B-2: dev-only Fast Refresh assets. Absent in prod
+     * manifests so the HTML preamble short-circuits without trying to
+     * load a nonexistent URL.
+     */
+    fastRefresh?: {
+      /** Bundled `react-refresh/runtime` (e.g. `/.mandu/client/_vendor-react-refresh.js`). */
+      runtime: string;
+      /** Mandu's glue module exposing `installGlobal` / `__MANDU_HMR__`. */
+      glue: string;
+    };
   };
   /** Import map for bare specifiers (react, react-dom, etc.) */
   importMap?: {

@@ -102,6 +102,10 @@ export function scaffoldFull(rootDir: string): RoutesManifest {
     "export const resource = { name: 'sample', fields: [] };\n",
   );
 
+  // Phase 7.1 — `slotModule` on `home` so `startDevBundler` registers
+  // `app/page.slot.ts` in `serverModuleSet`. The `about` route has no
+  // slot in this fixture (testing the falsy-skip branch — a route
+  // without `slotModule` must be registered normally without errors).
   return {
     version: 1,
     routes: [
@@ -111,6 +115,7 @@ export function scaffoldFull(rootDir: string): RoutesManifest {
         pattern: "/",
         module: "app/page.tsx",
         componentModule: "app/page.tsx",
+        slotModule: "app/page.slot.ts",
         clientModule: "app/widget.client.tsx",
         layoutChain: ["app/layout.tsx"],
         hydration: {

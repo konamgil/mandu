@@ -105,6 +105,42 @@ export const HMR_PERF = {
 
   /** Graph rebuild after new build — updates descendants map. */
   INCR_GRAPH_UPDATE: "incr:graph-update",
+
+  // ─── Cold boot path (Phase 7.1 B_gap — R0.3 diagnostic identified 9
+  //     unmeasured stages accounting for 150~210 ms of the 626 ms cold
+  //     start. Instrumenting these unlocks Tier 1 / Tier 2 optimizations.) ─
+
+  /** `validateAndReport(rootDir)` — mandu.config.ts load + schema check. */
+  BOOT_VALIDATE_CONFIG: "boot:validate-config",
+
+  /** `validateRuntimeLockfile` — bun.lock check + advisory warnings. */
+  BOOT_LOCKFILE_CHECK: "boot:lockfile-check",
+
+  /** `loadEnv({ rootDir, env: "development" })` — .env / .env.development. */
+  BOOT_LOAD_ENV: "boot:load-env",
+
+  /** `startSqliteStore(rootDir)` — observability store (optional). Should
+   *  become fire-and-forget in Tier 1 so it doesn't block ready. */
+  BOOT_SQLITE_START: "boot:sqlite-start",
+
+  /** `checkDirectory(guardConfig, rootDir)` — Architecture Guard preflight. */
+  BOOT_GUARD_PREFLIGHT: "boot:guard-preflight",
+
+  /** `resolveAvailablePort(desiredPort, ...)` — port probe (may be slow on
+   *  Windows due to TIME_WAIT; Phase 0 already added retry). */
+  BOOT_RESOLVE_PORT: "boot:resolve-port",
+
+  /** `createHMRServer(port, options?)` — Bun.serve + WebSocket + replay
+   *  buffer setup. Phase 7.0.R4 added Origin allowlist + rate limit. */
+  BOOT_HMR_SERVER: "boot:hmr-server",
+
+  /** `startServer(manifest, ...)` — Bun.serve for the actual app. */
+  BOOT_START_SERVER: "boot:start-server",
+
+  /** `watchFSRoutes(...)` — chokidar watcher for spec/slots + app/ routes.
+   *  Phase 7.1.A may not be able to remove this; it tracks new-route
+   *  creation which `_doBuild` does not. */
+  BOOT_WATCH_FS_ROUTES: "boot:watch-fs-routes",
 } as const;
 
 /**

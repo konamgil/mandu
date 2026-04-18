@@ -85,26 +85,23 @@ import { scaffoldFull } from "./fixture-full";
  * file-type classifier (`_doBuild` + `classifyBatch`) falls through to a
  * silent drop for them.
  *
- * Items currently listed:
+ * Historical entries (closed):
  *
- *   - `"app/slot.ts"` — `.slot.ts` has no match in the dispatch ladder:
- *     not common-dir, not server module (slot files are NOT added to
- *     `serverModuleSet` — the bundler registers `componentModule` /
- *     `layoutChain` only), not client module, not middleware, not
- *     config/env/resource. The silent drop is a known gap that the CLI
- *     works around via the chokidar-backed `watchFSRoutes` (full manifest
- *     re-scan) — that watcher runs OUTSIDE `startDevBundler`. We mark
- *     these cells as skipped with a GAP prefix so the matrix grid stays
- *     complete while surfacing the gap for Phase 7.1.
+ *   - `"app/slot.ts"` — closed by Phase 7.1 R1 Agent A. The bundler now
+ *     registers `route.slotModule` into `serverModuleSet` (see
+ *     `packages/core/src/bundler/dev.ts` around the manifest-iteration
+ *     block), so slot edits surface through the existing
+ *     `onSSRChange(filePath)` path. The fixtures were updated in the
+ *     same round to declare `slotModule` in their manifest routes; test
+ *     coverage lives in `packages/core/src/bundler/__tests__/slot-dispatch.test.ts`.
  *
- * When Agent A/D/F closes a gap by extending the dispatch ladder, simply
- * remove the kind from this set and the cell becomes live again. This is
- * intentional: the dispatch table is the **single source of truth** for
- * which cells the bundler can test directly.
+ * When a new gap is introduced (or discovered), add the kind back to
+ * this set and it becomes a skipped cell with a GAP prefix — the matrix
+ * grid stays complete while surfacing the gap for a future round. The
+ * dispatch table is the **single source of truth** for which cells the
+ * bundler can test directly.
  */
-const KNOWN_BUNDLER_GAPS: ReadonlySet<ChangeKind> = new Set([
-  "app/slot.ts",
-]);
+const KNOWN_BUNDLER_GAPS: ReadonlySet<ChangeKind> = new Set<ChangeKind>();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Invariant guards — must pass before any cell runs

@@ -425,6 +425,38 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
       }
     }
 
+    // Phase 7.1 R1 Agent A — slot dispatch integration (Option B).
+    //
+    // Prior to Phase 7.1 the bundler ignored `.slot.ts(x)` edits: they
+    // hit no classification bucket and silently fell through to a
+    // no-op in `_doBuild`. The CLI's chokidar-backed `watchFSRoutes`
+    // worked around the gap by re-scanning the manifest, but that
+    // path sits OUTSIDE `startDevBundler` and is not exercised by the
+    // HMR matrix (see `packages/core/tests/hmr-matrix/matrix.spec.ts`
+    // `KNOWN_BUNDLER_GAPS`).
+    //
+    // Option B — register the slot path into the existing
+    // `serverModuleSet`. Semantically a slot IS an SSR-side data
+    // loader (it runs before `componentModule` on the server to
+    // populate typed props), so co-locating the dispatch with page /
+    // layout is consistent. The existing `onSSRChange(filePath)` path
+    // downstream in `_doBuild` already delivers the right signal —
+    // the CLI's `handleSSRChange` will re-register the route handler
+    // and broadcast a full-reload.
+    //
+    // We also add the slot's directory to `watchDirs` so fs.watch
+    // actually delivers the event. For spec/slots/*.slot.ts the
+    // `slotsDir` block below already covers this, but user-authored
+    // colocated slots (e.g. `app/page.slot.ts`) live in app/ which is
+    // picked up via the page's `watchDirs.add(path.dirname(absPath))`
+    // line above — still, making the slot add explicit here keeps
+    // the dispatch path honest against future manifest topologies.
+    if (route.slotModule) {
+      const absPath = path.resolve(rootDir, route.slotModule);
+      serverModuleSet.add(normalizeFsPath(absPath));
+      watchDirs.add(path.dirname(absPath));
+    }
+
     // Track API route modules for hot-reload
     if (route.kind === "api" && route.module) {
       const absPath = path.resolve(rootDir, route.module);
@@ -1685,6 +1717,88 @@ export function createHMRServer(
       oldestId: replayBuffer.length > 0 ? replayBuffer[0]!.id : null,
     }),
   };
+}
+
+/**
+ * Phase 7.1 B-3 — HTML preamble for React Fast Refresh.
+ *
+ * Emitted by the SSR renderer in dev mode, **before** any island JS
+ * evaluates. Two concerns, one <script>:
+ *
+ *   1. Install inert stubs for `$RefreshReg$` / `$RefreshSig$` on
+ *      `window`. Bun's `reactFastRefresh: true` transform inserts calls
+ *      to these at the top of every transformed module; if they are
+ *      undefined when the module body runs, we get a runtime error and
+ *      the island never hydrates. Vite's preamble does the same inline
+ *      stub install for the same reason.
+ *
+ *   2. Fire a dynamic `import()` of the bundled glue (`_fast-refresh-
+ *      runtime.js`), which in turn `await`s the real `react-refresh/
+ *      runtime`, installs `window.__MANDU_HMR__`, and upgrades the
+ *      stubs to live wrappers that forward to the refresh runtime. The
+ *      race between "module evaluates and calls `$RefreshReg$`" and
+ *      "glue has upgraded the stubs" is benign — registrations that
+ *      land on the stub are simply no-ops, which at worst means the
+ *      very first mount isn't tracked. Subsequent hot swaps land on
+ *      the live wrappers and work normally.
+ *
+ * The emitted script is **inline** (no `type="module"`, no external
+ * src). This is deliberate: the stubs must exist before *any* module
+ * script runs, and inline execution blocks the parser. The dynamic
+ * import inside the inline script is non-blocking so we don't stall
+ * First Contentful Paint.
+ *
+ * CSP note: the inline <script> uses no `eval` or `new Function`; it
+ * only calls `Object.assign`, defines functions, and initiates an
+ * `import()`. All of these are permitted under `script-src 'self'
+ * 'unsafe-inline'` which is Mandu's default dev CSP (production CSP
+ * forbids `unsafe-inline`, but this preamble is dev-only).
+ *
+ * `glueUrl` and `runtimeUrl` come from the build manifest's
+ * `shared.fastRefresh` block (populated only in dev). Both must be
+ * absolute URLs served from the same origin as the HTML, which our
+ * bundler always guarantees (`/.mandu/client/...`).
+ */
+export function generateFastRefreshPreamble(
+  glueUrl: string,
+  runtimeUrl: string,
+): string {
+  // Both URLs must be non-empty. If either is missing (e.g. vendor
+  // shim build failed), the caller (ssr.ts) should skip this preamble
+  // entirely — defensive guard here keeps the output valid regardless.
+  if (!glueUrl || !runtimeUrl) {
+    return `<script>/* Mandu Fast Refresh: missing runtime assets, preamble skipped */</script>`;
+  }
+  // JSON.stringify escapes the URLs safely for inline `<script>`:
+  //   - quotes produce a valid JS string literal
+  //   - forward-slashes / backslashes are handled
+  // We also `split('</')` to avoid a stray `</script>` sequence in the
+  // URL bytes breaking the enclosing tag. This is the same defense
+  // Vite uses in its own preamble emitter.
+  const glueLit = JSON.stringify(glueUrl).split("</").join('<"+"/');
+  const runtimeLit = JSON.stringify(runtimeUrl).split("</").join('<"+"/');
+  return `<script>
+// Phase 7.1 B-3 React Fast Refresh preamble (Mandu dev-only)
+(function () {
+  if (typeof window === "undefined") return;
+  // Install inert stubs so transformed modules that run BEFORE the
+  // async runtime upgrade don't hit ReferenceError on $RefreshReg$.
+  if (!window.$RefreshReg$) window.$RefreshReg$ = function () {};
+  if (!window.$RefreshSig$) window.$RefreshSig$ = function () { return function (t) { return t; }; };
+  // Async-load the glue; failures are reported but never throw out of
+  // the preamble — a missing runtime degrades to full-reload HMR.
+  import(${glueLit})
+    .then(function (mod) {
+      var runtimeImport = function () { return import(${runtimeLit}); };
+      if (mod && typeof mod.installGlobal === "function") {
+        return mod.installGlobal({ runtimeImport: runtimeImport });
+      }
+    })
+    .catch(function (err) {
+      console.error("[Mandu Fast Refresh] preamble failed:", err);
+    });
+})();
+</script>`;
 }
 
 /**
