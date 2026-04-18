@@ -637,7 +637,9 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   if (hmrEnabled) {
     // HMR 서버는 island 유무와 무관하게 시작 (SSR 페이지에서도 CSS/페이지 리로드 필요)
-    hmrServer = createHMRServer(port);
+    hmrServer = createHMRServer(port, {
+      hostname: serverConfig.hostname || "localhost",
+    });
     hmrServer.setRestartHandler(async () => {
       await restartDevServer();
     });
@@ -679,7 +681,9 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   if (actualPort !== port) {
     if (hmrServer) {
       hmrServer.close();
-      hmrServer = createHMRServer(actualPort);
+      hmrServer = createHMRServer(actualPort, {
+        hostname: serverConfig.hostname || "localhost",
+      });
       hmrServer.setRestartHandler(async () => {
         await restartDevServer();
       });

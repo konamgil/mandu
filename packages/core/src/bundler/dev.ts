@@ -1245,9 +1245,45 @@ export interface HMRMessage {
  * The classic `broadcast(HMRMessage)` API is preserved as the internal
  * Mandu format; both broadcast channels share the same WebSocket.
  */
-export function createHMRServer(port: number): HMRServer {
+
+/**
+ * Phase 7.0.S — HMR security options (C-01 / C-03 / C-04 defense).
+ *
+ * The dev HMR WebSocket + `/restart` endpoint bind to loopback by default
+ * and reject cross-origin connections. Remote-dev scenarios (container,
+ * VM, tunnel) go through the Phase 7.1+ explicit-token path.
+ */
+export interface HMRServerOptions {
+  /**
+   * Network interface to bind. Defaults to "localhost" (loopback only).
+   * Override to "0.0.0.0" ONLY for remote-dev scenarios paired with
+   * explicit `allowedOrigins`.
+   */
+  hostname?: string;
+  /**
+   * Additional origins (beyond `http://localhost:${port}` and
+   * `http://127.0.0.1:${port}`) that may establish WebSocket connections
+   * or POST /restart. Required when binding to non-loopback.
+   */
+  allowedOrigins?: readonly string[];
+}
+
+export function createHMRServer(
+  port: number,
+  options: HMRServerOptions = {},
+): HMRServer {
   const clients = new Set<{ send: (data: string) => void; close: () => void }>();
   const hmrPort = port + PORTS.HMR_OFFSET;
+  const hostname = options.hostname ?? "localhost";
+  // Build Origin allowlist. Same-origin (main dev server) is always allowed.
+  // Both `localhost` and `127.0.0.1` forms are included because browsers
+  // resolve `localhost` ambiguously (IPv4 vs IPv6) and some OS stacks
+  // return one vs the other.
+  const allowedOrigins = new Set<string>([
+    `http://localhost:${port}`,
+    `http://127.0.0.1:${port}`,
+    ...(options.allowedOrigins ?? []),
+  ]);
   let restartHandler: (() => Promise<void>) | null = null;
 
   // ─── Replay buffer (B8) ────────────────────────────────────────────────
@@ -1382,14 +1418,40 @@ export function createHMRServer(port: number): HMRServer {
     since: number | null;
   }
 
+  // Phase 7.0.S — per-connection `invalidate` rate limit state.
+  // WeakMap keyed by the WS object so entries are GC'd when the socket
+  // closes; no manual cleanup needed. Per-connection (not global) so one
+  // abusive client cannot DoS the rate limit for legitimate ones.
+  const invalidateCounters = new WeakMap<object, { count: number; windowStart: number }>();
+
   const server = Bun.serve<WSData, never>({
     port: hmrPort,
+    hostname,  // Phase 7.0.S C-03 fix: bind to loopback by default.
     async fetch(req, server) {
       const url = new URL(req.url);
 
       // CORS preflight
       if (req.method === "OPTIONS") {
         return new Response(null, { status: 204, headers: corsHeaders });
+      }
+
+      // Phase 7.0.S Origin allowlist check (C-01 / C-04 defense).
+      //
+      // CSWSH (Cross-Site WebSocket Hijacking) defense: browsers DO NOT
+      // enforce same-origin for WebSocket connections. Any cross-origin
+      // page that reaches this port (C-03 fix narrows that to loopback)
+      // could open a WS and exfiltrate HMR events or trigger reloads
+      // without this check.
+      //
+      // We accept missing Origin (null / absent) — native clients (curl,
+      // test WebSocket connections, CLI devtools) legitimately omit it and
+      // the loopback binding (C-03) is the primary defense for them.
+      const origin = req.headers.get("origin");
+      if (origin !== null && !allowedOrigins.has(origin)) {
+        return new Response(
+          JSON.stringify({ error: "origin not allowed" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       // POST /restart → 재시작 핸들러 호출
@@ -1458,6 +1520,30 @@ export function createHMRServer(port: number): HMRServer {
             return;
           }
           if (data.type === "invalidate") {
+            // Phase 7.0.S — per-connection rate limit (C-02 / H-01 defense).
+            // A malicious same-machine process (even with C-01 + C-03 in
+            // place) could flood `invalidate` messages to DoS connected
+            // browsers via broadcast. 10 invalidates per 10-second window
+            // is >100× what legitimate HMR usage produces.
+            const now = Date.now();
+            let counter = invalidateCounters.get(ws as object);
+            if (!counter || now - counter.windowStart > 10_000) {
+              counter = { count: 0, windowStart: now };
+              invalidateCounters.set(ws as object, counter);
+            }
+            counter.count += 1;
+            if (counter.count > 10) {
+              // Silent drop — do not reply to abusive clients.
+              return;
+            }
+            // Reject oversized fields. 10 KB message / 2 KB moduleUrl is
+            // plenty for diagnostics; anything larger is amplification abuse.
+            if (
+              (typeof data.message === "string" && data.message.length > 10_000) ||
+              (typeof data.moduleUrl === "string" && data.moduleUrl.length > 2_000)
+            ) {
+              return;
+            }
             // A module called `import.meta.hot.invalidate()` in the
             // browser. Phase 7.0 v0.1 response: escalate to full reload
             // on the module that invalidated. Broadcasting through
@@ -1492,7 +1578,7 @@ export function createHMRServer(port: number): HMRServer {
     },
   });
 
-  console.log(`🔥 HMR server running on ws://localhost:${hmrPort}`);
+  console.log(`🔥 HMR server running on ws://${hostname}:${hmrPort}`);
 
   /**
    * Send a payload string to every connected client, pruning dead
