@@ -41,11 +41,29 @@
  * edited migrations are sacred: the generator will only ever ADD new
  * files at higher sequence numbers.
  *
+ * # Path traversal defense (Phase 4c.R4 security audit — H-01)
+ *
+ * `tableName` originates from:
+ *   - `persistence.tableName` — validated by `asPersistence` (only
+ *     `[A-Za-z_][A-Za-z0-9_]*` accepted).
+ *   - `options.pluralName` — pre-4c field, NOT format-validated at
+ *     resource-load time.
+ *   - auto-pluralized `resource.name` — resource.name is validated by
+ *     `validateResourceDefinition` (same alphabet).
+ *
+ * To close the remaining gap (pluralName), `writeSchemaArtifacts`
+ * verifies every resolved table name against a conservative identifier
+ * regex AND asserts the `path.join` result stays under
+ * `resourceSchemaOutDir` before touching the filesystem. Same for the
+ * auto-migration file (whose name is NNNN + ISO timestamp, both under
+ * our control, but routed through the same guard for uniformity).
+ *
  * # References
  *
  *   - docs/rfcs/0001-db-resource-layer.md §D3 (resource → DDL auto-derived)
  *   - docs/rfcs/0001-db-resource-layer.md §D4 (self-rolled migration runner)
  *   - docs/rfcs/0001-db-resource-layer.md Appendix D (post-4a normative)
+ *   - docs/security/phase-4c-audit.md §H-01 (path traversal remediation)
  *   - packages/core/src/db/migrations/runner.ts (Agent C — applied.json owner)
  */
 
@@ -177,6 +195,74 @@ export async function computeSchemaGeneration(
 // ============================================
 
 /**
+ * User-derived segment whitelist. Matches `SAFE_PERSISTENCE_IDENTIFIER_RE`
+ * from `ddl/persistence-types.ts`. Starts with a letter or `_`, then
+ * letters / digits / underscores only. No `.`, `/`, `\`, spaces, shell
+ * metachars, control chars — path traversal impossible.
+ *
+ * Applied to: per-resource `tableName` keys in `desiredSchemaByTable`,
+ * which can originate from `options.pluralName` or `persistence.tableName`.
+ * (Both ultimately flow through `snapshot.ts:resolveTableName`.)
+ */
+const SAFE_TABLE_FILE_SEGMENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Generator-derived segment whitelist. The auto-migration filename is
+ * `${NNNN}_auto_${ISO_TIMESTAMP_WITH_DASHES}` where the ISO timestamp
+ * has had `:` + `.` replaced with `-`. The character set reduces to
+ * digits, `_`, `-`, `T`, `Z`. This segment is NEVER user-derived but
+ * the path guard is applied for uniformity.
+ */
+const SAFE_MIGRATION_FILE_SEGMENT_RE = /^[A-Za-z0-9_\-]+$/;
+
+/**
+ * Join `dir` + `segment + suffix` and ensure the resolved path stays
+ * strictly under `dir`. Validates `segment` against `allowRe` first
+ * (blocks `..`, `/`, `\`, control chars), then resolves and asserts
+ * containment as defense-in-depth.
+ *
+ * Defense-in-depth rationale (H-01 from Phase 4c audit):
+ *   - `asPersistence` catches malicious `tableName` / `columnName` /
+ *     `indexes[].name` at narrowing time.
+ *   - This check catches anything that slipped through — e.g.
+ *     `options.pluralName` (pre-4c, no runtime format check) — AND
+ *     asserts the resolved path never escapes `dir` even if a future
+ *     refactor loosens the regex.
+ */
+function safeJoinSegment(
+  dir: string,
+  segment: string,
+  suffix: string,
+  allowRe: RegExp,
+): string {
+  if (typeof segment !== "string" || segment.length === 0) {
+    throw new TypeError(`safeJoinSegment: segment must be a non-empty string`);
+  }
+  if (!allowRe.test(segment)) {
+    throw new Error(
+      `[@mandujs/core/resource] refused to write file whose name segment ${JSON.stringify(segment)} ` +
+        `does not match ${allowRe}. This blocks path-traversal via resource-derived names.`,
+    );
+  }
+  const joined = path.join(dir, `${segment}${suffix}`);
+  const resolvedDir = path.resolve(dir);
+  const resolvedJoin = path.resolve(joined);
+  // Must live strictly inside `resolvedDir` — i.e. share the exact
+  // prefix + path separator. The equality check on `path.join` guards
+  // against cross-platform resolution surprises (mixed separators,
+  // UNC paths on Windows).
+  if (
+    resolvedJoin !== path.join(resolvedDir, `${segment}${suffix}`) ||
+    !resolvedJoin.startsWith(resolvedDir + path.sep)
+  ) {
+    throw new Error(
+      `[@mandujs/core/resource] refused to write outside ${resolvedDir}: resolved path ${resolvedJoin}`,
+    );
+  }
+  return joined;
+}
+
+/**
  * Write per-resource schema snippets and (if changes exist) a new
  * migration file to disk.
  *
@@ -190,6 +276,8 @@ export async function computeSchemaGeneration(
  *     meaningful: `applied.json` always reflects what the DB actually
  *     has, not what we intended to apply.
  *   - Creates parent directories as needed (`mkdir -p` semantics).
+ *   - Rejects any `tableName` / migration version that would resolve
+ *     outside the target directory (see `safeJoinSegment`).
  *
  * Returns the paths of written files so the caller can log / report to
  * the user.
@@ -205,7 +293,12 @@ export async function writeSchemaArtifacts(
   if (Object.keys(result.desiredSchemaByTable).length > 0) {
     await ensureDir(paths.resourceSchemaOutDir);
     for (const [tableName, sql] of Object.entries(result.desiredSchemaByTable)) {
-      const filePath = path.join(paths.resourceSchemaOutDir, `${tableName}.sql`);
+      const filePath = safeJoinSegment(
+        paths.resourceSchemaOutDir,
+        tableName,
+        ".sql",
+        SAFE_TABLE_FILE_SEGMENT_RE,
+      );
       // Schema files are DERIVED — always regenerate. Format the file
       // with a header so human readers don't confuse it with a migration.
       const body = `-- @generated by Mandu — do not edit.
@@ -229,9 +322,19 @@ ${sql}
   if (result.migrationSql.length > 0 && result.changes.length > 0) {
     await ensureDir(paths.migrationsDir);
     const nextVersion = await findNextMigrationVersion(paths.migrationsDir);
+    // Timestamp chars are a fixed [0-9:T.-Z] subset from
+    // `new Date().toISOString()`; after the `[:.]` → `-` replacement
+    // only `[0-9T-Z]` remain — safe for a file segment. Auto-migration
+    // names are never user-derived but we route through `safeJoinSegment`
+    // for uniformity.
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `${nextVersion}_auto_${timestamp}.sql`;
-    migrationFilePath = path.join(paths.migrationsDir, filename);
+    const filenameSegment = `${nextVersion}_auto_${timestamp}`;
+    migrationFilePath = safeJoinSegment(
+      paths.migrationsDir,
+      filenameSegment,
+      ".sql",
+      SAFE_MIGRATION_FILE_SEGMENT_RE,
+    );
     migrationVersion = nextVersion;
 
     const body = `-- @generated by Mandu — human-editable.
@@ -367,4 +470,7 @@ export const _internalForTests = {
   findNextMigrationVersion,
   composeMigrationSql,
   readAppliedSnapshot,
+  safeJoinSegment,
+  SAFE_TABLE_FILE_SEGMENT_RE,
+  SAFE_MIGRATION_FILE_SEGMENT_RE,
 };
