@@ -1,12 +1,27 @@
 /**
- * `@mandujs/edge/vercel` — Vercel Edge Functions adapter stub.
+ * `@mandujs/edge/vercel` — Vercel Edge adapter for Mandu.
  *
- * Scheduled for Phase 15.3.
+ * Public API:
+ *   - `createVercelEdgeHandler(manifest, options?)` — builds a
+ *     Vercel-Edge-shaped fetch handler from a Mandu routes manifest.
+ *   - `generateVercelEdgeConfig(options)` — emits `vercel.json`.
+ *   - `getVercelEdgeCtx()` — access the Vercel `context` object
+ *     (`waitUntil`, `geo`, `ip`) from inside request handlers.
  */
 
-export function createVercelEdgeHandler(): never {
-  throw new Error(
-    "[@mandujs/edge/vercel] Vercel Edge adapter is not yet implemented. " +
-      "Scheduled for Phase 15.3. Use @mandujs/edge/workers for Cloudflare Workers today."
-  );
-}
+export {
+  createVercelEdgeHandler,
+  getVercelEdgeCtx,
+  type CreateVercelEdgeHandlerOptions,
+  type VercelEdgeContext,
+  type VercelEdgeFetchHandler,
+} from "./fetch-handler";
+
+export {
+  generateVercelEdgeConfig,
+  type VercelConfigOptions,
+} from "./vercel-config";
+
+export {
+  installVercelEdgePolyfills,
+} from "./polyfills";

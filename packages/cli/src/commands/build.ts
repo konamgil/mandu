@@ -35,15 +35,23 @@ export interface BuildOptions {
   outDir?: string;
   /**
    * Deployment target. Leave undefined for the default Bun/Node adapter.
-   * `"workers"` emits `.mandu/workers/worker.js` + `wrangler.toml` so the
-   * project is ready for `wrangler dev` / `wrangler deploy`.
+   *
+   *   - `"workers"`      — Cloudflare Workers (`.mandu/workers/worker.js` + `wrangler.toml`)
+   *   - `"deno"`         — Deno Deploy (`.mandu/deno/server.ts` + `deno.json`)
+   *   - `"vercel-edge"`  — Vercel Edge Functions (`api/_mandu.ts` + `vercel.json`)
+   *   - `"netlify-edge"` — Netlify Edge Functions (`netlify/edge-functions/ssr.ts` + `netlify.toml`)
    */
-  target?: "workers";
+  target?: "workers" | "deno" | "vercel-edge" | "netlify-edge";
   /**
    * Override the Worker project name (defaults to the host `package.json`
-   * `name` field, lowered and slugified).
+   * `name` field, lowered and slugified). Used only by `--target=workers`.
    */
   workerName?: string;
+  /**
+   * Override the project name for Deno/Vercel/Netlify edge targets.
+   * Defaults to the host `package.json` `name` field, slugified.
+   */
+  projectName?: string;
 }
 
 export async function build(options: BuildOptions = {}): Promise<boolean> {
@@ -268,6 +276,72 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     } catch (error) {
       console.error(
         `\n❌ Workers build failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      await runHook("onAfterBuild", plugins, hooks, {
+        success: false,
+        duration: Math.round(performance.now() - buildStartTime),
+      });
+      return false;
+    }
+  }
+
+  // Phase 15.2 — Deno Deploy target
+  if (options.target === "deno") {
+    try {
+      const { emitDenoBundle } = await import("../util/deno-emitter");
+      await emitDenoBundle({
+        rootDir: cwd,
+        manifest,
+        cssPath,
+        projectName: options.projectName,
+      });
+    } catch (error) {
+      console.error(
+        `\n❌ Deno build failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      await runHook("onAfterBuild", plugins, hooks, {
+        success: false,
+        duration: Math.round(performance.now() - buildStartTime),
+      });
+      return false;
+    }
+  }
+
+  // Phase 15.2 — Vercel Edge target
+  if (options.target === "vercel-edge") {
+    try {
+      const { emitVercelEdgeBundle } = await import("../util/vercel-edge-emitter");
+      await emitVercelEdgeBundle({
+        rootDir: cwd,
+        manifest,
+        cssPath,
+        projectName: options.projectName,
+      });
+    } catch (error) {
+      console.error(
+        `\n❌ Vercel Edge build failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      await runHook("onAfterBuild", plugins, hooks, {
+        success: false,
+        duration: Math.round(performance.now() - buildStartTime),
+      });
+      return false;
+    }
+  }
+
+  // Phase 15.2 — Netlify Edge target
+  if (options.target === "netlify-edge") {
+    try {
+      const { emitNetlifyEdgeBundle } = await import("../util/netlify-edge-emitter");
+      await emitNetlifyEdgeBundle({
+        rootDir: cwd,
+        manifest,
+        cssPath,
+        projectName: options.projectName,
+      });
+    } catch (error) {
+      console.error(
+        `\n❌ Netlify Edge build failed: ${error instanceof Error ? error.message : String(error)}`
       );
       await runHook("onAfterBuild", plugins, hooks, {
         success: false,

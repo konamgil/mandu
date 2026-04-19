@@ -1,15 +1,29 @@
 /**
- * `@mandujs/edge/deno` — Deno Deploy adapter stub.
+ * `@mandujs/edge/deno` — Deno Deploy adapter for Mandu.
  *
- * Scheduled for Phase 15.2. Track progress at
- * https://github.com/konamgil/mandu/issues labeled `phase-15-2`.
- *
- * Until then, calling these exports throws to make missed imports obvious.
+ * Public API:
+ *   - `createDenoHandler(manifest, options?)` — builds a Deno.serve-shaped
+ *     fetch handler from a Mandu routes manifest.
+ *   - `generateDenoConfig(options)` — emits `deno.json`.
+ *   - `getDenoEnv()` / `getDenoInfo()` — access env / serve info from
+ *     inside request handlers.
  */
 
-export function createDenoHandler(): never {
-  throw new Error(
-    "[@mandujs/edge/deno] Deno Deploy adapter is not yet implemented. " +
-      "Scheduled for Phase 15.2. Use @mandujs/edge/workers for Cloudflare Workers today."
-  );
-}
+export {
+  createDenoHandler,
+  getDenoEnv,
+  getDenoInfo,
+  type CreateDenoHandlerOptions,
+  type DenoEnv,
+  type DenoServeInfo,
+  type DenoFetchHandler,
+} from "./fetch-handler";
+
+export {
+  generateDenoConfig,
+  type DenoConfigOptions,
+} from "./deno-config";
+
+export {
+  installDenoPolyfills,
+} from "./polyfills";

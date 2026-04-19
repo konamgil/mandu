@@ -153,7 +153,7 @@ registerCommand({
 
 registerCommand({
   id: "build",
-  description: "Build client bundles (hydration). Use --target=workers for Cloudflare Workers.",
+  description: "Build client bundles (hydration). Use --target=<edge> for edge deployments.",
   exitOnSuccess: true,
   help: [
     "",
@@ -161,30 +161,45 @@ registerCommand({
     "",
     "  Flags:",
     "    --watch                 Rebuild on file changes",
-    "    --target=<name>         Deployment target (workers)",
+    "    --target=<name>         Deployment target (workers|deno|vercel-edge|netlify-edge)",
     "    --worker-name=<slug>    Cloudflare Workers project name (target=workers)",
+    "    --project-name=<slug>   Project name (target=deno|vercel-edge|netlify-edge)",
     "",
     "  Outputs:",
-    "    .mandu/client/          Hydration bundles (default target)",
-    "    .mandu/static/          Prerendered HTML shells",
-    "    .mandu/workers/worker.js + wrangler.toml  (target=workers)",
+    "    .mandu/client/                              Hydration bundles (default target)",
+    "    .mandu/static/                              Prerendered HTML shells",
+    "    .mandu/workers/worker.js + wrangler.toml    (target=workers)",
+    "    .mandu/deno/server.ts + deno.json           (target=deno)",
+    "    api/_mandu.ts + vercel.json                 (target=vercel-edge)",
+    "    netlify/edge-functions/ssr.ts + netlify.toml (target=netlify-edge)",
     "",
     "  Examples:",
     "    mandu build",
     "    mandu build --watch",
     "    mandu build --target=workers --worker-name=my-app",
+    "    mandu build --target=deno --project-name=my-app",
+    "    mandu build --target=vercel-edge",
+    "    mandu build --target=netlify-edge",
     "",
   ].join("\n"),
   async run(ctx) {
     const { build } = await import("./build");
     const rawTarget = ctx.options.target;
-    let target: "workers" | undefined;
+    type BuildTarget = "workers" | "deno" | "vercel-edge" | "netlify-edge";
+    const ALLOWED_TARGETS: ReadonlyArray<BuildTarget> = [
+      "workers",
+      "deno",
+      "vercel-edge",
+      "netlify-edge",
+    ];
+    let target: BuildTarget | undefined;
     if (rawTarget && rawTarget !== "true") {
-      if (rawTarget === "workers") {
-        target = "workers";
+      if ((ALLOWED_TARGETS as readonly string[]).includes(rawTarget)) {
+        target = rawTarget as BuildTarget;
       } else {
         console.error(
-          `❌ Unsupported --target value: "${rawTarget}". Supported: workers (Phase 15.1).`
+          `❌ Unsupported --target value: "${rawTarget}". ` +
+            `Supported: ${ALLOWED_TARGETS.join(", ")} (Phase 15.1–15.2).`
         );
         return false;
       }
@@ -194,6 +209,9 @@ registerCommand({
       target,
       workerName: ctx.options["worker-name"] && ctx.options["worker-name"] !== "true"
         ? ctx.options["worker-name"]
+        : undefined,
+      projectName: ctx.options["project-name"] && ctx.options["project-name"] !== "true"
+        ? ctx.options["project-name"]
         : undefined,
     });
   },

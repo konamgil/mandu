@@ -1,13 +1,33 @@
 /**
- * `@mandujs/edge/netlify` — Netlify Edge Functions adapter stub.
+ * `@mandujs/edge/netlify` — Netlify Edge Functions adapter for Mandu.
  *
- * Scheduled for Phase 15.3. Netlify Edge runs on Deno, so the adapter will
- * re-export most of `@mandujs/edge/deno` once that ships.
+ * Public API:
+ *   - `createNetlifyEdgeHandler(manifest, options?)` — builds a
+ *     Netlify-Edge-shaped fetch handler from a Mandu routes manifest.
+ *   - `generateNetlifyEdgeConfig(options)` — emits `netlify.toml`.
+ *   - `getNetlifyEdgeCtx()` — access the Netlify `Context` object
+ *     (`geo`, `ip`, `deploy`, `env.get`, `next()`) from inside request
+ *     handlers.
+ *
+ * Netlify Edge Functions run on Deno Deploy, so Deno-side constraints
+ * apply (no Bun.sql / Bun.s3 / Bun.cron). See `@mandujs/edge/deno` for
+ * the Deno adapter — Netlify adds its own build-time integration
+ * (netlify.toml, deploy contexts) on top.
  */
 
-export function createNetlifyEdgeHandler(): never {
-  throw new Error(
-    "[@mandujs/edge/netlify] Netlify Edge adapter is not yet implemented. " +
-      "Scheduled for Phase 15.3. Use @mandujs/edge/workers for Cloudflare Workers today."
-  );
-}
+export {
+  createNetlifyEdgeHandler,
+  getNetlifyEdgeCtx,
+  type CreateNetlifyEdgeHandlerOptions,
+  type NetlifyEdgeContext,
+  type NetlifyEdgeFetchHandler,
+} from "./fetch-handler";
+
+export {
+  generateNetlifyEdgeConfig,
+  type NetlifyEdgeConfigOptions,
+} from "./netlify-config";
+
+export {
+  installNetlifyEdgePolyfills,
+} from "./polyfills";
