@@ -26,6 +26,9 @@ export const CLI_ERROR_CODES = {
   CONFIG_PARSE_FAILED: "CLI_E040",
   CONFIG_VALIDATION_FAILED: "CLI_E041",
 
+  // Skills generator errors (E050-E059) — Wave R3 L-02
+  SKILLS_OUTPUT_ESCAPE: "CLI_E050",
+
   // Test errors (E060-E069) — Phase 12.1
   TEST_NO_MATCH: "CLI_E060",
   TEST_RUNNER_FAILED: "CLI_E061",
@@ -53,7 +56,7 @@ export const CLI_ERROR_CODES = {
   DEPLOY_EDGE_RUNTIME_WARNING: "CLI_E213",
   DEPLOY_NOT_IMPLEMENTED: "CLI_E214",
 
-  // AI chat / eval errors (E300-E309) — Phase 14.2
+  // AI chat / eval errors (E300-E319) — Phase 14.2 + Wave R3 L-01
   AI_API_KEY_MISSING: "CLI_E300",
   AI_STREAM_FAILED: "CLI_E301",
   AI_HISTORY_MALFORMED: "CLI_E302",
@@ -64,6 +67,7 @@ export const CLI_ERROR_CODES = {
   AI_TIMEOUT: "CLI_E307",
   AI_INVALID_INPUT: "CLI_E308",
   AI_SYSTEM_FILE_NOT_FOUND: "CLI_E309",
+  AI_PATH_ESCAPE: "CLI_E310",
 
   // Phase 12.2/12.3 — E2E/coverage/watch/heal extensions (CLI_E063-CLI_E067).
   // Placed at end-of-file per Agent E scope (avoids E300-309 conflicts).

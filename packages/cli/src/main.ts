@@ -87,24 +87,65 @@ export function parseArgs(args: string[]): { command: string; options: Record<st
 export async function main(args = process.argv.slice(2)): Promise<void> {
   const { command, options } = parseArgs(args);
 
-  // Handle help
-  if (options.help || command === "help" || !command) {
+  // Global help: no command, explicit "help" command, or --help with no command.
+  if (command === "help" || !command) {
     console.log(getHelpText());
     process.exit(0);
   }
 
-  // Show hero banner
-  if (shouldShowBanner(args)) {
-    await renderHeroBanner(VERSION);
-  }
-
-  // DNA-010: Look up command from registry
+  // DNA-010: Look up command from registry (needed before --help routing so
+  // `mandu <cmd> --help` can dispatch to the per-command help when available).
   const registration = getCommand(command);
 
   if (!registration) {
+    if (options.help) {
+      // --help after an unknown command falls back to the global help.
+      console.log(getHelpText());
+      process.exit(0);
+    }
     printCLIError(CLI_ERROR_CODES.UNKNOWN_COMMAND, { command });
     console.log(getHelpText());
     process.exit(1);
+  }
+
+  // Per-subcommand --help routing (Wave R3 follow-up).
+  //
+  // Prior behaviour: `mandu <cmd> --help` fell through to the global help
+  // surface, masking per-command flag docs. Now:
+  //   - `mandu <cmd> --help`             → per-command help (if defined)
+  //   - `mandu <cmd> <sub> --help`       → fall through so the sub-dispatch
+  //                                         can render its own help (e.g.
+  //                                         `mandu ai chat --help` → chat's
+  //                                         CHAT_HELP, not AI_HELP).
+  //   - Any other case falls back to global help.
+  if (options.help) {
+    const argvSub = args[1];
+    const hasKnownSub = !!(
+      registration.subcommands &&
+      argvSub &&
+      !argvSub.startsWith("-") &&
+      registration.subcommands.includes(argvSub)
+    );
+    if (!hasKnownSub) {
+      const helpCtx: CommandContext = { args, options };
+      const help = registration.help;
+      if (typeof help === "string") {
+        process.stdout.write(help.endsWith("\n") ? help : help + "\n");
+      } else if (typeof help === "function") {
+        await help(helpCtx);
+      } else {
+        console.log(getHelpText());
+      }
+      process.exit(0);
+    }
+    // Subcommand-level --help: fall through to registration.run() which
+    // will dispatch to the subcommand's own help renderer (e.g. ai/chat,
+    // ai/eval, db/*, etc.).
+  }
+
+  // Show hero banner (after help routing so `--help` never prints it).
+  if (shouldShowBanner(args)) {
+    await renderHeroBanner(VERSION);
   }
 
   // Command execution context

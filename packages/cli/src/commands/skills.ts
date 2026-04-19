@@ -12,8 +12,10 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   generateSkillsForProject,
   listGeneratedSkills,
+  SkillsPathEscapeError,
   type GenerateSkillsResult,
 } from "@mandujs/skills/generator";
+import { CLI_ERROR_CODES, printCLIError } from "../errors";
 
 export interface SkillsGenerateOptions {
   regenerate?: boolean;
@@ -62,6 +64,11 @@ export async function skillsGenerate(options: SkillsGenerateOptions = {}): Promi
       kinds: options.kinds,
     });
   } catch (err) {
+    // Wave R3 L-02: surface path-escape as a proper CLI error code.
+    if (err instanceof SkillsPathEscapeError) {
+      printCLIError(CLI_ERROR_CODES.SKILLS_OUTPUT_ESCAPE, { path: err.path });
+      return false;
+    }
     console.error(
       `❌ Skill generation failed: ${err instanceof Error ? err.message : String(err)}`,
     );

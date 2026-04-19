@@ -99,6 +99,33 @@ function shouldExcludeFile(filePath: string, excludePatterns: string[]): boolean
   });
 }
 
+/**
+ * Anchor glob patterns at `rootDir` so ts-morph's `addSourceFilesAtPaths`
+ * resolves them against the caller's project — not `process.cwd()`.
+ *
+ * Rules:
+ *  - Absolute path (starts with / or <drive>:) → pass through unchanged.
+ *  - Already rooted at `rootDir` → pass through unchanged.
+ *  - Negation (`!foo`) → prefix the negation bit with `rootDir` too so the
+ *    exclusion still applies after we moved the positive matches.
+ *  - Everything else → `rootDir/<glob>`, with forward slashes for
+ *    cross-platform consistency.
+ */
+function resolveIncludeGlobs(rootDir: string, include: string[]): string[] {
+  const posixRoot = rootDir.replace(/\\/g, "/").replace(/\/$/, "");
+  return include.map((glob) => {
+    if (!glob) return glob;
+    const neg = glob.startsWith("!");
+    const body = neg ? glob.slice(1) : glob;
+    // Absolute (POSIX) or Windows drive (e.g. C:/...)
+    if (body.startsWith("/") || /^[A-Za-z]:[\\/]/.test(body)) {
+      return glob;
+    }
+    const prefixed = `${posixRoot}/${body}`;
+    return neg ? `!${prefixed}` : prefixed;
+  });
+}
+
 export async function buildDependencyGraph(options: BuildGraphOptions): Promise<DependencyGraph> {
   const { rootDir, tsconfigPath, include, exclude = [] } = options;
 
@@ -110,9 +137,23 @@ export async function buildDependencyGraph(options: BuildGraphOptions): Promise<
     skipAddingFilesFromTsConfig: !tsconfigPath,
   });
 
-  // Add files if no tsconfig
+  // Add files if no tsconfig.
+  //
+  // Globs must be anchored at `rootDir` — otherwise ts-morph's internal
+  // `addSourceFilesAtPaths` resolves them against `process.cwd()`, which
+  // scans the entire monorepo when callers are `smart-select` / `precommit`
+  // (they invoke from the CLI's cwd but care about files under a per-test
+  // or per-project tmpdir). Scanning the monorepo (a) takes ~1 s even on
+  // a warm fs, b) can hit Windows scandir EISDIR errors in Bun's isolated
+  // linker store, and c) makes the precommit test exceed its 5 s timeout
+  // under load.
+  //
+  // `resolveIncludeGlobs()` prefixes every include with `rootDir` unless
+  // the caller already supplied an absolute path. Exclude patterns are left
+  // unchanged because `shouldExcludeFile()` matches on the tail.
   if (!tsconfigPath && include) {
-    project.addSourceFilesAtPaths(include);
+    const resolved = resolveIncludeGlobs(rootDir, include);
+    project.addSourceFilesAtPaths(resolved);
   }
 
   const dependencies = new Map<string, Set<string>>();

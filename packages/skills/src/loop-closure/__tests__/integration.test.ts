@@ -176,3 +176,25 @@ describe("closeLoop — safety invariants", () => {
     expect(Object.keys(a).sort()).toEqual(Object.keys(b).sort());
   });
 });
+
+describe("Wave R3 L-05 — @mandujs/skills/loop-closure subpath export", () => {
+  it("dynamic import via '@mandujs/skills/loop-closure' resolves and exposes closeLoop", async () => {
+    // This import must succeed purely through package.json#exports mapping —
+    // not a fs-fallback Bun-in-monorepo resolution. If the exports map is
+    // missing the subpath, strict-mode consumers (npm-installed packages)
+    // would fail with ERR_PACKAGE_PATH_NOT_EXPORTED.
+    const mod = await import("@mandujs/skills/loop-closure");
+    expect(typeof mod.closeLoop).toBe("function");
+    expect(Array.isArray(mod.DEFAULT_DETECTORS)).toBe(true);
+    expect(typeof mod.listDetectorIds).toBe("function");
+  });
+
+  it("dynamic import via '@mandujs/skills/loop-closure/detectors' resolves", async () => {
+    const mod = await import("@mandujs/skills/loop-closure/detectors");
+    expect(typeof mod.runDetectors).toBe("function");
+    expect(Array.isArray(mod.DEFAULT_DETECTORS)).toBe(true);
+    // A representative detector surfaces under this subpath.
+    expect(typeof mod.detectTypecheckErrors).toBe("function");
+  });
+});
+

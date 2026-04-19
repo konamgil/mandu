@@ -8,7 +8,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./init-integration": "./src/init-integration.ts",
-    "./generator": "./src/generator/index.ts"
+    "./generator": "./src/generator/index.ts",
+    "./loop-closure": "./src/loop-closure/index.ts",
+    "./loop-closure/detectors": "./src/loop-closure/detectors.ts"
   },
   "bin": {
     "mandu-skills": "./src/cli.ts"

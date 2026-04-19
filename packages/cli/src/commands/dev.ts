@@ -40,6 +40,7 @@ import {
 import { registerManifestHandlers } from "../util/handlers";
 import { getFsRoutesGuardPolicy } from "../util/guard-policy";
 import { openBrowser } from "../util/browser";
+import { resolveDisplayHost } from "../util/host";
 import { startJitPrewarm, logPrewarmResult } from "../util/jit-prewarm";
 import {
   handleDevShortcutInput,
@@ -671,7 +672,9 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
     const devServer = server; // captured via closure from outer scope
     const basePort = devServer.server.port;
-    const hostname = serverConfig.hostname || "localhost";
+    // For internal prerender fetch, use loopback — 0.0.0.0 is not a valid
+    // destination. See #190.
+    const hostname = resolveDisplayHost(serverConfig.hostname);
 
     const fetchHandler = async (req: Request) => {
       const url = new URL(req.url);
@@ -866,9 +869,10 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   if (hmrEnabled) {
     // HMR 서버는 island 유무와 무관하게 시작 (SSR 페이지에서도 CSS/페이지 리로드 필요)
+    // Bind HMR to same hostname as main server so dual-stack/wildcard binds match (#190).
     mark(HMR_PERF.BOOT_HMR_SERVER);
     hmrServer = createHMRServer(port, {
-      hostname: serverConfig.hostname || "localhost",
+      hostname: serverConfig.hostname,
     });
     measure(HMR_PERF.BOOT_HMR_SERVER, HMR_PERF.BOOT_HMR_SERVER);
     hmrServer.setRestartHandler(async () => {
@@ -907,6 +911,15 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     guardConfig,
     cache: true,
     managementToken,
+    // Issue #192 — smooth navigation primitives (View Transitions +
+    // hover prefetch). Both default to true at SSR layer; pass through
+    // from config so explicit opt-out (`transitions: false`) is honored.
+    transitions: config.transitions,
+    prefetch: config.prefetch,
+    // Issue #191 — dev-only `_devtools.js` (~1.15 MB) injection override.
+    // `undefined` keeps the default auto-detect (inject iff hasIslands).
+    // Explicit `true` / `false` force on / off.
+    devtools: config.dev?.devtools,
   });
   measure(HMR_PERF.BOOT_START_SERVER, HMR_PERF.BOOT_START_SERVER);
 
@@ -915,7 +928,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     if (hmrServer) {
       hmrServer.close();
       hmrServer = createHMRServer(actualPort, {
-        hostname: serverConfig.hostname || "localhost",
+        hostname: serverConfig.hostname,
       });
       hmrServer.setRestartHandler(async () => {
         await restartDevServer();
@@ -925,7 +938,10 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     }
   }
 
-  const openUrl = `http://${serverConfig.hostname || "localhost"}:${actualPort}`;
+  // For user-facing URL (browser open, runtime control), prefer `localhost`
+  // when binding to wildcard — browsers can't navigate to 0.0.0.0. See #190.
+  const displayHost = resolveDisplayHost(serverConfig.hostname);
+  const openUrl = `http://${displayHost}:${actualPort}`;
 
   // --open 옵션: 브라우저 자동 열기
   if (options.open) {
@@ -955,7 +971,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
   await runHook("onDevStart", plugins, hooks, {
     port: actualPort,
-    hostname: serverConfig.hostname || "localhost",
+    hostname: displayHost,
   });
 
   // FS Routes real-time watching

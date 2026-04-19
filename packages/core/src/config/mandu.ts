@@ -67,6 +67,35 @@ export interface TestConfig {
 
 export interface ManduConfig {
   adapter?: ManduAdapter;
+  /**
+   * Issue #192 — Enable CSS View Transitions for cross-document
+   * navigations. When `true` (default) Mandu injects
+   * `<style>@view-transition { navigation: auto; }</style>` into the SSR
+   * `<head>`, which lets supporting browsers (Chrome/Edge ≥ 111) play a
+   * crossfade between the outgoing and incoming pages. Non-supporting
+   * browsers ignore the at-rule and fall back to the classic
+   * full-reload — zero regression.
+   *
+   * Set to `false` to opt out entirely (e.g. if your app ships a
+   * hand-rolled navigation animation or a conflicting CSS rule).
+   *
+   * Default: `true`.
+   */
+  transitions?: boolean;
+  /**
+   * Issue #192 — Enable hover-based link prefetch. When `true` (default)
+   * Mandu injects a ~500-byte inline script that listens for `mouseover`
+   * events on internal links (`<a href="/...">`) and issues a
+   * `<link rel="prefetch">` for each unique target. The browser's HTTP
+   * cache services the subsequent navigation, removing most of the TTFB
+   * for above-the-fold links.
+   *
+   * Per-link opt-out: add `data-no-prefetch` to an `<a>` tag to skip it.
+   * Global opt-out: set this field to `false`.
+   *
+   * Default: `true`.
+   */
+  prefetch?: boolean;
   server?: {
     port?: number;
     hostname?: string;
@@ -107,6 +136,21 @@ export interface ManduConfig {
     watchDirs?: string[];
     /** Observability SQLite 영구 저장 (기본: true) */
     observability?: boolean;
+    /**
+     * Issue #191 — Dev-only `_devtools.js` (~1.15 MB React dev runtime +
+     * Mandu Kitchen panel) injection override.
+     *
+     *   - `true`      → force inject on every page (SSR-only projects that
+     *                   still want the Kitchen panel in dev).
+     *   - `false`     → force skip on every page (Kitchen-off dev loop).
+     *   - `undefined` → default. Inject iff the page's bundle manifest
+     *                   has at least one island. Pure-SSR pages download
+     *                   zero devtools bytes.
+     *
+     * Production builds never emit `_devtools.js`, so this flag is
+     * a no-op in prod regardless of value.
+     */
+    devtools?: boolean;
   };
   fsRoutes?: {
     routesDir?: string;

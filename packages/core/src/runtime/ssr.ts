@@ -9,6 +9,21 @@ import { PORTS, TIMEOUTS } from "../constants";
 import { escapeHtmlAttr, escapeHtmlText, escapeJsonForInlineScript } from "./escape";
 import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
 import { generateFastRefreshPreamble } from "../bundler/dev";
+import { PREFETCH_HELPER_SCRIPT } from "../client/prefetch-helper";
+
+/**
+ * Issue #192 — `@view-transition` at-rule block.
+ * Inert in browsers without CSS View Transitions (Firefox, Safari < 18.0):
+ * the at-rule is simply ignored, so there is no regression. Supporting
+ * browsers (Chrome/Edge ≥ 111, Safari 18.2+) play the default crossfade
+ * between cross-document navigations.
+ *
+ * `navigation: auto` is the only value we need — selective transitions
+ * are a per-route concern reserved for a future `transitions` config
+ * sub-block.
+ */
+const VIEW_TRANSITION_STYLE_TAG =
+  "<style>@view-transition{navigation:auto}</style>";
 
 // Re-export streaming SSR utilities
 export {
@@ -69,6 +84,45 @@ export interface SSROptions {
    * manifest entry — prod builds never emit the preamble at all.
    */
   cspNonce?: string | boolean;
+  /**
+   * Issue #192 — emit `<style>@view-transition{navigation:auto}</style>`
+   * into `<head>`. Supported browsers (Chrome/Edge ≥ 111, Safari 18.2+)
+   * show a default crossfade between cross-document navigations; others
+   * ignore the at-rule (no regression).
+   *
+   * Default: `true`. Pass `false` to suppress the injection — typically
+   * wired from `ManduConfig.transitions`.
+   */
+  transitions?: boolean;
+  /**
+   * Issue #192 — emit the ~500-byte hover prefetch helper (`<script>`)
+   * into `<head>`. Listens for `mouseover` on same-origin `<a href="/...">`
+   * anchors and issues `<link rel="prefetch" as="document">` once per
+   * unique target. Individual links can opt out via `data-no-prefetch`.
+   *
+   * Default: `true`. Pass `false` to suppress — typically wired from
+   * `ManduConfig.prefetch`.
+   */
+  prefetch?: boolean;
+  /**
+   * Issue #191 — control dev-mode injection of the `_devtools.js` bundle
+   * (~1.15 MB React dev runtime + Mandu Kitchen panel).
+   *
+   * Three states:
+   *   - `true`  → force inject regardless of islands (explicit opt-in —
+   *              use this for SSR-only projects that still want the
+   *              Kitchen panel for local debugging).
+   *   - `false` → force skip regardless of islands (explicit opt-out —
+   *              disables Kitchen even for island projects).
+   *   - unset   → default. Inject iff the page renders at least one
+   *              hydratable island. Pure-SSR pages (no islands) download
+   *              zero devtools bytes.
+   *
+   * Wired from `ManduConfig.dev.devtools`. Only takes effect in dev mode
+   * (production builds omit the `_devtools.js` output entirely, so this
+   * flag is a no-op in prod regardless of value).
+   */
+  devtools?: boolean;
 }
 
 let projectRenderToString: ((element: ReactElement) => string) | null | undefined;
@@ -394,6 +448,9 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     routePattern,
     cssPath,
     islandPreWrapped,
+    transitions = true,
+    prefetch = true,
+    devtools,
   } = options;
 
   // CSS 링크 태그 생성
@@ -402,6 +459,20 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   const cssLinkTag = cssPath
     ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
+
+  // Issue #192 — Smooth navigation primitives.
+  // `transitions`: CSS `@view-transition { navigation: auto }` — inert in
+  //   non-supporting browsers (Firefox, older Safari), crossfade in
+  //   Chrome/Edge ≥ 111 and Safari 18.2+. Zero layout impact, ~70 bytes.
+  // `prefetch`: ~500-byte IIFE that listens for `mouseover` on internal
+  //   `<a href="/...">` anchors and issues `<link rel="prefetch">`. Honors
+  //   per-link `data-no-prefetch` opt-out.
+  // Position: immediately after `cssLinkTag` so that (a) the at-rule
+  //   parses alongside the user stylesheet, and (b) both blocks precede
+  //   user-owned `headTags` / `collectedHeadTags`, letting users override
+  //   or cancel with a later inline style. False disables each independently.
+  const viewTransitionTag = transitions !== false ? VIEW_TRANSITION_STYLE_TAG : "";
+  const prefetchScriptTag = prefetch !== false ? PREFETCH_HELPER_SCRIPT : "";
 
   // useHead/useSeoMeta SSR 수집
   let collectedHeadTags = "";
@@ -492,10 +563,14 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     ? generateFastRefreshPreambleTag(isDev, bundleManifest, resolvedCspNonce)
     : "";
 
-  // DevTools 번들 로드 (개발 모드)
+  // Issue #191 — DevTools 번들 (~1.15 MB) 주입 결정.
+  //   - 기본: island 이 하나라도 있을 때만 주입. Pure-SSR 페이지는 0 bytes 다운로드.
+  //   - `devtools === true`  → 강제 주입 (SSR-only 프로젝트에서 Kitchen panel 원할 때)
+  //   - `devtools === false` → 강제 스킵 (island 프로젝트에서도 Kitchen 비활성화)
+  // Cache-bust 은 `manifest.buildTime` 우선, 없으면 `Date.now()`.
   let devtoolsScript = "";
-  if (isDev) {
-    devtoolsScript = generateDevtoolsScript();
+  if (isDev && shouldInjectDevtools(devtools, bundleManifest)) {
+    devtoolsScript = generateDevtoolsScript(bundleManifest);
   }
 
   // #179: body 내 <link> 태그를 <head>로 호이스팅
@@ -516,6 +591,8 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtmlText(title)}</title>
   ${cssLinkTag}
+  ${viewTransitionTag}
+  ${prefetchScriptTag}
   ${hoistedLinkTags}
   ${headTags}
   ${collectedHeadTags}
@@ -729,12 +806,74 @@ window.__MANDU_HMR_PORT__ = ${hmrPort};
 }
 
 /**
- * DevTools 번들 로드 스크립트 생성 (개발 모드 전용)
- * _devtools.js 번들이 자체적으로 initManduKitchen()을 호출
+ * Issue #191 — Determine whether the dev-only `_devtools.js` bundle
+ * (~1.15 MB React dev runtime + Kitchen panel) should be injected
+ * into the HTML response.
+ *
+ * Decision table (`devtools` option × manifest shape):
+ *
+ *   | `devtools`  | hasIslands | inject? | rationale                   |
+ *   |-------------|------------|---------|-----------------------------|
+ *   | `true`      | any        | YES     | explicit opt-in             |
+ *   | `false`     | any        | NO      | explicit opt-out            |
+ *   | `undefined` | true       | YES     | default, hydration runtime  |
+ *   | `undefined` | false      | NO      | pure-SSR — save 1.15 MB     |
+ *   | `undefined` | no manifest| NO      | nothing to hydrate anyway   |
+ *
+ * `hasIslands` is derived from the existing manifest shape rather than
+ * a new field, so no bundler-side change is required:
+ *   - `manifest.islands` is populated only when per-island code
+ *     splitting produced at least one bundle (build.ts:1654).
+ *   - `manifest.bundles` entries exist only for routes where
+ *     `needsHydration()` is true (build.ts:70 filter).
+ * Either non-empty ⇒ some route on this server hydrates ⇒ devtools useful.
+ *
+ * @internal Exported via `_testOnly_shouldInjectDevtools` below so
+ * `tests/runtime/devtools-inject.test.ts` can table-test the matrix
+ * without mounting React.
  */
-function generateDevtoolsScript(): string {
-  return `<script type="module" src="/.mandu/client/_devtools.js"></script>`;
+function shouldInjectDevtools(
+  devtools: boolean | undefined,
+  manifest: BundleManifest | undefined,
+): boolean {
+  // Explicit overrides take absolute precedence.
+  if (devtools === true) return true;
+  if (devtools === false) return false;
+
+  // Default behavior: inject only when there is at least one island.
+  if (!manifest) return false;
+  const hasIslandsMap =
+    manifest.islands && Object.keys(manifest.islands).length > 0;
+  const hasBundles =
+    manifest.bundles && Object.keys(manifest.bundles).length > 0;
+  return Boolean(hasIslandsMap || hasBundles);
 }
+
+/**
+ * Issue #191 — DevTools 번들 로드 스크립트 생성 (개발 모드 전용).
+ *
+ * `_devtools.js` 번들이 자체적으로 `initManduKitchen()` 을 호출한다.
+ *
+ * Cache-bust: `?v=${manifest.buildTime}` 을 우선 사용하고, manifest 가 없으면
+ * `?t=${Date.now()}` 로 fallback. `buildTime` 은 빌드별로 고정이라 브라우저
+ * 캐시 효율이 좋지만, 동일 빌드 안에서 HMR 이 발생하더라도 devtools 번들은
+ * dev 서버의 static 응답이 `Cache-Control: no-cache, no-store, must-revalidate`
+ * (server.ts:1104) 를 보내므로 stale 위험이 없다.
+ *
+ * @internal Exported via `_testOnly_generateDevtoolsScript` below so tests
+ * can verify the URL shape without needing a full render.
+ */
+function generateDevtoolsScript(manifest?: BundleManifest): string {
+  const cacheBust = manifest?.buildTime
+    ? `?v=${encodeURIComponent(manifest.buildTime)}`
+    : `?t=${Date.now()}`;
+  return `<script type="module" src="/.mandu/client/_devtools.js${cacheBust}"></script>`;
+}
+
+/** @internal test helper — exposed only so unit tests can inspect the decision. */
+export const _testOnly_shouldInjectDevtools = shouldInjectDevtools;
+/** @internal test helper — exposed only so unit tests can inspect the script tag. */
+export const _testOnly_generateDevtoolsScript = generateDevtoolsScript;
 
 export function createHTMLResponse(
   html: string,

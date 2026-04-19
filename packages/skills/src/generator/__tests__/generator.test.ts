@@ -16,6 +16,8 @@ import {
   analyzeGuard,
   analyzeStack,
   listGeneratedSkills,
+  resolveSkillsOutDir,
+  SkillsPathEscapeError,
 } from "../index";
 
 let root: string;
@@ -275,3 +277,76 @@ describe("generateSkillsForProject", () => {
     }
   });
 });
+
+describe("skills out-dir containment (Wave R3 L-02)", () => {
+  it("resolveSkillsOutDir accepts a relative subdir", () => {
+    const proj = mkdtempSync(join(tmpdir(), "skills-contain-ok-"));
+    try {
+      const resolved = resolveSkillsOutDir(proj, ".claude/skills");
+      expect(resolved.startsWith(proj)).toBe(true);
+    } finally {
+      rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
+  it("resolveSkillsOutDir accepts .mandu/skills (relative)", () => {
+    const proj = mkdtempSync(join(tmpdir(), "skills-contain-mandu-"));
+    try {
+      const resolved = resolveSkillsOutDir(proj, ".mandu/skills");
+      expect(resolved.startsWith(proj)).toBe(true);
+    } finally {
+      rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
+  it("resolveSkillsOutDir rejects ../../etc traversal", () => {
+    const proj = mkdtempSync(join(tmpdir(), "skills-contain-traverse-"));
+    try {
+      expect(() => resolveSkillsOutDir(proj, "../../etc")).toThrow(SkillsPathEscapeError);
+    } finally {
+      rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
+  it("resolveSkillsOutDir rejects a sibling-directory absolute path", () => {
+    const base = mkdtempSync(join(tmpdir(), "skills-contain-sib-"));
+    const sibling = mkdtempSync(join(tmpdir(), "skills-contain-other-"));
+    try {
+      expect(() => resolveSkillsOutDir(base, sibling)).toThrow(SkillsPathEscapeError);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+      rmSync(sibling, { recursive: true, force: true });
+    }
+  });
+
+  it("generateSkillsForProject propagates SkillsPathEscapeError for ../../etc", () => {
+    const proj = mkdtempSync(join(tmpdir(), "skills-gen-escape-"));
+    try {
+      writeFileSync(join(proj, "package.json"), JSON.stringify({ name: "x" }));
+      expect(() =>
+        generateSkillsForProject({ repoRoot: proj, outDir: "../../etc" }),
+      ).toThrow(SkillsPathEscapeError);
+    } finally {
+      rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
+  it("generateSkillsForProject accepts .mandu/skills and writes there", () => {
+    const proj = mkdtempSync(join(tmpdir(), "skills-gen-relmandu-"));
+    try {
+      writeFileSync(join(proj, "package.json"), JSON.stringify({ name: "relproj" }));
+      const res = generateSkillsForProject({
+        repoRoot: proj,
+        outDir: ".mandu/skills",
+        regenerate: true,
+      });
+      const firstPath = res.files[0]?.path;
+      expect(firstPath).toBeDefined();
+      expect(firstPath!.includes(join(".mandu", "skills"))).toBe(true);
+      expect(firstPath!.startsWith(proj)).toBe(true);
+    } finally {
+      rmSync(proj, { recursive: true, force: true });
+    }
+  });
+});
+

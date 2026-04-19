@@ -8,8 +8,26 @@ import type { InteractionGraph } from "../src/types";
 
 let testDir: string;
 
-beforeAll(() => {
+// Tests that exercise smartSelectRoutes also trigger buildDependencyGraph,
+// which dynamically imports ts-morph (~600-800ms cold, up to 5-7s under
+// full-suite load on Windows per R2 integration report). A 15s ceiling gives
+// Windows I/O + Bun's isolated linker store enough headroom without hiding
+// genuine regressions (typical cost is <1s).
+const PRECOMMIT_WINDOWS_TIMEOUT_MS = 15_000;
+
+beforeAll(async () => {
   testDir = mkdtempSync(join(tmpdir(), "ate-precommit-test-"));
+  // Pre-warm ts-morph so the first `smartSelectRoutes` call in the suite
+  // does not pay the ~600-800ms dynamic-import cost. Under full-suite load
+  // on Windows this cold import has been measured at 5-7s, which is what
+  // pushed the first precommit dep-graph test past the default 5s bun:test
+  // timeout (see docs/qa/wave-R2-integration-report.md, Scenario 3).
+  try {
+    await import("ts-morph");
+  } catch {
+    // If ts-morph is unavailable the dep-graph path already handles the
+    // failure gracefully (smartSelectRoutes wraps it in try/catch).
+  }
 });
 
 afterAll(() => {
@@ -116,7 +134,7 @@ test("precommitCheck: returns shouldTest=true when route file staged with no tes
   expect(result.shouldTest).toBe(true);
   expect(result.routes.length).toBeGreaterThanOrEqual(1);
   expect(result.reason).toContain("no test coverage");
-});
+}, PRECOMMIT_WINDOWS_TIMEOUT_MS);
 
 test("precommitCheck: returns shouldTest=false when all affected routes have tests", async () => {
   const projectDir = createProject({
@@ -147,7 +165,7 @@ test("home smoke", async ({ page }) => {
 
   expect(result.shouldTest).toBe(false);
   expect(result.reason).toContain("existing tests");
-});
+}, PRECOMMIT_WINDOWS_TIMEOUT_MS);
 
 test("precommitCheck: throws when repoRoot is empty", async () => {
   await expect(precommitCheck({ repoRoot: "", stagedFiles: ["a.ts"] })).rejects.toThrow("repoRoot is required");
@@ -182,7 +200,7 @@ test("precommitCheck: lists untested routes in the reason", async () => {
   expect(result.shouldTest).toBe(true);
   // The reason should mention at least one route
   expect(result.reason).toMatch(/\/|\/dashboard/);
-});
+}, PRECOMMIT_WINDOWS_TIMEOUT_MS);
 
 test("precommitCheck: handles no interaction graph gracefully", async () => {
   const projectDir = join(testDir, `no-graph-precommit-${Date.now()}`);
@@ -217,4 +235,4 @@ test("precommitCheck: mixed source and non-source files filters correctly", asyn
   // Should process the source file even though non-source files are present
   expect(result.shouldTest).toBe(true);
   expect(result.routes).toContain("/");
-});
+}, PRECOMMIT_WINDOWS_TIMEOUT_MS);

@@ -34,6 +34,15 @@ export interface CommandRegistration {
   defaultSubcommand?: string;
   /** Command execution */
   run: (ctx: CommandContext) => Promise<boolean>;
+  /**
+   * Per-command help surface. When set, `mandu <id> --help` prints
+   * this instead of falling through to the global help block. The
+   * value is either a static string or an async function that renders
+   * the help text to stdout and returns `void`. Commands with rich
+   * help blocks (ai, db, mcp, deploy, upgrade, test, build, dev)
+   * define this; all others fall back to global help.
+   */
+  help?: string | ((ctx: CommandContext) => Promise<void> | void);
 }
 
 /**
@@ -114,6 +123,25 @@ registerCommand({
 registerCommand({
   id: "dev",
   description: "Start dev server (FS Routes + Guard enabled by default)",
+  help: [
+    "",
+    "  mandu dev — start the development server",
+    "",
+    "  Flags:",
+    "    --port=<n>     Port to bind (default: 3333, overridable via PORT env)",
+    "    --open         Open the browser after boot",
+    "",
+    "  Features:",
+    "    - FS-based routing (app/ directory)",
+    "    - Architecture guard on file change",
+    "    - HMR for client islands",
+    "    - Tailwind CSS watcher (when tailwindcss is installed)",
+    "",
+    "  Examples:",
+    "    mandu dev",
+    "    mandu dev --port=4000 --open",
+    "",
+  ].join("\n"),
   async run(ctx) {
     const { dev } = await import("./dev");
     const port = ctx.options.port ? Number(ctx.options.port) : undefined;
@@ -127,6 +155,26 @@ registerCommand({
   id: "build",
   description: "Build client bundles (hydration). Use --target=workers for Cloudflare Workers.",
   exitOnSuccess: true,
+  help: [
+    "",
+    "  mandu build — build client bundles",
+    "",
+    "  Flags:",
+    "    --watch                 Rebuild on file changes",
+    "    --target=<name>         Deployment target (workers)",
+    "    --worker-name=<slug>    Cloudflare Workers project name (target=workers)",
+    "",
+    "  Outputs:",
+    "    .mandu/client/          Hydration bundles (default target)",
+    "    .mandu/static/          Prerendered HTML shells",
+    "    .mandu/workers/worker.js + wrangler.toml  (target=workers)",
+    "",
+    "  Examples:",
+    "    mandu build",
+    "    mandu build --watch",
+    "    mandu build --target=workers --worker-name=my-app",
+    "",
+  ].join("\n"),
   async run(ctx) {
     const { build } = await import("./build");
     const rawTarget = ctx.options.target;
@@ -519,6 +567,35 @@ registerCommand({
   description: "Run tests (Phase 12.1+12.2+12.3). Subcommands: unit, integration, all. Flags: --e2e, --heal, --coverage, --watch, --dry-run, --filter, --bail, --update-snapshots.",
   subcommands: ["unit", "integration", "all"],
   defaultSubcommand: "all",
+  help: [
+    "",
+    "  mandu test — integrated test runner",
+    "",
+    "  Subcommands:",
+    "    unit           Unit tests (src/**/*.test.ts)",
+    "    integration    Integration tests (tests/**/*.test.ts)",
+    "    all            Alias for unit + integration (default)",
+    "",
+    "  Flags:",
+    "    --filter <g>       Forwarded to `bun test --filter`",
+    "    --watch            Chokidar watch → re-run affected",
+    "    --coverage         bun coverage + LCOV merge",
+    "    --bail             Stop on first failure",
+    "    --update-snapshots Regenerate snapshot files (-u)",
+    "    --e2e              Run ATE E2E pipeline after unit/integration",
+    "    --heal             Run ATE heal loop after E2E failure",
+    "    --dry-run          Print plan, exit 0 (only with --e2e/--watch)",
+    "    --base-url <url>   Playwright baseURL override",
+    "    --ci               Non-interactive mode",
+    "    --only-route <id>  Limit E2E to specific route ids (repeatable)",
+    "",
+    "  Examples:",
+    "    mandu test unit --filter=auth",
+    "    mandu test --e2e --dry-run",
+    "    mandu test --watch",
+    "    mandu test --coverage --bail",
+    "",
+  ].join("\n"),
   async run(ctx) {
     const sub = ctx.args[1];
     const target: "all" | "unit" | "integration" =
@@ -797,6 +874,31 @@ registerCommand({
   description: "Run MCP tools from terminal, or register Mandu with IDEs (mcp register)",
   subcommands: ["register"],
   exitOnSuccess: true,
+  help: [
+    "",
+    "  mandu mcp — MCP tool bridge + IDE integration",
+    "",
+    "  Usage:",
+    "    mandu mcp                    List all available MCP tools",
+    "    mandu mcp <tool> [args]      Execute a specific tool",
+    "    mandu mcp register [...]     Register Mandu with an IDE (Phase 13.2)",
+    "",
+    "  mcp register flags:",
+    "    --ide=<name>       claude|cursor|continue|aider|all (default: all)",
+    "    --remove           Remove Mandu entry from IDE config",
+    "    --token=<strategy> generate | prompt | env:VAR | (default: ${env:MANDU_MCP_TOKEN})",
+    "    --dry-run          Preview writes without touching disk",
+    "",
+    "  Flags (tool invocation):",
+    "    --list             Print all tools then exit (same as no <tool>)",
+    "    --json             Machine-readable output",
+    "",
+    "  Examples:",
+    "    mandu mcp --list",
+    "    mandu mcp register --ide=claude",
+    "    mandu mcp register --ide=all --dry-run",
+    "",
+  ].join("\n"),
   async run(ctx) {
     // Sub-dispatch: `mandu mcp register` → Phase 13.2 IDE auto-config.
     const sub = ctx.args[1];
@@ -834,6 +936,27 @@ registerCommand({
   description:
     "Prepare deployment artifacts (docker, docker-compose, fly, vercel, railway, netlify, cf-pages)",
   exitOnSuccess: true,
+  help: [
+    "",
+    "  mandu deploy — prepare deployment artifacts",
+    "",
+    "  Flags:",
+    "    --target=<name>    docker|docker-compose|fly|vercel|railway|netlify|cf-pages (required)",
+    "    --env=<name>       Environment name (default: production)",
+    "    --project=<name>   Project name override",
+    "    --dry-run          Preview artifacts without touching filesystem",
+    "    --execute          Invoke the provider CLI after artifact prep",
+    "    --verbose          Extra diagnostics (secrets still masked)",
+    "    --set-secret KEY=VAL  Stash a secret into OS keychain then exit (repeatable)",
+    "",
+    "  Examples:",
+    "    mandu deploy --target=vercel --dry-run",
+    "    mandu deploy --target=fly --execute",
+    "    mandu deploy --set-secret VERCEL_TOKEN=xxx --set-secret DATABASE_URL=yyy",
+    "",
+    "  See docs/deploy/README.md for adapter capability matrix.",
+    "",
+  ].join("\n"),
   async run(ctx) {
     const { deploy } = await import("./deploy");
     const setSecretRaw = ctx.options["set-secret"];
@@ -859,6 +982,27 @@ registerCommand({
   description:
     "Update @mandujs packages, or self-update the Mandu binary (Phase 13.2)",
   exitOnSuccess: true,
+  help: [
+    "",
+    "  mandu upgrade — update Mandu packages or self-update the binary",
+    "",
+    "  Flags:",
+    "    --check             Report latest version without modifying anything",
+    "    --channel=<ch>      Release channel: stable (default) | canary",
+    "    --dry-run           Verify + download but skip the swap step",
+    "    --rollback          Roll back to the previously-replaced binary",
+    "",
+    "  Modes (auto-detected):",
+    "    Binary mode    — downloads the OS/arch binary, verifies SHA-256, swaps atomically",
+    "    Package mode   — falls through to `bun update @mandujs/*`",
+    "",
+    "  Exit codes:",
+    "    0  upgrade applied (or --check run)",
+    "    1  network / integrity / I/O failure",
+    "    2  usage error",
+    "    3  already up to date",
+    "",
+  ].join("\n"),
   async run(ctx) {
     const { upgrade } = await import("./upgrade");
     const channelRaw = ctx.options.channel;
@@ -877,6 +1021,10 @@ registerCommand({
   id: "db",
   description: "Schema migrations + data seeds: plan, apply, status, reset, seed",
   subcommands: ["plan", "apply", "status", "reset", "seed"],
+  async help(_ctx) {
+    const { DB_HELP } = await import("./db");
+    process.stdout.write(DB_HELP);
+  },
   async run(ctx) {
     const { dbDispatch } = await import("./db");
     return dbDispatch(ctx);
@@ -961,6 +1109,10 @@ registerCommand({
   id: "ai",
   description: "Terminal AI playground: interactive chat or non-interactive eval",
   subcommands: ["chat", "eval"],
+  async help(_ctx) {
+    const { AI_HELP } = await import("./ai");
+    process.stdout.write(AI_HELP);
+  },
   async run(ctx) {
     const { aiDispatch } = await import("./ai");
     return aiDispatch(ctx);

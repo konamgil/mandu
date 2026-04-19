@@ -20,6 +20,15 @@
  * - In-process only. Cross-worker coordination is not this module's job;
  *   per-worker throttling already prevents the observed failure modes in
  *   our test matrix.
+ *
+ * Correctness — slot handoff:
+ * - The semaphore does slot *handoff* rather than release-then-acquire. When
+ *   a build completes with waiters queued, the slot is transferred directly
+ *   to the next waiter (active count never drops). A previous revision had
+ *   a classic acquire race: `releaseSlot()` decremented `active` before the
+ *   waiter's `active++` ran, which opened a microtask-sized window where a
+ *   concurrent `safeBuild()` call could observe `active < max`, skip the
+ *   wait, and join in — yielding `cap+1` concurrent builds.
  */
 
 import type { BuildConfig, BuildOutput } from "bun";
@@ -38,16 +47,36 @@ const maxConcurrent = parseMaxConcurrent();
 let active = 0;
 const waiters: Array<() => void> = [];
 
-function waitForSlot(): Promise<void> {
+/**
+ * Acquire a slot. When `active < max`, increment synchronously and return.
+ * Otherwise, queue and await a direct handoff from a completing build —
+ * the completing build does NOT decrement `active`; it resolves our waiter,
+ * and `active` stays at `max` through the transition. This prevents a
+ * microtask-window race where a third caller could see `active < max` and
+ * skip the wait entirely.
+ */
+function acquireSlot(): Promise<void> {
+  if (active < maxConcurrent) {
+    active++;
+    return Promise.resolve();
+  }
   return new Promise<void>((resolve) => {
     waiters.push(resolve);
   });
 }
 
+/**
+ * Release a slot. If a waiter is queued, hand the slot off directly (keep
+ * `active` at `max`, resolve the waiter). Otherwise decrement `active`.
+ */
 function releaseSlot(): void {
-  active--;
   const next = waiters.shift();
-  if (next) next();
+  if (next) {
+    // Direct handoff — `active` stays at max, waiter resumes holding the slot.
+    next();
+  } else {
+    active--;
+  }
 }
 
 /**
@@ -60,10 +89,7 @@ function releaseSlot(): void {
  * coordination work.
  */
 export async function safeBuild(options: BuildConfig): Promise<BuildOutput> {
-  if (active >= maxConcurrent) {
-    await waitForSlot();
-  }
-  active++;
+  await acquireSlot();
   try {
     return await Bun.build(options);
   } finally {

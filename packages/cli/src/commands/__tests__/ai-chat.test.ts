@@ -179,7 +179,10 @@ describe("mandu ai chat — slash commands", () => {
 
 describe("mandu ai chat — /save + /load round trip", () => {
   it("saves history to JSON and loads it back", async () => {
-    const savePath = path.join(tmpDir, "saved.json");
+    // Wave R3 L-01: /save and /load now accept only contained, relative paths.
+    // Use a bare filename so it resolves under <tmpDir>/.mandu/ai-chat/saved.json.
+    const saveArg = "saved.json";
+    const expectedDisk = path.join(tmpDir, ".mandu", "ai-chat", saveArg);
     const { stream: streamA } = makeOutput();
     const stateA: ChatState = {
       provider: "local" as PromptProvider,
@@ -191,9 +194,9 @@ describe("mandu ai chat — /save + /load round trip", () => {
     stateA.history.push({ role: "user", content: "hello" });
     stateA.history.push({ role: "assistant", content: "hi" });
 
-    const saveRes = await handleSlashCommand(`/save ${savePath}`, stateA);
+    const saveRes = await handleSlashCommand(`/save ${saveArg}`, stateA);
     expect(saveRes.kind).toBe("continue");
-    const onDisk = await fs.readFile(savePath, "utf8");
+    const onDisk = await fs.readFile(expectedDisk, "utf8");
     const parsed = JSON.parse(onDisk);
     expect(parsed.version).toBe(1);
     expect(parsed.messages.length).toBe(2);
@@ -207,14 +210,18 @@ describe("mandu ai chat — /save + /load round trip", () => {
       output: streamB,
       cwd: tmpDir,
     };
-    const loadRes = await handleSlashCommand(`/load ${savePath}`, stateB);
+    const loadRes = await handleSlashCommand(`/load ${saveArg}`, stateB);
     expect(loadRes.kind).toBe("continue");
     expect(stateB.history.size).toBe(2);
     expect(stateB.history.getTurns()[1]?.content).toBe("hi");
   });
 
   it("rejects malformed history file with AI_HISTORY_MALFORMED", async () => {
-    const badPath = path.join(tmpDir, "bad.json");
+    // Wave R3 L-01: /load rejects absolute paths, so stage the malformed file
+    // under the contained <tmpDir>/.mandu/ai-chat/ dir and reference it by name.
+    const badArg = "bad.json";
+    const badPath = path.join(tmpDir, ".mandu", "ai-chat", badArg);
+    await fs.mkdir(path.dirname(badPath), { recursive: true });
     await fs.writeFile(badPath, "{nope}", "utf8");
 
     const { stream } = makeOutput();
@@ -225,7 +232,7 @@ describe("mandu ai chat — /save + /load round trip", () => {
       output: stream,
       cwd: tmpDir,
     };
-    const result = await handleSlashCommand(`/load ${badPath}`, state);
+    const result = await handleSlashCommand(`/load ${badArg}`, state);
     expect(result.kind).toBe("error");
     if (result.kind === "error") {
       expect(result.code).toBe("AI_HISTORY_MALFORMED");
@@ -338,5 +345,127 @@ describe("mandu ai chat — missing API key is soft", () => {
     } finally {
       if (saved) process.env.MANDU_OPENAI_API_KEY = saved;
     }
+  });
+});
+
+
+describe("mandu ai chat — path containment (L-01)", () => {
+  const makeState = (cwd: string): ChatState => ({
+    provider: "local" as PromptProvider,
+    model: "local-model",
+    history: new ChatHistory(),
+    output: makeOutput().stream,
+    cwd,
+  });
+
+  it("/save rejects absolute paths with AI_PATH_ESCAPE", async () => {
+    const state = makeState(tmpDir);
+    const evilPath = path.isAbsolute("/etc/passwd")
+      ? "/etc/passwd"
+      : "/tmp/evil.json";
+    const result = await handleSlashCommand(`/save ${evilPath}`, state);
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.code).toBe("AI_PATH_ESCAPE");
+    }
+  });
+
+  it("/save rejects Windows-style absolute paths with AI_PATH_ESCAPE", async () => {
+    const state = makeState(tmpDir);
+    const result = await handleSlashCommand("/save C:\\evil\\out.json", state);
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.code).toBe("AI_PATH_ESCAPE");
+    }
+  });
+
+  it("/save rejects '..' traversal with AI_PATH_ESCAPE", async () => {
+    const state = makeState(tmpDir);
+    const result = await handleSlashCommand("/save ../../../etc/passwd", state);
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.code).toBe("AI_PATH_ESCAPE");
+    }
+  });
+
+  it("/load rejects absolute paths with AI_PATH_ESCAPE", async () => {
+    const state = makeState(tmpDir);
+    const result = await handleSlashCommand("/load /etc/shadow", state);
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.code).toBe("AI_PATH_ESCAPE");
+    }
+  });
+
+  it("/load rejects '..' traversal with AI_PATH_ESCAPE", async () => {
+    const state = makeState(tmpDir);
+    const result = await handleSlashCommand("/load ../../secrets.json", state);
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.code).toBe("AI_PATH_ESCAPE");
+    }
+  });
+
+  it("/system rejects absolute paths with AI_PATH_ESCAPE", async () => {
+    const state = makeState(tmpDir);
+    const result = await handleSlashCommand("/system /etc/passwd", state);
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.code).toBe("AI_PATH_ESCAPE");
+    }
+  });
+
+  it("/system rejects '..' traversal with AI_PATH_ESCAPE", async () => {
+    const state = makeState(tmpDir);
+    const result = await handleSlashCommand("/system ../../../etc/passwd", state);
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.code).toBe("AI_PATH_ESCAPE");
+    }
+  });
+
+  it("/save accepts a bare filename and resolves it under .mandu/ai-chat/", async () => {
+    const state = makeState(tmpDir);
+    state.history.push({ role: "user", content: "hello" });
+
+    const result = await handleSlashCommand("/save session.json", state);
+    expect(result.kind).toBe("continue");
+
+    const expected = path.join(tmpDir, ".mandu", "ai-chat", "session.json");
+    const exists = await fs
+      .stat(expected)
+      .then(() => true)
+      .catch(() => false);
+    expect(exists).toBe(true);
+  });
+
+  it("/save accepts './sub/file.json' and resolves it under .mandu/ai-chat/sub/", async () => {
+    const state = makeState(tmpDir);
+    state.history.push({ role: "user", content: "hi" });
+
+    const result = await handleSlashCommand("/save ./sub/file.json", state);
+    expect(result.kind).toBe("continue");
+
+    const expected = path.join(tmpDir, ".mandu", "ai-chat", "sub", "file.json");
+    const exists = await fs
+      .stat(expected)
+      .then(() => true)
+      .catch(() => false);
+    expect(exists).toBe(true);
+  });
+
+  it("/save then /load round-trips with a contained bare filename", async () => {
+    const stateA = makeState(tmpDir);
+    stateA.history.push({ role: "user", content: "q" });
+    stateA.history.push({ role: "assistant", content: "a" });
+
+    const saveRes = await handleSlashCommand("/save round.json", stateA);
+    expect(saveRes.kind).toBe("continue");
+
+    const stateB = makeState(tmpDir);
+    const loadRes = await handleSlashCommand("/load round.json", stateB);
+    expect(loadRes.kind).toBe("continue");
+    expect(stateB.history.size).toBe(2);
+    expect(stateB.history.getTurns()[0]?.content).toBe("q");
   });
 });

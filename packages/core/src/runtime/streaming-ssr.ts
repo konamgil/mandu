@@ -24,6 +24,16 @@ import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
 import { getRenderToString } from "./react-renderer";
 import { mark, measure } from "../perf";
 import { generateFastRefreshPreamble } from "../bundler/dev";
+import { PREFETCH_HELPER_SCRIPT } from "../client/prefetch-helper";
+
+/**
+ * Issue #192 — `@view-transition` at-rule, mirror of the constant in
+ * `./ssr.ts`. Duplicated here to keep the streaming path self-contained
+ * without a cross-module runtime import cycle (ssr.ts already re-exports
+ * streaming-ssr.ts). Both constants MUST stay byte-identical.
+ */
+const VIEW_TRANSITION_STYLE_TAG =
+  "<style>@view-transition{navigation:auto}</style>";
 
 // ========== Types ==========
 
@@ -154,7 +164,66 @@ export interface StreamingSSROptions {
    * Dev + hydration + populated `shared.fastRefresh` only.
    */
   cspNonce?: string | boolean;
+  /**
+   * Issue #192 — emit `<style>@view-transition{navigation:auto}</style>`
+   * into the streaming shell `<head>`. Mirrors `SSROptions.transitions`.
+   * Default: `true`.
+   */
+  transitions?: boolean;
+  /**
+   * Issue #192 — emit the ~500-byte hover prefetch helper `<script>`
+   * into the streaming shell `<head>`. Mirrors `SSROptions.prefetch`.
+   * Default: `true`.
+   */
+  prefetch?: boolean;
+  /**
+   * Issue #191 — control dev-mode injection of the `_devtools.js`
+   * bundle. Mirrors `SSROptions.devtools`:
+   *   - `true`      → force inject (explicit opt-in)
+   *   - `false`     → force skip (explicit opt-out)
+   *   - `undefined` → default; inject iff the manifest has islands.
+   */
+  devtools?: boolean;
 }
+
+/**
+ * Issue #191 — Streaming-SSR mirror of `ssr.ts:shouldInjectDevtools`.
+ * Kept in sync manually (tiny pure function, not worth a cross-module
+ * runtime import — the ssr.ts → streaming-ssr.ts re-export direction
+ * means a circular import here would force a refactor of the whole
+ * module graph). The unit test suite table-tests both implementations
+ * against the same matrix so drift is caught at CI time.
+ */
+function shouldInjectDevtoolsStreaming(
+  devtools: boolean | undefined,
+  manifest: BundleManifest | undefined,
+): boolean {
+  if (devtools === true) return true;
+  if (devtools === false) return false;
+  if (!manifest) return false;
+  const hasIslandsMap =
+    manifest.islands && Object.keys(manifest.islands).length > 0;
+  const hasBundles =
+    manifest.bundles && Object.keys(manifest.bundles).length > 0;
+  return Boolean(hasIslandsMap || hasBundles);
+}
+
+/**
+ * Issue #191 — Streaming-SSR mirror of `ssr.ts:generateDevtoolsScript`.
+ * Emits `<script type="module" src="/.mandu/client/_devtools.js?v=BUILD">`
+ * with a `buildTime`-keyed cache-bust (or `Date.now()` fallback).
+ */
+function generateStreamingDevtoolsScript(manifest: BundleManifest | undefined): string {
+  const cacheBust = manifest?.buildTime
+    ? `?v=${encodeURIComponent(manifest.buildTime)}`
+    : `?t=${Date.now()}`;
+  return `<script type="module" src="/.mandu/client/_devtools.js${cacheBust}"></script>`;
+}
+
+/** @internal — surface for the shared test suite in tests/runtime/devtools-inject.test.ts. */
+export const _testOnly_shouldInjectDevtoolsStreaming = shouldInjectDevtoolsStreaming;
+/** @internal — surface for the shared test suite in tests/runtime/devtools-inject.test.ts. */
+export const _testOnly_generateStreamingDevtoolsScript = generateStreamingDevtoolsScript;
 
 export interface StreamingLoaderResult<T = unknown> {
   /** 즉시 로드할 Critical 데이터 */
@@ -462,6 +531,8 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     hydration,
     cssPath,
     isDev = false,
+    transitions = true,
+    prefetch = true,
   } = options;
 
   // CSS 링크 태그 생성
@@ -470,6 +541,14 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   const cssLinkTag = cssPath
     ? `<link rel="stylesheet" href="${escapeHtmlAttr(`${cssPath}${isDev ? `?t=${Date.now()}` : ""}`)}">`
     : "";
+
+  // Issue #192 — Smooth navigation primitives. Mirror of the block in
+  // `ssr.ts::renderToHTML`; see that call-site for the full rationale.
+  // Positioned right after the user stylesheet so the at-rule parses
+  // alongside it, and before user `headTags` so users can override with
+  // an inline style later in the document order.
+  const viewTransitionTag = transitions !== false ? VIEW_TRANSITION_STYLE_TAG : "";
+  const prefetchScriptTag = prefetch !== false ? PREFETCH_HELPER_SCRIPT : "";
 
   // Island wrapper (hydration이 필요한 경우)
   const needsHydration = hydration && hydration.strategy !== "none" && routeId && bundleManifest;
@@ -549,6 +628,8 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtmlText(title)}</title>
   ${cssLinkTag}
+  ${viewTransitionTag}
+  ${prefetchScriptTag}
   ${loadingStyles}
   ${importMapScript}
   ${headTags}
@@ -572,6 +653,7 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
     hmrPort,
     enableClientRouter = false,
     hydration,
+    devtools,
   } = options;
 
   const scripts: string[] = [];
@@ -658,9 +740,13 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
     scripts.push(generateHMRScript(hmrPort));
   }
 
-  // 11. DevTools 번들 로드 (개발 모드)
-  if (isDev) {
-    scripts.push(`<script type="module" src="/.mandu/client/_devtools.js"></script>`);
+  // 11. Issue #191 — DevTools 번들 (~1.15 MB) 주입 결정.
+  //   - 기본: manifest 에 island/bundle 이 있을 때만 주입 (pure-SSR 페이지는 스킵).
+  //   - `devtools === true`  → 강제 주입 (SSR-only 프로젝트에서 Kitchen 원할 때).
+  //   - `devtools === false` → 강제 스킵.
+  //   - Cache-bust (`?v=buildTime`) 로 HMR 후 stale 방지.
+  if (isDev && shouldInjectDevtoolsStreaming(devtools, bundleManifest)) {
+    scripts.push(generateStreamingDevtoolsScript(bundleManifest));
   }
 
   // Island wrapper 닫기 (hydration이 필요한 경우)

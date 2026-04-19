@@ -271,3 +271,128 @@ describe("runtime-neutral primitives", () => {
     expect(verified).toBe(true);
   });
 });
+
+
+// ========== L-03: per-request ctx isolation ==========
+
+describe("Wave R3 L-03 — per-request ctx isolation across concurrent await", () => {
+  beforeEach(() => {
+    clearDefaultRegistry();
+  });
+
+  afterEach(() => {
+    clearDefaultRegistry();
+  });
+
+  it("10 concurrent requests each see only their own env/ctx", async () => {
+    const registry = createServerRegistry();
+    registry.registerApiHandler("api/echo", async (req) => {
+      // Force a yield so the ALS/WeakMap has to preserve context across await.
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      const env = getWorkersEnv() as { id?: string } | undefined;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      const ctx = getWorkersCtx();
+      const bodyText = await req.text();
+      return Response.json({ seenId: env?.id ?? null, ctxOk: !!ctx, body: bodyText });
+    });
+
+    const handler = createWorkersHandler(baseManifest, { registry, skipPolyfills: true });
+
+    const inflight: Array<Promise<{ seenId: string | null; ctxOk: boolean; body: string }>> = [];
+    for (let i = 0; i < 10; i++) {
+      const id = `req-${i}`;
+      const env = { id };
+      const ctx = mockCtx();
+      const req = new Request("https://example.com/api/echo", {
+        method: "POST",
+        body: id,
+      });
+      inflight.push(
+        handler(req, env, ctx).then((res) => res.json() as Promise<{ seenId: string | null; ctxOk: boolean; body: string }>),
+      );
+    }
+    const results = await Promise.all(inflight);
+
+    // Each handler must have seen its OWN env.id, not another request's.
+    for (let i = 0; i < results.length; i++) {
+      expect(results[i]?.seenId).toBe(`req-${i}`);
+      expect(results[i]?.ctxOk).toBe(true);
+      expect(results[i]?.body).toBe(`req-${i}`);
+    }
+  });
+});
+
+// ========== L-04: production error-body scrubbing ==========
+
+describe("Wave R3 L-04 — error body scrubbing in production", () => {
+  // Silence logFullError stderr noise under test — we assert body shape, not logs.
+  let origErr: typeof console.error;
+  beforeEach(() => {
+    origErr = console.error;
+    console.error = () => {};
+  });
+  afterEach(() => {
+    console.error = origErr;
+  });
+
+  it("production mode returns generic 'Internal Server Error' without raw message", async () => {
+    const { hintBunOnlyApiError } = await import("../src/workers/guards");
+    const err = new Error("SECRET_LEAK_PATH=/srv/app/.env; token=sk_live_ABCDEF");
+    const res = hintBunOnlyApiError(err, { ENVIRONMENT: "production" });
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as {
+      error: string;
+      message: string;
+      correlationId: string;
+      stack?: string;
+      cause?: unknown;
+    };
+    expect(body.error).toBe("InternalServerError");
+    expect(body.message).toBe("Internal Server Error");
+    expect(body.correlationId).toBeDefined();
+    expect(body.correlationId.length).toBeGreaterThan(0);
+    expect(body.stack).toBeUndefined();
+    expect(body.cause).toBeUndefined();
+    // Ensure the secret pattern never leaks into the body.
+    expect(body.message).not.toContain("SECRET_LEAK_PATH");
+    expect(body.message).not.toContain("sk_live_");
+  });
+
+  it("production mode scrubs Bun-API hint's raw message but keeps the generic hint", async () => {
+    const { hintBunOnlyApiError } = await import("../src/workers/guards");
+    const err = new Error(
+      "[@mandujs/edge/workers] Bun.sql is not available on Cloudflare Workers. " +
+        "Internal path: /srv/app/.mandu/generated/server/api-users.ts",
+    );
+    const res = hintBunOnlyApiError(err, { ENVIRONMENT: "production" });
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string; message: string; hint: string; correlationId: string };
+    expect(body.error).toBe("BunApiUnsupportedOnEdge");
+    expect(body.message).not.toContain("/srv/app/");
+    expect(body.hint).toContain("Cloudflare Workers");
+    expect(body.correlationId).toBeDefined();
+  });
+
+  it("dev mode keeps the raw error message for debugging", async () => {
+    const { hintBunOnlyApiError } = await import("../src/workers/guards");
+    const err = new Error("DEV_DEBUG_TOKEN=abc");
+    const res = hintBunOnlyApiError(err, {});
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { message: string; correlationId: string };
+    expect(body.message).toContain("DEV_DEBUG_TOKEN");
+    expect(body.correlationId).toBeDefined();
+  });
+
+  it("dev mode keeps the Bun-API raw message for debugging", async () => {
+    const { hintBunOnlyApiError } = await import("../src/workers/guards");
+    const err = new Error(
+      "[@mandujs/edge/workers] Bun.sql is not available on Cloudflare Workers. Internal: /srv/app/.env",
+    );
+    const res = hintBunOnlyApiError(err, {});
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe("BunApiUnsupportedOnEdge");
+    expect(body.message).toContain("/srv/app/.env");
+  });
+});

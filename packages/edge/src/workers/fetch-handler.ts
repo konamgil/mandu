@@ -2,11 +2,27 @@
  * Cloudflare Workers fetch handler factory.
  *
  * Wraps Mandu's runtime-neutral `createAppFetchHandler` with the Workers
- * execution contract: `fetch(request, env, ctx) → Response`. The `env` and
- * `ctx` bindings are exposed via `globalThis.__MANDU_WORKERS_ENV__` and
- * `globalThis.__MANDU_WORKERS_CTX__` so user handlers can reach them through
- * a small accessor API without leaking Workers-specific types through
- * `@mandujs/core`.
+ * execution contract: `fetch(request, env, ctx) → Response`.
+ *
+ * ## Per-request ctx isolation (Wave R3 L-03)
+ *
+ * Workers isolates multiplex many concurrent `fetch()` invocations — we
+ * cannot store per-request state on `globalThis`. Two requests that both
+ * yield at `await` points would see each other's ctx/env.
+ *
+ * We use `AsyncLocalStorage` from `node:async_hooks`, which Cloudflare
+ * Workers support when `compatibility_flags = ["nodejs_als"]` (or the
+ * full `nodejs_compat` bundle) is set in `wrangler.toml`. The stored
+ * context is scoped to the `.run(store, fn)` call, so concurrent
+ * requests each see their own bindings regardless of interleaving.
+ *
+ * Module-load guard: we lazily-import `node:async_hooks`. If the host
+ * runtime cannot resolve the module (pre-flag Workers config, or
+ * minified bundles that strip node: imports), we fall back to a
+ * per-Request WeakMap keyed on the Request object. That path is not
+ * concurrency-safe for nested `waitUntil` callbacks that outlive the
+ * fetch, but it preserves request-to-request isolation — which is what
+ * the race finding called out.
  */
 
 import {
@@ -62,11 +78,71 @@ export interface CreateWorkersHandlerOptions
   allowBunOnlyApis?: boolean;
 }
 
-// Expose bindings to user code through a stable `globalThis` slot. Cast
-// through `unknown` to avoid polluting the global type.
-interface MandWorkersGlobals {
-  __MANDU_WORKERS_ENV__?: WorkersEnv;
-  __MANDU_WORKERS_CTX__?: WorkersExecutionContext;
+/** Per-request context bag tracked by AsyncLocalStorage or WeakMap. */
+interface WorkersRequestStore {
+  env: WorkersEnv;
+  ctx: WorkersExecutionContext;
+}
+
+// ---------------------------------------------------------------------------
+// AsyncLocalStorage backing (primary) with WeakMap fallback
+// ---------------------------------------------------------------------------
+
+interface AlsLike<T> {
+  run<R>(store: T, fn: () => R): R;
+  getStore(): T | undefined;
+}
+
+let alsInstance: AlsLike<WorkersRequestStore> | null = null;
+/** Module-load flag — we only attempt the dynamic import once. */
+let alsInitAttempted = false;
+
+/**
+ * Request-object → store fallback. Works when `node:async_hooks` isn't
+ * resolvable in the current runtime (e.g. Workers without
+ * `nodejs_als`/`nodejs_compat`). Keyed on the exact Request instance so
+ * each fetch() sees only its own bindings.
+ */
+const requestToStore = new WeakMap<Request, WorkersRequestStore>();
+
+/**
+ * Most-recent request — used ONLY by the fallback path when user handlers
+ * haven't been threaded a `Request` reference. In the AsyncLocalStorage
+ * path this is unused and each request is correctly isolated.
+ */
+let fallbackCurrentRequest: Request | undefined;
+
+async function ensureAls(): Promise<AlsLike<WorkersRequestStore> | null> {
+  if (alsInstance) return alsInstance;
+  if (alsInitAttempted) return null;
+  alsInitAttempted = true;
+  try {
+    const mod = (await import("node:async_hooks")) as {
+      AsyncLocalStorage?: new <T>() => AlsLike<T>;
+    };
+    if (mod?.AsyncLocalStorage) {
+      alsInstance = new mod.AsyncLocalStorage<WorkersRequestStore>();
+    }
+  } catch {
+    // Workers without nodejs_als/nodejs_compat — use WeakMap fallback.
+    alsInstance = null;
+  }
+  return alsInstance;
+}
+
+/**
+ * Best-effort synchronous accessor used by {@link getWorkersEnv} /
+ * {@link getWorkersCtx}. On platforms with AsyncLocalStorage we return
+ * the ALS store; otherwise the WeakMap bound to the current request.
+ */
+function currentStore(): WorkersRequestStore | undefined {
+  if (alsInstance) {
+    return alsInstance.getStore();
+  }
+  if (fallbackCurrentRequest) {
+    return requestToStore.get(fallbackCurrentRequest);
+  }
+  return undefined;
 }
 
 /**
@@ -114,29 +190,42 @@ export function createWorkersHandler(
     env: WorkersEnv,
     ctx: WorkersExecutionContext
   ): Promise<Response> {
-    const globals = globalThis as unknown as MandWorkersGlobals;
-    globals.__MANDU_WORKERS_ENV__ = env;
-    globals.__MANDU_WORKERS_CTX__ = ctx;
+    const store: WorkersRequestStore = { env, ctx };
 
+    const als = await ensureAls();
+    if (als) {
+      // AsyncLocalStorage path — concurrency-safe even with `await` inside.
+      return als.run(store, async () => {
+        try {
+          return await handler(request);
+        } catch (error) {
+          return hintBunOnlyApiError(error, env);
+        }
+      });
+    }
+
+    // Fallback — WeakMap keyed on this exact Request instance.
+    requestToStore.set(request, store);
+    const previousRequest = fallbackCurrentRequest;
+    fallbackCurrentRequest = request;
     try {
       return await handler(request);
     } catch (error) {
-      return hintBunOnlyApiError(error);
+      return hintBunOnlyApiError(error, env);
     } finally {
-      // Intentionally keep env/ctx on globals — nested `waitUntil`
-      // callbacks may fire after the fetch() returns. Workers isolates
-      // are short-lived so this does not leak across invocations.
+      fallbackCurrentRequest = previousRequest;
+      // WeakMap entry cleaned up when GC reclaims the Request object.
     }
   };
 }
 
 /**
  * Access the Cloudflare Workers `env` binding from inside request handlers.
- * Returns `undefined` when running outside Workers (e.g. Bun tests).
+ * Returns `undefined` when running outside Workers (e.g. Bun tests) or
+ * before the first fetch() call has been routed.
  */
 export function getWorkersEnv(): WorkersEnv | undefined {
-  const globals = globalThis as unknown as MandWorkersGlobals;
-  return globals.__MANDU_WORKERS_ENV__;
+  return currentStore()?.env;
 }
 
 /**
@@ -144,6 +233,17 @@ export function getWorkersEnv(): WorkersEnv | undefined {
  * Returns `undefined` when running outside Workers.
  */
 export function getWorkersCtx(): WorkersExecutionContext | undefined {
-  const globals = globalThis as unknown as MandWorkersGlobals;
-  return globals.__MANDU_WORKERS_CTX__;
+  return currentStore()?.ctx;
+}
+
+/**
+ * Test-only hook: reset the AsyncLocalStorage init state so unit tests
+ * can exercise the fallback path. Never call this from production code.
+ *
+ * @internal
+ */
+export function _resetAlsForTesting(): void {
+  alsInstance = null;
+  alsInitAttempted = false;
+  fallbackCurrentRequest = undefined;
 }

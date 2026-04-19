@@ -48,7 +48,9 @@ export function adapterBun(): ManduAdapter {
 
           return {
             port: manduServer.server.port ?? port,
-            hostname: hostname ?? "localhost",
+            // Report the effective bind address. startServer() defaults to
+            // 0.0.0.0 when no hostname is supplied. See #190.
+            hostname: hostname ?? "0.0.0.0",
           };
         },
 

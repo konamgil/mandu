@@ -85,6 +85,13 @@ export const ERROR_MESSAGES: Record<CLIErrorCode, ErrorInfo> = {
     suggestion: "Review validation errors above and fix your config.",
   },
 
+  // Skills generator errors (CLI_E050-CLI_E059) — Wave R3 L-02
+  [CLI_ERROR_CODES.SKILLS_OUTPUT_ESCAPE]: {
+    message: "Skills output directory escapes project root: {path}",
+    suggestion:
+      "--out-dir must resolve inside the project root. Use a relative path like '.claude/skills' or '.mandu/skills'.",
+  },
+
   // Test errors (CLI_E060-CLI_E069) — Phase 12.1
   [CLI_ERROR_CODES.TEST_NO_MATCH]: {
     message: "No test files matched '{target}' patterns.",
@@ -231,6 +238,11 @@ export const ERROR_MESSAGES: Record<CLIErrorCode, ErrorInfo> = {
     message: "System prompt file not found: {path}",
     suggestion:
       "Verify the --system path is correct. Paths are resolved relative to the current working directory.",
+  },
+  [CLI_ERROR_CODES.AI_PATH_ESCAPE]: {
+    message: "Path escapes the AI chat working directory: {path}",
+    suggestion:
+      "Use a bare filename or a relative path under .mandu/ai-chat/ (e.g. \"session.json\" or \"./subdir/session.json\"). Absolute paths and '..' traversals are rejected.",
   },
 
   // Phase 12.2/12.3 — E2E/coverage/watch/heal extensions (CLI_E063-CLI_E067).

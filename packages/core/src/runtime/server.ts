@@ -350,6 +350,32 @@ export interface ServerOptions {
    * When set, token-protected endpoints such as `/_mandu/cache` become available.
    */
   managementToken?: string;
+  /**
+   * Issue #192 — enable CSS View Transitions auto-inject (default `true`).
+   * When `true`, every SSR response gets
+   * `<style>@view-transition{navigation:auto}</style>` in its `<head>`,
+   * giving supported browsers a default crossfade on cross-document
+   * navigation. Pass `false` to suppress (typically wired from
+   * `ManduConfig.transitions`).
+   */
+  transitions?: boolean;
+  /**
+   * Issue #192 — enable the hover prefetch helper (default `true`).
+   * When `true`, every SSR response gets a ~500-byte inline script that
+   * prefetches same-origin links on hover. Pass `false` to suppress
+   * (typically wired from `ManduConfig.prefetch`). Individual links can
+   * also opt out via `data-no-prefetch`.
+   */
+  prefetch?: boolean;
+  /**
+   * Issue #191 — override dev-mode `_devtools.js` injection.
+   * Wired from `ManduConfig.dev.devtools`.
+   *   - `true`      → force inject on every page (SSR-only + Kitchen).
+   *   - `false`     → force skip on every page.
+   *   - `undefined` → default. Inject iff the page's route has at least
+   *                   one island. Pure-SSR pages download zero devtools.
+   */
+  devtools?: boolean;
 }
 
 export interface ManduServer {
@@ -456,6 +482,24 @@ export interface ServerRegistrySettings {
    * Default: false (Bun/Node runtime with full FS access).
    */
   edge?: boolean;
+  /**
+   * Issue #192 — threaded from `ServerOptions.transitions`.
+   * `undefined` is treated as `true` at the SSR call-site (enabled by
+   * default); `false` suppresses the `<style>@view-transition>` injection.
+   */
+  transitions?: boolean;
+  /**
+   * Issue #192 — threaded from `ServerOptions.prefetch`.
+   * `undefined` is treated as `true` at the SSR call-site (enabled by
+   * default); `false` suppresses the hover prefetch `<script>` injection.
+   */
+  prefetch?: boolean;
+  /**
+   * Issue #191 — threaded from `ServerOptions.devtools`. `undefined`
+   * means "use default (islands → inject)"; `true` / `false` force the
+   * dev-mode `_devtools.js` `<script>` injection on / off. No-op in prod.
+   */
+  devtools?: boolean;
 }
 
 export class ServerRegistry {
@@ -1889,6 +1933,9 @@ async function renderPageSSR(
         criticalData: loaderData as Record<string, unknown> | undefined,
         enableClientRouter: true,
         cssPath: settings.cssPath,
+        transitions: settings.transitions,
+        prefetch: settings.prefetch,
+        devtools: settings.devtools,
         onShellReady: () => {
           if (settings.isDev) {
             console.log(`[Mandu Streaming] Shell ready: ${route.id}`);
@@ -1924,6 +1971,9 @@ async function renderPageSSR(
       routePattern: route.pattern,
       cssPath: settings.cssPath,
       islandPreWrapped: !!needsIslandWrap,
+      transitions: settings.transitions,
+      prefetch: settings.prefetch,
+      devtools: settings.devtools,
     });
     return ok(cookies ? cookies.applyToResponse(ssrResponse) : ssrResponse);
   } catch (error) {
@@ -1960,6 +2010,9 @@ async function renderPageSSR(
             title: "Mandu App — Error",
             isDev: settings.isDev,
             cssPath: settings.cssPath,
+            transitions: settings.transitions,
+            prefetch: settings.prefetch,
+            devtools: settings.devtools,
           });
           return ok(cookies ? cookies.applyToResponse(errorHtml) : errorHtml);
         }
@@ -2058,6 +2111,9 @@ async function renderNotFoundPage(
       title: "Not Found",
       isDev: settings.isDev,
       cssPath: settings.cssPath,
+      transitions: settings.transitions,
+      prefetch: settings.prefetch,
+      devtools: settings.devtools,
     });
 
     // renderSSR returns a 200; override to 404 without losing headers.
@@ -2485,6 +2541,9 @@ async function handleRequestInternal(
           title: "Not Found",
           isDev: settings.isDev,
           cssPath: settings.cssPath,
+          transitions: settings.transitions,
+          prefetch: settings.prefetch,
+          devtools: settings.devtools,
         });
         const headers = new Headers(html.headers);
         const body = await html.text();
@@ -2586,10 +2645,43 @@ function startBunServerWithFallback(options: {
 
 // ========== Server Startup ==========
 
+/**
+ * Format a base URL for startup logging based on the bound hostname.
+ *
+ * When binding to wildcard addresses (`0.0.0.0`, `::`, or empty string),
+ * the server listens on all interfaces — browsers must use `localhost`
+ * or a specific loopback address to connect. We surface both IPv4 and IPv6
+ * loopback URLs so the user can pick whichever their OS prefers.
+ *
+ * Returns `{ primary, additional }` where `primary` is the canonical URL
+ * for UX (open-in-browser, runtime control) and `additional` are supplementary
+ * URLs shown in the startup log.
+ */
+export function formatServerAddresses(
+  hostname: string | undefined,
+  port: number
+): { primary: string; additional: string[] } {
+  const isWildcardV4 = hostname === "0.0.0.0" || hostname === undefined || hostname === "";
+  const isWildcardV6 = hostname === "::" || hostname === "[::]";
+  if (isWildcardV4 || isWildcardV6) {
+    return {
+      primary: `http://localhost:${port}`,
+      additional: [`http://127.0.0.1:${port}`, `http://[::1]:${port}`],
+    };
+  }
+  // Bracket IPv6 literals for URL syntax.
+  const host = hostname.includes(":") && !hostname.startsWith("[") ? `[${hostname}]` : hostname;
+  return { primary: `http://${host}:${port}`, additional: [] };
+}
+
 export function startServer(manifest: RoutesManifest, options: ServerOptions = {}): ManduServer {
   const {
     port = 3000,
-    hostname = "localhost",
+    // Default to 0.0.0.0 (dual-stack wildcard on IPv4) so `localhost` resolves
+    // to 127.0.0.1 via OS-level IPv4-preferred lookups (e.g., Windows). Users
+    // can still pin `hostname: "::1"` or `hostname: "127.0.0.1"` explicitly.
+    // See issue #190.
+    hostname = "0.0.0.0",
     rootDir = process.cwd(),
     isDev = false,
     hmrPort,
@@ -2603,6 +2695,9 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     guardConfig = null,
     cache: cacheOption,
     managementToken,
+    transitions,
+    prefetch,
+    devtools,
   } = options;
 
   // cssPath 처리:
@@ -2638,6 +2733,9 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     rateLimit: rateLimitOptions,
     cssPath,
     managementToken,
+    transitions,
+    prefetch,
+    devtools,
   };
 
   registry.rateLimiter = rateLimitOptions ? new MemoryRateLimiter() : null;
@@ -2737,8 +2835,13 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     registry.settings = { ...registry.settings, hmrPort: actualPort };
   }
 
+  const addresses = formatServerAddresses(hostname, actualPort);
+
   if (isDev) {
-    console.log(`🥟 Mandu Dev Server running at http://${hostname}:${actualPort}`);
+    console.log(`🥟 Mandu Dev Server listening at ${addresses.primary}`);
+    if (addresses.additional.length > 0) {
+      console.log(`   (also reachable at ${addresses.additional.join(", ")})`);
+    }
     if (registry.settings.hmrPort) {
       console.log(`🔥 HMR enabled on port ${registry.settings.hmrPort + PORTS.HMR_OFFSET}`);
     }
@@ -2750,10 +2853,13 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
       console.log(`🌊 Streaming SSR enabled`);
     }
     if (registry.kitchen) {
-      console.log(`🍳 Kitchen dashboard at http://${hostname}:${actualPort}/__kitchen`);
+      console.log(`🍳 Kitchen dashboard at ${addresses.primary}/__kitchen`);
     }
   } else {
-    console.log(`🥟 Mandu server running at http://${hostname}:${actualPort}`);
+    console.log(`🥟 Mandu server listening at ${addresses.primary}`);
+    if (addresses.additional.length > 0) {
+      console.log(`   (also reachable at ${addresses.additional.join(", ")})`);
+    }
     if (streaming) {
       console.log(`🌊 Streaming SSR enabled`);
     }

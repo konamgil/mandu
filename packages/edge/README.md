@@ -81,8 +81,9 @@ migration guide.
 
 ## Accessing Workers bindings
 
-Cloudflare bindings (`env`, `ctx`) are stashed on `globalThis` during each
-request. Read them with:
+Cloudflare bindings (`env`, `ctx`) are tracked via `AsyncLocalStorage`
+with a per-Request WeakMap fallback, so concurrent requests in the same
+isolate never see each other's bindings. Read them with:
 
 ```ts
 import { getWorkersEnv, getWorkersCtx } from "@mandujs/edge/workers";
@@ -94,6 +95,38 @@ export async function POST(req: Request) {
   return Response.json({ ok: true });
 }
 ```
+
+### Compatibility flag
+
+`AsyncLocalStorage` requires Node.js compatibility in the Workers
+runtime. Ensure your `wrangler.toml` enables it:
+
+```toml
+# wrangler.toml
+compatibility_flags = ["nodejs_als"]
+# or the full compat bundle:
+# compatibility_flags = ["nodejs_compat"]
+```
+
+The emitted `wrangler.toml` from `mandu build --target=workers` already
+includes this flag. If you hand-roll your config, add the flag yourself —
+without it, `getWorkersEnv()` / `getWorkersCtx()` fall back to a
+per-Request WeakMap which is isolated per-request but won't carry ctx
+across `waitUntil` callbacks that outlive the fetch.
+
+### Error responses
+
+Uncaught exceptions return a 500 JSON payload with:
+
+- `error` — `"InternalServerError"` or `"BunApiUnsupportedOnEdge"`
+- `correlationId` — unique per-request ID to grep server logs
+- `message` — generic `"Internal Server Error"` in production
+  (`NODE_ENV === "production"` or `env.ENVIRONMENT === "production"`);
+  the raw error message in dev
+- `runtime` — `"workers"`
+
+Stack traces and `cause` are never included in the HTTP body. The full
+error (with stack) is logged via `console.error` for Cloudflare Logpush.
 
 ## License
 

@@ -24,6 +24,7 @@ import {
 } from "../util/lockfile";
 import { registerManifestHandlers } from "../util/handlers";
 import { removeRuntimeControl, writeRuntimeControl } from "../util/runtime-control";
+import { resolveDisplayHost } from "../util/host";
 import path from "path";
 import fs from "fs";
 
@@ -169,6 +170,9 @@ export async function start(options: StartOptions = {}): Promise<void> {
     cssPath,
     cache: true,
     managementToken,
+    // Issue #192 — smooth navigation primitives honored in prod
+    transitions: config.transitions,
+    prefetch: config.prefetch,
   };
 
   let actualPort: number;
@@ -193,13 +197,19 @@ export async function start(options: StartOptions = {}): Promise<void> {
     stopFn = () => { server.stop(); };
   }
 
-  console.log(`\n🚀 Production server running on http://${serverConfig.hostname || "localhost"}:${actualPort}`);
+  // Translate wildcard bind addresses to a browser-navigable loopback URL. (#190)
+  const displayHost = resolveDisplayHost(serverConfig.hostname);
+  const baseUrl = `http://${displayHost}:${actualPort}`;
+  console.log(`\n🚀 Production server running on ${baseUrl}`);
+  if (serverConfig.hostname === "0.0.0.0" || !serverConfig.hostname) {
+    console.log(`   (also reachable at http://127.0.0.1:${actualPort} and http://[::1]:${actualPort})`);
+  }
 
   await writeRuntimeControl(rootDir, {
     mode: "start",
     port: actualPort,
     token: managementToken,
-    baseUrl: `http://${serverConfig.hostname || "localhost"}:${actualPort}`,
+    baseUrl,
     startedAt: new Date().toISOString(),
   });
 

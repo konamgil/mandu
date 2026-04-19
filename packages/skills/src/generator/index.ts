@@ -17,7 +17,7 @@ import {
   accessSync,
   readdirSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep, isAbsolute } from "node:path";
 
 import { analyzeManifest } from "./analyzers/manifest-analyzer";
 import { analyzeGuard } from "./analyzers/guard-analyzer";
@@ -45,6 +45,35 @@ export type {
 
 export { analyzeManifest, analyzeGuard, analyzeStack };
 export { buildGlossarySkill, buildConventionsSkill, buildWorkflowSkill };
+
+/**
+ * Raised when `outDir` would resolve outside the host project root.
+ * The CLI surfaces this as `CLI_E050 SKILLS_OUTPUT_ESCAPE`.
+ */
+export class SkillsPathEscapeError extends Error {
+  readonly path: string;
+  constructor(offending: string) {
+    super(`Skills output directory escapes project root: ${offending}`);
+    this.name = "SkillsPathEscapeError";
+    this.path = offending;
+  }
+}
+
+/**
+ * Resolve an `outDir` inside the project root, rejecting any path that
+ * escapes via absolute-reference or `..` traversal. Accepts relative
+ * paths (`.claude/skills`, `.mandu/skills`) and absolute paths that
+ * already live under the root.
+ */
+export function resolveSkillsOutDir(repoRoot: string, outDir: string): string {
+  const root = resolve(repoRoot);
+  const candidate = isAbsolute(outDir) ? resolve(outDir) : resolve(root, outDir);
+  const rootWithSep = root.endsWith(sep) ? root : root + sep;
+  if (candidate !== root && !candidate.startsWith(rootWithSep)) {
+    throw new SkillsPathEscapeError(outDir);
+  }
+  return candidate;
+}
 
 function detectProjectName(repoRoot: string): string {
   const pkgPath = join(repoRoot, "package.json");
@@ -106,7 +135,9 @@ export function generateSkillsForProject(
   const kinds = options.kinds ?? ["glossary", "conventions", "workflow"];
 
   const analysis = analyzeProject(repoRoot);
-  const outDir = options.outDir ?? join(repoRoot, ".claude", "skills");
+  const outDir = options.outDir
+    ? resolveSkillsOutDir(repoRoot, options.outDir)
+    : join(repoRoot, ".claude", "skills");
 
   if (!dryRun) {
     mkdirSync(outDir, { recursive: true });

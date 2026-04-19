@@ -41,7 +41,9 @@ function strictWithWarnings<T extends z.ZodRawShape>(
 const ServerConfigSchema = z
   .object({
     port: z.number().min(1).max(65535).default(3000),
-    hostname: z.string().default("localhost"),
+    // Default 0.0.0.0 so IPv4 `localhost` resolution (Windows default) succeeds.
+    // Users may pin "::1" or "127.0.0.1" explicitly. See issue #190.
+    hostname: z.string().default("0.0.0.0"),
     cors: z
       .union([
         z.boolean(),
@@ -101,6 +103,13 @@ const DevConfigSchema = z
     hmr: z.boolean().default(true),
     watchDirs: z.array(z.string()).default([]),
     observability: z.boolean().default(true),
+    /**
+     * Issue #191 — `_devtools.js` (~1.15 MB React dev runtime + Kitchen
+     * panel) injection override. `undefined` (omitted) = default
+     * auto-detect based on `manifest.hasIslands`. Explicit `true` / `false`
+     * force on / off. Only applies in dev mode.
+     */
+    devtools: z.boolean().optional(),
   })
   .strict();
 
@@ -218,6 +227,16 @@ const ManduHooksSchema = z.custom<Partial<ManduHooks>>(
 export const ManduConfigSchema = z
   .object({
     adapter: AdapterConfigSchema.optional(),
+    /**
+     * Issue #192 — CSS View Transitions auto-inject. Default `true`.
+     * Set `false` to suppress the `@view-transition` `<style>` block.
+     */
+    transitions: z.boolean().default(true),
+    /**
+     * Issue #192 — Hover prefetch helper. Default `true`.
+     * Set `false` to suppress the ~500-byte prefetch IIFE.
+     */
+    prefetch: z.boolean().default(true),
     server: ServerConfigSchema.default({}),
     guard: GuardConfigSchema.default({}),
     build: BuildConfigSchema.default({}),

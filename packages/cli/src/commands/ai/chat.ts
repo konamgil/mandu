@@ -26,8 +26,10 @@ import type { PromptProvider } from "@mandujs/ate/prompts";
 import {
   ChatHistory,
   HistoryValidationError,
+  PathEscapeError,
   createSnapshot,
   loadHistory,
+  resolveAiChatPath,
   saveHistory,
 } from "../../util/ai-history";
 import {
@@ -190,13 +192,23 @@ export async function handleSlashCommand(
         writeLine(state.output, "usage: /save <path>");
         return { kind: "continue" };
       }
+      let resolved: string;
+      try {
+        resolved = resolveAiChatPath(arg, state.cwd);
+      } catch (err) {
+        if (err instanceof PathEscapeError) {
+          return { kind: "error", code: "AI_PATH_ESCAPE", context: { path: err.path } };
+        }
+        writeLine(state.output, `(/save failed: ${(err as Error).message})`);
+        return { kind: "continue" };
+      }
       const snapshot = createSnapshot(state.provider, state.history, {
         model: state.model,
         system: state.system,
       });
       try {
-        await saveHistory(arg, snapshot);
-        writeLine(state.output, `(saved ${state.history.size} turns → ${path.resolve(arg)})`);
+        await saveHistory(resolved, snapshot);
+        writeLine(state.output, `(saved ${state.history.size} turns → ${resolved})`);
       } catch (err) {
         writeLine(state.output, `(/save failed: ${(err as Error).message})`);
       }
@@ -207,22 +219,32 @@ export async function handleSlashCommand(
         writeLine(state.output, "usage: /load <path>");
         return { kind: "continue" };
       }
+      let resolved: string;
       try {
-        const snapshot = await loadHistory(arg);
+        resolved = resolveAiChatPath(arg, state.cwd);
+      } catch (err) {
+        if (err instanceof PathEscapeError) {
+          return { kind: "error", code: "AI_PATH_ESCAPE", context: { path: err.path } };
+        }
+        writeLine(state.output, `(/load failed: ${(err as Error).message})`);
+        return { kind: "continue" };
+      }
+      try {
+        const snapshot = await loadHistory(resolved);
         state.history.replace(snapshot.messages);
         state.provider = snapshot.provider;
         if (snapshot.model) state.model = snapshot.model;
         if (snapshot.system !== undefined) state.system = snapshot.system;
         writeLine(
           state.output,
-          `(loaded ${snapshot.messages.length} turns from ${path.resolve(arg)} — provider=${state.provider})`,
+          `(loaded ${snapshot.messages.length} turns from ${resolved} — provider=${state.provider})`,
         );
       } catch (err) {
         if (err instanceof HistoryValidationError) {
           return {
             kind: "error",
             code: "AI_HISTORY_MALFORMED",
-            context: { path: err.path ?? arg },
+            context: { path: err.path ?? resolved },
           };
         }
         writeLine(state.output, `(/load failed: ${(err as Error).message})`);
@@ -251,16 +273,26 @@ export async function handleSlashCommand(
         writeLine(state.output, "usage: /system <path>");
         return { kind: "continue" };
       }
+      let resolved: string;
       try {
-        const text = await loadSystemFile(arg);
+        resolved = resolveAiChatPath(arg, state.cwd);
+      } catch (err) {
+        if (err instanceof PathEscapeError) {
+          return { kind: "error", code: "AI_PATH_ESCAPE", context: { path: err.path } };
+        }
+        writeLine(state.output, `(/system failed: ${(err as Error).message})`);
+        return { kind: "continue" };
+      }
+      try {
+        const text = await loadSystemFile(resolved);
         state.system = text;
-        writeLine(state.output, `(system loaded from ${path.resolve(arg)} — ${text.length} chars)`);
+        writeLine(state.output, `(system loaded from ${resolved} — ${text.length} chars)`);
       } catch (err) {
         if ((err as { code?: string }).code === "AI_SYSTEM_FILE_NOT_FOUND") {
           return {
             kind: "error",
             code: "AI_SYSTEM_FILE_NOT_FOUND",
-            context: { path: arg },
+            context: { path: resolved },
           };
         }
         writeLine(state.output, `(/system failed: ${(err as Error).message})`);

@@ -269,15 +269,32 @@ describe("renderToHTML — HMR script", () => {
 
 // ---------------------------------------------------------------------------
 // 6. DevTools script injection
+//    Issue #191 — the ~1.15 MB `_devtools.js` bundle is no longer injected
+//    unconditionally in dev. Default: inject iff the manifest has at least
+//    one island. Exhaustive matrix coverage lives in `devtools-inject.test.ts`;
+//    this block keeps a minimal smoke suite so a regression breaking the
+//    island-present happy path still fails here.
 // ---------------------------------------------------------------------------
 
 describe("renderToHTML — DevTools script", () => {
-  it("injects DevTools script in dev mode", () => {
+  it("injects DevTools script in dev mode when the manifest has islands", () => {
+    const html = renderToHTML(React.createElement("div"), {
+      isDev: true,
+      routeId: "home",
+      hydration: { strategy: "island", priority: "visible", preload: false },
+      bundleManifest: manifestWithRoute("home"),
+    });
+
+    expect(html).toContain("_devtools.js");
+  });
+
+  it("does NOT inject DevTools script in dev mode when hasIslands is false", () => {
+    // Issue #191 — pure-SSR page skips the 1.15 MB devtools download.
     const html = renderToHTML(React.createElement("div"), {
       isDev: true,
     });
 
-    expect(html).toContain("_devtools.js");
+    expect(html).not.toContain("_devtools.js");
   });
 
   it("does NOT inject DevTools script in production mode", () => {
@@ -301,7 +318,12 @@ describe("renderToHTML — DevTools script", () => {
 
 describe("renderToHTML — Zero-JS mode", () => {
   it("produces no <script> tags when no hydration/dev options are set", () => {
-    const html = renderToHTML(React.createElement("p", null, "static"));
+    // Issue #192 — the hover-prefetch helper is injected by default in all
+    // SSR output. A "truly Zero-JS" page requires `prefetch: false`. Dev is
+    // false too (default), so no HMR / DevTools scripts either.
+    const html = renderToHTML(React.createElement("p", null, "static"), {
+      prefetch: false,
+    });
 
     // Count all <script tags in the output
     const scriptCount = (html.match(/<script/g) || []).length;

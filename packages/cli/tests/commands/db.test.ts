@@ -95,7 +95,10 @@ function basicUserResource(): string {
   // Use the absolute path to @mandujs/core so Bun can resolve it from
   // the tmpdir location (bunfig.toml's workspace alias only applies to
   // files inside the repo tree).
-  const coreResourcePath = join(process.cwd(), "packages", "core", "src", "resource", "index.ts").replace(/\\/g, "/");
+  // Resolve relative to this test file so the path is stable across entry points.
+  // process.cwd()-based resolution broke when tests ran from inside packages/cli
+  // (yielding packages/cli/packages/core/... — which does not exist).
+  const coreResourcePath = join(import.meta.dir, "..", "..", "..", "core", "src", "resource", "index.ts").replace(/\\/g, "/");
   return `
     import { defineResource } from "${coreResourcePath}";
     export default defineResource({

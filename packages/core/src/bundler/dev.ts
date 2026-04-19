@@ -15,6 +15,11 @@ import type {
   HMRReplayEnvelope,
 } from "./hmr-types";
 import { MAX_REPLAY_BUFFER, REPLAY_MAX_AGE_MS } from "./hmr-types";
+import {
+  ReverseImportGraph,
+  scanFileImports,
+  DEFAULT_MAX_CLOSURE_DEPTH,
+} from "./reverse-import-graph";
 import path from "path";
 import fs from "fs";
 
@@ -312,6 +317,9 @@ export const _testOnly_DEFAULT_COMMON_DIRS = DEFAULT_COMMON_DIRS;
 /** Test-only accessor for the watch exclude segments (B1 coverage). */
 export const _testOnly_WATCH_EXCLUDE_SEGMENTS = WATCH_EXCLUDE_SEGMENTS;
 
+/** Test-only re-export for #189 reverse import-graph coverage. */
+export { ReverseImportGraph, scanFileImports } from "./reverse-import-graph";
+
 /**
  * Phase 7.0 R2 Agent D — classification helper mirroring the in-bundler
  * `classifyBatch` priority rules WITHOUT the project-specific maps
@@ -569,6 +577,99 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
   for (const dir of commonDirsToCheck) {
     await addCommonDir(dir);
   }
+
+  // #189 — reverse import-graph for transitive invalidation.
+  //
+  // Built-time index of `importee -> Set<importer>` edges for every
+  // known SSR / API / client / common-dir root. On an unknown-file
+  // change (a leaf utility that none of our sets recognize) we walk
+  // the transitive importer closure and re-dispatch the change
+  // against every ancestor that IS known — so a deep edit to
+  // `app/_utils/translations/ko.ts` still re-evaluates the barrel
+  // in `app/_utils/translations/index.ts` that imported it.
+  //
+  // The initial population is best-effort (filesystem scan may
+  // surface typed-only stubs that have no source yet); misses simply
+  // keep the legacy "silent drop" behavior so no project is made
+  // worse by turning this on.
+  const reverseGraph = new ReverseImportGraph();
+
+  /**
+   * Re-scan a single file's imports and update its row in the
+   * reverse graph. Called on startup for every known root, and
+   * again each time a file change is dispatched so the graph
+   * tracks refactors (an import being added / removed) in real
+   * time.
+   *
+   * Errors are swallowed — a missing file / permission issue must
+   * not break the HMR dispatch for the rest of the project.
+   */
+  const refreshReverseGraphEdges = async (filePath: string): Promise<void> => {
+    try {
+      const imports = await scanFileImports(filePath);
+      reverseGraph.update(filePath, imports);
+    } catch {
+      // scanFileImports already swallows fs errors; this extra guard
+      // catches anything pathological (e.g. a symlink loop).
+    }
+  };
+
+  /**
+   * Populate the reverse graph transitively from every known root.
+   *
+   * The BFS walks each root's outgoing imports, scans every
+   * discovered intermediate, and keeps going until the frontier is
+   * empty or we hit the depth cap. Without this transitive seed,
+   * a deep edit (root -> barrel -> leaf) would see
+   * `reverseGraph.directImporters(leaf) === {}` because only the
+   * root's edges got recorded — exactly the bug #189 describes.
+   *
+   * The walk is I/O-bound but bounded: each node is visited at most
+   * once (`visited` set) and we cap the seeding at
+   * `DEFAULT_MAX_CLOSURE_DEPTH` hops to keep startup cost predictable
+   * on projects with dense import graphs. Subsequent edits still
+   * extend the graph via `refreshReverseGraphEdges` in `_doBuild`.
+   */
+  const seedReverseGraph = async (): Promise<void> => {
+    const roots = new Set<string>();
+    for (const rootPath of serverModuleSet) roots.add(rootPath);
+    for (const rootPath of apiModuleSet) roots.add(rootPath);
+    for (const rootPath of clientModuleToRoute.keys()) roots.add(rootPath);
+
+    const visited = new Set<string>();
+    let frontier = Array.from(roots);
+
+    for (
+      let depth = 0;
+      depth < DEFAULT_MAX_CLOSURE_DEPTH && frontier.length > 0;
+      depth++
+    ) {
+      // Scan the current frontier in parallel — these are independent
+      // file reads. The scan returns the RESOLVED absolute importee
+      // paths, which become the next frontier.
+      const scans = await Promise.all(
+        frontier.map(async (filePath) => {
+          if (visited.has(filePath)) return [];
+          visited.add(filePath);
+          try {
+            const imports = await scanFileImports(filePath);
+            reverseGraph.update(filePath, imports);
+            return imports;
+          } catch {
+            return [];
+          }
+        }),
+      );
+
+      const next: string[] = [];
+      for (const group of scans) {
+        for (const dep of group) {
+          if (!visited.has(dep)) next.push(dep);
+        }
+      }
+      frontier = next;
+    }
+  };
 
   // 파일 감시 설정
   const watchers: fs.FSWatcher[] = [];
@@ -974,8 +1075,156 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     perFileTimers.set(key, timer);
   };
 
+  /**
+   * #189 — dispatch an unknown-file change against every known root
+   * that transitively imports it.
+   *
+   * The reverse graph answers "which SSR / API / client modules end
+   * up depending on this file?" via a bounded BFS closure. Each
+   * matched root is re-dispatched through the SAME callbacks a
+   * direct change would fire (`onSSRChange`, `onAPIChange`, or an
+   * island rebuild), so downstream behavior is identical to a
+   * direct edit. This closes the "transitive ESM cache" gap
+   * described in issue #189 by making sure every ancestor that
+   * consumed the leaf gets its bundle rebuilt / handler re-
+   * registered.
+   *
+   * Returns the number of roots actually dispatched so the caller
+   * can decide whether to log a "no transitive importers" line or
+   * stay silent. Dispatch is idempotent — each root is touched at
+   * most once per change via the `dispatched` set.
+   */
+  const dispatchByTransitiveImporters = async (
+    changedFile: string,
+  ): Promise<number> => {
+    const absChanged = path.resolve(rootDir, changedFile);
+    // Refresh the changed file's OWN imports first. A leaf edit can
+    // legitimately add or remove imports (e.g. switching a barrel
+    // from `./en` to `./ko`); the reverse graph must track that so
+    // the NEXT unknown-file change uses the correct set.
+    await refreshReverseGraphEdges(absChanged);
+
+    const importers = reverseGraph.transitiveImporters(
+      absChanged,
+      DEFAULT_MAX_CLOSURE_DEPTH,
+    );
+    if (importers.size === 0) return 0;
+
+    // Partition importers by which known-root bucket they belong
+    // to. A single file can be in multiple buckets (e.g. a shared
+    // `.client.tsx` that is also referenced by a server module) —
+    // iterate in priority order: SSR first (heaviest signal), then
+    // API, then client islands.
+    const ssrRoots: string[] = [];
+    const apiRoots: string[] = [];
+    const islandRoots: Array<{ routeId: string; path: string }> = [];
+
+    for (const importerAbs of importers) {
+      if (serverModuleSet.has(importerAbs)) {
+        ssrRoots.push(importerAbs);
+        continue;
+      }
+      if (apiModuleSet.has(importerAbs)) {
+        apiRoots.push(importerAbs);
+        continue;
+      }
+      const islandRouteId = clientModuleToRoute.get(importerAbs);
+      if (islandRouteId) {
+        islandRoots.push({ routeId: islandRouteId, path: importerAbs });
+      }
+    }
+
+    const totalMatched = ssrRoots.length + apiRoots.length + islandRoots.length;
+    if (totalMatched === 0) return 0;
+
+    const relFile = path.relative(rootDir, absChanged).replace(/\\/g, "/");
+    console.log(
+      `\n🔄 ${path.basename(changedFile)} changed — invalidating ${totalMatched} transitive importer(s) (${relFile})`,
+    );
+
+    // SSR: fire once per distinct importer path.
+    if (onSSRChange) {
+      for (const ssrRoot of ssrRoots) {
+        try {
+          await Promise.resolve(onSSRChange(ssrRoot));
+        } catch (err) {
+          console.error(
+            "[Mandu HMR] transitive onSSRChange threw:",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+
+    // API: same pattern.
+    if (onAPIChange) {
+      for (const apiRoot of apiRoots) {
+        try {
+          await Promise.resolve(onAPIChange(apiRoot));
+        } catch (err) {
+          console.error(
+            "[Mandu HMR] transitive onAPIChange threw:",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+
+    // Islands: coalesce to a single build call when multiple routes
+    // share the changed file. `buildClientBundles` with a
+    // `targetRouteIds` list already dedupes internally.
+    if (islandRoots.length > 0) {
+      const targetIds = Array.from(new Set(islandRoots.map((r) => r.routeId)));
+      const startTime = performance.now();
+      try {
+        const result = await buildClientBundles(manifest, rootDir, {
+          minify: false,
+          sourcemap: true,
+          targetRouteIds: targetIds,
+        });
+        const buildTime = performance.now() - startTime;
+        if (result.success) {
+          console.log(
+            `✅ Rebuilt ${targetIds.length} island(s) in ${buildTime.toFixed(0)}ms`,
+          );
+          for (const targetId of targetIds) {
+            onRebuild?.({
+              routeId: targetId,
+              success: true,
+              buildTime,
+            });
+          }
+        } else {
+          console.error("❌ Transitive island rebuild failed:", result.errors);
+          for (const targetId of targetIds) {
+            onRebuild?.({
+              routeId: targetId,
+              success: false,
+              buildTime,
+              error: result.errors.join(", "),
+            });
+          }
+        }
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        console.error("❌ Transitive island rebuild error:", err.message);
+        for (const { routeId: targetId } of islandRoots) {
+          onError?.(err, targetId);
+        }
+      }
+    }
+
+    return totalMatched;
+  };
+
   const _doBuild = async (changedFile: string) => {
     const normalizedPath = normalizeFsPath(changedFile);
+
+    // #189 — refresh the changed file's imports so the reverse graph
+    // tracks refactors regardless of which dispatch path fires below.
+    // Fire-and-forget because the scan is I/O-bound and the dispatch
+    // path cannot stall on it.
+    void refreshReverseGraphEdges(path.resolve(rootDir, changedFile));
 
     // 공통 컴포넌트 디렉토리 변경 → Island만 재빌드 + SSR 레지스트리 invalidate (#184, #185)
     if (isInCommonDir(changedFile)) {
@@ -1053,12 +1302,16 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
       // SSR 모듈 변경 감지 (page.tsx, layout.tsx) — #151
       if (onSSRChange && serverModuleSet.has(normalizedPath)) {
         console.log(`\n🔄 SSR file changed: ${path.basename(changedFile)}`);
+        // Refresh the changed file's imports so the reverse graph
+        // tracks refactors (a new import added to an SSR module).
+        await refreshReverseGraphEdges(path.resolve(rootDir, changedFile));
         onSSRChange(normalizedPath);
         return;
       }
       // API 모듈 변경 감지 (route.ts)
       if (onAPIChange && apiModuleSet.has(normalizedPath)) {
         console.log(`\n🔄 API route changed: ${path.basename(changedFile)}`);
+        await refreshReverseGraphEdges(path.resolve(rootDir, changedFile));
         onAPIChange(normalizedPath);
         return;
       }
@@ -1070,13 +1323,35 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
       // reuse its existing `handleAPIChange` plumbing.
       if (onAPIChange && isRouteMiddlewareFile(normalizedPath)) {
         console.log(`\n🔄 Middleware changed: ${path.basename(changedFile)}`);
+        await refreshReverseGraphEdges(path.resolve(rootDir, changedFile));
         onAPIChange(normalizedPath);
+        return;
+      }
+      // #189 — reverse import-graph fallback.
+      //
+      // The changed file matched none of our direct dispatch sets.
+      // Before silently dropping (legacy behavior), walk the
+      // reverse graph to see which known roots transitively import
+      // this file and re-dispatch against each one. This is what
+      // makes a deep leaf edit (e.g. a barrel's static-map entry)
+      // propagate without a manual restart.
+      const dispatched = await dispatchByTransitiveImporters(changedFile);
+      if (dispatched === 0) {
+        // No known importer — preserve the legacy silent-drop path
+        // so truly unrelated file changes (editor backups, tmp
+        // files that slipped through the filter) stay cheap.
       }
       return;
     }
 
     const route = manifest.routes.find((r) => r.id === routeId);
     if (!route || !route.clientModule) return;
+
+    // #189 — refresh the client island's outgoing imports so the
+    // reverse graph tracks newly added / removed imports in the
+    // island file itself. Fire-and-forget so it cannot stall the
+    // rebuild.
+    void refreshReverseGraphEdges(path.resolve(rootDir, changedFile));
 
     console.log(`\n🔄 Rebuilding island: ${routeId}`);
     const startTime = performance.now();
@@ -1222,6 +1497,19 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
       console.log(`📦 Common dirs (full rebuild): ${commonDirNames}`);
     }
   }
+
+  // #189 — seed the reverse import-graph AFTER watchers are wired so
+  // any edit that lands during the scan still triggers `handleFileChange`.
+  // The scan is fire-and-forget; the initial build is already complete
+  // and the first user edit can't race the seed (first event goes
+  // through the 100 ms debounce, by which point the scan has finished
+  // for any realistic project size).
+  seedReverseGraph().catch((err) => {
+    console.warn(
+      "[Mandu HMR] reverse import-graph seed skipped:",
+      err instanceof Error ? err.message : String(err),
+    );
+  });
 
   return {
     initialBuild,
