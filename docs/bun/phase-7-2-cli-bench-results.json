@@ -1,0 +1,53 @@
+{
+  "startedAt": "2026-04-18T23:44:42.708Z",
+  "fixture": "C:\\Users\\LamySolution\\workspace\\mandu\\demo\\starter",
+  "iterations": 4,
+  "perfMode": false,
+  "cold": {
+    "readyMs": 1143.3899,
+    "reportedMs": 548,
+    "perfLines": [],
+    "timedOut": false,
+    "port": 59846,
+    "idx": 0,
+    "mode": "cold"
+  },
+  "warm": [
+    {
+      "readyMs": 956.2368,
+      "reportedMs": 377,
+      "perfLines": [],
+      "timedOut": false,
+      "port": 47314,
+      "idx": 1,
+      "mode": "warm"
+    },
+    {
+      "readyMs": 1057.9034,
+      "reportedMs": 381,
+      "perfLines": [],
+      "timedOut": false,
+      "port": 58898,
+      "idx": 2,
+      "mode": "warm"
+    },
+    {
+      "readyMs": null,
+      "reportedMs": null,
+      "perfLines": [],
+      "timedOut": true,
+      "port": 54437,
+      "idx": 3,
+      "mode": "warm"
+    }
+  ],
+  "warmStats": {
+    "count": 2,
+    "p50": 1007.0700999999999,
+    "p95": 1052.82007,
+    "p99": 1056.886734,
+    "mean": 1007.0700999999999,
+    "min": 956.2368,
+    "max": 1057.9034
+  }
+}

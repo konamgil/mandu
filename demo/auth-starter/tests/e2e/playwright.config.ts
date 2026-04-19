@@ -7,8 +7,12 @@ const E2E_PORT = Number(process.env.AUTH_STARTER_PORT ?? "4773");
 const E2E_URL = `http://localhost:${E2E_PORT}`;
 
 export default defineConfig({
-  // Spec files live next to this config.
+  // Spec files live next to this config. `fast-refresh.spec.ts` is
+  // excluded — it uses its own config (`playwright-fast-refresh.config.ts`)
+  // because it spawns its own dev server instead of relying on the
+  // `mandu start` webServer this config boots.
   testDir: ".",
+  testIgnore: /fast-refresh\.spec\.ts$/,
   timeout: 60_000,
   use: {
     baseURL: process.env.BASE_URL ?? E2E_URL,

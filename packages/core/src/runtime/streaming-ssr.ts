@@ -143,6 +143,16 @@ export interface StreamingSSROptions {
   _skipHtmlClose?: boolean;
   /** CSS 파일 경로 (자동 주입, 기본: /.mandu/client/globals.css) */
   cssPath?: string | false;
+  /**
+   * Phase 7.2 R1 Agent C (H1) — Content-Security-Policy nonce for the
+   * Fast Refresh inline preamble. Mirrors `SSROptions.cspNonce`:
+   *   - `true`            → auto-generate fresh 128-bit base64 nonce
+   *   - non-empty string  → use caller-provided nonce verbatim
+   *   - `false` / unset   → no nonce attribute / CSP header (legacy)
+   * Also forced off when `MANDU_CSP_NONCE=0` env is set.
+   * Dev + hydration + populated `shared.fastRefresh` only.
+   */
+  cspNonce?: string | boolean;
 }
 
 export interface StreamingLoaderResult<T = unknown> {
@@ -376,6 +386,71 @@ export function DeferredData<T>({
 /**
  * Streaming용 HTML Shell 생성 (<!DOCTYPE> ~ <div id="root">)
  */
+// ============================================================================
+// Phase 7.2 R1 Agent C (H1) — CSP nonce helpers. Mirror the ones in
+// ssr.ts but live locally here so Streaming SSR does not depend on
+// internals of the non-streaming path. Keep the implementations in
+// sync; the single source of truth is documented in the ssr.ts
+// equivalents.
+// ============================================================================
+
+/** 16-byte (128-bit) base64 nonce, matching csp.ts#resolveNonce. */
+function generateStreamingCspNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+/**
+ * Resolve the nonce option honoring `MANDU_CSP_NONCE=0` opt-out. See
+ * `ssr.ts#resolveFastRefreshCspNonce` for the rationale.
+ */
+function resolveStreamingCspNonce(
+  opt: StreamingSSROptions["cspNonce"],
+): string | undefined {
+  try {
+    if (typeof process !== "undefined" && process.env && process.env.MANDU_CSP_NONCE === "0") {
+      return undefined;
+    }
+  } catch {
+    /* sandboxed process access — treat as unset */
+  }
+  if (opt === false || opt === undefined) return undefined;
+  if (typeof opt === "string" && opt.length > 0) return opt;
+  if (opt === true) return generateStreamingCspNonce();
+  return undefined;
+}
+
+/** Mirror of ssr.ts#buildFastRefreshCspHeader. */
+function buildStreamingCspHeader(nonce: string): string {
+  const safe = nonce.replace(/["\\\r\n]/g, "");
+  return `script-src 'self' 'nonce-${safe}' 'strict-dynamic'`;
+}
+
+/**
+ * WeakMap that ferries the nonce chosen inside `renderToStream` back
+ * to `renderStreamingResponse` / `renderWithDeferredData` so they can
+ * emit the matching CSP header on the Response. Keyed by the options
+ * object identity — typical usage shares the same instance across
+ * the streaming pipeline. WeakMap entries GC naturally.
+ */
+const STREAMING_OPTIONS_TO_NONCE = new WeakMap<object, string>();
+
+/** @internal test helper — use only from unit tests. */
+export const _testOnly_generateStreamingCspNonce = generateStreamingCspNonce;
+/** @internal test helper — use only from unit tests. */
+export const _testOnly_resolveStreamingCspNonce = resolveStreamingCspNonce;
+/** @internal test helper — use only from unit tests. */
+export const _testOnly_buildStreamingCspHeader = buildStreamingCspHeader;
+/** @internal test helper — use only from unit tests. */
+export function _testOnly_getStreamingAttachedCspNonce(
+  options: StreamingSSROptions,
+): string | undefined {
+  return STREAMING_OPTIONS_TO_NONCE.get(options as object);
+}
+
 function generateHTMLShell(options: StreamingSSROptions): string {
   const {
     title = "Mandu App",
@@ -440,11 +515,24 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   // bundler transformed with `reactFastRefresh: true`. Dev mode only;
   // prod manifests omit `shared.fastRefresh` so `fr` is undefined and
   // we emit no preamble (HTML stays byte-identical to pre-7.1 prod).
+  //
+  // Phase 7.2 R1 Agent C (H1): when `cspNonce` is enabled, resolve
+  // the nonce up-front, ferry it to the response layer via the
+  // WeakMap, and rewrite the preamble's `<script>` to
+  // `<script nonce="...">`.
   let fastRefreshPreamble = "";
   if (isDev && needsHydration) {
     const fr = bundleManifest.shared?.fastRefresh;
     if (fr && fr.glue && fr.runtime) {
       fastRefreshPreamble = generateFastRefreshPreamble(fr.glue, fr.runtime);
+      const resolvedNonce = resolveStreamingCspNonce(options.cspNonce);
+      if (resolvedNonce) {
+        STREAMING_OPTIONS_TO_NONCE.set(options as object, resolvedNonce);
+        fastRefreshPreamble = fastRefreshPreamble.replace(
+          /<script>/,
+          `<script nonce="${escapeHtmlAttr(resolvedNonce)}">`,
+        );
+      }
     }
   }
 
@@ -617,6 +705,9 @@ function generateDeferredDataScript(routeId: string, key: string, data: unknown)
 /**
  * HMR 스크립트 생성
  * ssr.ts의 generateHMRScript와 동일한 구현을 유지해야 함 (#114)
+ *
+ * Phase 7.2 — mirrors the HDR (Hot Data Revalidation) extension in
+ * `ssr.ts:generateHMRScript`. Keep in sync.
  */
 function generateHMRScript(port: number): string {
   const hmrPort = port + PORTS.HMR_OFFSET;
@@ -636,6 +727,66 @@ window.__MANDU_HMR_PORT__ = ${hmrPort};
     }
   }
 
+  function hdrCurrentRouteId() {
+    var rs = window.__MANDU_ROUTER_STATE__;
+    if (rs && rs.currentRoute && rs.currentRoute.id) return String(rs.currentRoute.id);
+    var r = window.__MANDU_ROUTE__;
+    if (r && r.id) return String(r.id);
+    return null;
+  }
+
+  function hdrFallback(reason) {
+    console.log('[Mandu HDR] Fallback full reload' + (reason ? ' (' + reason + ')' : ''));
+    location.reload();
+  }
+
+  function hdrMark(name, data) {
+    try {
+      if (window.__MANDU_HDR__ && typeof window.__MANDU_HDR__.perfMark === 'function') {
+        window.__MANDU_HDR__.perfMark(name, data);
+      }
+    } catch (_) {}
+  }
+
+  function handleSlotRefetch(data) {
+    var routeId = data && typeof data.routeId === 'string' ? data.routeId : null;
+    if (!routeId) { hdrFallback('no-routeId'); return; }
+    if (window.__MANDU_HDR_DISABLED__ === true) { hdrFallback('disabled'); return; }
+    var currentId = hdrCurrentRouteId();
+    if (currentId !== routeId) {
+      console.log('[Mandu HDR] slot-refetch for ' + routeId + ' ignored (current route: ' + currentId + ')');
+      return;
+    }
+    var started = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    hdrMark('hdr:refetch-start', { routeId: routeId, slotPath: data.slotPath });
+    var url = window.location.pathname + window.location.search;
+    var sep = url.indexOf('?') >= 0 ? '&' : '?';
+    var dataUrl = url + sep + '_data=1';
+    fetch(dataUrl, { credentials: 'same-origin', headers: { 'X-Mandu-HDR': '1' } })
+      .then(function (res) {
+        if (!res.ok) { hdrFallback('status-' + res.status); return null; }
+        return res.json();
+      })
+      .then(function (payload) {
+        if (!payload) return;
+        var revalidate = window.__MANDU_ROUTER_REVALIDATE__;
+        if (typeof revalidate !== 'function') { hdrFallback('no-router'); return; }
+        try {
+          revalidate(routeId, payload.loaderData);
+          var elapsed = (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()) - started;
+          console.log('[Mandu HDR] Applied loader data for ' + routeId + ' in ' + elapsed.toFixed(0) + 'ms');
+          hdrMark('hdr:refetch', { routeId: routeId, slotPath: data.slotPath, elapsed: elapsed });
+        } catch (err) {
+          console.error('[Mandu HDR] Revalidate threw:', err);
+          hdrFallback('revalidate-throw');
+        }
+      })
+      .catch(function (err) {
+        console.error('[Mandu HDR] Fetch failed:', err);
+        hdrFallback('fetch-failed');
+      });
+  }
+
   function connect() {
     try {
       ws = new WebSocket('ws://' + window.location.hostname + ':${hmrPort}');
@@ -646,9 +797,21 @@ window.__MANDU_HMR_PORT__ = ${hmrPort};
       ws.onmessage = function(e) {
         try {
           var msg = JSON.parse(e.data);
-          if (msg.type === 'reload' || msg.type === 'island-update') {
+          if ((msg.type === 'vite' || msg.type === 'vite-replay') && msg.payload) {
+            if (msg.payload.type === 'custom' && msg.payload.event === 'mandu:slot-refetch') {
+              handleSlotRefetch(msg.payload.data || {});
+              return;
+            }
+            if (msg.payload.type === 'full-reload') {
+              location.reload();
+              return;
+            }
+          }
+          if (msg.type === 'reload' || msg.type === 'island-update' || msg.type === 'full-reload' || msg.type === 'layout-update' || msg.type === 'invalidate') {
             console.log('[Mandu HMR] Reloading...');
             location.reload();
+          } else if (msg.type === 'slot-refetch') {
+            handleSlotRefetch(msg.data || {});
           } else if (msg.type === 'css-update') {
             var cssPath = (msg.data && msg.data.cssPath) || '/.mandu/client/globals.css';
             var links = document.querySelectorAll('link[rel="stylesheet"]');
@@ -985,19 +1148,27 @@ export async function renderStreamingResponse(
   try {
     const stream = await renderToStream(element, options);
 
+    // Phase 7.2 R1 Agent C (H1): if a CSP nonce was produced during
+    // shell generation, emit the matching header so the inline
+    // preamble is authorized under strict CSP.
+    const nonce = STREAMING_OPTIONS_TO_NONCE.get(options as object);
+    const baseHeaders: Record<string, string> = {
+      "Content-Type": "text/html; charset=utf-8",
+      // Transfer-Encoding은 런타임이 자동 처리 (명시 안 함)
+      "X-Content-Type-Options": "nosniff",
+      // nginx 버퍼링 비활성화 힌트
+      "X-Accel-Buffering": "no",
+      // 캐시 및 변환 방지 (Streaming은 동적)
+      "Cache-Control": "no-store, no-transform",
+      // CDN 힌트
+      "CDN-Cache-Control": "no-store",
+    };
+    if (nonce) {
+      baseHeaders["Content-Security-Policy"] = buildStreamingCspHeader(nonce);
+    }
     return new Response(stream, {
       status: 200,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        // Transfer-Encoding은 런타임이 자동 처리 (명시 안 함)
-        "X-Content-Type-Options": "nosniff",
-        // nginx 버퍼링 비활성화 힌트
-        "X-Accel-Buffering": "no",
-        // 캐시 및 변환 방지 (Streaming은 동적)
-        "Cache-Control": "no-store, no-transform",
-        // CDN 힌트
-        "CDN-Cache-Control": "no-store",
-      },
+      headers: baseHeaders,
     });
   } catch (error) {
     // renderToStream에서 throw된 에러 → 500 응답 (단일 책임)
@@ -1182,15 +1353,23 @@ export async function renderWithDeferredData(
     },
   });
 
+  // Phase 7.2 R1 Agent C (H1): if the base stream produced a CSP
+  // nonce during shell emission, forward the matching header on the
+  // deferred Response as well.
+  const deferredNonce = STREAMING_OPTIONS_TO_NONCE.get(options as object);
+  const deferredHeaders: Record<string, string> = {
+    "Content-Type": "text/html; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+    "X-Accel-Buffering": "no",
+    "Cache-Control": "no-store, no-transform",
+    "CDN-Cache-Control": "no-store",
+  };
+  if (deferredNonce) {
+    deferredHeaders["Content-Security-Policy"] = buildStreamingCspHeader(deferredNonce);
+  }
   return new Response(finalStream, {
     status: 200,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "X-Content-Type-Options": "nosniff",
-      "X-Accel-Buffering": "no",
-      "Cache-Control": "no-store, no-transform",
-      "CDN-Cache-Control": "no-store",
-    },
+    headers: deferredHeaders,
   });
 }
 

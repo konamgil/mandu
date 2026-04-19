@@ -2201,6 +2201,13 @@ async function handlePageRoute(
   // 2. Client-side Routing: 데이터만 반환 (JSON)
   // 참고: layoutData는 SSR 시에만 사용 — SPA 네비게이션은 전체 페이지 SSR을 받지 않으므로 제외
   if (isDataRequest) {
+    // Phase 7.2 — HDR (Hot Data Revalidation) signal. When the client
+    // sends `X-Mandu-HDR: 1` it is a slot-refetch in dev mode. We echo
+    // the header back so observability tooling can distinguish HDR
+    // refetches from normal SPA navigations. The JSON body is
+    // identical — HDR reuses the existing `_data=1` contract — so
+    // this header is purely advisory.
+    const isHDR = req.headers.get("x-mandu-hdr") === "1";
     const jsonResponse = Response.json({
       routeId: route.id,
       pattern: route.pattern,
@@ -2208,6 +2215,17 @@ async function handlePageRoute(
       loaderData: loaderData ?? null,
       timestamp: Date.now(),
     });
+    if (isHDR) {
+      // Set headers on the response. Response.json() returns an
+      // immutable Response; we wrap with a new Headers object.
+      const headers = new Headers(jsonResponse.headers);
+      headers.set("X-Mandu-HDR", "1");
+      const taggedResponse = new Response(jsonResponse.body, {
+        status: jsonResponse.status,
+        headers,
+      });
+      return ok(mergedCookies ? mergedCookies.applyToResponse(taggedResponse) : taggedResponse);
+    }
     return ok(mergedCookies ? mergedCookies.applyToResponse(jsonResponse) : jsonResponse);
   }
 

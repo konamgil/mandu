@@ -396,6 +396,52 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     });
   };
 
+  /**
+   * Phase 7.2 — HDR (Hot Data Revalidation) routing helpers.
+   *
+   * When a `.slot.ts` / `.slot.tsx` file changes we want the browser
+   * to re-invoke the route's loader WITHOUT a full reload: form
+   * inputs, scroll position and focus all survive. This requires two
+   * pieces of information that `handleSSRChange` otherwise doesn't
+   * need:
+   *
+   *   1. "Is this a slot file?" — a path-shape check.
+   *   2. "Which route owns this slot?" — a manifest lookup.
+   *
+   * The lookup walks `manifest.routes` for a `route.slotModule` whose
+   * normalized absolute path equals the changed file. The search is
+   * O(n) but n is the number of routes, which is small and bounded
+   * by project size; every change runs it at most once per file
+   * change event.
+   *
+   * HDR is gated on `MANDU_HDR !== "0"` — projects with unusual
+   * setups can disable the optimization via env without losing dev
+   * mode entirely (they keep the slot → reload path).
+   */
+  const HDR_ENABLED = process.env.MANDU_HDR !== "0";
+
+  const isSlotFile = (filePath: string): boolean => {
+    return filePath.endsWith(".slot.ts") || filePath.endsWith(".slot.tsx");
+  };
+
+  const findRouteIdForSlot = (filePath: string): string | null => {
+    // Manifest slot modules are stored as project-relative forward-slash
+    // paths; compare after normalizing both sides so Windows
+    // backslashes and drive-letter case don't cause misses.
+    const normalizeCompare = (p: string): string => {
+      const resolved = path.resolve(rootDir, p).replace(/\\/g, "/");
+      return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+    };
+    const target = normalizeCompare(filePath);
+    for (const route of manifest.routes) {
+      if (!route.slotModule) continue;
+      if (normalizeCompare(route.slotModule) === target) {
+        return route.id;
+      }
+    }
+    return null;
+  };
+
   // SSR file change callback (page.tsx, layout.tsx -> re-register server handlers + browser reload)
   // #184: wildcard ("*") 입력 시 전체 레지스트리 invalidate (common dir 변경)
   // #186 hardening: 동시 호출 race 방지 — Promise-chain mutex로 직렬화.
@@ -475,13 +521,48 @@ export async function dev(options: DevOptions = {}): Promise<void> {
           }
         }
 
-        await withPerf(HMR_PERF.HMR_BROADCAST, async () => {
-          hmrServer?.broadcast({
-            type: "reload",
-            data: { timestamp: Date.now() },
+        // Phase 7.2 HDR — slot-refetch routing.
+        //
+        // If the changed file is a `.slot.ts` / `.slot.tsx` AND HDR is
+        // enabled AND the route lookup succeeds, broadcast a custom
+        // `mandu:slot-refetch` Vite event instead of the legacy
+        // `reload`. The client script detects it, fetches the
+        // current URL with X-Mandu-HDR: 1, receives loader JSON, and
+        // applies it inside `React.startTransition` — no remount.
+        //
+        // Note: we STILL re-registered handlers above (that happens
+        // before this broadcast section). A slot file *is* server
+        // code that must be reloaded in the registry; HDR only
+        // changes the client-side DELIVERY of fresh data, not the
+        // server-side module refresh. The replay buffer also
+        // captures this event so clients reconnecting right after
+        // the slot edit see it.
+        const slotRouteId =
+          !isWildcard && HDR_ENABLED && isSlotFile(filePath)
+            ? findRouteIdForSlot(filePath)
+            : null;
+        if (slotRouteId && hmrServer) {
+          await withPerf(HMR_PERF.HMR_BROADCAST, async () => {
+            hmrServer!.broadcastVite({
+              type: "custom",
+              event: "mandu:slot-refetch",
+              data: {
+                routeId: slotRouteId,
+                slotPath: filePath,
+                timestamp: Date.now(),
+              },
+            });
           });
-        });
-        console.log("  Status: SSR refresh complete");
+          console.log(`  Status: HDR slot-refetch for route ${slotRouteId}`);
+        } else {
+          await withPerf(HMR_PERF.HMR_BROADCAST, async () => {
+            hmrServer?.broadcast({
+              type: "reload",
+              data: { timestamp: Date.now() },
+            });
+          });
+          console.log("  Status: SSR refresh complete");
+        }
       }),
     ).catch((err) => {
       console.error("[handleSSRChange] error:", err instanceof Error ? err.message : err);

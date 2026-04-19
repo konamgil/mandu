@@ -51,6 +51,23 @@ export interface SSROptions {
   cssPath?: string | false;
   /** Island 래핑이 이미 React 엘리먼트 레벨에서 완료됨 (중복 래핑 방지) */
   islandPreWrapped?: boolean;
+  /**
+   * Phase 7.2 R1 Agent C (H1) — Content-Security-Policy nonce for the
+   * Fast Refresh inline preamble. Three accepted shapes:
+   *   - `true`            → auto-generate a fresh 128-bit base64 nonce
+   *                         per-render and insert it as the `nonce`
+   *                         attribute on the preamble `<script>` tag.
+   *   - non-empty string  → use the caller-provided nonce verbatim
+   *                         (e.g. one already produced by the
+   *                         `secure()` middleware and stashed on
+   *                         `ctx.get('csp-nonce')`).
+   *   - `false` / unset   → legacy behavior; no nonce attribute, no
+   *                         CSP header emitted. Also the effective
+   *                         behavior when env `MANDU_CSP_NONCE=0`.
+   * Only takes effect in dev mode with a populated `shared.fastRefresh`
+   * manifest entry — prod builds never emit the preamble at all.
+   */
+  cspNonce?: string | boolean;
 }
 
 let projectRenderToString: ((element: ReactElement) => string) | null | undefined;
@@ -184,6 +201,7 @@ export function wrapWithIsland(
 
 /**
  * Phase 7.1 R2 Agent D — Fast Refresh preamble emission helper.
+ * Phase 7.2 R1 Agent C (H1) — optional CSP nonce injection.
  *
  * Emits the `<script>` block returned by `generateFastRefreshPreamble`
  * ONLY when all three preconditions hold:
@@ -209,16 +227,148 @@ export function wrapWithIsland(
  * Production builds see `fastRefresh` as `undefined` on the manifest
  * (build.ts omits it), so this function returns `""` and the HTML
  * remains byte-identical to pre-7.1 prod output.
+ *
+ * When `nonce` is a non-empty string, the returned `<script>` opening
+ * tag is rewritten to `<script nonce="...">`. This is the single
+ * modification point for CSP compliance — the inner body comes verbatim
+ * from `generateFastRefreshPreamble` (owned by dev.ts) so the bundler
+ * and SSR sides stay decoupled.
  */
 function generateFastRefreshPreambleTag(
   isDev: boolean,
   manifest: BundleManifest | undefined,
+  nonce?: string,
 ): string {
   if (!isDev) return "";
   const fr = manifest?.shared?.fastRefresh;
   if (!fr) return "";
   if (!fr.glue || !fr.runtime) return "";
-  return generateFastRefreshPreamble(fr.glue, fr.runtime);
+  const raw = generateFastRefreshPreamble(fr.glue, fr.runtime);
+  if (!nonce) return raw;
+  // Inject nonce attribute onto the first <script> tag ONLY. Matches
+  // exactly `<script>` (the shape emitted by `generateFastRefreshPreamble`)
+  // to avoid accidentally nonce-ing a `<script src=...>` or malformed
+  // variant. If the upstream function changes shape, the regex still
+  // fails closed (returns raw) — unit-tested.
+  const nonceEscaped = escapeHtmlAttr(nonce);
+  return raw.replace(/<script>/, `<script nonce="${nonceEscaped}">`);
+}
+
+/**
+ * Phase 7.2 R1 Agent C (H1) — Resolve the CSP nonce to use for the Fast
+ * Refresh preamble. Three layered precedences (highest first):
+ *
+ *   1. `MANDU_CSP_NONCE=0` env var forces off (opt-out escape hatch for
+ *      projects with an existing Content-Security-Policy pipeline that
+ *      would collide with ours).
+ *   2. Explicit `options.cspNonce`:
+ *        - string  → use verbatim
+ *        - true    → auto-generate
+ *        - false   → off
+ *   3. No option → off (preserves legacy behavior byte-identical).
+ *
+ * Auto-generation uses `crypto.getRandomValues` with 16 bytes → 128 bits
+ * of entropy, matching OWASP guidance and the existing
+ * `@mandujs/core/middleware/secure` CSP nonce generator.
+ *
+ * Only invoked when we actually intend to emit a preamble (i.e. dev mode
+ * + `needsHydration` + populated `shared.fastRefresh`). Returns
+ * `undefined` when CSP nonce emission is disabled; the caller short-
+ * circuits the `nonce=` attribute and skips the response CSP header.
+ */
+function resolveFastRefreshCspNonce(
+  opt: SSROptions["cspNonce"],
+): string | undefined {
+  // Opt-out: env var takes absolute precedence. Read lazily because
+  // process is not available in some edge runtimes.
+  try {
+    if (typeof process !== "undefined" && process.env && process.env.MANDU_CSP_NONCE === "0") {
+      return undefined;
+    }
+  } catch {
+    /* some runtimes lock down `process` access — treat as unset */
+  }
+  if (opt === false || opt === undefined) return undefined;
+  if (typeof opt === "string" && opt.length > 0) return opt;
+  if (opt === true) return generateCspNonce();
+  return undefined;
+}
+
+/**
+ * Phase 7.2 R1 Agent C (H1) — Generate a fresh CSP nonce.
+ *
+ * 16 bytes (128 bits) of cryptographic entropy, base64-encoded. Matches
+ * `packages/core/src/middleware/secure/csp.ts#resolveNonce`. The same
+ * encoding keeps the nonce attribute short (≤24 base64 chars) and
+ * compatible with OWASP CSP3 guidance.
+ *
+ * Exported as `_testOnly_generateCspNonce` below for tests to verify
+ * entropy and encoding without depending on the specific platform.
+ */
+function generateCspNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  // Bun / Node 20+ both expose btoa + String.fromCharCode; avoid the
+  // Buffer dependency for portability. Node has `btoa` since v16.
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+/**
+ * Phase 7.2 R1 Agent C (H1) — Build the `Content-Security-Policy`
+ * header value to pair with a nonce-bearing preamble.
+ *
+ * Minimal and permissive by design — we are specifically writing a
+ * DEV-mode header that lets the Fast Refresh preamble + dynamic
+ * imports execute. We deliberately do NOT emit a blanket CSP for the
+ * entire page; that is the job of `@mandujs/core/middleware/secure` or
+ * the project's edge. Our sole concern here is: the inline preamble
+ * MUST be authorized without forcing the user to hand-write
+ * `'unsafe-inline'` in their policy.
+ *
+ * Header shape:
+ *   `script-src 'self' 'nonce-<n>' 'strict-dynamic'`
+ *
+ * Why `'strict-dynamic'`: once the nonced preamble runs, it loads the
+ * Fast Refresh runtime via `import('/.mandu/client/...')`. Without
+ * `'strict-dynamic'` the module graph would need to be nonce-tagged
+ * end-to-end, which Bun.build does not support today.
+ */
+function buildFastRefreshCspHeader(nonce: string): string {
+  // Nonces are already URL-safe / base64 but we defensively strip any
+  // stray quotes — should be impossible given the generator, but this
+  // closes the door on a caller-supplied nonce that slipped a quote in.
+  const safe = nonce.replace(/["\\\r\n]/g, "");
+  return `script-src 'self' 'nonce-${safe}' 'strict-dynamic'`;
+}
+
+/** @internal test helper — exposed only so unit tests can inspect the generator. */
+export const _testOnly_generateCspNonce = generateCspNonce;
+/** @internal test helper — exposed only so unit tests can inspect the resolver. */
+export const _testOnly_resolveFastRefreshCspNonce = resolveFastRefreshCspNonce;
+/** @internal test helper — exposed only so unit tests can inspect the header builder. */
+export const _testOnly_buildFastRefreshCspHeader = buildFastRefreshCspHeader;
+/** @internal test helper — exposed only so unit tests can inspect the preamble tag emitter. */
+export const _testOnly_generateFastRefreshPreambleTag = generateFastRefreshPreambleTag;
+
+/**
+ * Phase 7.2 R1 Agent C (H1) — Internal WeakMap that ferries the
+ * CSP nonce chosen during a `renderToHTML` call back to the caller
+ * (`renderSSR` / `renderWithHydration`) so they can emit the matching
+ * `Content-Security-Policy` response header.
+ *
+ * Keyed by the `options` object identity — the only caller that cares
+ * reuses the same options instance it handed in. External consumers
+ * of `renderToHTML` (tests, advanced users) are unaffected: they
+ * simply never look up the map and no memory accumulates because
+ * WeakMap entries collect when their key reference dies.
+ */
+const OPTIONS_TO_NONCE = new WeakMap<object, string>();
+
+/** @internal surface for unit tests — do not use in application code. */
+export function _testOnly_getAttachedCspNonce(options: SSROptions): string | undefined {
+  return OPTIONS_TO_NONCE.get(options as object);
 }
 
 export function renderToHTML(element: ReactElement, options: SSROptions = {}): string {
@@ -322,8 +472,17 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   // module the bundler transformed with `reactFastRefresh: true`. Dev
   // mode only; prod manifests omit `shared.fastRefresh` so the helper
   // returns "".
+  // Phase 7.2 R1 Agent C (H1): resolve nonce up-front so the same
+  // value is reused for the <script> tag AND surfaced to the caller
+  // (via `renderToHTMLWithMeta`) for the response CSP header.
+  const resolvedCspNonce = needsHydration && isDev
+    ? resolveFastRefreshCspNonce(options.cspNonce)
+    : undefined;
+  if (resolvedCspNonce) {
+    OPTIONS_TO_NONCE.set(options as object, resolvedCspNonce);
+  }
   const fastRefreshPreamble = needsHydration
-    ? generateFastRefreshPreambleTag(isDev, bundleManifest)
+    ? generateFastRefreshPreambleTag(isDev, bundleManifest, resolvedCspNonce)
     : "";
 
   // DevTools 번들 로드 (개발 모드)
@@ -414,6 +573,17 @@ function generateClientRouterScript(manifest: BundleManifest): string {
 
 /**
  * HMR 스크립트 생성
+ *
+ * Phase 7.2 Agent B — HDR (Hot Data Revalidation) extension.
+ * When the CLI broadcasts `{type: "vite", payload: {type: "custom",
+ * event: "mandu:slot-refetch", data: {routeId, slotPath, ...}}}` (via
+ * `hmrServer.broadcastVite`) we handle it here without remounting
+ * the React tree: fetch the current URL with `X-Mandu-HDR: 1`,
+ * receive JSON loader data, and hand it to the router's
+ * `applyHDRUpdate` hook (installed by `initializeRouter`). If the
+ * route doesn't match, the router hook is missing, or the fetch
+ * fails — we fall back to `location.reload()`. See the detailed
+ * design notes in `bundler/dev.ts:generateHMRClientScript` docstring.
  */
 function generateHMRScript(port: number): string {
   const hmrPort = port + PORTS.HMR_OFFSET;
@@ -433,6 +603,66 @@ window.__MANDU_HMR_PORT__ = ${hmrPort};
     }
   }
 
+  function hdrCurrentRouteId() {
+    var rs = window.__MANDU_ROUTER_STATE__;
+    if (rs && rs.currentRoute && rs.currentRoute.id) return String(rs.currentRoute.id);
+    var r = window.__MANDU_ROUTE__;
+    if (r && r.id) return String(r.id);
+    return null;
+  }
+
+  function hdrFallback(reason) {
+    console.log('[Mandu HDR] Fallback full reload' + (reason ? ' (' + reason + ')' : ''));
+    location.reload();
+  }
+
+  function hdrMark(name, data) {
+    try {
+      if (window.__MANDU_HDR__ && typeof window.__MANDU_HDR__.perfMark === 'function') {
+        window.__MANDU_HDR__.perfMark(name, data);
+      }
+    } catch (_) {}
+  }
+
+  function handleSlotRefetch(data) {
+    var routeId = data && typeof data.routeId === 'string' ? data.routeId : null;
+    if (!routeId) { hdrFallback('no-routeId'); return; }
+    if (window.__MANDU_HDR_DISABLED__ === true) { hdrFallback('disabled'); return; }
+    var currentId = hdrCurrentRouteId();
+    if (currentId !== routeId) {
+      console.log('[Mandu HDR] slot-refetch for ' + routeId + ' ignored (current route: ' + currentId + ')');
+      return;
+    }
+    var started = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    hdrMark('hdr:refetch-start', { routeId: routeId, slotPath: data.slotPath });
+    var url = window.location.pathname + window.location.search;
+    var sep = url.indexOf('?') >= 0 ? '&' : '?';
+    var dataUrl = url + sep + '_data=1';
+    fetch(dataUrl, { credentials: 'same-origin', headers: { 'X-Mandu-HDR': '1' } })
+      .then(function (res) {
+        if (!res.ok) { hdrFallback('status-' + res.status); return null; }
+        return res.json();
+      })
+      .then(function (payload) {
+        if (!payload) return;
+        var revalidate = window.__MANDU_ROUTER_REVALIDATE__;
+        if (typeof revalidate !== 'function') { hdrFallback('no-router'); return; }
+        try {
+          revalidate(routeId, payload.loaderData);
+          var elapsed = (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()) - started;
+          console.log('[Mandu HDR] Applied loader data for ' + routeId + ' in ' + elapsed.toFixed(0) + 'ms');
+          hdrMark('hdr:refetch', { routeId: routeId, slotPath: data.slotPath, elapsed: elapsed });
+        } catch (err) {
+          console.error('[Mandu HDR] Revalidate threw:', err);
+          hdrFallback('revalidate-throw');
+        }
+      })
+      .catch(function (err) {
+        console.error('[Mandu HDR] Fetch failed:', err);
+        hdrFallback('fetch-failed');
+      });
+  }
+
   function connect() {
     try {
       ws = new WebSocket('ws://' + window.location.hostname + ':${hmrPort}');
@@ -443,9 +673,26 @@ window.__MANDU_HMR_PORT__ = ${hmrPort};
       ws.onmessage = function(e) {
         try {
           var msg = JSON.parse(e.data);
-          if (msg.type === 'reload' || msg.type === 'island-update') {
+          // Vite-compat envelope: custom event for HDR.
+          if ((msg.type === 'vite' || msg.type === 'vite-replay') && msg.payload) {
+            if (msg.payload.type === 'custom' && msg.payload.event === 'mandu:slot-refetch') {
+              handleSlotRefetch(msg.payload.data || {});
+              return;
+            }
+            // Other Vite payloads fall through to the legacy branches
+            // when possible.
+            if (msg.payload.type === 'full-reload') {
+              location.reload();
+              return;
+            }
+          }
+          if (msg.type === 'reload' || msg.type === 'island-update' || msg.type === 'full-reload' || msg.type === 'layout-update' || msg.type === 'invalidate') {
             console.log('[Mandu HMR] Reloading...');
             location.reload();
+          } else if (msg.type === 'slot-refetch') {
+            // Legacy Mandu-internal path (not yet used by the server — kept
+            // for forward-compat).
+            handleSlotRefetch(msg.data || {});
           } else if (msg.type === 'css-update') {
             var cssPath = (msg.data && msg.data.cssPath) || '/.mandu/client/globals.css';
             var links = document.querySelectorAll('link[rel="stylesheet"]');
@@ -482,18 +729,38 @@ function generateDevtoolsScript(): string {
   return `<script type="module" src="/.mandu/client/_devtools.js"></script>`;
 }
 
-export function createHTMLResponse(html: string, status: number = 200): Response {
-  return new Response(html, {
-    status,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-    },
-  });
+export function createHTMLResponse(
+  html: string,
+  status: number = 200,
+  /**
+   * Phase 7.2 R1 Agent C (H1) — extra headers to merge in alongside
+   * the default `Content-Type`. Used for the Fast Refresh CSP header
+   * when a nonce was produced; can be repurposed for future
+   * per-response metadata without changing callsites.
+   */
+  extraHeaders?: Record<string, string>,
+): Response {
+  const headers: Record<string, string> = {
+    "Content-Type": "text/html; charset=utf-8",
+  };
+  if (extraHeaders) {
+    for (const [k, v] of Object.entries(extraHeaders)) {
+      headers[k] = v;
+    }
+  }
+  return new Response(html, { status, headers });
 }
 
 export function renderSSR(element: ReactElement, options: SSROptions = {}): Response {
   const html = renderToHTML(element, options);
-  return createHTMLResponse(html);
+  // Phase 7.2 R1 Agent C (H1): if a CSP nonce was produced during
+  // rendering (dev + fast-refresh path), emit the matching header so
+  // the inline preamble is authorized under strict CSP.
+  const nonce = _testOnly_getAttachedCspNonce(options);
+  const extra = nonce
+    ? { "Content-Security-Policy": buildFastRefreshCspHeader(nonce) }
+    : undefined;
+  return createHTMLResponse(html, 200, extra);
 }
 
 /**
@@ -523,5 +790,10 @@ export async function renderWithHydration(
   }
 ): Promise<Response> {
   const html = renderToHTML(element, options);
-  return createHTMLResponse(html);
+  // Phase 7.2 R1 Agent C (H1) — same CSP header logic as renderSSR.
+  const nonce = _testOnly_getAttachedCspNonce(options);
+  const extra = nonce
+    ? { "Content-Security-Policy": buildFastRefreshCspHeader(nonce) }
+    : undefined;
+  return createHTMLResponse(html, 200, extra);
 }

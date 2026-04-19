@@ -63,6 +63,31 @@ export type ViteHMRPayload =
   | { type: "custom"; event: string; data?: unknown };
 
 /**
+ * Phase 7.2 — HDR (Hot Data Revalidation) payload.
+ *
+ * Emitted when a `.slot.ts` file changes. Unlike `full-reload`, the
+ * client receives this and re-invokes the route's loader to refetch
+ * props while the React tree stays mounted — form input, scroll,
+ * focused element all survive. Modeled after Remix's HDR.
+ *
+ * The client-side handler (runtime/hmr-client.ts `dispatchReplacement`
+ * in Phase 7.2) wraps the props update in `React.startTransition` so
+ * the browser doesn't flash an intermediate state.
+ */
+export interface HDRPayload {
+  /** Discriminator — NOT a Vite-compat payload (Mandu internal only). */
+  type: "slot-refetch";
+  /** Route id whose loader must re-invoke. Matches manifest `route.id`. */
+  routeId: string;
+  /** Absolute path of the slot file that changed — for logging + dedup. */
+  slotPath: string;
+  /** Monotonic per-server-boot id — compatible with the replay buffer. */
+  rebuildId: number;
+  /** Unix ms — coalescing window for back-to-back edits. */
+  timestamp: number;
+}
+
+/**
  * Vite built-in event names a user or plugin may listen for via
  * `import.meta.hot.on()`. Phase 7.0 v0.1 emits the first 4; the rest are
  * Phase 7.1+ additions.

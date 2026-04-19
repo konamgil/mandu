@@ -39,7 +39,7 @@
  *   packages/core/src/bundler/hmr-types.ts (`ManduHot`, `HMREventName`)
  */
 
-import type { ManduHot, HMREventName } from "../bundler/hmr-types";
+import type { ManduHot, HMREventName, HDRPayload } from "../bundler/hmr-types";
 
 // ============================================
 // Internal registry shape
@@ -310,6 +310,78 @@ export function dispatchEvent(event: HMREventName, payload: unknown): void {
 }
 
 // ============================================
+// Phase 7.2 — HDR (Hot Data Revalidation)
+// ============================================
+
+/**
+ * A transport capable of re-invoking a route's loader *without* a
+ * React tree remount. The real implementation is a `fetch` against
+ * the current URL with the `X-Mandu-HDR: 1` header; the server
+ * returns the loader JSON and a router hook applies it inside
+ * `React.startTransition` so form inputs, scroll position, and
+ * focused elements survive.
+ *
+ * The transport is a seam (not wired inline) for three reasons:
+ *   1. Tests need to observe / mock the fetch + transition path
+ *      without spinning up a browser or a router.
+ *   2. The actual fetch + `startTransition` call lives in the HMR
+ *      client script that the bundler emits (dev.ts), which has
+ *      access to `window.__MANDU_ROUTER_REVALIDATE__`. This runtime
+ *      module stays framework-agnostic.
+ *   3. Projects that opt out (env `MANDU_HDR=0` evaluated by the
+ *      bundler) install a transport that immediately returns
+ *      `{ ok: false }` so the client falls back to a full reload.
+ */
+export type HDRTransport = (payload: HDRPayload) => Promise<{
+  /** True when the loader fetch succeeded and props were applied. */
+  ok: boolean;
+  /** When `ok` is false, the caller falls back to `location.reload()`. */
+  reason?: "no-route" | "fetch-failed" | "status" | "no-router" | "disabled";
+}>;
+
+/**
+ * Default: log + fall-back signal. Production installs a real
+ * transport via `setHDRTransport` at client boot from the HMR client
+ * script. Tests install mock transports.
+ */
+let hdrTransport: HDRTransport = async () => ({
+  ok: false,
+  reason: "no-router" as const,
+});
+
+export function setHDRTransport(fn: HDRTransport): void {
+  hdrTransport = fn;
+}
+
+/**
+ * Dispatch a `slot-refetch` payload received over the HMR websocket.
+ * Returns `true` when the transport applied the update cleanly;
+ * `false` when the caller should fall back to a full reload.
+ *
+ * The dispatch is wrapped in try/catch because the transport is
+ * third-party code (from the caller's perspective) and a thrown
+ * error must NOT wedge the HMR client. A throw is treated as
+ * `{ ok: false }` and the caller falls back to full reload.
+ */
+export async function dispatchSlotRefetch(
+  payload: HDRPayload,
+): Promise<boolean> {
+  try {
+    const result = await hdrTransport(payload);
+    return result.ok === true;
+  } catch (err) {
+    // Preserve the same "don't wedge the client" discipline as
+    // dispatchReplacement: log and signal fallback, never propagate.
+    // eslint-disable-next-line no-console
+    console.error(
+      `[Mandu HDR] slot-refetch for route ${payload.routeId} threw:`,
+      err,
+    );
+    return false;
+  }
+}
+
+// ============================================
 // Test helpers — NOT part of the public API
 // ============================================
 
@@ -323,6 +395,7 @@ export function dispatchEvent(event: HMREventName, payload: unknown): void {
 export function _resetRegistryForTests(): void {
   registry.clear();
   invalidateTransport = () => undefined;
+  hdrTransport = async () => ({ ok: false, reason: "no-router" as const });
 }
 
 /**

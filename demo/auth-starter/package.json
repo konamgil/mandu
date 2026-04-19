@@ -9,7 +9,8 @@
     "start": "mandu start",
     "check": "mandu check",
     "test:e2e": "playwright test --config=tests/e2e/playwright.config.ts",
-    "test:e2e:ci": "playwright test --config=tests/e2e/playwright.config.ts --reporter=html,json,junit"
+    "test:e2e:ci": "playwright test --config=tests/e2e/playwright.config.ts --reporter=html,json,junit",
+    "test:e2e:fast-refresh": "playwright test --config=tests/e2e/playwright-fast-refresh.config.ts"
   },
   "dependencies": {
     "@mandujs/core": "workspace:*",

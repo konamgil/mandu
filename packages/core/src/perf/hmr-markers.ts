@@ -141,6 +141,25 @@ export const HMR_PERF = {
    *  Phase 7.1.A may not be able to remove this; it tracks new-route
    *  creation which `_doBuild` does not. */
   BOOT_WATCH_FS_ROUTES: "boot:watch-fs-routes",
+
+  // ─── Phase 7.2 ─────────────────────────────────────────────────────────
+
+  /** Tier 2 vendor shim disk-cache hit — all 4 shim outputs loaded from
+   *  `.mandu/vendor-cache/` instead of rebuilt. Target: >95% on warm dev. */
+  VENDOR_CACHE_HIT: "vendor:cache-hit",
+
+  /** Tier 2 miss — any reason (no manifest / version mismatch / tamper /
+   *  first boot). Full `buildVendorShims` runs. */
+  VENDOR_CACHE_MISS: "vendor:cache-miss",
+
+  /** Tier 2 cache write — after a successful rebuild, persist to disk.
+   *  Only fires on miss paths. */
+  VENDOR_CACHE_WRITE: "vendor:cache-write",
+
+  /** HDR (Hot Data Revalidation) — slot change triggered a loader
+   *  refetch without a React tree remount. Measures WS broadcast →
+   *  client loader settled → props applied. Target: ≤ 150 ms P95. */
+  HDR_REFETCH: "hdr:refetch",
 } as const;
 
 /**

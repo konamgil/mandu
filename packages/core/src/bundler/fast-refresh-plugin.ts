@@ -38,10 +38,16 @@
  *   - A file that already contains a literal `window.__MANDU_HMR__` call
  *     is trusted — we don't append a second one (idempotent even across
  *     multiple `Bun.build` passes that bundle a pre-bundled module).
+ *   - URLs exceeding `MAX_ACCEPT_FILE_URL_LEN` (2 KB) or containing
+ *     characters that could escape the inline script context (`</`,
+ *     newline, nul) are rejected with a warning — no boundary emitted.
+ *     See `docs/security/phase-7-1-audit.md` §3 L-01.
  *
  * References:
  *   docs/bun/phase-7-1-diagnostics/fast-refresh-strategy.md §4 (4 phase breakdown)
  *   docs/bun/phase-7-1-team-plan.md §4 Agent B
+ *   docs/bun/phase-7-2-team-plan.md §3 Agent C H3 (URL length cap)
+ *   docs/security/phase-7-1-audit.md §3 L-01
  *   https://bun.com/docs/runtime/plugins
  *   packages/core/src/runtime/fast-refresh-types.ts
  */
@@ -75,6 +81,27 @@ export const DEFAULT_INCLUDE = /\.(client|island)\.tsx?$/;
 const ALREADY_INJECTED = /__MANDU_HMR__\s*(?:\?\.)?\s*\.acceptFile\s*\(/;
 
 /**
+ * Phase 7.2 H3 (L-01 audit): cap the length of a URL we will accept into
+ * an `acceptFile()` call. 2 KB is ~8× larger than any realistic Mandu
+ * tmpdir fixture and matches `MAX_BOUNDARY_URL_LEN` suggested by the
+ * audit. Beyond this we refuse to append the boundary — the file simply
+ * falls back to full-reload HMR, which is the safe degradation path.
+ */
+export const MAX_ACCEPT_FILE_URL_LEN = 2048;
+
+/**
+ * Phase 7.2 H3 (L-01 audit): characters or substrings that, if present
+ * inside the URL string, could break out of the emitted inline `<script>`
+ * context. `</` is the classic HTML-in-JS escape; `\n` / `\r` / `\u2028`
+ * / `\u2029` are JS literal terminators; `\x00`-`\x1f` are control chars
+ * the parser will complain about anyway. We reject outright rather than
+ * try to re-escape — these paths are filesystem-authored so the
+ * legitimate case never produces them.
+ */
+const UNSAFE_URL_SEQUENCES = ["</", "\u2028", "\u2029", "<script", "<!--"] as const;
+const UNSAFE_URL_CHARS = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\r\n]/;
+
+/**
  * Comment-neutral detector for `node_modules`. Using a forward-slashed
  * string match is sufficient because Mandu normalizes paths to posix
  * internally (see `bundler/dev.ts` `normalizeFsPath`).
@@ -83,6 +110,47 @@ function isInNodeModules(filePath: string): boolean {
   return (
     filePath.includes("/node_modules/") || filePath.includes("\\node_modules\\")
   );
+}
+
+/**
+ * Runtime predicate that decides whether `moduleUrl` is safe to bake
+ * into the inline `<script>` that the plugin emits. Exported so tests
+ * and diagnostic callers can share the exact rule.
+ *
+ * The checks are ordered cheapest-first (length before char-regex before
+ * substring scan) so a successful path short-circuits early. Returns
+ * `{ ok: true }` for accepted URLs and `{ ok: false, reason }` for
+ * rejections — the reason string feeds into the warning printed at
+ * injection time so developers see exactly why their file went
+ * full-reload.
+ */
+export function validateAcceptFileUrl(
+  moduleUrl: string,
+): { ok: true } | { ok: false; reason: string } {
+  if (typeof moduleUrl !== "string") {
+    return { ok: false, reason: "moduleUrl is not a string" };
+  }
+  if (moduleUrl.length === 0) {
+    return { ok: false, reason: "moduleUrl is empty" };
+  }
+  if (moduleUrl.length > MAX_ACCEPT_FILE_URL_LEN) {
+    return {
+      ok: false,
+      reason: `moduleUrl length ${moduleUrl.length} exceeds cap ${MAX_ACCEPT_FILE_URL_LEN}`,
+    };
+  }
+  if (UNSAFE_URL_CHARS.test(moduleUrl)) {
+    return { ok: false, reason: "moduleUrl contains control / newline chars" };
+  }
+  for (const seq of UNSAFE_URL_SEQUENCES) {
+    if (moduleUrl.includes(seq)) {
+      return {
+        ok: false,
+        reason: `moduleUrl contains unsafe substring "${seq}"`,
+      };
+    }
+  }
+  return { ok: true };
 }
 
 // ============================================
@@ -95,6 +163,12 @@ function isInNodeModules(filePath: string): boolean {
  * `moduleUrl` string the plugin has already resolved (usually a
  * normalized form of the on-disk path).
  *
+ * Phase 7.2 H3: hardened with `validateAcceptFileUrl`. When the URL
+ * fails validation we emit the source unchanged and log a single
+ * `console.warn`. The warning path is intentionally non-fatal — a
+ * pathological URL that somehow leaks through is a DX concern
+ * (full-reload HMR still works) not a correctness one.
+ *
  * The returned string is always safe to pass to Bun's `tsx` loader —
  * the epilogue is wrapped in a `typeof window` guard, so a single pass
  * of semicolon insertion at the end of the user's source never produces
@@ -102,6 +176,18 @@ function isInNodeModules(filePath: string): boolean {
  */
 export function appendBoundary(source: string, moduleUrl: string): string {
   if (ALREADY_INJECTED.test(source)) return source;
+
+  // Phase 7.2 H3: URL length + escape cap. Rejected URLs fall through
+  // to full-reload HMR without a boundary, preserving correctness.
+  const check = validateAcceptFileUrl(moduleUrl);
+  if (!check.ok) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[Mandu Fast Refresh] acceptFile URL rejected (${check.reason}); ` +
+        `falling back to full-reload for this module.`,
+    );
+    return source;
+  }
 
   // JSON.stringify here does double duty: (1) it escapes any
   // backslashes / quotes in the URL path (important on Windows), and

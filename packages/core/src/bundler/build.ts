@@ -17,6 +17,15 @@ import { HYDRATION } from "../constants";
 import { safeBuild } from "./safe-build";
 import { fastRefreshPlugin } from "./fast-refresh-plugin";
 import { mark, measure } from "../perf";
+import { HMR_PERF } from "../perf/hmr-markers";
+import {
+  readVendorCache,
+  writeVendorCache,
+  restoreVendorCache,
+  resolveVendorCacheKeys,
+  type VendorCacheKeyInput,
+  type VendorCacheWriteEntry,
+} from "./vendor-cache";
 import path from "path";
 import fs from "fs/promises";
 
@@ -1284,8 +1293,14 @@ export { installGlobal };
 /**
  * Vendor shim 번들 빌드
  * React, ReactDOM, ReactDOMClient를 각각의 shim으로 빌드
+ *
+ * Phase 7.2.S2: caches the built shim outputs on disk under
+ * `.mandu/vendor-cache/` keyed by Bun + React + ReactDOM + react-refresh +
+ * @mandujs/core versions. Warm boots reuse the cached files instead of
+ * re-running Bun.build, eliminating ~80-120 ms from cold start.
  */
 async function buildVendorShims(
+  rootDir: string,
   outDir: string,
   options: BundlerOptions
 ): Promise<VendorBuildResult> {
@@ -1314,12 +1329,12 @@ async function buildVendorShims(
   const isDev =
     (options.minify ?? process.env.NODE_ENV === "production") === false;
 
-  const shims: Array<{ name: string; source: string; key: VendorShimKey }> = [
-    { name: "_react", source: generateReactShimSource(), key: "react" },
-    { name: "_react-dom", source: generateReactDOMShimSource(), key: "reactDom" },
-    { name: "_react-dom-client", source: generateReactDOMClientShimSource(), key: "reactDomClient" },
-    { name: "_jsx-runtime", source: generateJsxRuntimeShimSource(), key: "jsxRuntime" },
-    { name: "_jsx-dev-runtime", source: generateJsxDevRuntimeShimSource(), key: "jsxDevRuntime" },
+  const shims: Array<{ name: string; source: string; key: VendorShimKey; cacheId: string }> = [
+    { name: "_react", source: generateReactShimSource(), key: "react", cacheId: "react" },
+    { name: "_react-dom", source: generateReactDOMShimSource(), key: "reactDom", cacheId: "react-dom" },
+    { name: "_react-dom-client", source: generateReactDOMClientShimSource(), key: "reactDomClient", cacheId: "react-dom-client" },
+    { name: "_jsx-runtime", source: generateJsxRuntimeShimSource(), key: "jsxRuntime", cacheId: "jsx-runtime" },
+    { name: "_jsx-dev-runtime", source: generateJsxDevRuntimeShimSource(), key: "jsxDevRuntime", cacheId: "jsx-dev-runtime" },
   ];
   if (isDev) {
     shims.push(
@@ -1327,18 +1342,97 @@ async function buildVendorShims(
         name: "_vendor-react-refresh",
         source: generateReactRefreshRuntimeShimSource(),
         key: "reactRefreshRuntime",
+        cacheId: "react-refresh-runtime",
       },
       {
         name: "_fast-refresh-runtime",
         source: generateFastRefreshRuntimeShimSource(),
         key: "fastRefreshRuntime",
+        cacheId: "fast-refresh-glue",
       },
     );
   }
 
+  // Phase 7.2.S2 — Tier 2 disk cache consultation. Production builds
+  // (non-dev, minified) still rebuild fresh because (a) the shim set is
+  // smaller (no fast-refresh) and (b) production is one-shot — there's no
+  // warm workflow to amortize the cache cost against. Dev warm restarts
+  // are where the cache pays off.
+  //
+  // `MANDU_VENDOR_CACHE=0` disables the cache (escape hatch for debugging
+  // cache-invalidation bugs without touching code).
+  const cacheEnabled = isDev && process.env.MANDU_VENDOR_CACHE !== "0";
+  let cacheKeys: VendorCacheKeyInput | null = null;
+
+  if (cacheEnabled) {
+    try {
+      cacheKeys = await resolveVendorCacheKeys(rootDir);
+      const hitOrMiss = await readVendorCache(rootDir, cacheKeys);
+
+      if (hitOrMiss.kind === "hit") {
+        // Attempt to restore every shim file to outDir.
+        const restored = await restoreVendorCache(
+          rootDir,
+          hitOrMiss.manifest,
+          outDir,
+        );
+        if (restored !== null) {
+          // Map the restored files into the result shape. If a shim is
+          // not in the manifest (eg. an older cache from before we added
+          // fast-refresh) we rebuild just that one — but the simpler
+          // policy is to require the manifest to cover every entry the
+          // current shim list wants, so we only accept hits that include
+          // everything. Otherwise fall through to rebuild.
+          const expected = new Set(shims.map((s) => s.cacheId));
+          const present = new Set(restored.keys());
+          let allPresent = true;
+          for (const id of expected) {
+            if (!present.has(id)) {
+              allPresent = false;
+              break;
+            }
+          }
+          if (allPresent) {
+            // Populate result + return. Every shim's outputPath references
+            // the freshly-restored file in `outDir`.
+            for (const shim of shims) {
+              const dst = restored.get(shim.cacheId);
+              if (dst) {
+                const fileName = path.basename(dst);
+                results[shim.key] = `/.mandu/client/${fileName}`;
+              }
+            }
+            mark(HMR_PERF.VENDOR_CACHE_HIT);
+            measure(HMR_PERF.VENDOR_CACHE_HIT, HMR_PERF.VENDOR_CACHE_HIT);
+            return {
+              success: true,
+              react: results.react,
+              reactDom: results.reactDom,
+              reactDomClient: results.reactDomClient,
+              jsxRuntime: results.jsxRuntime,
+              jsxDevRuntime: results.jsxDevRuntime,
+              reactRefreshRuntime: results.reactRefreshRuntime,
+              fastRefreshRuntime: results.fastRefreshRuntime,
+              errors,
+            };
+          }
+          // Restored but missing one of the expected shims — fall through.
+        }
+        // Restore failed — fall through to rebuild.
+      }
+
+      // Miss / failed restore: record the miss marker for perf logs.
+      mark(HMR_PERF.VENDOR_CACHE_MISS);
+      measure(HMR_PERF.VENDOR_CACHE_MISS, HMR_PERF.VENDOR_CACHE_MISS);
+    } catch {
+      // Any cache failure falls through to the full rebuild path — cache
+      // is strictly an optimisation.
+    }
+  }
+
   const buildShim = async (
-    shim: { name: string; source: string; key: VendorShimKey }
-  ): Promise<{ key: VendorShimKey; outputPath?: string; error?: string }> => {
+    shim: { name: string; source: string; key: VendorShimKey; cacheId: string }
+  ): Promise<{ key: VendorShimKey; cacheId: string; outputName?: string; outputPath?: string; error?: string }> => {
     const srcPath = path.join(outDir, `${shim.name}.src.js`);
     const outputName = `${shim.name}.js`;
 
@@ -1377,30 +1471,55 @@ async function buildVendorShims(
         const grouped = result.logs.map((l) => `  - ${l.message}`).join("\n");
         return {
           key: shim.key,
+          cacheId: shim.cacheId,
           error: `Vendor shim '${shim.name}' build failed (source: ${srcPath}):\n${grouped}\n  Hint: Check the import paths and ensure the vendor package is installed.`,
         };
       }
 
       return {
         key: shim.key,
+        cacheId: shim.cacheId,
+        outputName,
         outputPath: `/.mandu/client/${outputName}`,
       };
     } catch (error) {
       await fs.unlink(srcPath).catch(() => {});
       return {
         key: shim.key,
+        cacheId: shim.cacheId,
         error: `[${shim.name}] ${String(error)}`,
       };
     }
   };
 
   const buildResults = await Promise.all(shims.map((shim) => buildShim(shim)));
+  const writeEntries: VendorCacheWriteEntry[] = [];
   for (const result of buildResults) {
     if (result.error) {
       errors.push(result.error);
-    } else if (result.outputPath) {
+    } else if (result.outputPath && result.outputName) {
       results[result.key] = result.outputPath;
+      writeEntries.push({
+        logicalId: result.cacheId,
+        absPath: path.join(outDir, result.outputName),
+      });
     }
+  }
+
+  // Phase 7.2.S2 — persist freshly-built shims for next boot. Best-effort;
+  // a write failure is logged via perf markers (opt-in) but never breaks
+  // the build. Only write when every shim succeeded — partial manifests
+  // would still satisfy the expected-set check on next boot but we
+  // prefer writing only complete manifests.
+  if (cacheEnabled && cacheKeys && errors.length === 0 && writeEntries.length > 0) {
+    // Fire-and-forget so the fast path isn't blocked on disk. The
+    // returned VendorBuildResult does not depend on the write outcome.
+    mark(HMR_PERF.VENDOR_CACHE_WRITE);
+    void writeVendorCache(rootDir, cacheKeys, writeEntries)
+      .then(() => {
+        measure(HMR_PERF.VENDOR_CACHE_WRITE, HMR_PERF.VENDOR_CACHE_WRITE);
+      })
+      .catch(() => {});
   }
 
   return {
@@ -1885,7 +2004,9 @@ export async function buildClientBundles(
   const isDev = env === "development";
   const runtimePromise = buildRuntime(outDir, options);
   const routerPromise = buildRouterRuntime(outDir, options);
-  const vendorPromise = buildVendorShims(outDir, options);
+  // Phase 7.2.S2 — `rootDir` is now threaded through so buildVendorShims can
+  // consult `.mandu/vendor-cache/` for warm-boot shim reuse.
+  const vendorPromise = buildVendorShims(rootDir, outDir, options);
   const devtoolsPromise = isDev ? buildDevtoolsBundle(outDir, options) : null;
 
   const [runtimeResult, routerResult, vendorResult, devtoolsResult] = await Promise.all([

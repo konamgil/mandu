@@ -4,6 +4,7 @@
  */
 
 import type { ReactNode } from "react";
+import { startTransition } from "react";
 import {
   getManduData,
   getManduRoute,
@@ -621,6 +622,59 @@ export function getActionData<T = unknown>(): T | undefined {
 let initialized = false;
 
 /**
+ * Phase 7.2 — HDR (Hot Data Revalidation) hook.
+ *
+ * The dev-time HMR client script (see `bundler/dev.ts`
+ * `generateHMRClientScript`) calls this when a `.slot.ts` file
+ * changes for the currently-rendered route. We update the router's
+ * loader data inside `React.startTransition` so the component tree
+ * re-renders with new props while form inputs, scroll position, and
+ * focused elements all survive.
+ *
+ * The global is installed by `initializeRouter()` so dev and prod
+ * share the same boot path; in prod builds the HMR script is not
+ * emitted and the global is simply never called.
+ *
+ * Exposed on `window` because the HMR client script (emitted as a
+ * raw string) has no module system. Typed via `window-state.ts` if
+ * we ever lift the typing, but inline here for now.
+ */
+function applyHDRUpdate(routeId: string, loaderData: unknown): void {
+  const current = getRouterStateInternal();
+  const route = current.currentRoute;
+  if (!route || route.id !== routeId) {
+    // Route mismatch — the user navigated away between the
+    // slot-refetch broadcast and the fetch response. Safe to drop.
+    return;
+  }
+  const nextState: RouterState = {
+    currentRoute: route,
+    loaderData,
+    actionData: current.actionData,
+    navigation: current.navigation,
+  };
+  // startTransition wraps the update so React can interrupt it if
+  // more urgent updates come in, and (crucially for HDR) does NOT
+  // trigger the "input's state is inconsistent" tearing that a plain
+  // setState would. React 19 exports startTransition as a top-level
+  // API so it's always available when the router is on the page.
+  const apply = () => {
+    setRouterStateInternal(nextState);
+    setServerData(routeId, loaderData);
+    notifyListeners();
+  };
+  try {
+    startTransition(apply);
+  } catch {
+    // Defensive: if for any reason startTransition throws (e.g. a
+    // non-React 19 build ends up with the router on the page), fall
+    // back to a direct apply. Prop changes still propagate; only
+    // the tearing protection is lost.
+    apply();
+  }
+}
+
+/**
  * 라우터 초기화
  */
 export function initializeRouter(): void {
@@ -636,6 +690,12 @@ export function initializeRouter(): void {
 
   // 링크 클릭 이벤트 위임
   document.addEventListener("click", handleLinkClick);
+
+  // Phase 7.2 — expose HDR revalidate hook. Only in dev does the HMR
+  // client script call this; prod builds omit the script.
+  (window as unknown as {
+    __MANDU_ROUTER_REVALIDATE__?: (routeId: string, loaderData: unknown) => void;
+  }).__MANDU_ROUTER_REVALIDATE__ = applyHDRUpdate;
 
   console.log("[Mandu Router] Initialized");
 }

@@ -451,10 +451,59 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     // picked up via the page's `watchDirs.add(path.dirname(absPath))`
     // line above — still, making the slot add explicit here keeps
     // the dispatch path honest against future manifest topologies.
+    // Phase 7.2 R1 Agent C (H3 / L-03 audit): validate slotModule
+    // path BEFORE it contributes to serverModuleSet / watchDirs.
+    //
+    // Before 7.2 the code trusted `route.slotModule` verbatim and a
+    // tampered manifest with `slotModule: "../../../etc/passwd"` would
+    // pollute `watchDirs` with directories outside the project root.
+    // Downstream code (`bundledImport`, `registerHandlers`) already
+    // ignored the raw path, but the defense-in-depth cost is tiny so
+    // we reject obviously unsafe shapes here and keep the fs.watch
+    // surface inside the project tree.
+    //
+    // Allowed shapes (matches the bundler's own output conventions):
+    //   - `spec/slots/<id>.slot.ts(x)`          (auto-linked, fs-routes)
+    //   - `app/**/<name>.slot.ts(x)`            (colocated user slots)
+    //   - `[param]` brackets for dynamic routes are preserved
+    //
+    // Rejected shapes:
+    //   - absolute paths (leading `/` or Windows `C:\`)
+    //   - `..` anywhere in the path (traversal)
+    //   - backslashes (fs-routes emits forward-slash only)
+    //   - any char outside a conservative allowlist
+    //
+    // See `docs/security/phase-7-1-audit.md` §L-03.
     if (route.slotModule) {
-      const absPath = path.resolve(rootDir, route.slotModule);
-      serverModuleSet.add(normalizeFsPath(absPath));
-      watchDirs.add(path.dirname(absPath));
+      const SLOT_PATH_REGEX = /^(?:spec\/slots|app)\/[A-Za-z0-9_\-./\[\]]+\.slots?\.tsx?$/;
+      const raw = route.slotModule;
+      let accepted = false;
+      if (
+        typeof raw === "string" &&
+        raw.length > 0 &&
+        raw.length <= 512 &&
+        !raw.includes("..") &&
+        !raw.includes("\\") &&
+        !raw.startsWith("/") &&
+        !/^[A-Za-z]:/.test(raw) &&
+        SLOT_PATH_REGEX.test(raw)
+      ) {
+        const absPath = path.resolve(rootDir, raw);
+        // Belt-and-suspenders: canonicalized path must remain inside rootDir.
+        const rootWithSep = path.resolve(rootDir) + path.sep;
+        if (absPath.startsWith(rootWithSep) || absPath === path.resolve(rootDir)) {
+          serverModuleSet.add(normalizeFsPath(absPath));
+          watchDirs.add(path.dirname(absPath));
+          accepted = true;
+        }
+      }
+      if (!accepted) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[Mandu] slotModule rejected for route "${route.id}": ${raw}. ` +
+            `Expected (spec/slots|app)/.../<name>.slot.ts(x) with no '..' or absolute prefix.`,
+        );
+      }
     }
 
     // Track API route modules for hot-reload
@@ -1826,6 +1875,23 @@ export function generateFastRefreshPreamble(
  *     `update` or `vite` payload is applied; `vite:afterUpdate` after;
  *     `vite:beforeFullReload` before `full-reload`; `vite:error` for
  *     errors. Listeners are registered in `ManduHot.on()` (runtime).
+ *
+ * Phase 7.2 Agent B additions (HDR — Hot Data Revalidation):
+ *   - **`slot-refetch` message type**: when a `.slot.ts` file changes, the
+ *     CLI side broadcasts `{ type: "slot-refetch", data: { routeId,
+ *     slotPath, id, timestamp } }`. The client script checks whether the
+ *     current browser location belongs to that `routeId`; if so it fetches
+ *     the current URL with `X-Mandu-HDR: 1`, receives JSON loader data,
+ *     then calls `window.__MANDU_ROUTER_REVALIDATE__(routeId, loaderData)`
+ *     wrapped in `React.startTransition`. Form inputs / scroll / focus
+ *     survive because the React tree never unmounts.
+ *   - **Fallback semantics**: if the route doesn't match, the router
+ *     revalidate hook is missing, the fetch fails, `MANDU_HDR=0` is set,
+ *     or any other failure path — the client falls back to
+ *     `location.reload()`. This preserves the Phase 7.1 "always-safe"
+ *     invariant: a broken HDR path never leaves the user on a stale page.
+ *   - **`hdr:refetch` perf marker**: fires on successful HDR apply for
+ *     Agent F's bench script to aggregate. P95 target ≤150 ms.
  */
 export function generateHMRClientScript(port: number): string {
   const hmrPort = port + PORTS.HMR_OFFSET;
@@ -1970,9 +2036,134 @@ export function generateHMRClientScript(port: number): string {
         if (payload.err) showErrorOverlay(payload.err.message || 'Build error');
         return;
       case 'custom':
-        // Plugin custom events — route through vite:beforeUpdate namespace.
+        // Plugin custom events — route known events to their handlers.
+        // Phase 7.2 HDR: slot-refetch rides this channel so we don't
+        // have to extend HMRMessage (which lives outside this section
+        // of the file).
+        if (payload.event === 'mandu:slot-refetch') {
+          handleSlotRefetch(payload.data || {});
+          return;
+        }
+        // Unknown custom events are dropped silently — Vite's own
+        // plugin ecosystem may emit anything.
         return;
     }
+  }
+
+  // ─── Phase 7.2 HDR (Hot Data Revalidation) ──────────────────────────
+  //
+  // When a .slot.ts file changes the server broadcasts
+  //   { type: 'slot-refetch', data: { routeId, slotPath, id, timestamp } }
+  // instead of the legacy 'reload'. We refetch the current URL with
+  // X-Mandu-HDR: 1 to get JSON loader data, then hand it to a
+  // framework revalidate hook that wraps the props update in
+  // React.startTransition so form state / scroll / focus survive.
+  //
+  // The hook path:
+  //   1. window.__MANDU_ROUTER_REVALIDATE__(routeId, loaderData) — the
+  //      framework router installs this at boot. If absent we fall back
+  //      to full reload (minimum-viable-HDR path).
+  //   2. window.__MANDU_HDR__.perfMark(name) — optional perf hook.
+  //      Bench script reads HMR_PERF.HDR_REFETCH ('hdr:refetch').
+  function getCurrentRouteId() {
+    // SSR injects __MANDU_ROUTE__ on the window. Router state (if
+    // client-side navigation happened) lives under __MANDU_ROUTER_STATE__.
+    // Prefer the router's state when both are present.
+    var routerState = window.__MANDU_ROUTER_STATE__;
+    if (routerState && routerState.currentRoute && routerState.currentRoute.id) {
+      return String(routerState.currentRoute.id);
+    }
+    var route = window.__MANDU_ROUTE__;
+    if (route && route.id) return String(route.id);
+    return null;
+  }
+
+  function hdrDisabled() {
+    // Opt-out: projects with unusual CSP / environments may disable HDR
+    // via a global flag. The bundler sets this from MANDU_HDR=0 (see
+    // the bootScript path in SSR rendering).
+    return window.__MANDU_HDR_DISABLED__ === true;
+  }
+
+  function hdrFallbackFullReload(reason) {
+    console.log('[Mandu HDR] Fallback full reload' + (reason ? ' (' + reason + ')' : ''));
+    location.reload();
+  }
+
+  function hdrMark(name, data) {
+    try {
+      if (window.__MANDU_HDR__ && typeof window.__MANDU_HDR__.perfMark === 'function') {
+        window.__MANDU_HDR__.perfMark(name, data);
+      }
+    } catch (_) {}
+  }
+
+  function handleSlotRefetch(data) {
+    var routeId = data && typeof data.routeId === 'string' ? data.routeId : null;
+    if (!routeId) {
+      hdrFallbackFullReload('no-routeId');
+      return;
+    }
+    if (hdrDisabled()) {
+      hdrFallbackFullReload('disabled');
+      return;
+    }
+    var currentId = getCurrentRouteId();
+    if (currentId !== routeId) {
+      // Not on the affected route — nothing to revalidate, no reload
+      // either. The next navigation will pick up the fresh loader.
+      console.log('[Mandu HDR] slot-refetch for ' + routeId + ' ignored (current route: ' + currentId + ')');
+      return;
+    }
+    var started = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    hdrMark('hdr:refetch-start', { routeId: routeId, slotPath: data.slotPath });
+    // Build the data URL: current pathname + query + _data=1 marker,
+    // with X-Mandu-HDR header so the server can log + treat it as an
+    // HDR request. _data=1 is the existing SPA navigation contract so
+    // we reuse it here — the server returns
+    //   { routeId, pattern, params, loaderData, timestamp }.
+    var url = window.location.pathname + window.location.search;
+    var sep = url.indexOf('?') >= 0 ? '&' : '?';
+    var dataUrl = url + sep + '_data=1';
+    fetch(dataUrl, {
+      credentials: 'same-origin',
+      headers: { 'X-Mandu-HDR': '1' },
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          hdrFallbackFullReload('status-' + res.status);
+          return null;
+        }
+        return res.json();
+      })
+      .then(function (payload) {
+        if (!payload) return;
+        // Revalidate hook. The router installs this from island glue.
+        var revalidate = window.__MANDU_ROUTER_REVALIDATE__;
+        if (typeof revalidate !== 'function') {
+          // Minimum-viable-HDR fallback: the framework router isn't
+          // installed on this page (e.g. pure-SSR with no client
+          // router). Full reload is the honest degrade.
+          hdrFallbackFullReload('no-router');
+          return;
+        }
+        // Apply inside React.startTransition so the prop update
+        // doesn't tear down focus / form inputs / scroll position.
+        // The router hook is responsible for wrapping; we just call it.
+        try {
+          revalidate(routeId, payload.loaderData);
+          var elapsed = (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()) - started;
+          console.log('[Mandu HDR] Applied loader data for ' + routeId + ' in ' + elapsed.toFixed(0) + 'ms');
+          hdrMark('hdr:refetch', { routeId: routeId, slotPath: data.slotPath, elapsed: elapsed });
+        } catch (err) {
+          console.error('[Mandu HDR] Revalidate threw:', err);
+          hdrFallbackFullReload('revalidate-throw');
+        }
+      })
+      .catch(function (err) {
+        console.error('[Mandu HDR] Fetch failed:', err);
+        hdrFallbackFullReload('fetch-failed');
+      });
   }
 
   function handleMessage(message) {
@@ -2034,6 +2225,15 @@ export function generateHMRClientScript(port: number): string {
         fireViteEvent('vite:beforeFullReload', message);
         // Layout 변경은 항상 전체 리로드
         location.reload();
+        break;
+
+      case 'slot-refetch':
+        // Phase 7.2 HDR — slot (.slot.ts) changed. Try to refetch loader
+        // data without remounting the React tree. Falls back to a full
+        // reload on any failure so the user is never stranded on stale
+        // state. Fire-and-forget (no return from handleMessage itself).
+        recordEnvelopeId(message);
+        handleSlotRefetch(message.data || {});
         break;
 
       case 'css-update':
