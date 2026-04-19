@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/cli",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "description": "Agent-Native Fullstack Framework - 에이전트가 코딩해도 아키텍처가 무너지지 않는 개발 OS",
   "type": "module",
   "main": "./src/main.ts",
@@ -40,11 +40,11 @@
     "access": "public"
   },
   "dependencies": {
-    "@mandujs/core": "^0.22.0",
-    "@mandujs/mcp": "^0.19.6",
-    "@mandujs/ate": "^0.18.2",
-    "@mandujs/edge": "^0.1.0",
-    "@mandujs/skills": "^2.0.1",
+    "@mandujs/core": "^0.23.0",
+    "@mandujs/mcp": "^0.20.0",
+    "@mandujs/ate": "^0.19.0",
+    "@mandujs/edge": "^0.2.0",
+    "@mandujs/skills": "^3.0.0",
     "cfonts": "^3.3.0"
   },
   "engines": {
