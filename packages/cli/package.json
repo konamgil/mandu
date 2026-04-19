@@ -43,6 +43,7 @@
     "@mandujs/core": "^0.22.0",
     "@mandujs/mcp": "^0.19.6",
     "@mandujs/ate": "^0.18.2",
+    "@mandujs/edge": "^0.1.0",
     "@mandujs/skills": "^2.0.1",
     "cfonts": "^3.3.0"
   },

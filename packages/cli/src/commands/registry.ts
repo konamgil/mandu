@@ -125,11 +125,29 @@ registerCommand({
 
 registerCommand({
   id: "build",
-  description: "Build client bundles (hydration)",
+  description: "Build client bundles (hydration). Use --target=workers for Cloudflare Workers.",
   exitOnSuccess: true,
   async run(ctx) {
     const { build } = await import("./build");
-    return build({ watch: ctx.options.watch === "true" });
+    const rawTarget = ctx.options.target;
+    let target: "workers" | undefined;
+    if (rawTarget && rawTarget !== "true") {
+      if (rawTarget === "workers") {
+        target = "workers";
+      } else {
+        console.error(
+          `❌ Unsupported --target value: "${rawTarget}". Supported: workers (Phase 15.1).`
+        );
+        return false;
+      }
+    }
+    return build({
+      watch: ctx.options.watch === "true",
+      target,
+      workerName: ctx.options["worker-name"] && ctx.options["worker-name"] !== "true"
+        ? ctx.options["worker-name"]
+        : undefined,
+    });
   },
 });
 

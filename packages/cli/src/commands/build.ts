@@ -33,6 +33,17 @@ export interface BuildOptions {
   watch?: boolean;
   /** Output directory */
   outDir?: string;
+  /**
+   * Deployment target. Leave undefined for the default Bun/Node adapter.
+   * `"workers"` emits `.mandu/workers/worker.js` + `wrangler.toml` so the
+   * project is ready for `wrangler dev` / `wrangler deploy`.
+   */
+  target?: "workers";
+  /**
+   * Override the Worker project name (defaults to the host `package.json`
+   * `name` field, lowered and slugified).
+   */
+  workerName?: string;
 }
 
 export async function build(options: BuildOptions = {}): Promise<boolean> {
@@ -242,6 +253,28 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
       rootDir: cwd,
       serverOptions: adapterServerOptions,
     });
+  }
+
+  // Phase 15.1 — Cloudflare Workers target
+  if (options.target === "workers") {
+    try {
+      const { emitWorkersBundle } = await import("../util/workers-emitter");
+      await emitWorkersBundle({
+        rootDir: cwd,
+        manifest,
+        cssPath,
+        workerName: options.workerName,
+      });
+    } catch (error) {
+      console.error(
+        `\n❌ Workers build failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      await runHook("onAfterBuild", plugins, hooks, {
+        success: false,
+        duration: Math.round(performance.now() - buildStartTime),
+      });
+      return false;
+    }
   }
 
   await runHook("onAfterBuild", plugins, hooks, {

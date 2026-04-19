@@ -175,6 +175,18 @@ export const HMR_PERF = {
    *  prewarm before the user hits a file save. */
   JIT_PREWARM: "boot:jit-prewarm",
 
+  /** Phase 11 C — Deep-path JIT prewarm extension. Phase 7.3 A closed the
+   *  first-iter gap from 41 ms to 25 ms by prewarming the React hot set;
+   *  R0.3 diagnostics traced the remaining ~15 ms to the
+   *  `registerManifestHandlers` deep-path (cli `util/handlers` +
+   *  `util/bun` bundledImport + `@mandujs/core/bundler/safe-build`
+   *  internals) which only execute on the FIRST SSR reload. This marker
+   *  measures the settling time of the deep-import Promise — still
+   *  fire-and-forget, still NOT on the critical path, so values are
+   *  informational only. Target: first-iter ≤ 15 ms (hard) / ≤ 20 ms
+   *  (soft). See `packages/cli/src/util/jit-prewarm.ts`. */
+  JIT_PREWARM_DEEP: "boot:jit-prewarm-deep",
+
   /** API route handler reload (`handleAPIChange`) — `.route.ts` /
    *  `.route.tsx` change. Symmetric to `SSR_HANDLER_RELOAD` for page /
    *  layout reloads. Phase 7.2 §7.4 flagged that `handleAPIChange` was

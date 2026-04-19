@@ -382,6 +382,11 @@ async function main(): Promise<void> {
   // Phase 7.3 A — first-iter JIT delta surface. `--cold-first-iter`
   // always emits this split; without the flag it's only shown when
   // the delta exceeds 10 ms so the normal output stays concise.
+  //
+  // Phase 11 C — `--warm-only` with `--perf` additionally surfaces the
+  // deep prewarm wall-clock (`[perf] boot:jit-prewarm-deep: Nms`) parsed
+  // from the FIRST warm iter. This is the budget Phase 11 C tracks
+  // against (hard ≤ 15 ms, soft ≤ 20 ms).
   if (
     firstWarmSample !== null &&
     steadyWarmSamples.length > 0 &&
@@ -405,6 +410,28 @@ async function main(): Promise<void> {
       console.log(
         `  Prewarm target:      delta ≤ 10ms (Phase 7.3 A goal)`,
       );
+    }
+    if (PERF_MODE && warmResults.length > 0) {
+      // Phase 11 C — surface deep prewarm timing from the first warm iter
+      // (where it is meaningful; subsequent iters find Bun's module cache
+      // hot and settle in sub-ms).
+      const deepLine = warmResults[0]!.perfLines.find((l) =>
+        l.startsWith("[perf] boot:jit-prewarm-deep:"),
+      );
+      const shallowLine = warmResults[0]!.perfLines.find((l) =>
+        l.startsWith("[perf] boot:jit-prewarm:"),
+      );
+      if (deepLine || shallowLine) {
+        console.log();
+        console.log("─── Prewarm wall-clock (first warm iter) ──────────────");
+        if (shallowLine) console.log(`  ${shallowLine}`);
+        if (deepLine) {
+          console.log(`  ${deepLine}`);
+          console.log(
+            `  Phase 11 C target:    ≤ 15ms hard / ≤ 20ms soft (first-iter JIT)`,
+          );
+        }
+      }
     }
   }
 

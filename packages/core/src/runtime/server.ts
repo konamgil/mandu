@@ -449,6 +449,13 @@ export interface ServerRegistrySettings {
   cacheStore?: CacheStore;
   /** Internal management token for local runtime control */
   managementToken?: string;
+  /**
+   * Edge runtime flag — disables filesystem-dependent features (static file
+   * serving, Kitchen dashboard, image optimization, SSG fallback loaders).
+   * Set by `@mandujs/edge` adapters (Cloudflare Workers, Deno Deploy, Vercel Edge).
+   * Default: false (Bun/Node runtime with full FS access).
+   */
+  edge?: boolean;
 }
 
 export class ServerRegistry {
@@ -2408,18 +2415,23 @@ async function handleRequestInternal(
   }
 
   // 1. 정적 파일 서빙 시도 (최우선)
-  const staticFileResult = await serveStaticFile(pathname, settings, req);
-  if (staticFileResult.handled) {
-    const staticResponse = staticFileResult.response!;
-    if (settings.cors && isCorsRequest(req)) {
-      const corsOptions: CorsOptions = typeof settings.cors === 'object' ? settings.cors : {};
-      return ok(applyCorsToResponse(staticResponse, req, corsOptions));
+  // Edge runtimes (Cloudflare Workers, etc.) have no filesystem — skip and
+  // let the platform's asset pipeline (Wrangler [assets], Vercel _static, …)
+  // handle static routing instead.
+  if (!settings.edge) {
+    const staticFileResult = await serveStaticFile(pathname, settings, req);
+    if (staticFileResult.handled) {
+      const staticResponse = staticFileResult.response!;
+      if (settings.cors && isCorsRequest(req)) {
+        const corsOptions: CorsOptions = typeof settings.cors === 'object' ? settings.cors : {};
+        return ok(applyCorsToResponse(staticResponse, req, corsOptions));
+      }
+      return ok(staticResponse);
     }
-    return ok(staticResponse);
   }
 
   // 1.5. Image optimization handler (/_mandu/image)
-  if (pathname === "/_mandu/image") {
+  if (!settings.edge && pathname === "/_mandu/image") {
     const imageResponse = await handleImageRequest(req, settings.rootDir, settings.publicDir);
     if (imageResponse) return ok(imageResponse);
   }
@@ -2768,6 +2780,119 @@ export const apiHandlers = defaultRegistry.apiHandlers;
 export const pageLoaders = defaultRegistry.pageLoaders;
 export const pageHandlers = defaultRegistry.pageHandlers;
 export const routeComponents = defaultRegistry.routeComponents;
+
+// ========== Runtime-Neutral Fetch Handler Factory ==========
+
+/**
+ * Options for {@link createAppFetchHandler}. Subset of {@link ServerOptions}
+ * that makes sense in edge/serverless runtimes — no listen/port/hmr fields.
+ */
+export interface AppFetchHandlerOptions {
+  /** Project root (used for module path validation). Required. */
+  rootDir: string;
+  /** Bundle manifest (Island hydration). Optional in pure-SSR apps. */
+  bundleManifest?: BundleManifest;
+  /** CORS config — `true` allows all origins, object for fine-grained rules. */
+  cors?: boolean | CorsOptions;
+  /** Streaming SSR toggle. Default: `false`. */
+  streaming?: boolean;
+  /** Rate limit policy. Memory-backed; edge runtimes should prefer durable stores. */
+  rateLimit?: boolean | RateLimitOptions;
+  /**
+   * CSS link injection target for SSR. Typically `"/.mandu/client/globals.css"`
+   * when Tailwind is in use. `false` disables injection.
+   */
+  cssPath?: string | false;
+  /** Custom registry override (defaults to the global registry). */
+  registry?: ServerRegistry;
+  /**
+   * Mark this handler as edge-hosted. Skips filesystem-dependent features
+   * (static file serving, Kitchen dashboard, image optimization). Set to
+   * `true` by `@mandujs/edge` adapters.
+   */
+  edge?: boolean;
+  /**
+   * Optional global middleware function. When omitted, the handler does not
+   * attempt to auto-load `middleware.ts` from disk (important for edge
+   * bundles where FS is unavailable). Adapters should pass pre-compiled
+   * middleware at build time.
+   */
+  middleware?: {
+    fn: MiddlewareFn;
+    config?: MiddlewareConfig | null;
+  };
+}
+
+/**
+ * Build a runtime-neutral `fetch(req) → Promise<Response>` handler from a
+ * routes manifest. Reuses the same request pipeline as `startServer()`
+ * (CORS, middleware, router, SSR, API handlers) but without binding to
+ * `Bun.serve`. Suitable for Cloudflare Workers, Deno Deploy, Vercel Edge,
+ * Netlify Edge, and any other Web-Fetch host.
+ *
+ * Handler registration (`registerApiHandler`, `registerPageHandler`, …) must
+ * happen *before* calling this factory — same contract as `startServer`.
+ *
+ * @example
+ * ```ts
+ * // Cloudflare Workers entry
+ * import { createAppFetchHandler } from "@mandujs/core";
+ * import manifest from "./.mandu/routes.manifest.json";
+ * import "./.mandu/edge-workers/register.js"; // populates registries
+ *
+ * const fetch = createAppFetchHandler(manifest, {
+ *   rootDir: "/",
+ *   edge: true,
+ *   cssPath: false,
+ * });
+ *
+ * export default { fetch };
+ * ```
+ */
+export function createAppFetchHandler(
+  manifest: RoutesManifest,
+  options: AppFetchHandlerOptions
+): (req: Request) => Promise<Response> {
+  const {
+    rootDir,
+    bundleManifest,
+    cors = false,
+    streaming = false,
+    rateLimit = false,
+    cssPath = false,
+    registry = defaultRegistry,
+    edge = false,
+    middleware,
+  } = options;
+
+  const corsOptions: CorsOptions | false = cors === true ? {} : cors;
+  const rateLimitOptions = normalizeRateLimitOptions(rateLimit);
+
+  registry.settings = {
+    isDev: false,
+    bundleManifest,
+    rootDir,
+    publicDir: "public",
+    cors: corsOptions,
+    streaming,
+    rateLimit: rateLimitOptions,
+    cssPath,
+    edge,
+  };
+
+  registry.rateLimiter = rateLimitOptions ? new MemoryRateLimiter() : null;
+
+  const router = new Router(manifest.routes);
+
+  return createFetchHandler({
+    router,
+    registry,
+    corsOptions,
+    middlewareFn: middleware?.fn ?? null,
+    middlewareConfig: middleware?.config ?? null,
+    handleRequest,
+  });
+}
 
 // ========== Rate Limiting Public API ==========
 

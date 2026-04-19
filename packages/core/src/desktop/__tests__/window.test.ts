@@ -165,8 +165,84 @@ describe("@mandujs/core/desktop — createWindow peer loading", () => {
       return;
     }
 
-    await expect(
-      createWindow({ url: "http://127.0.0.1:1" }),
-    ).rejects.toThrow(/webview-bun/);
+    // Ensure the FFI fallback also can't resolve — otherwise `createWindow`
+    // silently flips to the FFI path. We force an unreachable library path
+    // so both paths deterministically fail, which is the state the
+    // actionable error contract guards.
+    const originalFFIPath = process.env.MANDU_LIBWEBVIEW_PATH;
+    process.env.MANDU_LIBWEBVIEW_PATH =
+      "/path/that/does/not/exist/libwebview.so";
+    try {
+      await expect(
+        createWindow({ url: "http://127.0.0.1:1" }),
+      ).rejects.toThrow(/webview-bun/);
+    } finally {
+      if (originalFFIPath !== undefined) {
+        process.env.MANDU_LIBWEBVIEW_PATH = originalFFIPath;
+      } else {
+        delete process.env.MANDU_LIBWEBVIEW_PATH;
+      }
+    }
+  });
+
+  it("MANDU_DESKTOP_INLINE_FFI=1 routes to the FFI fallback path", async () => {
+    // With the env flag set, `createWindow` must import
+    // `./webview-fallback` instead of `webview-bun`. We don't assert on
+    // the exact success/failure of the FFI call (that depends on the
+    // machine's libwebview install state) — we only assert that the
+    // branch is taken. The simplest observable is: when the library
+    // actually loads AND the test machine has a webview backend
+    // (WebView2 on Windows etc.), a real window would open. To stay
+    // CI-safe we monkey-patch dynamic import of the fallback module to
+    // detect invocation.
+    //
+    // Bun's ESM cache makes this tricky — instead we verify the call
+    // selector by checking that `createWindow` does NOT throw the
+    // webview-bun "install me" error when the flag is set. That error
+    // is only reachable via the primary `_loadWebviewBun` path; if the
+    // FFI branch is skipped or the webview-bun import is tried in its
+    // place, the test would observe the install-me error.
+    const originalFlag = process.env.MANDU_DESKTOP_INLINE_FFI;
+    const originalFFIPath = process.env.MANDU_LIBWEBVIEW_PATH;
+    process.env.MANDU_DESKTOP_INLINE_FFI = "1";
+    // Force an unreachable libwebview so the fallback fails deterministically
+    // and the error surfaces the fallback's distinctive language (which
+    // is what we assert on).
+    process.env.MANDU_LIBWEBVIEW_PATH = "/nonexistent/libwebview-test-stub.so";
+
+    try {
+      // Resolve whatever error comes back and assert it's NOT the
+      // webview-bun peer-missing error. The exact failure mode of the
+      // FFI path varies by CI machine (libwebview missing, dlopen
+      // succeeds on a stub, or the FFI cstring call errors), but none
+      // of those produce the distinctive "bun add webview-bun" string
+      // from the primary path.
+      let caught: unknown;
+      try {
+        const handle = await createWindow({ url: "http://127.0.0.1:1" });
+        // Unexpected success — close to clean up, then fail.
+        await handle.close();
+        throw new Error(
+          "unreachable — createWindow should fail with MANDU_DESKTOP_INLINE_FFI=1 + bogus MANDU_LIBWEBVIEW_PATH",
+        );
+      } catch (err) {
+        caught = err;
+      }
+      const msg = caught instanceof Error ? caught.message : String(caught);
+      // The webview-bun install-me message always mentions "bun add webview-bun".
+      // The fallback path's failure never does.
+      expect(msg).not.toContain("bun add webview-bun");
+    } finally {
+      if (originalFlag !== undefined) {
+        process.env.MANDU_DESKTOP_INLINE_FFI = originalFlag;
+      } else {
+        delete process.env.MANDU_DESKTOP_INLINE_FFI;
+      }
+      if (originalFFIPath !== undefined) {
+        process.env.MANDU_LIBWEBVIEW_PATH = originalFFIPath;
+      } else {
+        delete process.env.MANDU_LIBWEBVIEW_PATH;
+      }
+    }
   });
 });

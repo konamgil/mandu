@@ -16,6 +16,12 @@
  * Non-goals:
  *   - Code signing (Phase 9b.C / R3 security track).
  *   - Packaging installers (MSI, DMG, AppImage) — follow-up phase.
+ *
+ * Phase 11.B — L-03: entry path containment.
+ *   `--entry=<absolute-path>` previously allowed writes outside the
+ *   project cwd (e.g. `--entry=/etc/cron.hourly/evil.sh`). We now
+ *   canonicalize the entry path and require it to remain inside cwd
+ *   after symlink resolution. See `docs/security/phase-9-audit.md` §L-03.
  */
 
 import path from "path";
@@ -147,15 +153,152 @@ main().catch((error) => {
 }
 
 /**
+ * Validate that a desktop entry path — which may be user-supplied via
+ * `--entry=<abs>` — stays inside the project `cwd`. Prevents:
+ *
+ *   - Absolute paths that escape the project (`--entry=/etc/cron.d/x`)
+ *   - Relative paths with `..` traversal (`--entry=../../../tmp/evil`)
+ *   - Symlinks whose target resolves outside cwd
+ *   - Windows drive-letter crossings (`C:\project` vs `--entry=D:\evil`)
+ *
+ * The check runs in two stages, both of which must pass:
+ *
+ *   1. **Lexical** — We resolve both the project `cwd` and the candidate
+ *      entry through their respective realpaths first, then `path.relative`.
+ *      If the relative is `..`-prefixed or itself absolute, the entry
+ *      escapes. Realpath-before-relative is important on Windows where a
+ *      short 8.3 name (`C:\Users\LAMYSO~1\...`) and its long form
+ *      (`C:\Users\LamySolution\...`) refer to the same directory but
+ *      compare unequal as plain strings.
+ *   2. **Canonical ancestor** — `fs.realpath` on a not-yet-existing file
+ *      throws. We walk up the parent chain until we hit something that
+ *      exists, realpath that ancestor, then verify it's still inside the
+ *      canonical cwd. This catches a mid-path symlink (`src/desktop ->
+ *      /tmp/elsewhere`) that otherwise passes stage 1 because the lexical
+ *      string is inside cwd.
+ *
+ * Exported for test coverage.
+ *
+ * @internal
+ * @param cwd — project root (absolute, may be pre-canonical)
+ * @param entry — as supplied by user (may be relative or absolute)
+ * @returns the validated absolute entry path (in the user's preferred form)
+ * @throws Error with actionable message if containment is violated
+ */
+export async function validateDesktopEntryPath(
+  cwd: string,
+  entry: string,
+): Promise<string> {
+  if (typeof entry !== "string" || entry.length === 0) {
+    throw new Error("[mandu desktop] --entry must be a non-empty path");
+  }
+
+  const absCwd = path.resolve(cwd);
+  const absEntry = path.isAbsolute(entry) ? path.resolve(entry) : path.resolve(absCwd, entry);
+
+  // Canonicalize cwd — this is the authoritative boundary for every
+  // subsequent containment check.
+  const canonicalCwd = (await tryRealpath(absCwd)) ?? absCwd;
+
+  // Stage 1 — canonical lexical check. We canonicalize the nearest
+  // existing ancestor of absEntry so that both sides of `path.relative`
+  // are in the same form (Windows: short-name → long-name, macOS:
+  // `/var` → `/private/var`, Linux: symlink → target).
+  const canonicalEntryAncestor = await canonicalAncestorOf(absEntry);
+  const relAncestor = path.relative(canonicalCwd, canonicalEntryAncestor);
+  const escapesLexical =
+    relAncestor.startsWith("..") ||
+    // After canonicalization a leading absolute string means "different
+    // volume" (Windows) or "different mount root" — in either case the
+    // ancestor is not inside cwd.
+    path.isAbsolute(relAncestor);
+  // An ancestor that equals cwd (empty relative) is valid: the entry
+  // file will be created beneath it once its missing directories are
+  // mkdir'd.
+  if (escapesLexical && relAncestor !== "") {
+    // If the ancestor isn't the cwd itself, the entry or its parent
+    // chain escapes. Distinguish the two error classes only for the
+    // message — "symlink" when the lexical pre-realpath was inside but
+    // the canonical ancestor was outside; "path" when even the lexical
+    // string was outside.
+    const lexRel = path.relative(absCwd, absEntry);
+    const escapedBeforeRealpath =
+      lexRel.startsWith("..") || path.isAbsolute(lexRel);
+    if (escapedBeforeRealpath) {
+      throw new Error(
+        `[mandu desktop] --entry must be inside the project directory.\n` +
+          `  entry:    ${entry}\n` +
+          `  resolved: ${absEntry}\n` +
+          `  project:  ${canonicalCwd}`,
+      );
+    }
+    throw new Error(
+      `[mandu desktop] --entry resolves (via symlink) outside the project directory.\n` +
+        `  entry:     ${entry}\n` +
+        `  canonical: ${canonicalEntryAncestor}\n` +
+        `  project:   ${canonicalCwd}`,
+    );
+  }
+
+  return absEntry;
+}
+
+/**
+ * Walk up the parent chain from `target` and return the realpath of the
+ * first existing ancestor. Used by `validateDesktopEntryPath` to resolve
+ * symlinks when the entry file itself may not yet exist.
+ *
+ * @internal
+ */
+async function canonicalAncestorOf(target: string): Promise<string> {
+  let current = target;
+  // Bound the climb — filesystem roots have `dirname(x) === x`.
+  for (let i = 0; i < 256; i += 1) {
+    const resolved = await tryRealpath(current);
+    if (resolved !== null) return resolved;
+    const parent = path.dirname(current);
+    if (parent === current) {
+      // Hit filesystem root without finding anything that exists —
+      // return the lexical path as-is.
+      return current;
+    }
+    current = parent;
+  }
+  return current;
+}
+
+/**
+ * `fs.realpath` that returns `null` when the target doesn't exist
+ * rather than throwing. Any other error is rethrown.
+ *
+ * @internal
+ */
+async function tryRealpath(p: string): Promise<string | null> {
+  try {
+    return await fs.realpath(p);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    // Any other failure — treat as "can't canonicalize" and return
+    // the path verbatim. This matches the behavior callers had before
+    // we introduced realpath.
+    return null;
+  }
+}
+
+/**
  * Emit (or verify) the desktop entry file. Returns whether the file was
  * newly written.
+ *
+ * Phase 11.B — L-03: `entry` is validated via `validateDesktopEntryPath`
+ * before any filesystem mutation. Absolute paths outside `cwd`, `..`
+ * traversals, and symlinks pointing outside the project are all rejected
+ * with an actionable error.
  */
 export async function scaffoldDesktopEntry(
   options: { cwd: string; entry: string; force: boolean },
 ): Promise<{ wrote: boolean; path: string }> {
-  const entryPath = path.isAbsolute(options.entry)
-    ? options.entry
-    : path.join(options.cwd, options.entry);
+  const entryPath = await validateDesktopEntryPath(options.cwd, options.entry);
 
   const exists = await pathExists(entryPath);
   if (exists && !options.force) {
@@ -189,12 +332,25 @@ export async function desktop(options: DesktopOptions = {}): Promise<boolean> {
     console.warn("");
   }
 
-  // Always emit the entry (respecting --force).
-  const { wrote, path: entryPath } = await scaffoldDesktopEntry({
-    cwd,
-    entry,
-    force: options.force ?? false,
-  });
+  // Always emit the entry (respecting --force). scaffoldDesktopEntry
+  // validates containment — a thrown error here surfaces as the CLI's
+  // usual fatal exit path.
+  let wrote: boolean;
+  let entryPath: string;
+  try {
+    const result = await scaffoldDesktopEntry({
+      cwd,
+      entry,
+      force: options.force ?? false,
+    });
+    wrote = result.wrote;
+    entryPath = result.path;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(msg);
+    return false;
+  }
+
   const relEntry = path.relative(cwd, entryPath);
   if (wrote) {
     console.log(`✅ Wrote desktop entry: ${relEntry}`);

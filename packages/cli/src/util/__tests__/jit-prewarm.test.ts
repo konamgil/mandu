@@ -61,14 +61,22 @@ describe("JIT prewarm (Phase 7.3 A)", () => {
   it("fires the boot:jit-prewarm perf marker when MANDU_PERF=1", async () => {
     enablePerf();
 
-    const result = await startJitPrewarm();
+    // Keep the legacy Phase 7.3 shape — deep:false so only the shallow
+    // marker fires. Phase 11 C deep layer is exercised by the dedicated
+    // `jit-prewarm-deep.test.ts` suite.
+    const result = await startJitPrewarm({ deep: false });
 
     // Look for the perf log line emitted by `measure()` in perf/index.ts.
-    // Format: `[perf] boot:jit-prewarm: <N.NN>ms`.
+    // Format: `[perf] boot:jit-prewarm: <N.NN>ms`. Use a word-boundary
+    // match so we don't accidentally catch the Phase 11 C
+    // `boot:jit-prewarm-deep` line when that layer also ran.
     const perfCalls = (logSpy.mock.calls as unknown as Array<[string]>).filter(
       (c) => {
         const [line] = c;
-        return typeof line === "string" && line.startsWith(`[perf] ${HMR_PERF.JIT_PREWARM}`);
+        return (
+          typeof line === "string" &&
+          line.startsWith(`[perf] ${HMR_PERF.JIT_PREWARM}:`)
+        );
       },
     );
 

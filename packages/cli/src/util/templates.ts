@@ -35,6 +35,15 @@ import {
   TEMPLATE_MANIFEST,
   EMBEDDED_FILE_COUNT,
 } from "../../generated/templates-manifest.js";
+// Phase 11.A — Skills manifest (I-03 fix). Unlike the template manifest
+// above, this one uses `with { type: "text" }` so the payloads are
+// **strings** inlined at compile time. That makes every lookup
+// synchronous and filesystem-free — exactly what the binary needs.
+import {
+  SKILLS_MANIFEST,
+  EMBEDDED_SKILL_IDS,
+  SKILLS_PAYLOAD_COUNT,
+} from "../../generated/skills-manifest.js";
 
 export interface EmbeddedTemplateFile {
   /** POSIX-normalized path relative to the template root. */
@@ -136,4 +145,73 @@ export function resolveEmbeddedPath(name: string, relPath: string): string | nul
 /** Total file count — useful for sanity checks in tests and CLI diagnostics. */
 export function getEmbeddedFileCount(): number {
   return EMBEDDED_FILE_COUNT;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11.A — Skills manifest (Phase 9 audit I-03).
+// ---------------------------------------------------------------------------
+//
+// The CLI's `mandu init` drives Claude-Code-skills installation through
+// `@mandujs/skills/init-integration::setupClaudeSkills`, which originally
+// walked the filesystem (`copyFile(srcPath, destPath)`). In a compiled
+// binary that logic tries to read `$bunfs/.../packages/skills/skills/<id>/SKILL.md`,
+// which never exists because `@mandujs/skills` lives on the user's disk
+// (or — in the binary case — is not embedded at all). Result: 9 silent
+// warnings during `mandu.exe init`.
+//
+// The fix embeds the 9 SKILL.md payloads + the shared Claude
+// `settings.json` via `with { type: "text" }` so they are inline strings
+// in both dev and compiled modes. The API below is what the init step
+// (and the skills package, for dev-mode parity) consume.
+
+/**
+ * Payload for one embedded skill or auxiliary asset.
+ */
+export interface EmbeddedSkillFile {
+  /**
+   * Stable key. For skill IDs, the key matches `@mandujs/skills`'s
+   * `SKILL_IDS` entry (e.g. `"mandu-create-feature"`). Auxiliary files
+   * carry a `"settings/<rel>"` prefix.
+   */
+  readonly key: string;
+  /** Raw UTF-8 payload. Pass straight to `writeFile()` — no encoding dance. */
+  readonly contents: string;
+}
+
+/**
+ * List every skill payload currently embedded. Order is deterministic
+ * (matches the generator output) so downstream progress reporting is
+ * stable across runs. Auxiliary entries (e.g. `settings/.claude/settings.json`)
+ * are included — filter by `key.startsWith("settings/")` if a caller only
+ * wants `SKILL.md` entries.
+ */
+export function loadSkillFiles(): readonly EmbeddedSkillFile[] {
+  const out: EmbeddedSkillFile[] = [];
+  for (const [key, contents] of SKILLS_MANIFEST) {
+    out.push({ key, contents });
+  }
+  return out;
+}
+
+/**
+ * Lookup a single payload by key. Returns `null` for unknown keys — the
+ * caller decides whether that's a hard error (missing skill asset) or a
+ * soft one (stale key after a skill rename).
+ */
+export function resolveSkillPayload(key: string): string | null {
+  return SKILLS_MANIFEST.get(key) ?? null;
+}
+
+/**
+ * The ordered list of skill IDs the binary was built against. Used by
+ * `setupClaudeSkills` to drive the copy loop + by the regression test
+ * that guards against drift vs. the `@mandujs/skills` source export.
+ */
+export function getEmbeddedSkillIds(): readonly string[] {
+  return EMBEDDED_SKILL_IDS;
+}
+
+/** Sanity check — 9 SKILL.md files + 1 auxiliary settings.json = 10. */
+export function getEmbeddedSkillsCount(): number {
+  return SKILLS_PAYLOAD_COUNT;
 }

@@ -13,6 +13,12 @@
       "@mandujs/mcp/*": ["packages/mcp/src/*"],
       "@mandujs/ate": ["packages/ate/src/index.ts"],
       "@mandujs/ate/*": ["packages/ate/src/*"],
+      "@mandujs/edge": ["packages/edge/src/index.ts"],
+      "@mandujs/edge/*": ["packages/edge/src/*"],
+      "@mandujs/edge/workers": ["packages/edge/src/workers/index.ts"],
+      "@mandujs/edge/deno": ["packages/edge/src/deno/index.ts"],
+      "@mandujs/edge/vercel": ["packages/edge/src/vercel/index.ts"],
+      "@mandujs/edge/netlify": ["packages/edge/src/netlify/index.ts"],
       "@mandujs/skills": ["packages/skills/src/index.ts"],
       "@mandujs/skills/*": ["packages/skills/src/*.ts", "packages/skills/*"]
     },

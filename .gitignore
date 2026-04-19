@@ -31,6 +31,7 @@ bun.lockb
 
 # Mandu runtime
 .mandu/
+.mandu-edge-test-scratch/
 .perf/
 .smoke/
 

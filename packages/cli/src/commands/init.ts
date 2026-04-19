@@ -12,6 +12,8 @@ import { theme } from "../terminal/theme";
 import {
   loadTemplate as loadEmbeddedTemplate,
   resolveEmbeddedPath,
+  getEmbeddedSkillIds,
+  resolveSkillPayload,
 } from "../util/templates";
 // Phase 9.R2 — init-landing markdown payload is pre-embedded as a string
 // via `with { type: "text" }` so `renderInitLanding()` can stay
@@ -24,11 +26,102 @@ import {
   writeLockfile,
   LOCKFILE_PATH,
 } from "@mandujs/core";
+// `setupClaudeSkills` is the dev-mode filesystem copier and remains the
+// public API exposed by `@mandujs/skills`. The CLI no longer calls it
+// directly (Phase 11.A: binary-safe path below), but we keep the type
+// import (`SetupResult`) to preserve the existing summary contract and
+// the value import for third-party consumers who import `init.ts` as a
+// library and want to substitute their own skills strategy.
+// `getSkillCount` is a pure constant — safe to call from any context.
 import {
-  setupClaudeSkills,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  setupClaudeSkills as _setupClaudeSkillsFsCopy,
   getSkillCount,
   type SetupResult as SkillsSetupResult,
 } from "@mandujs/skills/init-integration";
+
+/**
+ * Phase 11.A — Binary-safe Claude Code skills installer.
+ *
+ * Replaces the Phase 9 call path (`setupClaudeSkills(targetDir)` →
+ * `copyFile(fs → fs)`) which silently 9x-ENOENT'd inside a compiled
+ * binary because `@mandujs/skills` is never reachable from `$bunfs`.
+ * The new implementation consumes the `SKILLS_MANIFEST` string payloads
+ * embedded by `scripts/generate-template-manifest.ts`, so every skill
+ * gets written using `fs.writeFile()` with known-good in-memory bytes.
+ *
+ * Output shape is identical to `setupClaudeSkills` so downstream
+ * summary logic (`skillsResult.skillsInstalled` etc.) does not change.
+ */
+async function installEmbeddedClaudeSkills(
+  targetDir: string
+): Promise<SkillsSetupResult> {
+  const result: SkillsSetupResult = {
+    skillsInstalled: 0,
+    settingsCreated: false,
+    errors: [],
+  };
+
+  const skillsDir = path.join(targetDir, ".claude", "skills");
+  try {
+    await fs.mkdir(skillsDir, { recursive: true });
+  } catch (err) {
+    result.errors.push(
+      `mkdir .claude/skills: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return result;
+  }
+
+  for (const skillId of getEmbeddedSkillIds()) {
+    const payload = resolveSkillPayload(skillId);
+    if (payload === null) {
+      // Manifest drift — an ID advertised by the generator but missing
+      // from the emitted map. This is a hard bug, not a runtime edge.
+      result.errors.push(
+        `skill payload missing in manifest: ${skillId} ` +
+          `(re-run scripts/generate-template-manifest.ts and rebuild)`
+      );
+      continue;
+    }
+    const destPath = path.join(skillsDir, `${skillId}.md`);
+    try {
+      await fs.writeFile(destPath, payload, "utf-8");
+      result.skillsInstalled++;
+    } catch (err) {
+      result.errors.push(
+        `write ${skillId}: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  // Shared Claude settings.json — manifest key must match
+  // generator's SKILL_SETTINGS_REL (`.claude/settings.json`).
+  const settingsPayload = resolveSkillPayload("settings/.claude/settings.json");
+  if (settingsPayload === null) {
+    result.errors.push(
+      "settings payload missing in manifest: .claude/settings.json"
+    );
+    return result;
+  }
+  try {
+    // Ensure the parent `.claude` directory exists — normally already
+    // present thanks to the skills mkdir above, but `mkdir recursive`
+    // is a no-op when the dir exists so this is safe.
+    await fs.mkdir(path.join(targetDir, ".claude"), { recursive: true });
+    await fs.writeFile(
+      path.join(targetDir, ".claude", "settings.json"),
+      settingsPayload,
+      "utf-8"
+    );
+    result.settingsCreated = true;
+  } catch (err) {
+    result.errors.push(
+      `settings.json: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  return result;
+}
 
 export type CSSFramework = "tailwind" | "panda" | "none";
 export type UILibrary = "shadcn" | "ark" | "none";
@@ -499,7 +592,13 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
       {
         label: "Claude Code skills",
         fn: async () => {
-          skillsResult = await setupClaudeSkills(targetDir);
+          // Phase 11.A — was `setupClaudeSkills(targetDir)` which copied
+          // from on-disk `@mandujs/skills/skills/<id>/SKILL.md`. That path
+          // is unreachable inside a compiled binary and caused 9 silent
+          // ENOENT warnings on `mandu.exe init` (Phase 9 audit I-03).
+          // The embedded manifest gives us the same bytes synchronously
+          // in both dev and binary modes.
+          skillsResult = await installEmbeddedClaudeSkills(targetDir);
         },
       },
       {

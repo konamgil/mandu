@@ -16,8 +16,15 @@
 #   curl -fsSL https://raw.githubusercontent.com/konamgil/mandu/main/install.bash | bash
 #
 # All flags and environment variables documented in install.sh are honored
-# verbatim (MANDU_VERSION, MANDU_INSTALL_DIR, MANDU_REPO, MANDU_FORCE,
-# MANDU_NO_MODIFY_PATH).
+# verbatim (MANDU_VERSION, MANDU_INSTALL_DIR, MANDU_REPO,
+# MANDU_REPO_CONFIRM, MANDU_FORCE, MANDU_NO_MODIFY_PATH).
+#
+# Phase 11.B — L-01/L-02:
+#   The safety checks (MANDU_REPO allowlist + warning, MANDU_INSTALL_DIR
+#   char filter) all live in install.sh. This wrapper performs one extra
+#   guard — validating MANDU_REPO before curl'ing a remote install.sh —
+#   because a compromised MANDU_REPO here would also redirect the fetch
+#   of install.sh itself from raw.githubusercontent.com.
 
 set -euo pipefail
 
@@ -54,6 +61,31 @@ EOF
 esac
 
 # ---------------------------------------------------------------------------
+# Phase 11.B — L-01 guard on the pre-fetch MANDU_REPO.
+#
+# When install.sh is not on disk (curl | bash), we have to fetch it from
+# raw.githubusercontent.com/<MANDU_REPO>/main/install.sh. A malicious
+# MANDU_REPO at this stage would redirect the fetch of install.sh itself,
+# so the allowlist must run here BEFORE the curl. install.sh then re-runs
+# the same checks (defense-in-depth) once it's running.
+# ---------------------------------------------------------------------------
+_mandu_repo="${MANDU_REPO:-konamgil/mandu}"
+case "${_mandu_repo}" in
+  */*) ;;
+  *)
+    echo "error: MANDU_REPO must be in owner/repo format" >&2
+    exit 5
+    ;;
+esac
+case "${_mandu_repo}" in
+  *[!A-Za-z0-9/._-]*)
+    echo "error: MANDU_REPO contains unsafe characters" >&2
+    echo "  value: ${_mandu_repo}" >&2
+    exit 5
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
 # Locate the POSIX script. Two deployment shapes:
 #
 #   1. Local checkout — install.sh sits beside install.bash.
@@ -62,8 +94,7 @@ esac
 #      install.sh itself.
 # ---------------------------------------------------------------------------
 if [[ ! -f "${POSIX_SCRIPT}" ]]; then
-  MANDU_REPO="${MANDU_REPO:-konamgil/mandu}"
-  RAW_URL="https://raw.githubusercontent.com/${MANDU_REPO}/main/install.sh"
+  RAW_URL="https://raw.githubusercontent.com/${_mandu_repo}/main/install.sh"
   TMP_POSIX="$(mktemp 2>/dev/null || mktemp -t mandu-install.sh)"
   trap 'rm -f "${TMP_POSIX}"' EXIT INT TERM
   if command -v curl >/dev/null 2>&1; then

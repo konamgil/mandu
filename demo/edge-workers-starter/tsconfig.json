@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "types": ["bun-types", "@cloudflare/workers-types"]
+  },
+  "include": ["app/**/*", "src/**/*", "mandu.config.ts"]
+}

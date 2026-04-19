@@ -280,7 +280,42 @@ export async function createWindow(
 ): Promise<WindowHandle> {
   _validateOptions(options);
 
-  const { Webview, SizeHint } = await _loadWebviewBun();
+  // Phase 11 C / M-02 — FFI fallback path. When `MANDU_DESKTOP_INLINE_FFI=1`
+  // is set, OR when `webview-bun` dynamic import fails at runtime, we try
+  // the `bun:ffi` fallback that binds directly to the upstream
+  // `webview/webview` C library. The fallback is a supply-chain mitigation
+  // for the webview-bun single-maintainer risk — see
+  // `docs/bun/phase-9-diagnostics/webview-bun-ffi.md` §8.
+  //
+  // Behaviour matrix:
+  //   MANDU_DESKTOP_INLINE_FFI=1:
+  //     → SKIP webview-bun, go straight to FFI fallback.
+  //   webview-bun resolves cleanly:
+  //     → primary path (normal flow below).
+  //   webview-bun rejects with a module-not-found error AND fallback
+  //   succeeds: log a one-time hint, use fallback.
+  //   Both fail: rethrow the webview-bun "install me" error (the original
+  //   actionable hint).
+  const forceFFI = process.env.MANDU_DESKTOP_INLINE_FFI === "1";
+  if (forceFFI) {
+    const { createFallbackWebview } = await import("./webview-fallback.js");
+    return createFallbackWebview(options);
+  }
+
+  let peer: WebviewBunModule;
+  try {
+    peer = await _loadWebviewBun();
+  } catch (primaryError) {
+    // Try the fallback. If it also fails, surface the PRIMARY error since
+    // it carries the actionable "bun add webview-bun" hint users expect.
+    try {
+      const { createFallbackWebview } = await import("./webview-fallback.js");
+      return await createFallbackWebview(options);
+    } catch {
+      throw primaryError;
+    }
+  }
+  const { Webview, SizeHint } = peer;
 
   const merged = {
     ..._DEFAULTS,

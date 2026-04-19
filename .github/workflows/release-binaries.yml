@@ -18,6 +18,11 @@ name: Release Binaries
 # NOTE: Binaries are UNSIGNED in this workflow. Windows SmartScreen / macOS
 # Gatekeeper warnings are expected for end-users until Phase 9.1 follow-up
 # (EV cert + Apple Developer ID) lands. Early-access label recommended.
+#
+# Phase 11.A — SLSA Build Level 2 attestations are generated for every
+# released binary via `actions/attest-build-provenance`. Third-party actions
+# are pinned to immutable commit SHAs (I-01 mitigation) so a compromise of
+# an upstream tag cannot silently substitute a different action.
 
 on:
   push:
@@ -34,10 +39,17 @@ on:
         required: false
         default: "false"
 
-# Minimum permission surface — contents:write is required by
-# softprops/action-gh-release to create/update the Release.
+# Minimum permission surface:
+#   - contents:write      — softprops/action-gh-release creates/updates the Release.
+#   - id-token:write      — SLSA provenance needs an OIDC token to sign the
+#                           attestation predicate with Sigstore Fulcio.
+#   - attestations:write  — actions/attest-build-provenance records the
+#                           attestation into the GitHub attestation store
+#                           (surfaced via `gh attestation verify`).
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 # Avoid concurrent matrix builds racing on the same tag.
 concurrency:
@@ -82,10 +94,10 @@ jobs:
             ext: ".exe"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ github.event.inputs.bun_version || '1.3.12' }}
 
@@ -205,8 +217,30 @@ jobs:
           fi
           cat "${artifact}.sha256"
 
+      # Phase 11.A — SLSA Build Level 2 attestation (M-01 first cut).
+      #
+      # `actions/attest-build-provenance` produces a Sigstore-signed
+      # in-toto SLSA provenance predicate for the listed artifacts and
+      # writes it into the repository's GitHub Attestation Store. End
+      # users can later verify the binary with:
+      #
+      #   gh attestation verify mandu-bun-linux-x64 --repo konamgil/mandu
+      #
+      # We attest on a per-matrix-target basis so each OS runner signs
+      # the artifact it actually produced — avoids moving bytes around
+      # between runners before signing (which would weaken the
+      # provenance claim).
+      #
+      # Docs: https://github.com/actions/attest-build-provenance
+      #       https://slsa.dev/spec/v1.0/
+      - name: Generate SLSA provenance attestation
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: |
+            dist/mandu-${{ matrix.target.runner_target }}${{ matrix.target.ext }}
+
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mandu-${{ matrix.target.runner_target }}
           path: |
@@ -229,10 +263,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
 
@@ -277,7 +311,7 @@ jobs:
           fi
 
       - name: Create / update GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           name: ${{ steps.tag.outputs.name }}
@@ -310,7 +344,21 @@ jobs:
             | `mandu-bun-windows-x64.exe` | Windows x86_64 |
             | `SHA256SUMS.txt` | Aggregate checksums |
 
-            > [early-access] Binaries in this release are **unsigned**. Windows users will see a SmartScreen warning; macOS users may need `xattr -d com.apple.quarantine`. Code signing lands in Phase 9.1 follow-up.
+            ### Verification (SLSA Build Level 2)
+
+            Each binary ships with a Sigstore-signed SLSA provenance
+            attestation. Verify the provenance chain before running:
+
+            ```bash
+            gh attestation verify mandu-bun-linux-x64 --repo konamgil/mandu
+            ```
+
+            > [early-access] Binaries in this release are **unsigned** (no EV
+            > cert / Apple Developer ID yet). Windows users will see a
+            > SmartScreen warning; macOS users may need
+            > `xattr -d com.apple.quarantine`. See
+            > [docs/code-signing.md](https://github.com/konamgil/mandu/blob/main/docs/code-signing.md)
+            > for the signing roadmap.
           draft: false
           prerelease: ${{ contains(steps.tag.outputs.name, '-rc.') || contains(steps.tag.outputs.name, '-beta.') || contains(steps.tag.outputs.name, '-alpha.') }}
           files: |

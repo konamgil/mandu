@@ -1,0 +1,59 @@
+{
+  "name": "@mandujs/edge",
+  "version": "0.1.0",
+  "description": "Mandu edge adapters — Cloudflare Workers, Deno Deploy, Vercel Edge, Netlify Edge",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./workers": "./src/workers/index.ts",
+    "./deno": "./src/deno/index.ts",
+    "./vercel": "./src/vercel/index.ts",
+    "./netlify": "./src/netlify/index.ts"
+  },
+  "files": [
+    "src/**/*",
+    "README.md"
+  ],
+  "keywords": [
+    "mandu",
+    "edge",
+    "cloudflare",
+    "workers",
+    "deno",
+    "vercel",
+    "netlify",
+    "serverless"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/konamgil/mandu.git",
+    "directory": "packages/edge"
+  },
+  "author": "konamgil",
+  "license": "MPL-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "bun": ">=1.3.12"
+  },
+  "dependencies": {
+    "@mandujs/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "wrangler": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "wrangler": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "test": "bun test __tests__"
+  }
+}

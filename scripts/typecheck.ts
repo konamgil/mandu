@@ -16,7 +16,7 @@ import { join } from "path";
 import { existsSync } from "fs";
 
 const ROOT = join(import.meta.dir, "..");
-const ALL_PACKAGES = ["core", "cli", "mcp", "ate"];
+const ALL_PACKAGES = ["core", "cli", "mcp", "ate", "edge"];
 
 const requestedPackages = process.argv.slice(2);
 const packages =
