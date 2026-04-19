@@ -1547,7 +1547,27 @@ async function loadPageData(
       const exportedObj = exported as Record<string, unknown> | null;
       const component = typeof exported === "function"
         ? (exported as RouteComponent)
-        : (exportedObj?.component ?? exported);
+        : (exportedObj?.component ?? undefined);
+      // DX-1: pageLoader 경로에서 malformed default export를 silent 404 로
+      //보내지 않고 명시적 에러로 즉시 실패시킨다. 이전에는
+      //   `export default "hello"` / `export default undefined` / named-only
+      // 같은 실수가 registerRouteComponent(undefined) → defaultCreateApp
+      // 에서 404로 렌더되어 사용자가 원인을 추적하기 어려웠음. 여기서 throw
+      // 하면 try/catch(아래) 의 createPageLoadErrorResponse 가 500 응답과
+      // 함께 route.id + pattern 을 출력해주므로 개발자가 바로 인지한다.
+      if (typeof component !== "function") {
+        const defaultSummary =
+          exported === undefined
+            ? "undefined (missing `export default`)"
+            : exported === null
+              ? "null"
+              : `type ${typeof exported}`;
+        throw new Error(
+          `[Mandu] Page module for '${route.id}' (pattern ${route.pattern}) has an invalid default export: ${defaultSummary}. ` +
+            "Expected `export default function Page() {…}` or `export default { component, filling }`. " +
+            "If the page file is empty or only has named exports, add a default-exported React component."
+        );
+      }
       registry.registerRouteComponent(route.id, component as RouteComponent);
 
       // #186: page 모듈에서 metadata / generateMetadata export 캐싱
@@ -2201,8 +2221,22 @@ async function handlePageRoute(
   const cache = settings.cacheStore;
   // Only call ensurePageRouteMetadata when a pageHandler exists;
   // routes registered via registerPageLoader are handled by loadPageData instead.
+  // DX-1: if the pageHandler returns a malformed registration (component is
+  // not a function), ensurePageRouteMetadata now throws with a descriptive
+  // message. Catch it here so the request becomes a loud 500 instead of
+  // bubbling up as an opaque "Internal Server Error".
   if (registry.pageHandlers.has(route.id)) {
-    await ensurePageRouteMetadata(route.id, registry);
+    try {
+      await ensurePageRouteMetadata(route.id, registry);
+    } catch (error) {
+      const pageError = createPageLoadErrorResponse(
+        route.id,
+        route.pattern,
+        error instanceof Error ? error : new Error(String(error))
+      );
+      console.error(`[Mandu] ${pageError.errorType}:`, pageError.message);
+      return err(pageError);
+    }
   }
   const renderMode = getRenderModeForRoute(route.id, registry);
 
@@ -2467,6 +2501,19 @@ async function ensurePageRouteMetadata(
   }
 
   const registration = await handler();
+  // DX-1: pageHandler가 malformed registration을 반환해도 silent 404 대신
+  // 명시적 에러로 실패. handlers.ts 의 auto-promote 블록이 function 기본값을
+  // { component } 로 감싸주지만, 직접 registerPageHandler 를 쓰는 경우나
+  // 사용자 코드가 이상한 값을 반환하는 경우를 방어한다.
+  if (typeof registration?.component !== "function") {
+    const t = registration === null || registration === undefined
+      ? String(registration)
+      : typeof registration.component;
+    throw new Error(
+      `[Mandu] Page handler for '${routeId}' returned an invalid registration: component is ${t}. ` +
+        "Expected `{ component: ReactComponent, filling? }` from the page module's default export."
+    );
+  }
   const component = registration.component as RouteComponent;
   registry.registerRouteComponent(routeId, component);
 
