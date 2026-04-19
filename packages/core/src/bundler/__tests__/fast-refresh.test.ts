@@ -534,36 +534,46 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")(
     });
 
     test("[E1] dev build produces _vendor-react-refresh.js + _fast-refresh-runtime.js + manifest.shared.fastRefresh entry", async () => {
-      const { buildClientBundles } = await import("../build");
-      const manifest = {
-        version: 1 as const,
-        routes: [
-          {
-            id: "demo",
-            kind: "page" as const,
-            pattern: "/",
-            module: "app/page.tsx",
-            componentModule: "app/page.tsx",
-            clientModule: "app/demo.client.tsx",
-            hydration: {
-              strategy: "island" as const,
-              priority: "visible" as const,
-              preload: false,
-            },
-          },
-        ],
-      };
-      // Force dev-mode build by explicit `minify: false`. The build
-      // function's `isDev` branch is keyed off `options.minify`.
-      const result = await buildClientBundles(manifest, rootDir, {
-        minify: false,
-        sourcemap: false,
-        splitting: false,
+      // Force dev-mode build by spawning `buildClientBundles` in a fresh
+      // bun subprocess — see build-runner.ts header for the full story.
+      // In short: Bun 1.3.x's bundler resolver state gets poisoned when
+      // any sibling test file imports `react` / `react-dom`, making the
+      // 7-parallel shim fan-out fail with `AggregateError: Bundle failed`
+      // ~100 % of the time for the affected shim(s). A subprocess has a
+      // clean module graph.
+      const { spawn } = await import("node:child_process");
+      const runner = path.join(import.meta.dir, "build-runner.ts");
+      const cwd = path.resolve(import.meta.dir, "..", "..", "..");
+      const out = await new Promise<string>((resolve) => {
+        const proc = spawn(process.execPath, ["run", runner, rootDir], {
+          cwd,
+          stdio: ["ignore", "pipe", "inherit"],
+        });
+        let buf = "";
+        proc.stdout.on("data", (d: Buffer) => (buf += d.toString("utf-8")));
+        proc.on("close", () => resolve(buf));
       });
-      if (!result.success) {
-        console.error("[fr-vendor] errors:", result.errors);
+      const jsonLine =
+        out
+          .split(/\r?\n/)
+          .filter((l) => l.trim().length > 0)
+          .pop() ?? "";
+      let parsed: {
+        success: boolean;
+        errors: string[];
+        manifest: { shared: { fastRefresh: { runtime: string; glue: string } | null } } | null;
+      };
+      try {
+        parsed = JSON.parse(jsonLine);
+      } catch (e) {
+        throw new Error(
+          `build-runner stdout could not be parsed as JSON: ${String(e)}\nLast line: ${jsonLine}`,
+        );
       }
-      expect(result.success).toBe(true);
+      if (!parsed.success) {
+        console.error("[fr-vendor] errors:", parsed.errors);
+      }
+      expect(parsed.success).toBe(true);
       // Both shim files must exist on disk
       const glueFile = path.join(
         rootDir,
@@ -585,10 +595,10 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")(
       // bundle output — avoids requiring a full evaluation)
       expect(glueContents).toContain("installGlobal");
       // Manifest exposes the paths
-      expect(result.manifest.shared.fastRefresh?.runtime).toBe(
+      expect(parsed.manifest?.shared.fastRefresh?.runtime).toBe(
         "/.mandu/client/_vendor-react-refresh.js",
       );
-      expect(result.manifest.shared.fastRefresh?.glue).toBe(
+      expect(parsed.manifest?.shared.fastRefresh?.glue).toBe(
         "/.mandu/client/_fast-refresh-runtime.js",
       );
     });

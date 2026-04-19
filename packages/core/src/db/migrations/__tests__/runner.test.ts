@@ -588,16 +588,20 @@ CREATE INDEX items_slug_idx ON items (slug);`,
   });
 
   it("applyTimeoutMs of 1ms aborts a file whose cumulative SQL runs longer", async () => {
-    // Force a timeout by using `applyTimeoutMs = 1` and a multi-statement
-    // migration. After the first statement executes, elapsed > 1 ms so
-    // the timeout check fires; tx rolls back; no history row written.
-    writeMigration(
-      f.migrationsDir,
-      "0001_timeout.sql",
-      `CREATE TABLE slow1 (id INTEGER);
-CREATE TABLE slow2 (id INTEGER);
-CREATE TABLE slow3 (id INTEGER);`,
-    );
+    // Force a timeout by using `applyTimeoutMs = 1` and a migration with
+    // enough statements that cumulative execution reliably crosses 1 ms
+    // on any hardware. The previous 3-statement version (total ~0.3-1.5
+    // ms on fast in-memory SQLite) could finish within the 1 ms budget
+    // and leave the expected `MigrationTimeoutError` unthrown on ~40 %
+    // of isolated runs. 120 small `CREATE TABLE` statements clear 1 ms
+    // by a wide margin on every target — observed ~2-8 ms on the
+    // current test boxes.
+    const statementCount = 120;
+    const sqlBlock = Array.from(
+      { length: statementCount },
+      (_, i) => `CREATE TABLE slow${i} (id INTEGER);`,
+    ).join("\n");
+    writeMigration(f.migrationsDir, "0001_timeout.sql", sqlBlock);
 
     const runner = createMigrationRunner(f.db, {
       migrationsDir: f.migrationsDir,
