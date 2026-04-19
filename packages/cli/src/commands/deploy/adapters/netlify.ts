@@ -213,6 +213,7 @@ export function createNetlifyAdapter(
       const projectName = options.projectName ?? project.projectName;
 
       const netlifyTomlResult = await writeArtifact({
+        forbiddenValues: options.forbiddenSecrets,
         path: path.join(rootDir, "netlify.toml"),
         content: renderNetlifyToml({ projectName }),
         preserveIfExists: true,
@@ -226,6 +227,7 @@ export function createNetlifyAdapter(
       });
 
       const ssrResult = await writeArtifact({
+        forbiddenValues: options.forbiddenSecrets,
         path: path.join(rootDir, "netlify", "functions", "ssr.ts"),
         content: renderNetlifySsrFunction(),
       });

@@ -81,10 +81,15 @@ describe("sanitizeOsc8 URL allowlist", () => {
     expect(out).toContain("http://example.com/");
   });
 
-  it("preserves file:// hyperlinks (local docs)", () => {
+  it("preserves file:// hyperlinks only when explicitly opted-in (Wave R3 M-03)", () => {
     const rendered = `${ESC}]8;;file:///home/user/readme.md${OSC_ST}Readme${ESC}]8;;${OSC_ST}`;
-    const out = sanitizeOsc8(rendered);
-    expect(out).toContain("file:///home/user/readme.md");
+    // Default behavior: file:// is dropped (AI-chat safety).
+    const defaultOut = sanitizeOsc8(rendered);
+    expect(defaultOut).not.toContain("file:///home/user/readme.md");
+    expect(defaultOut).toContain("Readme");
+    // Opt-in: file:// is preserved for local-doc renderers.
+    const optedIn = sanitizeOsc8(rendered, { allowFileScheme: true });
+    expect(optedIn).toContain("file:///home/user/readme.md");
   });
 
   it("strips javascript: URL but keeps the label visible", () => {

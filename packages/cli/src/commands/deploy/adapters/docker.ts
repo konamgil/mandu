@@ -179,6 +179,7 @@ export const dockerAdapter: DeployAdapter = {
     });
     const dockerfilePath = path.join(rootDir, "Dockerfile");
     const dockerfileResult = await writeArtifact({
+      forbiddenValues: options.forbiddenSecrets,
       path: dockerfilePath,
       content: dockerfileContent,
     });

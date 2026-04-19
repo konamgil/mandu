@@ -236,11 +236,24 @@ export async function deploy(options: DeployCliOptions = {}): Promise<boolean> {
     renderSecretsInventory(adapter.secrets, storedSecrets, missingSecrets, log);
   }
 
+  // ----- forbidden-secret map (Wave R3 M-01) -------------------------
+  const forbiddenSecrets = new Map<string, string>();
+  for (const name of storedSecrets) {
+    const value = await bridge.get(name);
+    if (typeof value === "string" && value.length >= 8) {
+      forbiddenSecrets.set(name, value);
+    }
+  }
+  const prepareOptions: DeployOptions = {
+    ...deployOptions,
+    forbiddenSecrets,
+  };
+
   // ----- adapter.prepare() -------------------------------------------
   console.log(`\n📦 Adapter prepare: ${adapter.name}`);
   let artifacts: AdapterArtifact[] = [];
   try {
-    artifacts = await adapter.prepare(project, deployOptions);
+    artifacts = await adapter.prepare(project, prepareOptions);
   } catch (err) {
     log.error(`  prepare failed: ${err instanceof Error ? err.message : String(err)}`);
     return false;

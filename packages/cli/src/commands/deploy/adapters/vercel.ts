@@ -247,6 +247,7 @@ export function createVercelAdapter(
 
       // 1. vercel.json — preserved if user has already customized one.
       const vercelJsonResult = await writeArtifact({
+        forbiddenValues: options.forbiddenSecrets,
         path: path.join(rootDir, "vercel.json"),
         content: renderVercelJson({ projectName }),
         preserveIfExists: true,
@@ -262,6 +263,7 @@ export function createVercelAdapter(
       // 2. Node SSR function entry.
       const apiDir = path.join(rootDir, "api");
       const functionResult = await writeArtifact({
+        forbiddenValues: options.forbiddenSecrets,
         path: path.join(apiDir, "_mandu.ts"),
         content: renderVercelFunctionEntry(),
       });

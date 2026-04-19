@@ -39,3 +39,16 @@ bun.lockb
 *.log
 *.tmp
 nul
+
+# Claude Code session state (local per-user)
+.claude/scheduled_tasks.lock
+
+# Local debug / ad-hoc scratch files
+packages/cli/chokidar-test.ts
+
+# Auto-generated test artifacts
+mandu-report.json
+packages/cli/spec/architecture.json
+
+# Playwright test results
+**/test-results/

@@ -290,3 +290,16 @@ export {
   type MockStorage,
   type MockStoredObject,
 } from "./mocks";
+
+// ========== Phase 12.3 — Snapshot assertions ==========
+
+export {
+  matchSnapshot,
+  toMatchSnapshot,
+  stableStringify,
+  scrubVolatile,
+  deriveSnapshotPath,
+  isUpdateMode,
+  type SnapshotOptions,
+  type SnapshotResult,
+} from "./snapshot";

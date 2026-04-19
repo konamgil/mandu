@@ -239,6 +239,7 @@ export const dockerComposeAdapter: DeployAdapter = {
     // Emit (or preserve) the Dockerfile used by the `app` service.
     const hasLockfile = await pathExists(path.join(rootDir, "bun.lock"));
     const dockerfileResult = await writeArtifact({
+      forbiddenValues: options.forbiddenSecrets,
       path: path.join(rootDir, "Dockerfile"),
       content: renderDockerfile({
         hasLockfile,
@@ -256,6 +257,7 @@ export const dockerComposeAdapter: DeployAdapter = {
 
     // docker-compose.yml
     const composeResult = await writeArtifact({
+      forbiddenValues: options.forbiddenSecrets,
       path: path.join(rootDir, "docker-compose.yml"),
       content: renderDockerCompose({
         projectName,
@@ -275,6 +277,7 @@ export const dockerComposeAdapter: DeployAdapter = {
 
     // .env.example
     const envExampleResult = await writeArtifact({
+      forbiddenValues: options.forbiddenSecrets,
       path: path.join(rootDir, ".env.example"),
       content: renderEnvExample(includePostgres, includeRedis),
       preserveIfExists: true,

@@ -47,6 +47,15 @@ export interface RenderOptions {
    * Default: follows the rich-output decision.
    */
   hyperlinks?: boolean;
+  /**
+   * Opt in to `file://` scheme in OSC 8 hyperlinks. Wave R3 M-03 tightened
+   * the default allow-list to `http`/`https` only because the same renderer
+   * is used for AI chat output where attacker-influenced markdown could
+   * smuggle `file:///etc/passwd` links. Callers that legitimately display
+   * local documentation links (e.g. `mandu docs`) must opt in explicitly.
+   * Default: `false`.
+   */
+  allowFileScheme?: boolean;
 }
 
 /**
@@ -108,7 +117,15 @@ export function sanitizeControl(source: string): string {
  *
  * @internal
  */
-const OSC8_ALLOWED_SCHEMES = new Set(["http", "https", "file"]);
+const OSC8_ALLOWED_SCHEMES = new Set(["http", "https"]);
+/**
+ * Wave R3 M-03 — `file://` is opt-in. Previously we auto-allowed it for
+ * local-documentation links, but the same renderer also outputs AI chat
+ * responses where attacker-influenced markdown could smuggle a clickable
+ * `file:///etc/passwd` link. Callers that legitimately render local docs
+ * must pass `{ allowFileScheme: true }` explicitly.
+ */
+const OSC8_FILE_SCHEME = "file";
 
 /**
  * Re-scan a rendered ANSI string and neutralize OSC 8 hyperlinks whose
@@ -128,7 +145,10 @@ const OSC8_ALLOWED_SCHEMES = new Set(["http", "https", "file"]);
  *
  * @internal
  */
-export function sanitizeOsc8(rendered: string): string {
+export function sanitizeOsc8(
+  rendered: string,
+  opts: { allowFileScheme?: boolean } = {},
+): string {
   if (typeof rendered !== "string" || rendered.length === 0) return rendered;
   // Fast path: no OSC 8 introducer at all.
   if (!rendered.includes("\x1b]8;")) return rendered;
@@ -152,7 +172,10 @@ export function sanitizeOsc8(rendered: string): string {
       return `\x1b]8;${params};${terminator}`;
     }
     const scheme = url.slice(0, colonIdx).toLowerCase();
-    if (!OSC8_ALLOWED_SCHEMES.has(scheme)) {
+    const accepted =
+      OSC8_ALLOWED_SCHEMES.has(scheme) ||
+      (opts.allowFileScheme === true && scheme === OSC8_FILE_SCHEME);
+    if (!accepted) {
       // Drop the URL — keep the label (which is emitted after this
       // match) and the closing OSC 8 that appears later. We emit an
       // end-of-hyperlink sequence here so the terminal resets its
@@ -194,7 +217,7 @@ export function renderMarkdown(source: string, opts: RenderOptions = {}): string
       columns,
       hyperlinks,
     });
-    return sanitizeOsc8(raw);
+    return sanitizeOsc8(raw, { allowFileScheme: opts.allowFileScheme });
   } catch {
     return plainFallback(clean);
   }

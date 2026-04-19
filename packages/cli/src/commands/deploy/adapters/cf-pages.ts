@@ -184,6 +184,7 @@ export function createCfPagesAdapter(
       const projectName = options.projectName ?? project.projectName;
 
       const wranglerResult = await writeArtifact({
+        forbiddenValues: options.forbiddenSecrets,
         path: path.join(rootDir, "wrangler.toml"),
         content: renderCfPagesWrangler({ projectName }),
         preserveIfExists: true,
@@ -197,6 +198,7 @@ export function createCfPagesAdapter(
       });
 
       const middlewareResult = await writeArtifact({
+        forbiddenValues: options.forbiddenSecrets,
         path: path.join(rootDir, "functions", "_middleware.ts"),
         content: renderCfPagesMiddleware(),
       });

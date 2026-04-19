@@ -199,6 +199,7 @@ export function createRailwayAdapter(
       const projectName = options.projectName ?? project.projectName;
 
       const railwayJsonResult = await writeArtifact({
+        forbiddenValues: options.forbiddenSecrets,
         path: path.join(rootDir, "railway.json"),
         content: renderRailwayJson({ projectName }),
         preserveIfExists: true,
@@ -212,6 +213,7 @@ export function createRailwayAdapter(
       });
 
       const nixpacksResult = await writeArtifact({
+        forbiddenValues: options.forbiddenSecrets,
         path: path.join(rootDir, "nixpacks.toml"),
         content: renderNixpacksToml({
           port: project.config.server?.port ?? DEFAULT_PORT,

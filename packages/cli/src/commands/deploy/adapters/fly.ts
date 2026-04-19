@@ -188,6 +188,7 @@ export function createFlyAdapter(internal: FlyAdapterOptions = {}): DeployAdapte
       //    serves both targets).
       const hasLockfile = await pathExists(path.join(rootDir, "bun.lock"));
       const dockerfileResult = await writeArtifact({
+        forbiddenValues: options.forbiddenSecrets,
         path: path.join(rootDir, "Dockerfile"),
         content: renderDockerfile({
           hasLockfile,
@@ -202,6 +203,7 @@ export function createFlyAdapter(internal: FlyAdapterOptions = {}): DeployAdapte
 
       // 2. fly.toml — preserved if user already has one.
       const flyTomlResult = await writeArtifact({
+        forbiddenValues: options.forbiddenSecrets,
         path: path.join(rootDir, "fly.toml"),
         content: renderFlyToml({
           appName,

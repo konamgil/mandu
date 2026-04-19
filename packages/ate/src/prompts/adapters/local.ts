@@ -55,11 +55,78 @@ async function* streamDummy(
   } satisfies PromptStreamTerminal;
 }
 
+/**
+ * Wave R3 M-02 — SSRF guard for `MANDU_LOCAL_BASE_URL` / `OPENAI_BASE_URL`.
+ *
+ * The local adapter exists so Mandu can point at Ollama / LM Studio running
+ * on the same machine. Without this gate a malicious `.env` could redirect
+ * the chat loop to the AWS IMDS endpoint (`http://169.254.169.254`) or an
+ * internal intranet host, and the returned body would be rendered as model
+ * output. We therefore require:
+ *   - scheme http / https
+ *   - http scheme → hostname in `{localhost, 127.0.0.1, ::1}` unless the
+ *     caller explicitly opts in via `MANDU_LOCAL_ALLOW_REMOTE=1`
+ *   - block RFC1918 ranges (10/8, 192.168/16, 172.16/12) and link-local
+ *     (169.254/16) unless the same opt-in is set
+ *
+ * Throws a user-facing `Error` so the chat loop surfaces it via the normal
+ * adapter-error path (which is already mask-scrubbed).
+ */
+export function validateLocalBaseUrl(rawUrl: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error(
+      `MANDU_LOCAL_BASE_URL must be a valid URL (got: ${JSON.stringify(rawUrl)})`,
+    );
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(
+      `MANDU_LOCAL_BASE_URL protocol must be http: or https: (got: ${parsed.protocol})`,
+    );
+  }
+  const allowRemote =
+    process.env.MANDU_LOCAL_ALLOW_REMOTE === "1" ||
+    process.env.MANDU_LOCAL_ALLOW_REMOTE === "true";
+  if (allowRemote) return parsed;
+  const host = parsed.hostname.toLowerCase();
+  if (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host === "[::1]"
+  ) {
+    return parsed;
+  }
+  if (parsed.protocol === "http:") {
+    throw new Error(
+      `MANDU_LOCAL_BASE_URL over http: must point at localhost / 127.0.0.1 / ::1 ` +
+        `(got: ${host}). Set MANDU_LOCAL_ALLOW_REMOTE=1 to opt out of this guard.`,
+    );
+  }
+  // https: — still refuse metadata + private ranges by default.
+  if (
+    host === "169.254.169.254" ||
+    host.startsWith("169.254.") ||
+    host.startsWith("10.") ||
+    host.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  ) {
+    throw new Error(
+      `MANDU_LOCAL_BASE_URL host ${host} is in a blocked range (metadata / RFC1918). ` +
+        `Set MANDU_LOCAL_ALLOW_REMOTE=1 to opt out of this guard.`,
+    );
+  }
+  return parsed;
+}
+
 async function* streamOpenAICompat(
   baseUrl: string,
   options: PromptStreamOptions,
 ): AsyncIterable<string | PromptStreamTerminal> {
-  const url = baseUrl.replace(/\/$/, "") + "/v1/chat/completions";
+  const parsed = validateLocalBaseUrl(baseUrl);
+  const url = parsed.toString().replace(/\/$/, "") + "/v1/chat/completions";
   const response = await fetch(url, {
     method: "POST",
     headers: {

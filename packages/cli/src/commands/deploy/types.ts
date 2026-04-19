@@ -131,6 +131,13 @@ export interface DeployOptions {
    * current adapter's service name. Skips the rest of the pipeline.
    */
   setSecrets?: ReadonlyArray<string>;
+  /**
+   * Wave R3 M-01 — secret-leak guard map populated by the dispatcher before
+   * `prepare()`. Adapters that render artifact bodies MUST forward this map
+   * to every `writeArtifact` call so the `forbiddenValues` guard can reject
+   * a regression that accidentally inlines a secret value into an artifact.
+   */
+  forbiddenSecrets?: ReadonlyMap<string, string>;
 }
 
 // =====================================================================
