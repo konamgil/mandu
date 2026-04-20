@@ -4,6 +4,14 @@ import { validateSlotContent } from "../slot/validator";
 import type { RoutesManifest } from "../spec/schema";
 import type { GeneratedMap } from "../generator/generate";
 import { loadManduConfig, type GuardRuleSeverity } from "../config";
+import { extractImportsAST, extractExportsAST } from "./ast-analyzer";
+import {
+  validateCustomRules,
+  type GuardRule as CustomGuardRule,
+  type GuardRuleContext as CustomGuardRuleContext,
+  type GuardViolation as CustomGuardViolation,
+} from "./define-rule";
+import type { ManduConfig } from "../config/mandu";
 import path from "path";
 import fs from "fs/promises";
 
@@ -445,11 +453,227 @@ export async function runGuardCheck(
   violations.push(...slotContentViolations);
   violations.push(...contractViolations);
 
-  const resolvedViolations = applyRuleSeverity(violations, config.guard ?? {});
+  // ============================================
+  // Phase 18.ν — Consumer-defined custom rules
+  // ============================================
+  const customRules = (config.guard?.rules as unknown);
+  if (Array.isArray(customRules) && customRules.length > 0) {
+    const customViolations = await runCustomRules(
+      customRules as CustomGuardRule[],
+      rootDir,
+      config
+    );
+    violations.push(...customViolations);
+  }
+
+  const resolvedViolations = applyRuleSeverity(violations, normalizeGuardConfigForSeverity(config.guard));
   const passed = resolvedViolations.every((v) => v.severity !== "error");
 
   return {
     passed,
     violations: resolvedViolations,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 18.ν — Consumer-defined Guard rules
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * The existing `config.guard.rules` field was a `Record<string,
+ * GuardRuleSeverity>` map for built-in rule overrides. Phase 18.ν
+ * allows consumers to also pass an array of `GuardRule` objects.
+ * `applyRuleSeverity` only understands the record shape, so we strip
+ * the array out before forwarding to it.
+ */
+function normalizeGuardConfigForSeverity(
+  guard: ManduConfig["guard"] | undefined
+): { rules?: Record<string, GuardRuleSeverity>; contractRequired?: GuardRuleSeverity } {
+  if (!guard) return {};
+  const rulesField = guard.rules as unknown;
+  const rules =
+    rulesField && !Array.isArray(rulesField) && typeof rulesField === "object"
+      ? (rulesField as Record<string, GuardRuleSeverity>)
+      : undefined;
+  return {
+    rules,
+    contractRequired: (guard as { contractRequired?: GuardRuleSeverity }).contractRequired,
+  };
+}
+
+/**
+ * Parallel scan cap for `runCustomRules()`. Matches `safeBuild` default
+ * (`MANDU_BUN_BUILD_CONCURRENCY`) semantics — tunable via
+ * `MANDU_GUARD_CUSTOM_CONCURRENCY` positive integer env var.
+ */
+function customRuleConcurrency(): number {
+  const raw = process.env.MANDU_GUARD_CUSTOM_CONCURRENCY;
+  if (!raw) return 8;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return 8;
+  return parsed;
+}
+
+/** Default source directories scanned for custom rules. */
+const CUSTOM_RULE_SOURCE_DIRS = ["packages", "src", "app"];
+
+async function collectCustomRuleSourceFiles(rootDir: string): Promise<string[]> {
+  const files = await Promise.all(
+    CUSTOM_RULE_SOURCE_DIRS.map((d) => scanTsFiles(path.join(rootDir, d)))
+  );
+  // Deduplicate paths (a file could in theory live under multiple roots
+  // if a consumer symlinks, which the walker doesn't follow but we
+  // guard anyway).
+  return Array.from(new Set(files.flat()));
+}
+
+/**
+ * Convert a consumer-defined `GuardViolation` into the standard Guard
+ * report `GuardViolation` shape. Adds the `custom:<id>` ruleId prefix
+ * so the reporter can attribute each entry unambiguously.
+ */
+function toReportViolation(
+  rule: CustomGuardRule,
+  violation: CustomGuardViolation
+): GuardViolation {
+  const severity: "error" | "warning" =
+    rule.severity === "error" ? "error" : "warning";
+  return {
+    ruleId: `custom:${rule.id}`,
+    file: violation.file,
+    message: violation.message,
+    suggestion: violation.hint ?? violation.docsUrl ?? "",
+    line: violation.line,
+    severity,
+  };
+}
+
+/**
+ * Execute every consumer-defined rule against every source file under
+ * `rootDir`. Rules are awaited per-file with a concurrency cap; a
+ * single rule throwing is caught and reported as a `custom:<id>`
+ * violation so the rest of the scan still completes.
+ *
+ * Exported for tests; not re-exported via `guard/index.ts` to keep the
+ * public surface small.
+ */
+export async function runCustomRules(
+  rules: readonly CustomGuardRule[],
+  rootDir: string,
+  config: ManduConfig
+): Promise<GuardViolation[]> {
+  const { duplicates, malformed } = validateCustomRules(rules);
+  const results: GuardViolation[] = [];
+
+  if (malformed.length > 0) {
+    for (const idx of malformed) {
+      results.push({
+        ruleId: "custom:__invalid__",
+        file: "mandu.config",
+        message: `guard.rules[${idx}] is not a valid GuardRule (missing \`id\` or \`check()\`).`,
+        suggestion:
+          "Wrap the rule with defineGuardRule({...}) or import a preset from @mandujs/core/guard/define-rule.",
+        severity: "error",
+      });
+    }
+  }
+
+  if (duplicates.length > 0) {
+    for (const dup of duplicates) {
+      // Warning-level so duplicates don't gate CI but still surface in the
+      // report. Matches the "soft failure" convention used by config-guard.
+      results.push({
+        ruleId: `custom:${dup.id}`,
+        file: "mandu.config",
+        message: `Duplicate guard.rules id "${dup.id}" at indices [${dup.indices.join(", ")}] — only the first instance will be enforced.`,
+        suggestion: "Give each rule a unique \`id\`, or remove the duplicate.",
+        severity: "warning",
+      });
+    }
+  }
+
+  // Deduplicate rules by id (keep first occurrence). Matches the
+  // warning emitted above.
+  const seen = new Set<string>();
+  const uniqueRules = rules.filter((r) => {
+    if (!r || typeof r !== "object" || typeof (r as CustomGuardRule).id !== "string") return false;
+    const id = (r as CustomGuardRule).id;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  if (uniqueRules.length === 0) return results;
+
+  const files = await collectCustomRuleSourceFiles(rootDir);
+  if (files.length === 0) return results;
+
+  const cap = customRuleConcurrency();
+  let cursor = 0;
+
+  async function worker(): Promise<GuardViolation[]> {
+    const local: GuardViolation[] = [];
+    while (true) {
+      const index = cursor++;
+      if (index >= files.length) return local;
+      const filePath = files[index];
+
+      // Skip __generated__ and build output.
+      if (filePath.includes("__generated__") || filePath.includes(".mandu/")) continue;
+
+      let content: string;
+      try {
+        content = await Bun.file(filePath).text();
+      } catch {
+        continue;
+      }
+
+      let imports: ReturnType<typeof extractImportsAST>;
+      let exportsAst: ReturnType<typeof extractExportsAST>;
+      try {
+        imports = extractImportsAST(content);
+        exportsAst = extractExportsAST(content);
+      } catch {
+        // Tokenizer failure on an exotic file — skip rather than abort.
+        continue;
+      }
+
+      const relFile = path.relative(rootDir, filePath) || filePath;
+      const ctx: CustomGuardRuleContext = {
+        sourceFile: relFile.replace(/\\/g, "/"),
+        content,
+        imports,
+        exports: exportsAst,
+        config,
+        projectRoot: rootDir,
+      };
+
+      for (const rule of uniqueRules) {
+        try {
+          const violations = await rule.check(ctx);
+          if (!Array.isArray(violations)) continue;
+          for (const v of violations) {
+            if (!v || typeof v !== "object") continue;
+            local.push(toReportViolation(rule, v));
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          local.push({
+            ruleId: `custom:${rule.id}`,
+            file: ctx.sourceFile,
+            message: `Rule "${rule.id}" threw: ${message}`,
+            suggestion: "Fix the rule's check() implementation or wrap it in a try/catch.",
+            severity: rule.severity === "error" ? "error" : "warning",
+          });
+        }
+      }
+    }
+  }
+
+  const workerCount = Math.min(cap, files.length);
+  const workers: Promise<GuardViolation[]>[] = [];
+  for (let i = 0; i < workerCount; i++) workers.push(worker());
+  const chunks = await Promise.all(workers);
+  for (const chunk of chunks) results.push(...chunk);
+
+  return results;
 }

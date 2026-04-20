@@ -20,6 +20,8 @@ import {
   type SpanAttributes,
   type SpanOptions,
 } from "../observability/tracing";
+// Phase 18.μ — i18n integration.
+import type { ResolvedLocale, Translator } from "../i18n/types";
 
 type ContractInput<
   TContract extends ContractSchema,
@@ -332,6 +334,18 @@ export class ManduContext {
   private _deps: FillingDeps;
   private _cacheMeta: { tags: string[]; maxAge?: number; staleWhileRevalidate?: number } = { tags: [] };
   private _cacheHelper: CacheHelper | null = null;
+  /**
+   * Phase 18.μ — resolved active locale. `undefined` when the server has
+   * no `ManduConfig.i18n` configured (zero-overhead — the runtime never
+   * attaches this field). Populated by `runtime/server.ts` μ dispatch.
+   */
+  private _locale: ResolvedLocale | undefined = undefined;
+  /**
+   * Phase 18.μ — typed translator bound to the active locale. `undefined`
+   * until the runtime attaches one via `_setI18n()`. User code should
+   * null-check via `ctx.t?.(...)` OR require i18n via a type predicate.
+   */
+  private _t: Translator | undefined = undefined;
 
   constructor(
     public readonly request: Request,
@@ -395,6 +409,52 @@ export class ManduContext {
       maxAge: this._cacheMeta.maxAge,
       staleWhileRevalidate: this._cacheMeta.staleWhileRevalidate,
     };
+  }
+
+  /**
+   * Phase 18.μ — active resolved locale. `undefined` when i18n is
+   * disabled at server boot (`ManduConfig.i18n` omitted). Populated by
+   * the runtime dispatcher BEFORE loader + render so downstream code
+   * can branch on it without threading state manually.
+   *
+   * @example
+   * ```ts
+   * if (ctx.locale?.code === "ko") {
+   *   return ctx.redirect("/ko/welcome");
+   * }
+   * ```
+   */
+  get locale(): ResolvedLocale | undefined {
+    return this._locale;
+  }
+
+  /**
+   * Phase 18.μ — typed translator bound to `ctx.locale`. `undefined`
+   * when i18n is disabled OR no message registry was supplied to
+   * `startServer()`. Unlike `ctx.locale`, this is safe to call with an
+   * unknown key — misses fall through `fallbackLocale` → `defaultLocale`
+   * → raw key per {@link createTranslator}.
+   *
+   * @example
+   * ```ts
+   * return ctx.ok({ greeting: ctx.t?.("welcome", { name: "만두" }) });
+   * ```
+   */
+  get t(): Translator | undefined {
+    return this._t;
+  }
+
+  /**
+   * Phase 18.μ — runtime-internal: attach resolved locale + translator.
+   * Exposed as a method (not a public setter) so user code can't mutate
+   * mid-request. Called exactly once by the server dispatcher before
+   * loader execution.
+   *
+   * @internal
+   */
+  _setI18n(locale: ResolvedLocale, translator?: Translator): void {
+    this._locale = locale;
+    if (translator) this._t = translator;
   }
 
   /**

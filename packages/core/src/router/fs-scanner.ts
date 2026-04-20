@@ -620,6 +620,107 @@ function escapeRegex(char: string): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Phase 18.μ — i18n path-prefix route synthesis
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Options for {@link synthesizeLocaleRoutes}. Mirrors the relevant subset
+ * of `I18nDefinition` so callers don't need to pull the whole
+ * `@mandujs/core/i18n` surface into pure-router code paths.
+ */
+export interface LocaleSynthesisOptions {
+  /** Allow-list of locale codes to materialize. */
+  locales: readonly string[];
+  /** Default locale — its routes stay unprefixed (Next.js parity). */
+  defaultLocale: string;
+}
+
+/**
+ * Phase 18.μ — synthesize per-locale route variants at manifest-build
+ * time. Given a set of scanned routes, produces `locales.length` copies
+ * for every `page` / `api` route with a locale prefix baked into
+ * `id` + `pattern`. The default locale's routes are emitted unprefixed
+ * (so legacy links keep working and SEO stays intact).
+ *
+ * The synthesis is pure: it re-uses existing `FSRouteConfig` objects as
+ * source of truth, producing *new* objects with:
+ *
+ *   - `pattern`    : `/en/blog/:slug`
+ *   - `id`         : `en::<original-id>`
+ *   - `module`     : unchanged (same loader on disk)
+ *   - everything else: shallow-copied
+ *
+ * Metadata routes (sitemap/robots/llms-txt/manifest) are NOT duplicated —
+ * they always sit at site root regardless of locale (same SEO rule as
+ * Next.js).
+ *
+ * The caller is responsible for passing the output through
+ * {@link sortRoutesByPriority} before writing the manifest.
+ *
+ * @example
+ * ```ts
+ * const scan = await scanRoutes(rootDir);
+ * const prefixed = synthesizeLocaleRoutes(scan.routes, {
+ *   locales: ["en", "ko"],
+ *   defaultLocale: "en",
+ * });
+ * // scan.routes   : [/, /blog, /blog/:slug]
+ * // prefixed      : [/, /blog, /blog/:slug, /ko, /ko/blog, /ko/blog/:slug]
+ * ```
+ */
+export function synthesizeLocaleRoutes(
+  routes: FSRouteConfig[],
+  options: LocaleSynthesisOptions
+): FSRouteConfig[] {
+  const { locales, defaultLocale } = options;
+  if (!Array.isArray(locales) || locales.length === 0) return [...routes];
+  if (!locales.includes(defaultLocale)) {
+    throw new Error(
+      `[router] synthesizeLocaleRoutes: defaultLocale "${defaultLocale}" not in locales [${locales.join(", ")}]`
+    );
+  }
+
+  const out: FSRouteConfig[] = [];
+  for (const route of routes) {
+    // Metadata routes live at site root; never prefix them.
+    if (route.kind === "metadata") {
+      out.push(route);
+      continue;
+    }
+
+    // Default locale: unprefixed copy preserved verbatim (legacy +
+    // SEO neutral).
+    out.push(route);
+
+    for (const locale of locales) {
+      if (locale === defaultLocale) continue;
+      const prefixed = prefixRouteWithLocale(route, locale);
+      out.push(prefixed);
+    }
+  }
+  return out;
+}
+
+function prefixRouteWithLocale(route: FSRouteConfig, locale: string): FSRouteConfig {
+  const prefixedPattern = route.pattern === "/"
+    ? `/${locale}`
+    : `/${locale}${route.pattern.startsWith("/") ? route.pattern : `/${route.pattern}`}`;
+
+  return {
+    ...route,
+    id: `${locale}::${route.id}`,
+    pattern: prefixedPattern,
+    // `segments` is used for priority calculation + layout resolution;
+    // prepending a static locale segment keeps priority sensible and
+    // avoids collisions with real `[param]` segments.
+    segments: [
+      { raw: locale, type: "static" },
+      ...route.segments,
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Factory Function
 // ═══════════════════════════════════════════════════════════════════════════
 

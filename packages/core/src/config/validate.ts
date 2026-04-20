@@ -7,6 +7,7 @@ import type { ManduAdapter } from "../runtime/adapter";
 import type { ManduPlugin, ManduHooks } from "../plugins/hooks";
 import type { Middleware } from "../middleware/define";
 import type { CronDef } from "../scheduler";
+import { isGuardRuleLike, type GuardRule as CustomGuardRule } from "../guard/define-rule";
 
 /**
  * DNA-003: Strict mode schema helper
@@ -73,7 +74,29 @@ const ServerConfigSchema = z
   .strict();
 
 /**
+ * Phase 18.ν — consumer-defined Guard rule (structural check).
+ *
+ * Rule objects carry closures (`check`) that Zod cannot introspect, so
+ * we validate structurally: must be a non-null object with a non-empty
+ * `id` string and a `check` function. Deeper validation (severity enum,
+ * description type) happens at `defineGuardRule()` time for the clearest
+ * DX error; the Guard runner catches any in-band violations.
+ */
+const CustomGuardRuleSchema = z.custom<CustomGuardRule>(
+  (v) => isGuardRuleLike(v),
+  {
+    message:
+      "Each custom guard rule must be an object with a non-empty `id` string and a `check` function. Use `defineGuardRule({...})` from `@mandujs/core/guard/define-rule` to construct.",
+  }
+);
+
+/**
  * Guard 설정 스키마 (strict)
+ *
+ * `guard.rules` is a discriminated union of two shapes:
+ *   - `Record<string, GuardRuleSeverity>` → built-in rule severity overrides.
+ *   - `GuardRule[]` (Phase 18.ν) → consumer-defined custom rules.
+ * The runner dispatches on `Array.isArray()`.
  */
 const GuardConfigSchema = z
   .object({
@@ -81,7 +104,12 @@ const GuardConfigSchema = z
     srcDir: z.string().default("src"),
     exclude: z.array(z.string()).default([]),
     realtime: z.boolean().default(true),
-    rules: z.record(z.enum(["error", "warn", "warning", "off"])).optional(),
+    rules: z
+      .union([
+        z.record(z.enum(["error", "warn", "warning", "off"])),
+        z.array(CustomGuardRuleSchema),
+      ])
+      .optional(),
     /**
      * Issue #207 — bundler-level hard-fail on direct `__generated__/`
      * imports. Default `true`. Set `false` to opt out of the
@@ -377,6 +405,69 @@ const SchedulerConfigSchema = z
   })
   .strict();
 
+/**
+ * Phase 18.μ — i18n config schema (strict).
+ *
+ * Strictly validates shape + cross-field invariants that `defineI18n()`
+ * enforces at runtime (defaultLocale ∈ locales, fallback ∈ locales,
+ * domain map required when strategy === "domain"). Doing this at
+ * config load gives users a clean `mandu validate` error instead of
+ * a runtime boot failure.
+ */
+const I18nConfigSchema = z
+  .object({
+    locales: z.array(z.string().min(1)).min(1),
+    defaultLocale: z.string().min(1),
+    fallback: z.string().min(1).optional(),
+    strategy: z.enum(["path-prefix", "domain", "header", "cookie"]),
+    cookieName: z.string().min(1).optional(),
+    domains: z.record(z.string().min(1)).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const locales = new Set(value.locales);
+    if (locales.size !== value.locales.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["locales"],
+        message: "locales must not contain duplicates",
+      });
+    }
+    if (!locales.has(value.defaultLocale)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["defaultLocale"],
+        message: `defaultLocale "${value.defaultLocale}" must be one of locales`,
+      });
+    }
+    if (value.fallback !== undefined && !locales.has(value.fallback)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["fallback"],
+        message: `fallback "${value.fallback}" must be one of locales`,
+      });
+    }
+    if (value.strategy === "domain") {
+      if (!value.domains || Object.keys(value.domains).length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["domains"],
+          message: "strategy 'domain' requires a non-empty domains map",
+        });
+      } else {
+        for (const [host, locale] of Object.entries(value.domains)) {
+          if (!locales.has(locale)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["domains", host],
+              message: `domains["${host}"] = "${locale}" is not in locales`,
+            });
+          }
+        }
+      }
+    }
+  });
+
 export const ManduConfigSchema = z
   .object({
     adapter: AdapterConfigSchema.optional(),
@@ -423,6 +514,11 @@ export const ManduConfigSchema = z
      * passthrough).
      */
     scheduler: SchedulerConfigSchema.optional(),
+    /**
+     * Phase 18.μ — first-class i18n config. See {@link I18nConfigSchema}.
+     * Optional; omission leaves i18n disabled with zero runtime overhead.
+     */
+    i18n: I18nConfigSchema.optional(),
   })
   .strict();
 

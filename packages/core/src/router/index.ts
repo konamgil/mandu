@@ -68,7 +68,13 @@ export {
 } from "./fs-patterns";
 
 // Scanner
-export { FSScanner, createFSScanner, scanRoutes } from "./fs-scanner";
+export {
+  FSScanner,
+  createFSScanner,
+  scanRoutes,
+  synthesizeLocaleRoutes,
+  type LocaleSynthesisOptions,
+} from "./fs-scanner";
 
 // Generator
 export type { FSGenerateResult, GenerateOptions, RouteChangeCallback, FSRoutesWatcher } from "./fs-routes";

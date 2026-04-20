@@ -276,6 +276,32 @@ export {
 } from "./semantic-slots";
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Custom Guard Rules (Phase 18.ν) - Consumer-defined rules
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  defineGuardRule,
+  isGuardRuleLike,
+  validateCustomRules,
+  type GuardRule as CustomGuardRule,
+  type GuardRuleContext as CustomGuardRuleContext,
+  type GuardViolation as CustomGuardViolation,
+  type GuardRuleSeverity as CustomGuardRuleSeverity,
+  type DuplicateRuleId,
+  type ImportInfo as CustomRuleImportInfo,
+  type ExportInfo as CustomRuleExportInfo,
+} from "./define-rule";
+
+export {
+  forbidImport,
+  requireNamedExport,
+  requirePrefixForExports,
+  type ForbidImportOptions,
+  type RequireNamedExportOptions,
+  type RequirePrefixForExportsOptions,
+} from "./rule-presets";
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Architecture Negotiation - AI-Framework 협상
 // ═══════════════════════════════════════════════════════════════════════════
 

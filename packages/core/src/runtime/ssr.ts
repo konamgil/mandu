@@ -590,6 +590,15 @@ export async function resolveAsyncElement(node: ReactNode): Promise<ReactNode> {
   // Clone with the resolved children. React.cloneElement preserves the
   // element's key, ref, and internal `$$typeof` markers — a plain spread
   // does not.
+  //
+  // #212 — when resolvedChildren is an array of siblings, spread it back
+  // to the variadic form so React's variadic-children heuristic kicks in
+  // and does NOT demand keys (the original JSX was variadic too — no key
+  // was required). Passing a single array argument would trigger spurious
+  // "missing key" warnings for every sibling.
+  if (Array.isArray(resolvedChildren)) {
+    return React.cloneElement(element, undefined, ...resolvedChildren);
+  }
   return React.cloneElement(element, undefined, resolvedChildren);
 }
 

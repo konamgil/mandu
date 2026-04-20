@@ -117,6 +117,20 @@ import {
   buildPayloadFromError,
   shouldInjectOverlay,
 } from "../dev-error-overlay";
+// Phase 18.μ — i18n dispatch. `resolveLocale()` is pure (no side effects),
+// `createTranslator()` binds a per-request `t()` to the registry.
+import {
+  resolveLocale,
+  createTranslator,
+  isI18nDefinition,
+  isMessageRegistry,
+} from "../i18n";
+import type {
+  I18nDefinition,
+  ResolvedLocale,
+  Translator,
+} from "../i18n/types";
+import type { MessageRegistry } from "../i18n/message-registry";
 
 export interface RateLimitOptions {
   windowMs?: number;
@@ -548,6 +562,33 @@ export interface ServerOptions {
     jobs?: import("../scheduler").CronDef[];
     disabled?: boolean;
   };
+  /**
+   * Phase 18.μ — first-class i18n. Threaded from `ManduConfig.i18n`.
+   *
+   * When populated, the runtime dispatcher:
+   *   1. resolves the active locale BEFORE route dispatch (via
+   *      {@link resolveLocale}) using the configured strategy;
+   *   2. attaches `ctx.locale` (ResolvedLocale) + `ctx.t` (typed
+   *      translator) to every loader / handler invocation;
+   *   3. stamps `Vary: Accept-Language` + `Content-Language` on all
+   *      page responses so upstream caches key on locale;
+   *   4. when `strategy === "path-prefix"` and the incoming URL
+   *      carries no locale prefix AND no override cookie, redirects
+   *      `/` → `/<defaultLocale>` so browsers reach a locale-scoped
+   *      URL (Next.js parity).
+   *
+   * Omitting this block keeps the runtime branch-free — the hot path
+   * incurs zero overhead when i18n is disabled.
+   */
+  i18n?: I18nDefinition;
+  /**
+   * Phase 18.μ — optional message registry bound to `ctx.t`. Created via
+   * `defineMessages({ en: {...}, ko: {...} })`. When omitted but `i18n`
+   * is set, `ctx.locale` is populated but `ctx.t` stays `undefined` —
+   * projects that manage their own translation layer (e.g. react-intl)
+   * use `ctx.locale.code` and ignore `ctx.t`.
+   */
+  messages?: MessageRegistry;
 }
 
 export interface ManduServer {
@@ -736,6 +777,19 @@ export interface ServerRegistrySettings {
    * `ServerOptions.middleware` at {@link startServer} time.
    */
   middlewareChain?: ComposedHandler;
+  /**
+   * Phase 18.μ — resolved i18n definition. `undefined` means "no i18n
+   * configured at boot" (hot path is branch-free). Wired from
+   * `ServerOptions.i18n`.
+   */
+  i18n?: I18nDefinition;
+  /**
+   * Phase 18.μ — message registry bound to {@link i18n}. When both are
+   * set, the runtime builds a per-request `ctx.t` via
+   * `createTranslator()`. When only `i18n` is set, `ctx.t` stays
+   * `undefined` and user code is responsible for its own translations.
+   */
+  messages?: MessageRegistry;
 }
 
 export class ServerRegistry {
@@ -1609,6 +1663,15 @@ async function handleRequestWithTracing(
         });
       }
     }
+    // Phase 18.μ — stamp locale hint on error responses too.
+    const errI18nState = i18nRequestState.get(req);
+    if (errI18nState && !errorResponse.headers.has("Content-Language")) {
+      try {
+        errorResponse.headers.set("Content-Language", errI18nState.locale.code);
+      } catch {
+        // Some adapters freeze headers on error responses — ignore.
+      }
+    }
     return errorResponse;
   }
 
@@ -1639,6 +1702,28 @@ async function handleRequestWithTracing(
         duration: elapsed,
         data: { method: req.method, path: p, status, cache: cacheHdr || undefined },
       });
+    }
+  }
+
+  // Phase 18.μ — stamp locale-sensitive caching hints onto the final
+  // response. `Vary: Accept-Language, Cookie` ensures upstream caches
+  // key correctly per locale signal; `Content-Language` surfaces the
+  // resolved locale for SEO / screen-reader parity. Only stamped when
+  // i18n is configured AND the request was actually resolved — the hot
+  // path is branch-free when `i18n` is absent.
+  const i18nState = i18nRequestState.get(req);
+  if (i18nState) {
+    const existingVary = result.value.headers.get("Vary");
+    const varyParts = new Set(
+      (existingVary ? existingVary.split(",") : [])
+        .map((s) => s.trim())
+        .filter(Boolean)
+    );
+    varyParts.add("Accept-Language");
+    varyParts.add("Cookie");
+    result.value.headers.set("Vary", [...varyParts].join(", "));
+    if (!result.value.headers.has("Content-Language")) {
+      result.value.headers.set("Content-Language", i18nState.locale.code);
     }
   }
 
@@ -1908,6 +1993,7 @@ async function loadPageData(
       // Filling의 loader 실행
       if (registration.filling?.hasLoader()) {
         const ctx = new ManduContext(req, params);
+        attachI18nToContext(ctx, req);
         // DX-3: loader may return OR throw a redirect Response. Both are
         // short-circuits — if we detect one, skip SSR and hand the Response
         // to the caller with pending cookies merged in.
@@ -2028,6 +2114,7 @@ async function loadPageData(
       }
       if (filling?.hasLoader?.()) {
         const ctx = new ManduContext(req, params);
+        attachI18nToContext(ctx, req);
         // DX-3 / Phase 6.3: same redirect + notFound handling as the
         // PageHandler path above. notFound is checked first so both
         // short-circuits remain symmetric.
@@ -2197,6 +2284,7 @@ async function loadLayoutData(
           const filling = exported as ManduFilling;
           if (filling.hasLoader()) {
             const ctx = new ManduContext(req, params);
+            attachI18nToContext(ctx, req);
             const data = await filling.executeLoader(ctx);
             // DX-3: layout loaders are NOT allowed to redirect. They share
             // the pipeline with a page loader and we can only honor one
@@ -2430,15 +2518,27 @@ async function renderPageSSR(
       ? route.streaming
       : settings.streaming;
 
-    // Issue #198 — Pre-resolve async server components before handing off
-    // to React's SSR engines. `renderToString` (non-streaming path) does
-    // not support async components; `renderToReadableStream` does, but
-    // the shell-gen step in streaming-ssr also falls through
-    // `collectStreamingHeadTags` → `renderToString`. Resolving up-front
-    // gives consistent, synchronous trees to both paths and keeps the
-    // user-visible contract (`export default async function Page() {...}`
-    // and `export default async function Layout() {...}`) working end to end.
-    app = (await resolveAsyncElement(app)) as React.ReactElement;
+    // Issue #198 / Phase 18.ξ — Async server component resolution policy.
+    //
+    // Non-streaming path (`renderToString`) cannot handle async components,
+    // so we MUST pre-resolve the tree up-front.
+    //
+    // Streaming path (`renderToReadableStream`, React 19) supports async
+    // components natively and is designed around progressive flushing. If
+    // we pre-resolve here, the caller blocks until every async component
+    // settles before the shell can be emitted — defeating the entire point
+    // of streaming (`TTFB` regresses from shell-ready to slowest-component).
+    // So in streaming mode we hand React the raw async tree. Head tags
+    // pushed from async components are captured by `renderToStream`'s
+    // `buildHtmlTail` (late-head injection) via `use-head`. The streaming
+    // shell-gen's `collectStreamingHeadTags` pre-pass uses `renderToString`
+    // internally and will throw on async trees — its try/catch already
+    // handles that case and returns an empty string, so the early shell
+    // emission is still correct; the late-head script fills in any
+    // metadata emitted during the async render.
+    if (!useStreaming) {
+      app = (await resolveAsyncElement(app)) as React.ReactElement;
+    }
 
     if (useStreaming) {
       const streamingResponse = await renderStreamingResponse(app, {
@@ -2667,6 +2767,7 @@ async function renderNotFoundPage(
     let loaderData: unknown = { message };
     if (registration.filling?.hasLoader()) {
       const ctx = new ManduContext(req, params);
+      attachI18nToContext(ctx, req);
       try {
         const returned = await registration.filling.executeLoader(ctx);
         loaderData = returned !== undefined ? returned : { message };
@@ -3243,6 +3344,66 @@ async function tryServePrerendered(
   return new Response(body, { status: 200, headers });
 }
 
+// ─── Phase 18.μ — request-scoped i18n state ──────────────────────────────
+/**
+ * Per-request locale state keyed by the `Request` object. The runtime
+ * dispatcher populates this right before `handleRequestInternal` returns
+ * to route-specific paths; `handlePageRoute` / `handleApiRoute` read it
+ * when creating `ManduContext` and attach via `ctx._setI18n(...)`.
+ *
+ * A WeakMap is used so completed requests release their entries
+ * automatically — no explicit cleanup needed on the hot path.
+ *
+ * @internal
+ */
+const i18nRequestState = new WeakMap<
+  Request,
+  { locale: ResolvedLocale; translator?: Translator }
+>();
+
+/**
+ * Phase 18.μ — expose the stashed locale state for `filling` /
+ * `handlePageRoute` / `handleApiRoute`. Returns `undefined` when i18n
+ * is disabled OR the request predates dispatch (internal callers).
+ *
+ * @internal
+ */
+export function getRequestI18n(
+  req: Request
+): { locale: ResolvedLocale; translator?: Translator } | undefined {
+  return i18nRequestState.get(req);
+}
+
+/**
+ * Phase 18.μ — attach i18n state to a freshly-constructed `ManduContext`.
+ * No-op when i18n is disabled. Called by every callsite that instantiates
+ * `new ManduContext(req, …)` so `ctx.locale` + `ctx.t` are populated
+ * before loader / handler execution.
+ *
+ * @internal
+ */
+function attachI18nToContext(ctx: ManduContext, req: Request): void {
+  const state = i18nRequestState.get(req);
+  if (state) {
+    ctx._setI18n(state.locale, state.translator);
+  }
+}
+
+/**
+ * Helper: returns the URL's first segment if it matches a known locale.
+ * Extracted so the inline μ dispatch block stays readable.
+ */
+function stripLocaleForRedirectCheck(
+  pathname: string,
+  locales: readonly string[]
+): string | undefined {
+  if (pathname.length < 2) return undefined;
+  const slashIdx = pathname.indexOf("/", 1);
+  const first = slashIdx === -1 ? pathname.slice(1) : pathname.slice(1, slashIdx);
+  return locales.includes(first) ? first : undefined;
+}
+// ─── End Phase 18.μ ──────────────────────────────────────────────────────
+
 async function handleRequestInternal(
   req: Request,
   router: Router,
@@ -3271,6 +3432,92 @@ async function handleRequestInternal(
     }
     return ok(prerendered);
   }
+
+  // ─── Phase 18.μ — i18n dispatch ─────────────────────────────────────────
+  // Runs AFTER γ's prerendered check (static HTML per-locale is already
+  // handled by path-prefix synthesis at build time) and BEFORE ζ's cache
+  // lookup (cache keys include the resolved locale via `Vary:
+  // Accept-Language`).
+  //
+  //   1. Resolve the active locale via `resolveLocale()` — the strategy
+  //      switches determines URL / cookie / header precedence.
+  //   2. For `strategy: 'path-prefix'`: when the incoming URL carries no
+  //      locale prefix (root or locale-less path) AND the resolution
+  //      came from `default` / `fallback`, we emit a 307 redirect to
+  //      `/<locale><rest>` so the user lands on a locale-scoped URL.
+  //      Cookie / header signals "win" over the default — no redirect
+  //      when the user explicitly preferred a non-default locale.
+  //   3. Stash the resolved locale on the `registry.__perRequest` map
+  //      indexed by the request so downstream `handlePageRoute` /
+  //      `handleApiRoute` can mount it onto `ctx` via `_setI18n()`.
+  //
+  // Zero overhead when `settings.i18n` is undefined — the `if` falls
+  // through and the hot path runs exactly as Phase 18.λ's baseline.
+  let resolvedLocaleForRequest: ResolvedLocale | undefined;
+  let translatorForRequest: Translator | undefined;
+  if (settings.i18n) {
+    resolvedLocaleForRequest = resolveLocale(req, settings.i18n);
+
+    // Path-prefix strategy: URL has no locale prefix AND resolver picked
+    // a non-default locale from cookie/header → redirect to prefixed URL
+    // so the user lands on a locale-scoped URL (Next.js parity).
+    //
+    // Excluded paths (never redirected, always locale-neutral):
+    //   - `/api/*`  — API routes use `Accept-Language` header; JSON
+    //     clients rarely want an HTML redirect.
+    //   - `/_mandu/*`, `/.mandu/*` — framework internals.
+    //   - `/sitemap.xml`, `/robots.txt`, etc. — metadata routes live
+    //     at site root across all locales.
+    if (
+      settings.i18n.strategy === "path-prefix" &&
+      (req.method === "GET" || req.method === "HEAD") &&
+      !pathname.startsWith("/api/") &&
+      !pathname.startsWith("/_mandu/") &&
+      !pathname.startsWith("/.mandu/") &&
+      !pathname.startsWith("/__kitchen") &&
+      !pathname.startsWith("/__mandu/") &&
+      pathname !== "/sitemap.xml" &&
+      pathname !== "/robots.txt" &&
+      pathname !== "/llms.txt" &&
+      pathname !== "/manifest.webmanifest"
+    ) {
+      const urlLocale = stripLocaleForRedirectCheck(pathname, settings.i18n.locales);
+      if (!urlLocale && resolvedLocaleForRequest.code !== settings.i18n.defaultLocale) {
+        const targetPath = `/${resolvedLocaleForRequest.code}${pathname === "/" ? "" : pathname}`;
+        const targetUrl = new URL(targetPath + url.search, req.url);
+        const redirectRes = new Response(null, {
+          status: 307,
+          headers: {
+            Location: targetUrl.toString(),
+            Vary: "Accept-Language, Cookie",
+            "Content-Language": resolvedLocaleForRequest.code,
+          },
+        });
+        return ok(redirectRes);
+      }
+    }
+
+    // Build translator if a registry is wired up.
+    if (settings.messages) {
+      translatorForRequest = createTranslator(settings.messages, {
+        activeLocale: resolvedLocaleForRequest.code,
+        defaultLocale: settings.i18n.defaultLocale,
+        fallbackLocale: settings.i18n.fallback,
+      });
+    }
+
+    // Stash on request-scoped map so downstream context creation (inside
+    // `handlePageRoute` / `handleApiRoute`) can pick them up without
+    // threading extra args through every call site. `i18nRequestState`
+    // is a WeakMap — no memory retention after the request completes.
+    if (resolvedLocaleForRequest) {
+      i18nRequestState.set(req, {
+        locale: resolvedLocaleForRequest,
+        translator: translatorForRequest,
+      });
+    }
+  }
+  // ─── End Phase 18.μ ─────────────────────────────────────────────────────
 
   // 1. 정적 파일 서빙 시도 (최우선)
   // Edge runtimes (Cloudflare Workers, etc.) have no filesystem — skip and
@@ -3425,6 +3672,7 @@ async function handleRequestInternal(
         let loaderData: unknown = { message: "Not Found" };
         if (registration.filling?.hasLoader()) {
           const ctx = new ManduContext(req, {});
+          attachI18nToContext(ctx, req);
           try {
             const returned = await registration.filling.executeLoader(ctx);
             loaderData = returned !== undefined ? returned : { message: "Not Found" };
@@ -3610,7 +3858,25 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     middleware: middlewareOption,
     rpc: rpcOption,
     scheduler: schedulerOption,
+    i18n: i18nOption,
+    messages: messagesOption,
   } = options;
+
+  // Phase 18.μ — validate i18n + messages shape. Both are branded via
+  // `defineI18n()` / `defineMessages()`; reject any raw object so user
+  // typos fail fast at boot instead of on first request.
+  if (i18nOption !== undefined && !isI18nDefinition(i18nOption)) {
+    throw new Error(
+      "[mandu] ServerOptions.i18n must be the return value of defineI18n(). " +
+        "Import { defineI18n } from '@mandujs/core/i18n'."
+    );
+  }
+  if (messagesOption !== undefined && !isMessageRegistry(messagesOption)) {
+    throw new Error(
+      "[mandu] ServerOptions.messages must be the return value of defineMessages(). " +
+        "Import { defineMessages } from '@mandujs/core/i18n'."
+    );
+  }
 
   // Phase 18.ε — build the request-level middleware chain once at boot.
   // `compose()` returns a passthrough when the list is empty; storing
@@ -3692,6 +3958,8 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     tracer: tracerInstance.enabled ? tracerInstance : undefined,
     prerender: prerenderSettings,
     middlewareChain,
+    i18n: i18nOption,
+    messages: messagesOption,
   };
 
   registry.rateLimiter = rateLimitOptions ? new MemoryRateLimiter() : null;

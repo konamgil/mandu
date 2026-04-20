@@ -5,6 +5,8 @@ import type { ManduPlugin, ManduHooks } from "../plugins/hooks";
 import type { Middleware } from "../middleware/define";
 import type { RpcDefinition, RpcProcedureRecord } from "../contract/rpc";
 import type { CronDef } from "../scheduler";
+import type { GuardRule as CustomGuardRule } from "../guard/define-rule";
+import type { I18nStrategy, LocaleCode } from "../i18n/types";
 
 export type GuardRuleSeverity = "error" | "warn" | "warning" | "off";
 
@@ -148,7 +150,20 @@ export interface ManduConfig {
     srcDir?: string;
     exclude?: string[];
     realtime?: boolean;
-    rules?: Record<string, GuardRuleSeverity>;
+    /**
+     * Built-in rule severity overrides (map) OR consumer-defined
+     * custom rules (array). The Guard runner dispatches on shape:
+     *
+     *   - `Record<string, GuardRuleSeverity>` → override severity of
+     *     Mandu's built-in rules by id.
+     *   - `GuardRule[]` (Phase 18.ν) → register consumer-defined rules
+     *     alongside the built-in presets. See `@mandujs/core/guard/define-rule`.
+     *
+     * Passing both at once is not supported; pick one shape per config.
+     * Mixed input falls back to "custom rules only" and the built-in
+     * rule severity overrides become unreachable.
+     */
+    rules?: Record<string, GuardRuleSeverity> | CustomGuardRule[];
     contractRequired?: GuardRuleSeverity;
     /**
      * Issue #207 — hard-fail on direct `__generated__/` imports at the
@@ -421,6 +436,48 @@ export interface ManduConfig {
   scheduler?: {
     jobs?: CronDef[];
     disabled?: boolean;
+  };
+  /**
+   * Phase 18.μ — first-class internationalization.
+   *
+   * Declaring this block opts the project into the framework's built-in
+   * locale resolution + route synthesis. The CLI (`mandu build` /
+   * `mandu dev`) materializes per-locale route variants when
+   * `strategy === "path-prefix"` so a single `app/docs/page.tsx`
+   * serves `/en/docs`, `/ko/docs`, etc. without file duplication.
+   *
+   * At runtime, the server dispatcher attaches `ctx.locale`
+   * ({@link ResolvedLocale}) + `ctx.t` (typed translator, when a
+   * message registry is wired) to every loader and stamps
+   * `Vary: Accept-Language` on responses so CDNs cache correctly.
+   *
+   * Coexists with the legacy `app/[lang]/...` manual pattern — users
+   * migrate only when ready. See `docs/architect/i18n.md`.
+   *
+   * @example
+   * ```ts
+   * export default {
+   *   i18n: {
+   *     locales: ['en', 'ko'],
+   *     defaultLocale: 'en',
+   *     strategy: 'path-prefix',
+   *   },
+   * } satisfies ManduConfig;
+   * ```
+   */
+  i18n?: {
+    /** Non-empty list of supported locale codes. */
+    locales: LocaleCode[];
+    /** Fallback when no signal matches. MUST be in `locales`. */
+    defaultLocale: LocaleCode;
+    /** Optional fallback chain between request locale and defaultLocale. */
+    fallback?: LocaleCode;
+    /** Locale detection strategy. See {@link I18nStrategy}. */
+    strategy: I18nStrategy;
+    /** Cookie name (default: "mandu_locale"). */
+    cookieName?: string;
+    /** Domain → locale map; required when strategy === "domain". */
+    domains?: Record<string, LocaleCode>;
   };
 }
 
