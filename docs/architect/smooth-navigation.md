@@ -1,7 +1,7 @@
 ---
 title: Smooth Navigation
 summary: CSS View Transitions auto-inject, hover prefetch, and opt-out SPA navigation in Mandu.
-issue: 192, 193, 208, 220
+issue: 192, 193, 208, 220, 222
 status: shipped
 ---
 
@@ -151,7 +151,7 @@ router **unless** one of the escape hatches below fires:
 | `<a href="/about">`                   | NO — intercepted (new default)     |
 | `<a data-mandu-link href="/...">`     | NO — intercepted (legacy attr still works) |
 | `<a data-no-spa href="/...">`         | YES — per-link opt-out             |
-| `<a href="#section">` (fragment only) | YES — browser handles scroll       |
+| `<a href="#section">` (fragment only) | NO — intercepted, pushState + scrollIntoView (issue #222) |
 | `<a href="/about#team">` (cross-page) | NO — routed, hash preserved        |
 | `<a href="mailto:...">`               | YES — mail client opens            |
 | `<a href="tel:...">` / `javascript:`  | YES — browser / UA handler         |
@@ -298,6 +298,49 @@ The detail payload:
 This event is **not** dispatched on the fallback path — if the user
 hits a full navigation, the fresh page load will naturally re-run all
 your scripts and you don't need re-hydration.
+
+### "링크에 `#anchor` 포함 시 스크롤이 top으로 가지 않고 해당 anchor로" (issue #222)
+
+**v0.28.x 이전**: `<a href="/docs/page#section">` 클릭 → 본문 스왑 후
+`window.scrollTo(0, 0)` 이 무조건 실행되어 페이지 최상단으로 이동.
+`#section` 타깃이 무시됨.
+
+**v0.28.1+ (issue #222 fix)**: 본문 스왑 후 `target URL` 의 hash 를
+보고, `document.getElementById(hash)` (없으면 `[name="..."]` fallback)
+로 찾은 요소에 `scrollIntoView({ behavior: "instant", block: "start" })`
+를 호출합니다. 동시에 `location.hash` 를 갱신해 `:target` CSS pseudo
+class 도 정상 동작합니다.
+
+```
+[mandu-spa-nav] swap target container: main
+[mandu-spa-nav] scrolled to #intro /docs/page#intro
+[mandu-spa-nav] swapped to /docs/page#intro in 22ms (container=main)
+```
+
+타깃이 없으면 경고 대신 debug 로그로 안내하고 `scrollTo(0, 0)` 로
+fallback:
+
+```
+[mandu-spa-nav] hash target #ghost not found, scrolling to top /docs#ghost
+```
+
+특수문자가 들어간 id (`<h2 id="foo.bar">`) 는 `CSS.escape` 로 이스케이프
+됩니다. `CSS.escape` 을 지원하지 않는 구형 브라우저는 내부
+`[^a-zA-Z0-9_-]` 정규식으로 fallback 합니다.
+
+#### Same-page hash navigation
+
+`<a href="#intro">` (pathname 동일, hash 만 다름) 도 이제 helper 가
+가로챕니다. body swap 없이 `pushState` + `scrollIntoView` 만 수행:
+
+```
+[mandu-spa-nav] same-page hash nav /docs#intro
+[mandu-spa-nav] scrolled to #intro /docs#intro
+```
+
+`fetch` 요청이 발생하지 않으므로 서버 부하도, 전환 플리커도 없습니다.
+이전에는 브라우저 네이티브 동작에 맡겼지만, 프레임워크 단일 코드 패스로
+스크롤 복원 로직을 일관화했습니다.
 
 ### View Transitions integration
 

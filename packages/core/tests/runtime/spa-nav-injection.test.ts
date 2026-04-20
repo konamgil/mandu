@@ -109,8 +109,11 @@ describe("Issue #208 — SPA_NAV_HELPER_BODY structural invariants", () => {
     expect(SPA_NAV_HELPER_BODY).toContain(`"_self"`);
     // 8: download attribute
     expect(SPA_NAV_HELPER_BODY).toContain("download");
-    // 9: fragment-only links (#)
-    expect(SPA_NAV_HELPER_BODY).toMatch(/charAt\(0\)==="#"|h\.charAt\(0\)==="#"/);
+    // 9: fragment-only links (#) — as of issue #222 these are now
+    //    intercepted (pushState + scrollIntoView, no fetch); the old
+    //    `charAt(0)==="#"` early-return was removed. Instead the helper
+    //    branches into `samePageHashNav` when pathname + search match.
+    expect(SPA_NAV_HELPER_BODY).toContain("samePageHashNav");
     // 10: cross-origin + non-http(s) schemes
     expect(SPA_NAV_HELPER_BODY).toContain("origin");
     expect(SPA_NAV_HELPER_BODY).toContain(`"http:"`);

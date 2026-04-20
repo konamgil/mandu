@@ -229,10 +229,17 @@ describe("SPA_NAV_HELPER — exclusions parity with router.ts", () => {
     expect(ev.defaultPrevented).toBe(false);
   });
 
-  it("[3] falls through for same-page fragment (href starts with #)", () => {
+  it("[3] intercepts same-page fragment (#section) for issue #222 scroll handling", () => {
+    // Issue #222: fragment-only links are now intercepted so the helper
+    // can resolve the hash target and scrollIntoView (preserving :target
+    // CSS pseudo). Previously the helper bailed out and the browser
+    // scrolled — both paths land on the anchor, but interception lets us
+    // ship a single consistent scroll-restoration path across the codebase.
     const ev = makeClick({ anchor: makeAnchor({ href: "#section" }) });
     dispatch(ev);
-    expect(ev.defaultPrevented).toBe(false);
+    expect(ev.defaultPrevented).toBe(true);
+    // Same-page hash MUST NOT trigger a fetch (no body swap).
+    expect(fetchHits).toBe(0);
   });
 
   it("[4] falls through for mailto:", () => {
