@@ -1,5 +1,14 @@
 # @mandujs/core
 
+## 0.29.1
+
+### Patch Changes
+
+- fix: resolve #210 — `./bundler/plugins` + 6 sibling subpath exports for
+  Wave E1 new modules (bundler/generate-static-params, dev-error-overlay,
+  middleware/compose|define|bridge, client/hydrate). 같은 패턴 3회차
+  (#194 kitchen / #202 content/prebuild 에 이어).
+
 ## 0.29.0
 
 ### Minor Changes
