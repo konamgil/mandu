@@ -84,7 +84,7 @@ describe("mandu diagnose CLI", () => {
     expect(parsed).toHaveProperty("healthy");
     expect(parsed).toHaveProperty("checks");
     expect(Array.isArray(parsed.checks)).toBe(true);
-    expect(parsed.checks.length).toBe(5); // 5 extended checks in CLI path
+    expect(parsed.checks.length).toBeGreaterThanOrEqual(5); // extended checks in CLI path (grows as new rules land)
   });
 
   it("each check in JSON output has the unified shape", async () => {
