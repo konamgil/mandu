@@ -1,5 +1,47 @@
 # @mandujs/skills
 
+## 14.0.0
+
+### Patch Changes
+
+- Updated dependencies [[`5c9bac1`](https://github.com/konamgil/mandu/commit/5c9bac1afd3d769ec5889ec5ac65b6d587ff9f51)]:
+  - @mandujs/core@0.35.0
+
+## 13.0.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.34.0
+
+## 12.0.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.33.0
+
+## 11.0.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.32.0
+
+## 10.0.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.31.0
+
+## 9.0.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.30.0
+
 ## 6.0.0
 
 ### Patch Changes

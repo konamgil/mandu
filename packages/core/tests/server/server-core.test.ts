@@ -304,7 +304,10 @@ describe("runtime cache control endpoint", () => {
       headers: {},
       createdAt: Date.now(),
       revalidateAfter: Date.now() + 60_000,
+      staleUntil: Date.now() + 60_000,
       tags: ["products"],
+      maxAgeSeconds: 60,
+      swrSeconds: 0,
     });
     store.set("home:/other", {
       html: "<p>other</p>",
@@ -313,7 +316,10 @@ describe("runtime cache control endpoint", () => {
       headers: {},
       createdAt: Date.now(),
       revalidateAfter: Date.now() + 60_000,
+      staleUntil: Date.now() + 60_000,
       tags: ["other"],
+      maxAgeSeconds: 60,
+      swrSeconds: 0,
     });
 
     const port = server.server.port;

@@ -1,5 +1,21 @@
 # @mandujs/mcp
 
+## 0.22.2
+
+### Patch Changes
+
+- Updated dependencies [[`5c9bac1`](https://github.com/konamgil/mandu/commit/5c9bac1afd3d769ec5889ec5ac65b6d587ff9f51)]:
+  - @mandujs/core@0.35.0
+  - @mandujs/skills@14.0.0
+
+## 0.22.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.34.0
+  - @mandujs/skills@13.0.0
+
 ## 0.22.0
 
 ### Minor Changes
