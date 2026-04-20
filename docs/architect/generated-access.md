@@ -18,6 +18,62 @@ Use the runtime registry: see https://mandujs.com/docs/architect/generated-acces
 
 This page explains **why** the restriction exists and **what to do instead**.
 
+## Enforcement
+
+As of **Mandu 0.28** (issue #207), the `mandu:block-generated-imports` Bun
+plugin is **installed by default** on every `mandu dev`, `mandu build`, and
+`mandu start` run. Any import whose specifier contains `__generated__`
+causes the build to hard-fail with a structured error:
+
+```text
+Direct __generated__/ imports are forbidden: ./__generated__/routes.
+Use the runtime registry: see https://mandujs.com/docs/architect/generated-access
+  Importer: /your-repo/src/app/page.tsx
+  Replacement: import { getGenerated } from "@mandujs/core/runtime";
+  Then: const data = getGenerated(<key>);
+  Docs: https://mandujs.com/docs/architect/generated-access
+```
+
+### Three lines of defence
+
+| Layer | Tool | When it fires |
+|---|---|---|
+| IDE | `tsconfig.json` `paths` mapping | Typing, before save |
+| Static | `mandu guard check` | Explicit lint run |
+| **Bundler** | `mandu:block-generated-imports` plugin | **Every build** |
+
+The bundler layer is the one Mandu 0.28 adds. The first two already existed
+but were trivially bypassed — autonomous agents kept writing direct imports
+despite the Guard warning. The bundler layer makes the failure physical.
+
+### Opt-out (emergency escape hatch)
+
+```ts
+// mandu.config.ts
+export default {
+  guard: {
+    blockGeneratedImport: false, // default: true
+  },
+};
+```
+
+Use only when a migration path literally requires the legacy barrel
+re-export pattern. Open an issue before disabling — in every case we've
+measured, the fix is "use `getGenerated()`."
+
+### Allowed importers
+
+The plugin exempts `@mandujs/core/runtime` internals (the file that
+*wires* the global registry is allowed to touch generated content). No
+other exemption paths exist.
+
+### Legacy projects
+
+Existing `mandu init` projects pick up the new bundler enforcement on
+upgrade without any config change. New `mandu init` projects additionally
+get a TypeScript `paths` entry that turns direct imports into an IDE
+type error on day one.
+
 ## Why direct imports are forbidden
 
 1. **Hot reload** — in dev, generated modules are rebuilt and re-imported on

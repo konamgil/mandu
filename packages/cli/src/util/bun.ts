@@ -56,6 +56,7 @@ import path from "path";
 import { pathToFileURL } from "url";
 import { mkdir, readdir, unlink, readFile } from "fs/promises";
 import { safeBuild } from "@mandujs/core/bundler/safe-build";
+import { defaultBundlerPlugins } from "@mandujs/core/bundler/plugins";
 import { HMR_PERF } from "@mandujs/core/perf/hmr-markers";
 import { isPerfEnabled, mark, measure } from "@mandujs/core/perf";
 import {
@@ -278,6 +279,18 @@ export function createBundledImporter(
 
     let result;
     try {
+      // Issue #207 — install Mandu's default block-generated-imports plugin
+      // on the SSR bundler path too, so pure-SSR pages/slots that never
+      // go through the client bundler still cannot smuggle in a direct
+      // `__generated__/` import. The historical Bun 1.3.10 Windows
+      // `onResolve` panic is fixed in 1.3.12 (our pinned engine). If a
+      // downstream project hits a regression on a newer Bun patch, the
+      // `MANDU_DISABLE_BUNDLER_PLUGINS=1` env var provides an emergency
+      // escape hatch without requiring a config change.
+      const ssrPlugins =
+        process.env.MANDU_DISABLE_BUNDLER_PLUGINS === "1"
+          ? []
+          : defaultBundlerPlugins();
       result = await safeBuild({
         entrypoints: [rootPathAbs],
         outdir: cacheDir,
@@ -292,9 +305,10 @@ export function createBundledImporter(
         // defaults). User code — including TypeScript path aliases like `@/*`
         // — is NOT here, so it gets inlined into the bundle. We deliberately
         // avoid `packages: "external"` (treats `@/foo` as a scoped npm
-        // package) and Bun.build plugins (`onResolve` panics on Windows in
-        // Bun 1.3.10).
+        // package). The bundler-plugin caveat that previously lived here
+        // was tied to Bun 1.3.10; see the plugin-install block above.
         external: externalList,
+        plugins: ssrPlugins,
       });
     } catch (err) {
       const inner = err instanceof Error ? err.message : String(err);

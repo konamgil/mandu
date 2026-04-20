@@ -16,6 +16,8 @@ import type {
 import { HYDRATION } from "../constants";
 import { safeBuild } from "./safe-build";
 import { fastRefreshPlugin } from "./fast-refresh-plugin";
+import { defaultBundlerPlugins } from "./plugins";
+import type { BunPlugin } from "bun";
 import { mark, measure } from "../perf";
 import { HMR_PERF } from "../perf/hmr-markers";
 import {
@@ -28,6 +30,24 @@ import {
 } from "./vendor-cache";
 import path from "path";
 import fs from "fs/promises";
+
+/**
+ * Resolve Mandu's default bundler plugin set from a `BundlerOptions`
+ * object. Currently returns the `mandu:block-generated-imports` plugin
+ * unless `options.blockGeneratedImport === false`. Centralised here so
+ * every `safeBuild(...)` call-site can compose
+ * `[...manduDefaultPlugins(options), ...buildLocalPlugins]` and stay in
+ * sync as the default set grows.
+ */
+function manduDefaultPlugins(options: BundlerOptions): BunPlugin[] {
+  return defaultBundlerPlugins({
+    config: {
+      guard: {
+        blockGeneratedImport: options.blockGeneratedImport,
+      },
+    },
+  });
+}
 
 /**
  * Scan for *.island.tsx / *.island.ts files across hydrated route directories.
@@ -121,7 +141,7 @@ async function buildPerIslandBundle(
       sourcemap: options.sourcemap ? "external" : "none",
       target: "browser",
       ...(isDev ? { reactFastRefresh: true } : {}),
-      plugins: isDev ? [fastRefreshPlugin()] : [],
+      plugins: [...manduDefaultPlugins(options), ...(isDev ? [fastRefreshPlugin()] : [])],
       external: ["react", "react-dom", "react-dom/client", ...(options.external || [])],
       define: { "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"), ...options.define },
     });
@@ -1063,6 +1083,7 @@ if (typeof window !== 'undefined') {
       minify: false, // dev only
       sourcemap: options.sourcemap ? "external" : "none",
       target: "browser",
+      plugins: manduDefaultPlugins(options),
       // React를 인라인 번들링 (import map 없이도 독립 동작)
       // DevTools는 Shadow DOM 격리 → 앱 React와 충돌 없음
       define: {
@@ -1117,6 +1138,7 @@ async function buildRouterRuntime(
       minify: options.minify ?? process.env.NODE_ENV === "production",
       sourcemap: options.sourcemap ? "external" : "none",
       target: "browser",
+      plugins: manduDefaultPlugins(options),
       define: {
         "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),
         ...options.define,
@@ -1193,6 +1215,7 @@ async function buildRuntime(
       sourcemap: options.sourcemap ? "external" : "none",
       target: "browser",
       external: ["react", "react-dom", "react-dom/client"],
+      plugins: manduDefaultPlugins(options),
       define: {
         "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),
         ...options.define,
@@ -1482,6 +1505,7 @@ async function buildVendorShims(
         sourcemap: options.sourcemap ? "external" : "none",
         target: "browser",
         external: shimExternal,
+        plugins: manduDefaultPlugins(options),
         define: {
           "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),
           ...options.define,
@@ -1590,7 +1614,7 @@ async function buildIsland(
       target: "browser",
       splitting: options.splitting ?? (process.env.NODE_ENV === "production"),
       ...(isDev ? { reactFastRefresh: true } : {}),
-      plugins: isDev ? [fastRefreshPlugin()] : [],
+      plugins: [...manduDefaultPlugins(options), ...(isDev ? [fastRefreshPlugin()] : [])],
       external: ["react", "react-dom", "react-dom/client", ...(options.external || [])],
       define: {
         "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV || "development"),

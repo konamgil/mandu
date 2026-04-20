@@ -12,6 +12,40 @@ export interface GuardCheckResult {
   violations: GuardViolation[];
 }
 
+/**
+ * Canonical docs URL for the `getGenerated()` runtime-registry pattern.
+ * Shared by the Guard `INVALID_GENERATED_IMPORT` rule and the bundler
+ * plugin `block-generated-imports` so both paths surface the same
+ * remediation target.
+ */
+export const GENERATED_IMPORT_DOCS_URL =
+  "https://mandujs.com/docs/architect/generated-access";
+
+/**
+ * Build the user-facing message for a detected direct `__generated__/`
+ * import. `specifier` is the literal import string that tripped the
+ * guard (not the resolved path).
+ *
+ * This helper is the single source of truth for the message text — both
+ * the static Guard pass (`checkInvalidGeneratedImport`) and the bundler
+ * plugin (`blockGeneratedImports`) call through it so the two paths
+ * cannot drift.
+ */
+export function buildForbiddenGeneratedImportMessage(specifier: string): string {
+  return (
+    `Direct __generated__/ imports are forbidden: ${specifier}. ` +
+    `Use the runtime registry: see ${GENERATED_IMPORT_DOCS_URL}`
+  );
+}
+
+/**
+ * Shared remediation hint. Points at `getGenerated()` from
+ * `@mandujs/core/runtime` and the decision-tree docs.
+ */
+export const FORBIDDEN_GENERATED_IMPORT_SUGGESTION =
+  "Import getGenerated() from @mandujs/core/runtime and read the generated artifact through the manifest. " +
+  `See ${GENERATED_IMPORT_DOCS_URL} for the decision tree.`;
+
 function normalizeSeverity(level: GuardRuleSeverity): "error" | "warning" | "off" {
   if (level === "warn") return "warning";
   return level;
@@ -119,12 +153,8 @@ export async function checkInvalidGeneratedImport(
         violations.push({
           ruleId: GUARD_RULES.INVALID_GENERATED_IMPORT.id,
           file: relativePath,
-          message:
-            `Direct __generated__/ imports are forbidden: ${match[1]}. ` +
-            `Use the runtime registry: see https://mandujs.com/docs/architect/generated-access`,
-          suggestion:
-            "Import getGenerated() from @mandujs/core/runtime and read the generated artifact through the manifest. " +
-            "See https://mandujs.com/docs/architect/generated-access for the decision tree.",
+          message: buildForbiddenGeneratedImportMessage(match[1]),
+          suggestion: FORBIDDEN_GENERATED_IMPORT_SUGGESTION,
         });
       }
     }

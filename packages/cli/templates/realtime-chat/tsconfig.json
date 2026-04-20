@@ -9,7 +9,8 @@
     "jsx": "react-jsx",
     "types": ["bun"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "*/__generated__/*": ["__MANDU_BLOCKED__/no-direct-generated-import"]
     }
   },
   "include": [

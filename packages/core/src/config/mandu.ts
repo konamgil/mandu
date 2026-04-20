@@ -147,6 +147,22 @@ export interface ManduConfig {
     realtime?: boolean;
     rules?: Record<string, GuardRuleSeverity>;
     contractRequired?: GuardRuleSeverity;
+    /**
+     * Issue #207 — hard-fail on direct `__generated__/` imports at the
+     * bundler level. When `true` (default), every `mandu dev` /
+     * `mandu build` pass installs the
+     * `mandu:block-generated-imports` Bun plugin, which throws
+     * `ForbiddenGeneratedImportError` the moment any source file
+     * resolves an import whose specifier contains `__generated__`.
+     *
+     * Set to `false` only when a migration path literally requires
+     * the legacy barrel re-export pattern. User code should always
+     * prefer `getGenerated()` from `@mandujs/core/runtime`; see
+     * https://mandujs.com/docs/architect/generated-access.
+     *
+     * Default: `true`.
+     */
+    blockGeneratedImport?: boolean;
   };
   build?: {
     outDir?: string;

@@ -156,4 +156,12 @@ export interface BundlerOptions {
    * - 안전성: 기존 `.mandu/manifest.json` 이 없으면 자동으로 full build로 fallback.
    */
   skipFrameworkBundles?: boolean;
+  /**
+   * Issue #207 — opt-out for the `mandu:block-generated-imports` bundler
+   * plugin. Default `true` (plugin installed on every build). Set
+   * `false` to skip installation — mirrors
+   * `ManduConfig.guard.blockGeneratedImport`. CLI callers pass the
+   * resolved config flag straight through.
+   */
+  blockGeneratedImport?: boolean;
 }

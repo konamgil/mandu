@@ -80,6 +80,12 @@ const GuardConfigSchema = z
     exclude: z.array(z.string()).default([]),
     realtime: z.boolean().default(true),
     rules: z.record(z.enum(["error", "warn", "warning", "off"])).optional(),
+    /**
+     * Issue #207 — bundler-level hard-fail on direct `__generated__/`
+     * imports. Default `true`. Set `false` to opt out of the
+     * `mandu:block-generated-imports` Bun plugin.
+     */
+    blockGeneratedImport: z.boolean().default(true),
   })
   .strict();
 
