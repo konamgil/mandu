@@ -242,10 +242,32 @@ const TestE2EConfigSchema = z
   })
   .strict();
 
-const TestCoverageConfigSchema = z
+/**
+ * Per-metric threshold sub-block (Phase 18.σ).
+ *
+ * All four metrics (lines / branches / functions / statements) are
+ * independently optional. Omitting the whole sub-block keeps the
+ * legacy behavior — the CLI only enforces thresholds for metrics
+ * that are explicitly set.
+ */
+const TestCoverageThresholdsSchema = z
   .object({
     lines: z.number().min(0).max(100).optional(),
     branches: z.number().min(0).max(100).optional(),
+    functions: z.number().min(0).max(100).optional(),
+    statements: z.number().min(0).max(100).optional(),
+  })
+  .strict();
+
+const TestCoverageConfigSchema = z
+  .object({
+    // Legacy top-level shorthand (Phase 12.3). When set, the CLI
+    // mirrors it into `thresholds.lines` so users who already had
+    // `coverage.lines: 80` in their config keep working unchanged.
+    lines: z.number().min(0).max(100).optional(),
+    branches: z.number().min(0).max(100).optional(),
+    // Phase 18.σ — preferred per-metric threshold block.
+    thresholds: TestCoverageThresholdsSchema.optional(),
   })
   .strict();
 

@@ -7,17 +7,24 @@
  *   - `mandu test integration`    → integration tests only
  *   - `mandu test all`            → alias for `mandu test`
  *
- * ## Phase 12.2 — E2E via ATE wrap (this file):
+ * ## Phase 12.2 — E2E via ATE wrap:
  *   - `mandu test --e2e`          → invoke ATE E2E codegen + runner
  *   - `mandu test --e2e --heal`   → additionally run the heal loop
  *   - `mandu test --e2e --dry-run`→ print the plan, do not spawn
  *
- * ## Phase 12.3 — coverage + watch + snapshot (this file):
+ * ## Phase 12.3 — coverage + watch + snapshot:
  *   - `mandu test --coverage`     → `bun test --coverage` + optional E2E LCOV
  *                                   merged into `.mandu/coverage/lcov.info`
  *   - `mandu test --watch`        → chokidar watch app/ src/ packages/
  *                                   and re-run affected tests on change
  *   - `mandu test --watch --dry-run` → print the watch plan, exit 0
+ *
+ * ## Phase 18.σ — unified reporter + per-metric threshold enforcement:
+ *   - `mandu test --reporter=<fmt>` → emit human/json/junit/lcov via
+ *                                     `@mandujs/core/testing` reporter
+ *   - `mandu.config.ts → test.coverage.thresholds.{lines,branches,
+ *     functions,statements}` → per-metric coverage gates. The CLI
+ *     exits non-zero with a breakdown showing actual vs expected.
  *
  * ## Flag matrix
  *
@@ -31,11 +38,7 @@
  * | `--e2e`           | run ATE E2E pipeline after unit/integration      |
  * | `--heal`          | run ATE heal loop after an E2E failure           |
  * | `--dry-run`       | print plan and exit 0 (only valid with --e2e/--watch) |
- *
- * Everything else (env, stdio) is pass-through. The runner simply
- * resolves the config-driven glob set, then invokes `bun test` with
- * the resolved file list — so any feature Bun test supports is
- * automatically supported here without a shim layer.
+ * | `--reporter <fmt>`| human|json|junit|lcov (default: human)           |
  *
  * See `packages/core/src/config/validate.ts` → `TestConfigSchema`
  * for the shape of the configurable `test` block.
@@ -43,7 +46,7 @@
  * ## Exit codes (CTO contract — Agent E Phase 12.2/12.3)
  *
  * |  0 | pass (or dry-run)                                    |
- * |  1 | test failure (assertions failed)                     |
+ * |  1 | test failure (assertions failed OR threshold miss)   |
  * |  2 | infra failure (spawn error, timeout, unexpected)     |
  * |  3 | usage error (unknown subcommand / bad flags)         |
  * |  4 | config error (missing playwright, missing config)    |
@@ -57,6 +60,17 @@ import {
   resolveTestConfig,
   type ValidatedTestConfig,
 } from "@mandujs/core/config/validate";
+import {
+  checkCoverageThresholds,
+  emptyReport,
+  formatReport,
+  formatThresholdFailure,
+  parseLcovSummary,
+  type Coverage,
+  type CoverageThresholds,
+  type ReporterFormat,
+  type TestReport,
+} from "@mandujs/core/testing";
 import { theme } from "../terminal";
 import { CLI_ERROR_CODES, printCLIError } from "../errors";
 
@@ -92,6 +106,8 @@ export interface TestOptions {
   ci?: boolean;
   /** Phase 12.2 — limit E2E to a subset of route ids. */
   onlyRoutes?: string[];
+  /** Phase 18.σ — unified reporter output format. Default `"human"`. */
+  reporter?: ReporterFormat;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -115,12 +131,8 @@ export async function discoverTestFiles(
   const seen = new Set<string>();
 
   for (const pattern of include) {
-    // Bun's Glob does not support the `!pattern` negation form inline, so we
-    // run exclusions as a post-filter pass. This mirrors the behavior of
-    // fast-glob / picomatch users expect.
     const glob = new Glob(pattern);
     for await (const hit of glob.scan({ cwd, absolute: true, onlyFiles: true })) {
-      // Normalize Windows backslashes so patterns compose predictably.
       seen.add(hit.split(path.sep).join("/"));
     }
   }
@@ -128,10 +140,6 @@ export async function discoverTestFiles(
   const excludeGlobs = exclude.map((p) => new Glob(p));
   const results: string[] = [];
   for (const file of seen) {
-    // `match` checks against the pattern without listing the filesystem.
-    // Check both the absolute path and the cwd-relative path so exclusion
-    // globs written as `node_modules/**` work regardless of how the include
-    // pattern resolved.
     const relative = path.relative(cwd, file).split(path.sep).join("/");
     const excluded = excludeGlobs.some(
       (g) => g.match(file) || g.match(relative),
@@ -172,14 +180,6 @@ export function buildBunTestArgs(
 /**
  * Spawn `bun test` with the resolved argv. Returns the exit code verbatim so
  * callers map non-zero to `false` (failed run) and zero to `true`.
- *
- * We use `Bun.spawn` over `node:child_process` for three reasons:
- *   - It's the project-wide convention (per Phase 1 memory: #139).
- *   - Stdio streams are plain WritableStream → cleaner to hook for CI.
- *   - `exitCode` is a promise awaited directly; no `.on("exit", ...)` dance.
- *
- * Exposed as a separate helper so the `testCommand` orchestrator stays small
- * and the spawn can be swapped under test.
  */
 export async function spawnBunTest(
   args: readonly string[],
@@ -197,8 +197,6 @@ export async function spawnBunTest(
 
 /**
  * Resolve the configured glob set for a single `target`.
- * Isolated so a caller that wants to preview discovery ("will anything
- * match?") can do so without running the suite.
  */
 export async function resolveTargetFiles(
   cwd: string,
@@ -211,7 +209,6 @@ export async function resolveTargetFiles(
 
 /**
  * Run a single target end-to-end. Returns `true` on zero exit code.
- * Emits a `CLI_E060` (no match) or `CLI_E061` (non-zero exit) on failure.
  */
 async function runTarget(
   target: "unit" | "integration",
@@ -248,15 +245,6 @@ async function runTarget(
 
 /**
  * Run the ATE E2E pipeline for the current project.
- *
- * We delegate all heavy lifting to `@mandujs/ate`:
- *   1. `ateExtract` — build the interaction graph from `app/`.
- *   2. `ateGenerate` — emit Playwright specs into `tests/e2e/auto/`.
- *   3. `planE2ERun` — compose the Playwright argv.
- *   4. `runE2E` — spawn Playwright, surface exit code + lcov path.
- *   5. (Optional) `ateHeal` — inspect the latest run, emit suggestions.
- *
- * When `--dry-run` is passed we stop after step 3 and print the plan.
  */
 export async function runE2EPipeline(opts: {
   cwd: string;
@@ -279,7 +267,6 @@ export async function runE2EPipeline(opts: {
     findMissingPlaywright,
   } = await import("@mandujs/ate");
 
-  // Step 1 — plan phase (works even without playwright installed).
   const codegenPlan = buildE2EPlan({
     repoRoot: opts.cwd,
     onlyRoutes: opts.onlyRoutes,
@@ -305,7 +292,6 @@ export async function runE2EPipeline(opts: {
     return { ok: true, lcovPath: runPlan.lcovPath };
   }
 
-  // Step 2 — extract graph (non-fatal if app/ missing; ate emits its own warnings).
   try {
     await ateExtract({ repoRoot: opts.cwd });
   } catch (err: unknown) {
@@ -317,7 +303,6 @@ export async function runE2EPipeline(opts: {
     return { ok: false, lcovPath: null };
   }
 
-  // Step 3 — generate specs.
   try {
     await ateGenerate({
       repoRoot: opts.cwd,
@@ -333,14 +318,12 @@ export async function runE2EPipeline(opts: {
     return { ok: false, lcovPath: null };
   }
 
-  // Step 4 — detect missing playwright up front so the error is actionable.
   const missing = findMissingPlaywright(opts.cwd);
   if (missing) {
     printCLIError(CLI_ERROR_CODES.TEST_E2E_PLAYWRIGHT_MISSING);
     return { ok: false, lcovPath: null };
   }
 
-  // Step 5 — spawn.
   const result = await runE2E({
     repoRoot: opts.cwd,
     baseURL: opts.baseURL,
@@ -351,7 +334,6 @@ export async function runE2EPipeline(opts: {
 
   const ok = result.exitCode === 0;
   if (!ok && opts.heal) {
-    // Step 6 — heal (best effort, never throws).
     try {
       const healOut = await ateHeal({ repoRoot: opts.cwd, runId: "latest" });
       console.log(theme.heading("mandu test --heal"));
@@ -369,18 +351,13 @@ export async function runE2EPipeline(opts: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Phase 12.3 — coverage (LCOV merge)
+// Phase 12.3 — coverage (LCOV merge) + Phase 18.σ threshold enforcement
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * After a successful `--coverage` run we gather every LCOV source Bun or
  * Playwright emitted, merge them, and write the canonical output to
  * `.mandu/coverage/lcov.info`.
- *
- * Bun's default LCOV location is `coverage/lcov.info` (configurable via
- * `bunfig.toml`). Playwright's output path is controlled by our
- * `PW_COVERAGE_OUTPUT` env var (see `e2e-runner.ts`). Both may be absent
- * (the user ran only one dimension) — the merger tolerates missing inputs.
  */
 export async function mergeCoverageOutputs(opts: {
   cwd: string;
@@ -393,9 +370,6 @@ export async function mergeCoverageOutputs(opts: {
     source: { kind: "file"; path: string };
   }> = [];
 
-  // Bun writes to <cwd>/coverage/lcov.info by default. We also accept
-  // the .mandu/coverage/unit.lcov convention so users with a Bun config
-  // pointing there do not need extra flags.
   const candidates = [
     path.join(opts.cwd, "coverage", "lcov.info"),
     path.join(opts.cwd, ".mandu", "coverage", "unit.lcov"),
@@ -416,9 +390,9 @@ export async function mergeCoverageOutputs(opts: {
 }
 
 /**
- * Enforce coverage thresholds from `mandu.config.ts → test.coverage.lines`.
- * Parses the merged LCOV, computes LF/LH ratios, and emits CLI_E065 when
- * below target.
+ * Phase 12.3 legacy — single-line-threshold check. Retained so the
+ * `CLI_E065` emission path stays intact when only the legacy
+ * `coverage.lines` shorthand is configured.
  *
  * Returns `true` when thresholds are met (or none configured).
  */
@@ -436,7 +410,7 @@ export function enforceCoverageThreshold(
     if (line.startsWith("LF:")) lf += Number(line.slice(3)) || 0;
     else if (line.startsWith("LH:")) lh += Number(line.slice(3)) || 0;
   }
-  if (lf === 0) return true; // no data points; do not fail
+  if (lf === 0) return true;
   const actual = (lh / lf) * 100;
   if (actual + 1e-9 < thresholdPct) {
     printCLIError(CLI_ERROR_CODES.TEST_COVERAGE_THRESHOLD, {
@@ -448,8 +422,113 @@ export function enforceCoverageThreshold(
   return true;
 }
 
+/**
+ * Resolve the effective per-metric thresholds from a
+ * `ValidatedTestConfig`. Hoists the legacy `coverage.lines` /
+ * `coverage.branches` shorthand into the `thresholds` sub-block
+ * unless explicit values already shadow them. Returns `undefined`
+ * when nothing is configured.
+ */
+export function resolveEffectiveThresholds(
+  config: ValidatedTestConfig,
+): CoverageThresholds | undefined {
+  const { coverage } = config;
+  const thresholds: {
+    lines?: number;
+    branches?: number;
+    functions?: number;
+    statements?: number;
+  } = { ...(coverage.thresholds ?? {}) };
+  if (thresholds.lines === undefined && coverage.lines !== undefined) {
+    thresholds.lines = coverage.lines;
+  }
+  if (thresholds.branches === undefined && coverage.branches !== undefined) {
+    thresholds.branches = coverage.branches;
+  }
+  const hasAny =
+    thresholds.lines !== undefined ||
+    thresholds.branches !== undefined ||
+    thresholds.functions !== undefined ||
+    thresholds.statements !== undefined;
+  return hasAny ? (thresholds as CoverageThresholds) : undefined;
+}
+
+/**
+ * Phase 18.σ — per-metric threshold check. Parses the merged LCOV,
+ * builds a {@link Coverage} block, and delegates to the pure
+ * `checkCoverageThresholds` comparator in the reporter module.
+ *
+ * Returns `true` when all configured metrics meet their target (or
+ * nothing is configured). Emits a human-readable breakdown to stderr
+ * on failure (per metric: actual vs expected).
+ */
+export function enforceCoverageThresholds(
+  lcovPath: string,
+  thresholds: CoverageThresholds | undefined,
+): { ok: boolean; coverage?: Coverage } {
+  if (!thresholds) return { ok: true };
+  if (!fs.existsSync(lcovPath)) return { ok: true };
+  const body = fs.readFileSync(lcovPath, "utf8");
+  const coverage = parseLcovSummary(body);
+  const result = checkCoverageThresholds(coverage, thresholds);
+  if (!result.ok) {
+    const breakdown = formatThresholdFailure(result);
+    // Structured error for CI log scrapers (CLI_E065 + per-metric body).
+    for (const b of result.breakdown.filter((x) => !x.ok)) {
+      printCLIError(CLI_ERROR_CODES.TEST_COVERAGE_THRESHOLD, {
+        actual: `${b.actual.toFixed(2)}`,
+        expected: String(b.expected),
+      });
+    }
+    // Additional human block (un-prefixed) listing every failing metric.
+    if (breakdown) console.error(breakdown);
+  }
+  return { ok: result.ok, coverage };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-// Phase 12.3 — Watch mode
+// Phase 18.σ — Reporter dispatch
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Compose a `TestReport` from the run outcomes. In the current
+ * pipeline we don't capture per-case results (bun test's TAP stream
+ * is not parsed), so the report carries an empty `tests[]` but
+ * complete coverage + timestamps. This is still valuable for CI —
+ * JUnit consumers treat zero-case suites as "empty but not failed",
+ * and `--reporter=json` still gives machine-readable coverage.
+ *
+ * Future work: parse `bun test --reporter=tap` to populate `tests[]`.
+ */
+export function buildTestReport(options: {
+  suite: string;
+  coverage?: Coverage;
+  startedAt: number;
+}): TestReport {
+  return {
+    ...emptyReport(options.suite, "combined"),
+    coverage: options.coverage,
+    durationMs: Math.max(0, Date.now() - options.startedAt),
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Emit the report to stdout in the selected format. For `lcov` the
+ * body is re-emitted only when a coverage block is present; callers
+ * with no coverage get a no-op (matches tooling like `codecov` which
+ * reads stdin and exits silently on empty input).
+ */
+export function emitReport(
+  report: TestReport,
+  format: ReporterFormat,
+): void {
+  const body = formatReport(report, format);
+  if (body) process.stdout.write(body.endsWith("\n") ? body : body + "\n");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 12.3 — Watch mode (with Phase 18.σ UX convergence)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** A plan describing what `--watch` will do. Used by --dry-run. */
@@ -461,11 +540,7 @@ export interface WatchPlan {
 }
 
 /**
- * Resolve the list of directories we will watch. We keep it minimal so
- * users don't see spurious re-runs for config changes: `app/`, `src/`,
- * and `packages/` cover nearly all Mandu project layouts.
- *
- * Missing directories are filtered out so the plan reflects reality.
+ * Resolve the list of directories we will watch.
  */
 export function resolveWatchDirs(cwd: string): string[] {
   const candidates = ["app", "src", "packages"];
@@ -515,20 +590,7 @@ export function describeWatchPlan(plan: WatchPlan): string {
 
 /**
  * Map a set of changed files to the test files that should re-run.
- *
- * We use two signals:
- *
- *  1. **Direct match**: the changed file IS a test file → run it.
- *  2. **Import match**: a source file (non-test) changed → run every
- *     test file that imports it (by relative module path substring).
- *
- * This is intentionally simpler than the ATE dep-graph (`ate/dep-graph`).
- * That graph costs ~500ms to build and requires ts-morph; for a
- * sub-second watch loop we use a cheap grep-equivalent. Users needing
- * full transitive impact can use `mandu test:watch` which wraps the
- * ATE pipeline.
- *
- * Exported for unit tests.
+ * See original Phase 12.3 docs for the algorithm.
  */
 export function computeAffectedTests(params: {
   changedFiles: readonly string[];
@@ -541,19 +603,13 @@ export function computeAffectedTests(params: {
     params.readFile ?? ((abs: string) => fs.readFileSync(abs, "utf8"));
 
   const affected = new Set<string>();
-
-  // 1. Direct test-file match.
   for (const c of changed) {
     if (tests.includes(c)) affected.add(c);
   }
 
-  // 2. Import scan: for each non-test change, look for tests that
-  //    reference the file by basename.
   const sourceChanges = changed.filter((c) => !tests.includes(c));
   if (sourceChanges.length === 0) return Array.from(affected).sort();
 
-  // Reduce false positives: derive both the full basename and the
-  // extension-stripped form so `import X from "./foo"` matches `foo.ts`.
   const needles = sourceChanges.map((c) => {
     const base = path.basename(c);
     const stem = base.replace(/\.[a-z]+$/i, "");
@@ -568,9 +624,6 @@ export function computeAffectedTests(params: {
       continue;
     }
     for (const n of needles) {
-      // Match the bare filename, the extension-stripped form, OR the full
-      // absolute path (some generated tests embed absolute paths). Any of
-      // these hits a re-run.
       if (
         body.includes(n.base) ||
         body.includes(n.stem) ||
@@ -586,9 +639,31 @@ export function computeAffectedTests(params: {
 }
 
 /**
- * Run the watch loop. Non-returning until SIGINT / SIGTERM. We rely on
- * chokidar (already a transitive dep via `@mandujs/core`) for reliable
- * cross-platform fs.watch.
+ * Phase 18.σ — print a unified watch header. Mirrors the human-format
+ * reporter heading so the stdout stays consistent across modes.
+ */
+function printWatchHeader(subtitle: string): void {
+  // Clear the screen the way most watchers do — ESC [2J ESC [H.
+  if (process.stdout.isTTY) {
+    process.stdout.write("\x1b[2J\x1b[H");
+  }
+  console.log(theme.heading("mandu test · watch"));
+  console.log(theme.muted(subtitle));
+  console.log(
+    theme.muted(`Shortcuts: q=quit, r=rerun all, Enter=rerun affected`),
+  );
+}
+
+/**
+ * Run the watch loop. Non-returning until SIGINT / SIGTERM / `q` key.
+ *
+ * Phase 18.σ UX convergence:
+ *  - Console cleared + unified header on every rerun.
+ *  - Keyboard shortcuts: `q` quits, `r` forces full rerun, Enter
+ *    re-runs pending/affected tests.
+ *
+ * The file-watcher internals (chokidar + affected-test mapping) are
+ * unchanged from Phase 12.3 — this function only extends the UX.
  */
 export async function runWatchMode(
   opts: TestOptions,
@@ -601,7 +676,6 @@ export async function runWatchMode(
     return false;
   }
 
-  // Lazy-load chokidar so --dry-run never requires it to be installed.
   const chokidarMod = await import("chokidar");
   const chokidar = chokidarMod.default ?? chokidarMod;
 
@@ -610,14 +684,27 @@ export async function runWatchMode(
     ...(await resolveTargetFiles(cwd, "integration", config)),
   ];
 
-  console.log(theme.heading(`mandu test --watch`));
-  console.log(theme.muted(`Watching ${watchDirs.length} director${watchDirs.length === 1 ? "y" : "ies"} (debounce 200ms). Press Ctrl+C to stop.`));
+  printWatchHeader(
+    `Watching ${watchDirs.length} director${watchDirs.length === 1 ? "y" : "ies"} (debounce 200ms). Press Ctrl+C or q to stop.`,
+  );
 
   const pending = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
   let queued = false;
   const DEBOUNCE = 200;
+
+  const runBatch = async (files: string[], label: string): Promise<void> => {
+    printWatchHeader(`${label} · ${files.length} file(s)`);
+    for (const f of files) console.log(theme.muted(`  - ${f}`));
+    const args = buildBunTestArgs(files, opts, config.unit.timeout);
+    const code = await spawnBunTest(args, cwd);
+    console.log(
+      code === 0
+        ? theme.success(`[watch] PASS`)
+        : theme.error(`[watch] FAIL (exit ${code})`),
+    );
+  };
 
   const trigger = async (): Promise<void> => {
     if (running) {
@@ -636,25 +723,29 @@ export async function runWatchMode(
           testFiles,
         });
         if (affected.length === 0) {
-          console.log(theme.muted(`[watch] ${batch.length} change(s), no affected test`));
+          console.log(
+            theme.muted(`[watch] ${batch.length} change(s), no affected test`),
+          );
           if (!queued) break;
           continue;
         }
 
-        console.log(
-          theme.heading(`[watch] Re-running ${affected.length} affected test file(s)`),
-        );
-        for (const f of affected) console.log(theme.muted(`  - ${f}`));
-
-        const args = buildBunTestArgs(affected, opts, config.unit.timeout);
-        const code = await spawnBunTest(args, cwd);
-        console.log(
-          code === 0
-            ? theme.success(`[watch] PASS`)
-            : theme.error(`[watch] FAIL (exit ${code})`),
-        );
+        await runBatch(affected, "Re-running affected");
         if (!queued) break;
       }
+    } finally {
+      running = false;
+    }
+  };
+
+  const rerunAll = async (): Promise<void> => {
+    if (running) {
+      queued = true;
+      return;
+    }
+    running = true;
+    try {
+      await runBatch([...testFiles], "Re-running ALL");
     } finally {
       running = false;
     }
@@ -672,15 +763,7 @@ export async function runWatchMode(
 
   const watcher = chokidar.watch(watchDirs, {
     ignoreInitial: true,
-    ignored: [
-      /node_modules/,
-      /\.git/,
-      /\.mandu/,
-      /dist/,
-      // Respect user's .gitignore by piggybacking on chokidar's ignore regex.
-      // A full gitignore parser is overkill — these three exclusions cover
-      // the default `mandu init` templates and every shipped example app.
-    ],
+    ignored: [/node_modules/, /\.git/, /\.mandu/, /dist/],
   });
 
   watcher.on("add", handle);
@@ -692,6 +775,11 @@ export async function runWatchMode(
   });
 
   const shutdown = (): void => {
+    try {
+      if (process.stdin.isTTY && typeof (process.stdin as { setRawMode?: (v: boolean) => void }).setRawMode === "function") {
+        (process.stdin as { setRawMode: (v: boolean) => void }).setRawMode(false);
+      }
+    } catch { /* no-op */ }
     void watcher.close();
     if (timer) clearTimeout(timer);
     process.exit(0);
@@ -699,9 +787,29 @@ export async function runWatchMode(
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  // Block until a signal lands.
+  // Phase 18.σ — keyboard shortcuts (q / r / Enter). We only bind
+  // when stdin is a TTY; CI pipes stay as-is.
+  if (process.stdin.isTTY) {
+    try {
+      const stdin = process.stdin as NodeJS.ReadStream & {
+        setRawMode?: (v: boolean) => void;
+      };
+      if (typeof stdin.setRawMode === "function") stdin.setRawMode(true);
+      stdin.resume();
+      stdin.setEncoding("utf8");
+      stdin.on("data", (data: string | Buffer) => {
+        const key = typeof data === "string" ? data : data.toString("utf8");
+        if (key === "q" || key === "\x03" /* Ctrl+C */) shutdown();
+        else if (key === "r") void rerunAll();
+        else if (key === "\r" || key === "\n") void trigger();
+      });
+    } catch {
+      // Non-interactive fallback: no keyboard shortcuts — watcher still works.
+    }
+  }
+
   await new Promise<void>(() => {
-    /* intentionally unresolved — shutdown via SIGINT */
+    /* intentionally unresolved — shutdown via SIGINT / q */
   });
   return true;
 }
@@ -713,10 +821,6 @@ export async function runWatchMode(
 /**
  * Main CLI entry point. Resolves config, dispatches to the requested target,
  * and reports outcomes via the standard `theme.*` / `printCLIError` channels.
- *
- * Concurrent execution of unit + integration is intentionally sequential —
- * parallel Bun.spawn runs can interleave stdout, making CI logs unreadable.
- * Parallelism inside each `bun test` invocation is still in play.
  */
 export async function testCommand(
   target: TestTarget,
@@ -725,6 +829,8 @@ export async function testCommand(
   const cwd = opts.cwd ?? process.cwd();
   const rawConfig = await loadManduConfig(cwd);
   const config = resolveTestConfig(rawConfig.test);
+  const reporter: ReporterFormat = opts.reporter ?? "human";
+  const startedAt = Date.now();
 
   if (target !== "all" && target !== "unit" && target !== "integration") {
     printCLIError(CLI_ERROR_CODES.TEST_UNKNOWN_TARGET, { target });
@@ -741,10 +847,7 @@ export async function testCommand(
     return runWatchMode(opts, cwd, config);
   }
 
-  // ─── Phase 12.2 — E2E-only mode (no unit/integration) ─────────────
-  // `--e2e` on its own implies the user wants ONLY the E2E pipeline —
-  // we still run unit/integration first if the target was "all" and
-  // --dry-run is OFF, but --dry-run + --e2e short-circuits to the plan.
+  // ─── Phase 12.2 — E2E-only dry-run short-circuit ──────────────────
   if (opts.e2e && opts.dryRun) {
     const out = await runE2EPipeline({
       cwd,
@@ -767,7 +870,6 @@ export async function testCommand(
   } else if (target === "integration") {
     integrationOk = await runTarget("integration", config, opts, cwd);
   } else {
-    // target === "all"
     unitOk = await runTarget("unit", config, opts, cwd);
     if (!unitOk && opts.bail) return false;
     integrationOk = await runTarget("integration", config, opts, cwd);
@@ -792,7 +894,9 @@ export async function testCommand(
     e2eLcovPath = e2eOut.lcovPath;
   }
 
-  // ─── Phase 12.3 — Coverage merge (after everything has run) ───────
+  // ─── Phase 12.3 + 18.σ — Coverage merge + threshold check ─────────
+  let coverage: Coverage | undefined;
+  let thresholdsOk = true;
   if (opts.coverage) {
     const merged = await mergeCoverageOutputs({ cwd, e2eLcov: e2eLcovPath });
     if (merged.outputPath) {
@@ -801,12 +905,43 @@ export async function testCommand(
           `[coverage] merged ${merged.files} file record(s) → ${merged.outputPath}`,
         ),
       );
-      const threshold = config.coverage.lines;
-      if (!enforceCoverageThreshold(merged.outputPath, threshold)) {
-        return false;
+      const effectiveThresholds = resolveEffectiveThresholds(config);
+      const threshRes = enforceCoverageThresholds(
+        merged.outputPath,
+        effectiveThresholds,
+      );
+      thresholdsOk = threshRes.ok;
+      coverage = threshRes.coverage ?? parseLcovFileSafe(merged.outputPath);
+      if (coverage && merged.outputPath) {
+        coverage = { ...coverage, lcovPath: merged.outputPath };
       }
     }
   }
 
-  return bunOk && e2eOk;
+  // ─── Phase 18.σ — Reporter dispatch ───────────────────────────────
+  // `human` mode matches the legacy stdout (headers + per-target
+  // success messages are already emitted above by `runTarget`). We
+  // only append a unified trailer in non-human formats to avoid double
+  // output for interactive users.
+  if (reporter !== "human") {
+    const report = buildTestReport({
+      suite: `mandu test ${target}`,
+      coverage,
+      startedAt,
+    });
+    emitReport(report, reporter);
+  }
+
+  return bunOk && e2eOk && thresholdsOk;
+}
+
+/** Helper — parse an LCOV file into a {@link Coverage}, tolerating absence. */
+function parseLcovFileSafe(lcovPath: string): Coverage | undefined {
+  try {
+    if (!fs.existsSync(lcovPath)) return undefined;
+    const body = fs.readFileSync(lcovPath, "utf8");
+    return parseLcovSummary(body);
+  } catch {
+    return undefined;
+  }
 }

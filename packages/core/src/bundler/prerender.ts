@@ -25,7 +25,10 @@ import {
   collectStaticPaths,
   isDynamicPattern,
   type PageModuleWithStaticParams,
+  type StaticParamSet,
 } from "./generate-static-params";
+import type { ManduPlugin, ManduHooks } from "../plugins/hooks";
+import { runDefinePrerenderHook } from "../plugins/runner";
 
 // ========== Types ==========
 
@@ -55,6 +58,15 @@ export interface PrerenderOptions {
    * callers leave this undefined (the default dynamic import is used).
    */
   importModule?: (specifier: string) => Promise<PageModuleWithStaticParams>;
+
+  /**
+   * Phase 18.τ — plugins contributing `definePrerenderHook()`.
+   * Each plugin receives a {@link PrerenderContext} with the
+   * pathname + HTML and may return a {@link PrerenderOverride} to
+   * skip, rewrite, or replace the output. Omitted → zero overhead.
+   */
+  plugins?: readonly ManduPlugin[];
+  configHooks?: Partial<ManduHooks>;
 }
 
 export interface PrerenderResult {
@@ -123,6 +135,16 @@ export async function prerenderRoutes(
     importModule,
   } = options;
 
+  // Phase 18.τ — resolve plugin hook bundle once so the hot render loop
+  // can short-circuit with a single falsy check.
+  const pluginArgs = {
+    plugins: options.plugins ?? [],
+    configHooks: options.configHooks,
+  };
+  const hasPrerenderHook =
+    pluginArgs.plugins.some((p) => p.hooks?.definePrerenderHook) ||
+    Boolean(pluginArgs.configHooks?.definePrerenderHook);
+
   const outputDir = path.isAbsolute(outDir) ? outDir : path.join(rootDir, outDir);
   await fs.mkdir(outputDir, { recursive: true });
 
@@ -157,18 +179,40 @@ export async function prerenderRoutes(
       continue;
     }
 
+    // ─── Issue #214 ─────────────────────────────────────────────────────────
+    // Capture `dynamicParams` export from the page module and stamp it onto
+    // the route spec so the runtime dispatch guard can consult it. Undefined
+    // export → undefined on the spec (default: allow SSR fallback, Next.js
+    // parity). Explicit `true` also round-trips for clarity.
+    if (typeof mod.dynamicParams === "boolean") {
+      (route as { dynamicParams?: boolean }).dynamicParams = mod.dynamicParams;
+    }
+    // ─── End Issue #214 ─────────────────────────────────────────────────────
+
     if (typeof mod.generateStaticParams !== "function") {
       // Not opted-in for this route — perfectly fine.
       continue;
     }
 
     try {
-      const { paths, errors: paramErrors } = await collectStaticPaths(
-        route.pattern,
-        mod
-      );
+      const {
+        paths,
+        errors: paramErrors,
+        paramSets,
+      } = await collectStaticPaths(route.pattern, mod);
       for (const p of paths) pathsToRender.add(p);
       for (const e of paramErrors) errors.push(`[${route.pattern}] ${e}`);
+
+      // ─── Issue #214 ───────────────────────────────────────────────────────
+      // Persist the resolved param sets on the spec. The runtime #214 guard
+      // reads this to decide whether an incoming request matches the known
+      // set. Empty arrays are preserved (distinct from `undefined`) so users
+      // can opt into "no dynamic URLs at all" via `generateStaticParams: []`
+      // + `dynamicParams: false`.
+      if (paramSets.length > 0 || mod.dynamicParams === false) {
+        (route as { staticParams?: StaticParamSet[] }).staticParams = paramSets;
+      }
+      // ─── End Issue #214 ───────────────────────────────────────────────────
     } catch (error) {
       // User code threw. Surface the error but keep going — other
       // routes should not be blocked by one buggy generator.
@@ -193,15 +237,49 @@ export async function prerenderRoutes(
         continue;
       }
 
-      const html = await response.text();
-      const filePath = getOutputPath(outputDir, pathname);
+      let html = await response.text();
+      let finalPathname = pathname;
+
+      // Phase 18.τ — let plugins inspect / rewrite / skip the output.
+      // Zero-overhead fast-path when no plugin provides the hook.
+      if (hasPrerenderHook) {
+        const override = await runDefinePrerenderHook(
+          {
+            rootDir,
+            mode: "production",
+            logger: {
+              debug: (m) => console.debug(`[prerender] ${m}`),
+              info: (m) => console.info(`[prerender] ${m}`),
+              warn: (m) => console.warn(`[prerender] ${m}`),
+              error: (m) => console.error(`[prerender] ${m}`),
+            },
+            pathname,
+            html,
+          },
+          pluginArgs,
+        );
+        for (const e of override.errors) {
+          errors.push(`definePrerenderHook[${e.source}] ${pathname}: ${e.error.message}`);
+        }
+        if (override.result.skip === true) {
+          continue;
+        }
+        if (typeof override.result.html === "string") {
+          html = override.result.html;
+        }
+        if (typeof override.result.pathname === "string") {
+          finalPathname = override.result.pathname;
+        }
+      }
+
+      const filePath = getOutputPath(outputDir, finalPathname);
 
       await fs.mkdir(path.dirname(filePath), { recursive: true });
       await fs.writeFile(filePath, html, "utf-8");
 
       const duration = Date.now() - start;
-      pages.push({ path: pathname, size: html.length, duration });
-      pageIndex[pathname] = toPosix(path.relative(outputDir, filePath));
+      pages.push({ path: finalPathname, size: html.length, duration });
+      pageIndex[finalPathname] = toPosix(path.relative(outputDir, filePath));
 
       // 5. Optional crawl — harvest internal links for next pass.
       if (crawl) {

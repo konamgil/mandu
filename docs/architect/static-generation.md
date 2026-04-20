@@ -80,19 +80,88 @@ unchanged.
 | Return type                           | `{ ... }[]`                 | `{ ... }[]`                  |
 | Catch-all params                      | `string[]`                  | `string[]`                   |
 | Optional catch-all (missing prefix)   | resolves to prefix          | resolves to prefix           |
-| Fallback mode (ISR on-miss)           | `dynamicParams` flag        | falls through to SSR         |
+| Fallback mode (ISR on-miss)           | `dynamicParams` flag        | `dynamicParams` flag         |
 | Runtime cache header                  | long-lived via CDN          | `immutable`, 1-year `max-age`|
 
-Mandu differs in two deliberate places:
+Mandu differs in one deliberate place:
 
-1. **No `dynamicParams: false`.** If a user requests a dynamic URL
-   that wasn't prerendered, Mandu always falls through to SSR. To
-   force 404 on unknown params, return the sentinel from your loader
-   (`notFound()`) — that keeps prerendered vs. runtime behavior
-   symmetric.
-2. **No per-route revalidation window.** Prerendered HTML is immutable
+1. **No per-route revalidation window.** Prerendered HTML is immutable
    until the next build. For time-based revalidation use the ISR cache
    helpers in `@mandujs/core/runtime/cache` on an SSR route instead.
+
+## `dynamicParams` — opt out of SSR fallback (Issue #214)
+
+By default, when a user requests a dynamic URL that wasn't prerendered
+(for example `/es` on a page that only enumerated `en` / `ko`), Mandu
+falls through to SSR and returns 200. That preserves graceful long-tail
+handling but opens two concrete problems:
+
+- **Duplicate content / SEO.** A catch-all `app/[lang]/page.tsx` will
+  happily 200-render `/path`, `/does-not-exist`, `/favicon`, and every
+  other URL the router can pattern-match — even when only two real
+  locales exist.
+- **Wasted compute.** Every bogus URL runs the page's data loaders,
+  SSR, and island boot before (ideally) hitting a domain-specific
+  `notFound()`.
+
+Export `dynamicParams` on the page module to opt out of that fallback.
+Values outside the `generateStaticParams` set then 404 at the dispatch
+layer — before any loader runs, before any layout wraps, before the
+ISR cache is consulted.
+
+```tsx
+// app/[lang]/page.tsx
+export const dynamicParams = false; // default: true
+
+export async function generateStaticParams() {
+  return [{ lang: "en" }, { lang: "ko" }];
+}
+
+export default function Page({ params }: { params: { lang: string } }) {
+  return <Hello lang={params.lang} />;
+}
+```
+
+Runtime behavior:
+
+| Request URL   | `dynamicParams: true` (default) | `dynamicParams: false`        |
+| ------------- | ------------------------------- | ----------------------------- |
+| `/en`         | 200 (prerendered or SSR)        | 200 (prerendered)             |
+| `/ko`         | 200 (prerendered or SSR)        | 200 (prerendered)             |
+| `/es`         | 200 (SSR fallback)              | **404** (via `not-found.tsx`) |
+| `/anything`   | 200 (SSR fallback)              | **404** (via `not-found.tsx`) |
+
+The guard honors the usual not-found chain:
+
+1. Nearest-ancestor `app/**/not-found.tsx` if present.
+2. Global `notFoundHandler` registered at boot.
+3. Built-in JSON 404 as the last resort.
+
+Notes:
+
+- The flag applies only to page routes. API routes (`route.ts`) and
+  metadata routes (`sitemap.ts`, etc.) are never gated.
+- Setting `dynamicParams: false` with an empty `generateStaticParams`
+  array renders *no* dynamic URLs at all — every request 404s. That's
+  the right choice when you want to kill a `[slug]` route without
+  deleting the file.
+- Catch-all (`[...slug]`) matching compares the joined path: declaring
+  `{ slug: ["guide", "intro"] }` matches `/docs/guide/intro` and
+  nothing else.
+- Nested dynamics (`app/[lang]/[slug]/page.tsx`) only serve pairs that
+  were explicitly enumerated. `{ lang: "en", slug: "intro" }` matches
+  `/en/intro`; `/en/random` and `/de/intro` both 404.
+
+### Comparison with Next.js
+
+| Capability                            | Next.js                     | Mandu                        |
+| ------------------------------------- | --------------------------- | ---------------------------- |
+| `dynamicParams` flag                  | yes                         | yes                          |
+| Default                               | `true`                      | `true`                       |
+| `false` → unknown param 404s          | yes                         | yes                          |
+| Guard runs before loader              | yes                         | yes                          |
+| Honors `not-found.tsx`                | yes                         | yes                          |
+| Per-route revalidation window         | `revalidate`                | not yet (use ISR cache tags) |
 
 ## When to use SSR vs. prerender
 

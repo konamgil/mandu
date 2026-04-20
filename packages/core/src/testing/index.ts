@@ -303,3 +303,32 @@ export {
   type SnapshotOptions,
   type SnapshotResult,
 } from "./snapshot";
+
+// ========== Phase 18.σ — Unified reporter ==========
+
+export {
+  formatReport,
+  formatHuman,
+  formatJson,
+  formatJunit,
+  formatLcov,
+  mergeReports,
+  summarizeReport,
+  checkCoverageThresholds,
+  formatThresholdFailure,
+  parseLcovSummary,
+  emptyReport,
+  type TestReport,
+  type TestCase,
+  type TestStatus,
+  type TestSuiteKind,
+  type Coverage,
+  type CoverageMetric,
+  type CoverageMetricResult,
+  type CoverageThresholds,
+  type CoverageThresholdBreakdown,
+  type CoverageThresholdResult,
+  type ReporterFormat,
+  type ReportSummary,
+  type FormatOptions,
+} from "./reporter";

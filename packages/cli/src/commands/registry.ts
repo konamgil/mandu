@@ -279,6 +279,43 @@ registerCommand({
 });
 
 registerCommand({
+  id: "diagnose",
+  description: "Run extended health checks (manifest freshness, prerender hygiene, export-map gaps, etc.)",
+  exitOnSuccess: true,
+  help: [
+    "",
+    "  mandu diagnose — extended health diagnostics (Issue #215)",
+    "",
+    "  Runs 5 structural checks in parallel:",
+    "    - manifest_freshness      Bundle manifest env + bundle coverage",
+    "    - prerender_pollution     Suspicious prerendered route shapes (#213)",
+    "    - cloneelement_warnings   React key warnings in recent build log (#212)",
+    "    - dev_artifacts_in_prod   _devtools.js / dev HTML leaking into prod",
+    "    - package_export_gaps     User imports missing from @mandujs/core exports",
+    "",
+    "  Exit codes:",
+    "    0 — healthy (no error-severity check fired)",
+    "    1 — unhealthy (at least one error-severity check failed; warnings do not fail)",
+    "",
+    "  Flags:",
+    "    --json        Emit the full DiagnoseReport as JSON (no console summary)",
+    "    --quiet       Only print the summary line + final verdict",
+    "",
+    "  CI usage:",
+    "    mandu diagnose --json > diagnose.json   # capture for artifacts",
+    "    mandu diagnose                           # fail build on error severity",
+    "",
+  ].join("\n"),
+  async run(ctx) {
+    const { diagnose } = await import("./diagnose");
+    return diagnose({
+      json: ctx.options.json === "true",
+      quiet: ctx.options.quiet === "true",
+    });
+  },
+});
+
+registerCommand({
   id: "guard",
   description: "Architecture violation check",
   subcommands: ["arch", "legacy", "spec", "manifest"],
@@ -287,9 +324,19 @@ registerCommand({
     const subCommand = ctx.args[1];
     const hasSubCommand = subCommand && !subCommand.startsWith("--");
 
+    const graphOpt = ctx.options.graph;
     const guardOptions = {
       watch: ctx.options.watch === "true",
       output: ctx.options.output,
+      graph: graphOpt === undefined
+        ? undefined
+        : graphOpt === "true"
+          ? true
+          : graphOpt === "json"
+            ? ("json" as const)
+            : graphOpt === "html"
+              ? ("html" as const)
+              : true,
     };
 
     switch (subCommand) {
@@ -616,6 +663,7 @@ registerCommand({
     "    --base-url <url>   Playwright baseURL override",
     "    --ci               Non-interactive mode",
     "    --only-route <id>  Limit E2E to specific route ids (repeatable)",
+    "    --reporter <fmt>   human|json|junit|lcov (default: human)",
     "",
     "  Examples:",
     "    mandu test unit --filter=auth",
@@ -663,6 +711,7 @@ registerCommand({
       ci: ctx.options.ci === "true",
       baseURL,
       onlyRoutes,
+      reporter: resolveReporterOption(ctx.options),
     });
   },
 });
@@ -1146,3 +1195,18 @@ registerCommand({
     return aiDispatch(ctx);
   },
 });
+
+// Phase 18.σ — resolve the --reporter=<fmt> flag to a typed union.
+// Accepts only human/json/junit/lcov; anything else falls back to human.
+function resolveReporterOption(
+  options: Record<string, unknown>,
+): "human" | "json" | "junit" | "lcov" {
+  const raw = options.reporter;
+  if (typeof raw === "string") {
+    if (raw === "json" || raw === "junit" || raw === "lcov" || raw === "human") {
+      return raw;
+    }
+  }
+  return "human";
+}
+

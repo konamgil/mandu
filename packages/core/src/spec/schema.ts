@@ -80,6 +80,13 @@ const RouteSpecBase = {
   streaming: z.boolean().optional(),
 };
 
+// ---- Static params (Issue #214) ----
+// StaticParamSet values mirror `bundler/generate-static-params.ts` —
+// scalar params are strings, catch-all params are `string[]`.
+const StaticParamValue = z.union([z.string(), z.array(z.string())]);
+const StaticParamSet = z.record(StaticParamValue);
+export type StaticParamSetSchema = z.infer<typeof StaticParamSet>;
+
 // ---- Page 라우트 ----
 export const PageRouteSpec = z
   .object({
@@ -93,6 +100,20 @@ export const PageRouteSpec = z
     loadingModule: z.string().optional(),
     errorModule: z.string().optional(),
     notFoundModule: z.string().optional(),
+    /**
+     * Issue #214 — when `false`, the runtime rejects dynamic URLs
+     * whose params aren't in `staticParams` with a 404 instead of
+     * falling through to SSR. Undefined or `true` preserves the
+     * default "SSR on miss" behavior (Next.js parity).
+     */
+    dynamicParams: z.boolean().optional(),
+    /**
+     * Issue #214 — populated at build time from `generateStaticParams`.
+     * Consulted by the runtime #214 guard together with `dynamicParams`
+     * to decide whether an incoming param set is allowed. Scalar values
+     * are strings; catch-all values are string arrays.
+     */
+    staticParams: z.array(StaticParamSet).optional(),
   })
   .refine(
     (route) => {
@@ -159,6 +180,10 @@ export const RouteSpec = z.discriminatedUnion("kind", [
     loadingModule: z.string().optional(),
     errorModule: z.string().optional(),
     notFoundModule: z.string().optional(),
+    // Issue #214 — see PageRouteSpec for contract. Kept optional so
+    // existing manifests load unchanged (default behavior: dynamic SSR).
+    dynamicParams: z.boolean().optional(),
+    staticParams: z.array(StaticParamSet).optional(),
   }),
   z.object({
     ...RouteSpecBase,

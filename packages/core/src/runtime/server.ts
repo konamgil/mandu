@@ -1,5 +1,5 @@
 import type { Server } from "bun";
-import type { RoutesManifest, RouteSpec, HydrationConfig } from "../spec/schema";
+import type { RoutesManifest, RouteSpec, HydrationConfig, StaticParamSetSchema } from "../spec/schema";
 import type { BundleManifest } from "../bundler/types";
 import type { ManduFilling, RenderMode } from "../filling/filling";
 import { ManduContext, CookieManager } from "../filling/context";
@@ -531,6 +531,14 @@ export interface ServerOptions {
    * `secureMiddleware`, `rateLimitMiddleware`).
    */
   middleware?: Middleware[];
+  /**
+   * Phase 18.τ — plugins contributing `defineMiddlewareChain()` +
+   * lifecycle observers. Plugin middleware are PREPENDED to
+   * `options.middleware` so they run BEFORE user-declared layers. Both
+   * fields are optional; omission is a zero-overhead passthrough.
+   */
+  plugins?: readonly import("../plugins/hooks").ManduPlugin[];
+  configHooks?: Partial<import("../plugins/hooks").ManduHooks>;
   /**
    * Phase 18.κ — tRPC-like typed RPC endpoints.
    *
@@ -3404,6 +3412,57 @@ function stripLocaleForRedirectCheck(
 }
 // ─── End Phase 18.μ ──────────────────────────────────────────────────────
 
+// ─── Issue #214 — dynamicParams guard helper ────────────────────────────────
+/**
+ * True when the incoming `params` from the router matches one of the
+ * enumerated sets in `staticParams` (populated at build time from
+ * `generateStaticParams`). Used by the runtime #214 guard to decide
+ * whether a `dynamicParams: false` page must 404.
+ *
+ * Matching rules mirror `bundler/generate-static-params.ts`:
+ *   - Scalar segments compare as exact strings.
+ *   - Catch-all segments compare as slash-joined strings (the router
+ *     always materializes wildcards as a single string, whereas
+ *     `generateStaticParams` emits `string[]` — we normalize both
+ *     sides to the joined form for equality).
+ *
+ * When `staticParams` is undefined or empty, no URL can match — the
+ * route effectively becomes "no dynamic URLs at all", which is the
+ * documented behavior of `dynamicParams: false` + `generateStaticParams: []`.
+ */
+function paramsInStaticSet(
+  params: Record<string, string>,
+  staticParams: StaticParamSetSchema[] | undefined
+): boolean {
+  if (!staticParams || staticParams.length === 0) return false;
+  const paramKeys = Object.keys(params);
+  for (const entry of staticParams) {
+    if (!entry) continue;
+    let allMatch = true;
+    for (const key of paramKeys) {
+      const requestValue = params[key];
+      const declared = (entry as Record<string, string | string[] | undefined>)[key];
+      if (declared === undefined) {
+        // Optional catch-all that wasn't declared — router gives empty
+        // string in that case; anything else is a miss.
+        if (requestValue !== "") {
+          allMatch = false;
+          break;
+        }
+        continue;
+      }
+      const declaredJoined = Array.isArray(declared) ? declared.join("/") : declared;
+      if (declaredJoined !== requestValue) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) return true;
+  }
+  return false;
+}
+// ─── End Issue #214 ─────────────────────────────────────────────────────────
+
 async function handleRequestInternal(
   req: Request,
   router: Router,
@@ -3707,6 +3766,64 @@ async function handleRequestInternal(
 
   const { route, params } = match;
 
+  // ─── Issue #214 — dynamicParams guard ─────────────────────────────────────
+  // Runs AFTER γ's prerendered pass-through (step 0.5) and BEFORE ζ's
+  // per-route ISR cache dispatch (which lives inside `handlePageRoute`).
+  //
+  // Contract (Next.js parity):
+  //   - Page route opted into `dynamicParams: false` AND has `staticParams`
+  //     populated from `generateStaticParams` at build time → the incoming
+  //     params MUST match one of the known sets. Otherwise: 404.
+  //   - `dynamicParams: true` (or undefined) → default behavior unchanged.
+  //     Any dynamic URL falls through to SSR just like before.
+  //   - API + metadata routes are never gated — `dynamicParams` is
+  //     page-only.
+  //
+  // The guard short-circuits with `renderNotFoundPage` so per-route
+  // `not-found.tsx` / global `notFoundHandler` / built-in JSON 404 all
+  // render correctly without recursing through SSR. Cookies are not
+  // applied because no page loader has run yet — this check precedes
+  // loader dispatch by design.
+  if (
+    route.kind === "page" &&
+    (route as { dynamicParams?: boolean }).dynamicParams === false
+  ) {
+    const staticParams = (route as { staticParams?: StaticParamSetSchema[] })
+      .staticParams;
+    if (!paramsInStaticSet(params, staticParams)) {
+      const pageRouteForNF = route as {
+        id: string;
+        pattern: string;
+        layoutChain?: string[];
+        hydration?: HydrationConfig;
+        streaming?: boolean;
+        notFoundModule?: string;
+      };
+      const nfResponse = await renderNotFoundPage(
+        req,
+        pageRouteForNF,
+        params,
+        registry,
+        /* pageCookies */ undefined,
+        /* layoutCookies */ undefined,
+        /* layoutData */ undefined,
+        new Response(
+          JSON.stringify({
+            message: `No static param match for ${pathname}`,
+          }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        )
+      );
+      if (settings.cors && isCorsRequest(req)) {
+        const corsOptions: CorsOptions =
+          typeof settings.cors === "object" ? settings.cors : {};
+        return ok(applyCorsToResponse(nfResponse, req, corsOptions));
+      }
+      return ok(nfResponse);
+    }
+  }
+  // ─── End Issue #214 ───────────────────────────────────────────────────────
+
   // 3. 라우트 종류별 처리
   if (route.kind === "api") {
     const rateLimitOptions = settings.rateLimit;
@@ -3860,6 +3977,8 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     scheduler: schedulerOption,
     i18n: i18nOption,
     messages: messagesOption,
+    plugins: pluginsOption,
+    configHooks: configHooksOption,
   } = options;
 
   // Phase 18.μ — validate i18n + messages shape. Both are branded via
@@ -3881,6 +4000,18 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   // Phase 18.ε — build the request-level middleware chain once at boot.
   // `compose()` returns a passthrough when the list is empty; storing
   // `undefined` for "no middleware" keeps the hot path branch-free.
+  //
+  // Phase 18.τ — plugin-contributed middleware via `defineMiddlewareChain()`
+  // is resolved asynchronously OUTSIDE `startServer()` (which is sync).
+  // Drivers call `resolvePluginMiddleware({ plugins, configHooks, rootDir,
+  // mode })` and pass the resulting `Middleware[]` as a PREFIX of
+  // `options.middleware` before calling `startServer()`.
+  //
+  // `pluginsOption` / `configHooksOption` are still carried here so that
+  // lifecycle observers fired by drivers can reuse the same bundle; they
+  // are NOT consulted for the middleware chain itself.
+  void pluginsOption;
+  void configHooksOption;
   const middlewareChain: ComposedHandler | undefined =
     middlewareOption && middlewareOption.length > 0
       ? composeMiddleware(...middlewareOption)

@@ -13,6 +13,11 @@ import type { FSRouteConfig, FSScannerConfig, ScanResult } from "./fs-types";
 import { DEFAULT_SCANNER_CONFIG } from "./fs-types";
 import { scanRoutes } from "./fs-scanner";
 import { loadManduConfig } from "../config";
+import type { ManduPlugin, ManduHooks } from "../plugins/hooks";
+import {
+  runOnRouteRegistered,
+  runOnManifestBuilt,
+} from "../plugins/runner";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -41,6 +46,20 @@ export interface GenerateOptions {
 
   /** 출력 파일 경로 (지정 시 파일로 저장) */
   outputPath?: string;
+
+  /**
+   * Phase 18.τ — optional plugins + config-level hooks bundle.
+   *
+   * When provided, `generateManifest()` fires two plugin hooks:
+   *   - `onRouteRegistered(route)` — once per scanned route.
+   *   - `onManifestBuilt(manifest)` — after assembly, BEFORE the
+   *     manifest is written to disk. A plugin may return a mutated
+   *     manifest (pipe semantics across plugins).
+   *
+   * Omitted → zero overhead, identical to pre-τ behaviour.
+   */
+  plugins?: readonly ManduPlugin[];
+  configHooks?: Partial<ManduHooks>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -244,11 +263,35 @@ export async function generateManifest(
   }
 
   // FS Routes 매니페스트 생성
-  const manifest = scanResultToManifest(scanResult);
+  let manifest = scanResultToManifest(scanResult);
   const warnings: string[] = [];
 
   // Auto-linking: spec/slots/, spec/contracts/ 자동 연결
   await resolveAutoLinks(manifest, rootDir);
+
+  // Phase 18.τ — fire plugin hooks AFTER auto-linking so plugins see the
+  // final RouteSpec (including slot/contract/client modules). Both hooks
+  // are opt-in; zero-overhead when `options.plugins` / `options.configHooks`
+  // are omitted.
+  const pluginArgs = {
+    plugins: options.plugins ?? [],
+    configHooks: options.configHooks,
+  };
+  if (pluginArgs.plugins.length > 0 || pluginArgs.configHooks) {
+    for (const route of manifest.routes) {
+      const { errors } = await runOnRouteRegistered(route, pluginArgs);
+      for (const e of errors) {
+        warnings.push(
+          `onRouteRegistered[${e.source}] ${route.id}: ${e.error.message}`
+        );
+      }
+    }
+    const manifestReport = await runOnManifestBuilt(manifest, pluginArgs);
+    manifest = manifestReport.result;
+    for (const e of manifestReport.errors) {
+      warnings.push(`onManifestBuilt[${e.source}]: ${e.error.message}`);
+    }
+  }
 
   // 기존 매니페스트에서 사용자 설정 필드 보존 (clientModule, hydration 등)
   const outputPath = options.outputPath ?? ".mandu/routes.manifest.json";
@@ -271,6 +314,26 @@ export async function generateManifest(
         }
         if (prev.hydration && !route.hydration) {
           route.hydration = prev.hydration;
+        }
+        // Issue #214 — preserve prerender-time fields (`dynamicParams`,
+        // `staticParams`) across manifest rescans. `mandu build`'s prerender
+        // phase stamps these onto the manifest; a subsequent `mandu dev`
+        // rescan must not wipe them out.
+        if (route.kind === "page" && prev.kind === "page") {
+          const prevPage = prev as typeof prev & {
+            dynamicParams?: boolean;
+            staticParams?: unknown[];
+          };
+          const routePage = route as typeof route & {
+            dynamicParams?: boolean;
+            staticParams?: unknown[];
+          };
+          if (prevPage.dynamicParams !== undefined && routePage.dynamicParams === undefined) {
+            routePage.dynamicParams = prevPage.dynamicParams;
+          }
+          if (prevPage.staticParams !== undefined && routePage.staticParams === undefined) {
+            routePage.staticParams = prevPage.staticParams;
+          }
         }
       }
     }

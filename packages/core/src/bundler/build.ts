@@ -20,6 +20,7 @@ import { defaultBundlerPlugins } from "./plugins";
 import type { BunPlugin } from "bun";
 import { mark, measure } from "../perf";
 import { HMR_PERF } from "../perf/hmr-markers";
+import { runOnBundleComplete } from "../plugins/runner";
 import {
   readVendorCache,
   writeVendorCache,
@@ -40,13 +41,21 @@ import fs from "fs/promises";
  * sync as the default set grows.
  */
 function manduDefaultPlugins(options: BundlerOptions): BunPlugin[] {
-  return defaultBundlerPlugins({
+  const defaults = defaultBundlerPlugins({
     config: {
       guard: {
         blockGeneratedImport: options.blockGeneratedImport,
       },
     },
   });
+  // Phase 18.τ — append consumer-supplied bundler plugins (from
+  // `defineBundlerPlugin()` hook, resolved by the CLI or library caller).
+  // Runs AFTER Mandu defaults so user transforms see already-resolved
+  // imports / aliases.
+  if (options.pluginBundlerPlugins && options.pluginBundlerPlugins.length > 0) {
+    return [...defaults, ...options.pluginBundlerPlugins];
+  }
+  return defaults;
 }
 
 /**
@@ -1795,6 +1804,22 @@ export async function buildClientBundles(
   const startTime = performance.now();
   const outputs: BundleOutput[] = [];
   const errors: string[] = [];
+
+  // Phase 18.τ — fire `onBundleComplete(stats)` before returning. Helper
+  // is inlined here so every return path in this function can opt in
+  // with a single `await fireOnBundleComplete(stats);` call without
+  // leaking plugin plumbing into the hot path.
+  const fireOnBundleComplete = async (stats: BundleStats): Promise<void> => {
+    const plugins = options.plugins ?? [];
+    if (plugins.length === 0 && !options.configHooks) return;
+    const { errors: hookErrors } = await runOnBundleComplete(stats, {
+      plugins,
+      configHooks: options.configHooks,
+    });
+    for (const e of hookErrors) {
+      errors.push(`onBundleComplete[${e.source}]: ${e.error.message}`);
+    }
+  };
   const env = (process.env.NODE_ENV === "production" ? "production" : "development") as
     | "development"
     | "production";
@@ -2165,6 +2190,9 @@ export async function buildClientBundles(
 
   // 7. 통계 계산
   const stats = calculateStats(outputs, startTime);
+
+  // Phase 18.τ — fire onBundleComplete(stats) before return.
+  await fireOnBundleComplete(stats);
 
   measure("bundler:full", "bundler:full");
   return {

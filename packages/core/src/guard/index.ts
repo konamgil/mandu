@@ -302,6 +302,20 @@ export {
 } from "./rule-presets";
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Guard Graph - Phase 18.π dependency graph visualization
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  analyzeDependencyGraph,
+  renderGraphHtml,
+  type ModuleNode,
+  type ImportEdge,
+  type Layer as GraphLayer,
+  type GraphSummary,
+  type DependencyGraph,
+} from "./graph";
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Architecture Negotiation - AI-Framework 협상
 // ═══════════════════════════════════════════════════════════════════════════
 

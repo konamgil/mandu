@@ -45,9 +45,21 @@ export type StaticParamSet = Record<string, string | string[]>;
  * the full page-module type here — this module is invoked from the
  * build orchestrator where modules are dynamic-imported, and the only
  * thing we need is the optional `generateStaticParams` export.
+ *
+ * Issue #214 — `dynamicParams` opts the route out of SSR fallback for
+ * param values that aren't in the `generateStaticParams` set. When
+ * `dynamicParams === false`, the runtime returns 404 for any dynamic
+ * URL whose params don't match a prerendered entry. Defaults to `true`
+ * (Next.js parity) which preserves the existing fall-through-to-SSR
+ * behavior.
  */
 export interface PageModuleWithStaticParams {
   generateStaticParams?: () => Promise<StaticParamSet[]> | StaticParamSet[];
+  /**
+   * `false` → out-of-set param values produce a 404 at runtime.
+   * `true`  → (default) fall through to SSR for any dynamic URL.
+   */
+  dynamicParams?: boolean;
 }
 
 /**

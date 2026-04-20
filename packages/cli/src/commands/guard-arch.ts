@@ -20,10 +20,12 @@ import {
   generateGuardMarkdownReport,
   generateHTMLReport,
   validateAndReport,
+  analyzeDependencyGraph,
+  renderGraphHtml,
   type GuardConfig,
   type GuardPreset,
 } from "@mandujs/core";
-import { writeFile } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import { isDirectory, resolveFromCwd } from "../util/fs";
 import { getFsRoutesGuardPolicy } from "../util/guard-policy";
 import { resolveOutputFormat, type OutputFormat } from "../util/output";
@@ -52,6 +54,13 @@ export interface GuardArchOptions {
   saveStats?: boolean;
   /** Show trend analysis */
   showTrend?: boolean;
+  /**
+   * Emit an interactive dependency graph to .mandu/guard/.
+   *
+   * - `true` / `"html"` → emits both graph.html + graph.json
+   * - `"json"` → JSON only (for CI consumption; skips HTML render)
+   */
+  graph?: boolean | "html" | "json";
 }
 
 function inferReportFormat(output?: string): "json" | "markdown" | "html" | undefined {
@@ -222,6 +231,31 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
         for (const rec of trend.recommendations) {
           console.log(`      - ${rec}`);
         }
+      }
+    }
+  }
+
+  // Phase 18.π — Dependency graph emission (--graph)
+  if (options.graph) {
+    const mode = options.graph === "json" ? "json" : "html";
+    const outDir = path.resolve(rootDir, ".mandu/guard");
+    await mkdir(outDir, { recursive: true });
+    const graph = await analyzeDependencyGraph(guardConfig, rootDir);
+    const jsonPath = path.join(outDir, "graph.json");
+    await writeFile(jsonPath, JSON.stringify(graph, null, 2));
+    if (mode === "html") {
+      const htmlPath = path.join(outDir, "graph.html");
+      await writeFile(htmlPath, renderGraphHtml(graph));
+      if (resolvedFormat === "console") {
+        console.log(
+          `\n📊 Graph written to .mandu/guard/graph.html (${graph.summary.nodes} modules, ${graph.summary.edges} edges, ${graph.summary.violationEdges} violations)`
+        );
+      }
+    } else {
+      if (resolvedFormat === "console") {
+        console.log(
+          `\n📊 Graph written to .mandu/guard/graph.json (${graph.summary.nodes} modules, ${graph.summary.edges} edges, ${graph.summary.violationEdges} violations)`
+        );
       }
     }
   }

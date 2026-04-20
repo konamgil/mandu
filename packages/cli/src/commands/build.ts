@@ -259,6 +259,26 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
           console.warn(`      ${err}`);
         }
       }
+
+      // ─── Issue #214 ─────────────────────────────────────────────────────
+      // Persist the manifest back to disk so the runtime picks up the
+      // `dynamicParams` + `staticParams` fields that `prerenderRoutes`
+      // stamped onto the in-memory route specs. Without this write, the
+      // guard has nothing to consult on boot.
+      const manifestJsonPath = path.join(cwd, ".mandu/routes.manifest.json");
+      try {
+        await fs.writeFile(
+          manifestJsonPath,
+          JSON.stringify(manifest, null, 2),
+          "utf-8"
+        );
+      } catch (writeErr) {
+        console.warn(
+          `   ⚠️  Failed to update routes.manifest.json after prerender:`,
+          writeErr instanceof Error ? writeErr.message : String(writeErr)
+        );
+      }
+      // ─── End Issue #214 ─────────────────────────────────────────────────
     } catch (error) {
       console.warn("   ⚠️  Prerendering skipped:", error instanceof Error ? error.message : String(error));
     }

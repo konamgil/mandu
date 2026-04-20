@@ -13,6 +13,7 @@ import { kitchenTools } from "./kitchen.js";
 import { ateTools } from "./ate.js";
 import { requestRuntimeCache } from "../utils/runtime-control.js";
 import { requireLock } from "../tx-lock.js";
+import { runExtendedDiagnose, buildReport, type DiagnoseCheckResult } from "@mandujs/core/diagnose";
 import path from "path";
 import fs from "fs/promises";
 
@@ -43,7 +44,11 @@ export const compositeToolDefinitions: Tool[] = [
     name: "mandu.diagnose",
     description:
       "Run all diagnostic checks in parallel and return a unified health report. " +
-      "Combines: kitchen_errors + guard_check + validate_contracts + validate_manifest.",
+      "Legacy checks: kitchen_errors + guard_check + validate_contracts + validate_manifest. " +
+      "Extended checks (Issue #215): manifest_freshness, prerender_pollution, cloneelement_warnings, " +
+      "dev_artifacts_in_prod, package_export_gaps. Every check uses the unified " +
+      "{ ok, rule, severity, message, suggestion?, details? } shape. " +
+      "`healthy: false` when any check has severity='error'; warnings do not block.",
     annotations: {
       readOnlyHint: true,
     },
@@ -251,25 +256,78 @@ export function compositeTools(projectRoot: string) {
 
     "mandu.diagnose": async (args: Record<string, unknown>) => {
       const { autoFix = false } = args as { autoFix?: boolean };
-      const [kitchenResult, guardResult, contractResult, manifestResult] = await Promise.all([
+
+      // Run legacy (structural) checks + extended (#215) checks in parallel.
+      const [kitchenResult, guardResult, contractResult, manifestResult, extendedReport] = await Promise.all([
         kitchen["mandu.kitchen.errors"]({ clear: false }).catch((e: Error) => ({ error: e.message })),
         guard["mandu.guard.check"]({ autoCorrect: autoFix }).catch((e: Error) => ({ error: e.message })),
         contract["mandu.contract.validate"]({}).catch((e: Error) => ({ error: e.message })),
         spec["mandu.manifest.validate"]({}).catch((e: Error) => ({ error: e.message })),
+        runExtendedDiagnose(projectRoot).catch((e: Error) => ({
+          healthy: false,
+          errorCount: 1,
+          warningCount: 0,
+          checks: [{ ok: false, rule: "diagnose_internal_error", severity: "error" as const, message: e.message }],
+          summary: { total: 1, passed: 0, failed: 1 },
+        })),
       ]);
-      const checks = [
-        { name: "kitchen_errors", result: kitchenResult },
-        { name: "guard_check", result: guardResult },
-        { name: "contract_validation", result: contractResult },
-        { name: "manifest_validation", result: manifestResult },
-      ];
-      const isFail = (c: typeof checks[number]) => {
-        const r = c.result as Record<string, unknown>;
-        return r.error || r.passed === false || r.valid === false;
+
+      // Normalize each legacy check into the unified shape.
+      const normalizeLegacy = (rule: string, result: unknown): DiagnoseCheckResult => {
+        const r = (typeof result === "object" && result !== null) ? result as Record<string, unknown> : {};
+        const errorMsg = typeof r.error === "string" ? r.error : undefined;
+        const failed =
+          !!errorMsg || r.passed === false || r.valid === false;
+        if (!failed) {
+          return {
+            ok: true,
+            rule,
+            message: `${rule} passed`,
+            details: r,
+          };
+        }
+        return {
+          ok: false,
+          rule,
+          severity: "error",
+          message: errorMsg ?? `${rule} failed`,
+          details: r,
+        };
       };
+
+      const legacyChecks: DiagnoseCheckResult[] = [
+        normalizeLegacy("kitchen_errors", kitchenResult),
+        normalizeLegacy("guard_check", guardResult),
+        normalizeLegacy("contract_validation", contractResult),
+        normalizeLegacy("manifest_validation", manifestResult),
+      ];
+
+      // Tighten manifest_validation by cross-checking against the fresh
+      // bundle-manifest check. Legacy manifest_validation only inspects
+      // the FS-routes manifest; it passes even when the bundle manifest
+      // is stale (the #211 gap). If manifest_freshness is unhealthy,
+      // legacy manifest_validation's pass is misleading — downgrade it.
+      const freshness = extendedReport.checks.find((c) => c.rule === "manifest_freshness");
+      if (freshness && !freshness.ok && freshness.severity === "error") {
+        const legacyMv = legacyChecks.find((c) => c.rule === "manifest_validation");
+        if (legacyMv && legacyMv.ok) {
+          legacyMv.ok = false;
+          legacyMv.severity = "warning";
+          legacyMv.message = "FS-routes manifest loaded, but bundle manifest is stale (see manifest_freshness).";
+          legacyMv.suggestion = "Run `mandu build` to regenerate the bundle manifest.";
+        }
+      }
+
+      const allChecks: DiagnoseCheckResult[] = [...legacyChecks, ...extendedReport.checks];
+      const report = buildReport(allChecks);
+
       return {
-        healthy: !checks.some(isFail), autoFix, checks,
-        summary: { total: checks.length, passed: checks.filter((c) => !isFail(c)).length, failed: checks.filter(isFail).length },
+        healthy: report.healthy,
+        autoFix,
+        errorCount: report.errorCount,
+        warningCount: report.warningCount,
+        checks: report.checks,
+        summary: report.summary,
       };
     },
 

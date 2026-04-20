@@ -164,4 +164,24 @@ export interface BundlerOptions {
    * resolved config flag straight through.
    */
   blockGeneratedImport?: boolean;
+
+  /**
+   * Phase 18.τ — consumer-supplied `BunPlugin`s contributed via plugin
+   * `defineBundlerPlugin()` hook. Composed AFTER Mandu's defaults so
+   * user transforms see already-resolved imports. Omitted / empty
+   * array is a zero-overhead passthrough.
+   *
+   * Resolved by the CLI (`cli/commands/build.ts`, `cli/commands/dev.ts`)
+   * via `runDefineBundlerPlugin()` and fed into every `safeBuild(...)`
+   * call-site; library users may populate it directly.
+   */
+  pluginBundlerPlugins?: readonly import("bun").BunPlugin[];
+
+  /**
+   * Phase 18.τ — fire per-build `onBundleComplete(stats)` hook after
+   * `buildClientBundles()` finishes. Paired with `configHooks` for
+   * config-level hooks. Zero-overhead when both are omitted.
+   */
+  plugins?: readonly import("../plugins/hooks").ManduPlugin[];
+  configHooks?: Partial<import("../plugins/hooks").ManduHooks>;
 }
