@@ -1,5 +1,43 @@
 # @mandujs/cli
 
+## 0.28.10
+
+### Patch Changes
+
+- [`e77b035`](https://github.com/konamgil/mandu/commit/e77b035dd28cc256a596fe5221f781c5609645e9) Thanks [@konamgil](https://github.com/konamgil)! - feat(core,ate,mcp,cli): Phase C — primitives + mutation + RPC + oracle
+
+  Ships ATE v2 Phase C (docs/ate/phase-c-spec.md, 364-line spec):
+
+  - 5 Mandu-specific assertion primitives in @mandujs/core/testing:
+    expectContract(strict/loose/drift-tolerant), expectNavigation,
+    waitForIsland (data-hydrated polling), assertStreamBoundary
+    (<!--$--> marker count + shell budget), expectSemantic
+    (agent-delegated, CI non-blocking).
+  - 9 contract-semantic mutation operators (remove_required_field,
+    narrow_type, widen_enum, flip_nullable, rename_field,
+    swap_sibling_type, skip_middleware, early_return,
+    bypass_validation). runner writes tmpdir, kills/survives/timeout
+    classification. mutationScore + severity report via
+    mandu_ate_mutate + mandu_ate_mutation_report.
+  - RPC parity: defineRpc extractor emits rpc_procedure nodes,
+    context scope "rpc" with dot-notation id, boundary probe works
+    automatically on input schemas.
+  - Oracle queue: .mandu/ate-oracle-queue.jsonl, mandu_ate_oracle_pending /
+    verdict / replay. Semantic judgments deferred to agent session,
+    deterministic CI never blocked. promoteVerdicts regresses past
+    fails on next run.
+  - Prompt catalog +3: island_hydration, streaming_ssr, rpc_procedure.
+
+  Test counts: ate 575 / mcp 220. Typecheck clean across 7 packages.
+  ATE v2 core surface complete.
+
+- Updated dependencies [[`e77b035`](https://github.com/konamgil/mandu/commit/e77b035dd28cc256a596fe5221f781c5609645e9)]:
+  - @mandujs/core@0.39.0
+  - @mandujs/ate@0.24.0
+  - @mandujs/mcp@0.27.0
+  - @mandujs/edge@0.4.21
+  - @mandujs/skills@17.0.0
+
 ## 0.28.9
 
 ### Patch Changes

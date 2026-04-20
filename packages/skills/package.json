@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/skills",
-  "version": "16.0.0",
+  "version": "17.0.0",
   "type": "module",
   "description": "Claude Code skills and plugin for Mandu framework",
   "license": "MPL-2.0",
@@ -45,7 +45,7 @@
     "bun": ">=1.3.12"
   },
   "peerDependencies": {
-    "@mandujs/core": ">=0.37.0"
+    "@mandujs/core": ">=0.39.0"
   },
   "peerDependenciesMeta": {
     "@mandujs/core": {
