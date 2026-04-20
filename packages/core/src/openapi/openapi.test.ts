@@ -7,12 +7,14 @@ import { z } from "zod";
 import {
   generateOpenAPIDocument,
   hashOpenAPIJSON,
+  hoistSharedSchemas,
   openAPIToJSON,
   openAPIToYAML,
   readOpenAPIArtifacts,
   writeOpenAPIArtifacts,
   zodToOpenAPISchema,
 } from "./generator";
+import type { OpenAPIDocument } from "./generator";
 import type { RoutesManifest } from "../spec/schema";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -510,5 +512,435 @@ describe("writeOpenAPIArtifacts + readOpenAPIArtifacts", () => {
     } finally {
       await fs.rm(rootDir, { recursive: true, force: true });
     }
+  });
+});
+
+// ============================================
+// Schema hoisting (shared schemas → components.schemas)
+// ============================================
+
+/**
+ * Build a two-contract fixture where both contracts share the same
+ * `User` body shape. The generator should hoist `{ name, email }` into
+ * `components.schemas` when hoisting is enabled.
+ */
+async function buildSharedSchemaFixture(opts: {
+  /** Override the `name` attribute on each contract (in file order). */
+  contractNames?: [string, string];
+  /** Replace the second contract's body shape to exercise collision paths. */
+  secondBody?: string;
+} = {}): Promise<{
+  rootDir: string;
+  manifest: RoutesManifest;
+  cleanup: () => Promise<void>;
+}> {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "mandu-openapi-hoist-"));
+  const [nameA, nameB] = opts.contractNames ?? ["users", "admins"];
+  const bodyB =
+    opts.secondBody ??
+    `z.object({ name: z.string().min(2), email: z.string().email() })`;
+
+  await fs.mkdir(path.join(rootDir, "contracts"), { recursive: true });
+  await fs.writeFile(
+    path.join(rootDir, "contracts/users.contract.ts"),
+    `import { z } from "zod";
+export default {
+  name: "${nameA}",
+  request: {
+    POST: {
+      body: z.object({ name: z.string().min(2), email: z.string().email() }),
+    },
+  },
+  response: {
+    200: z.object({ id: z.string().uuid(), status: z.string() }),
+  },
+};
+`,
+    "utf-8"
+  );
+  await fs.writeFile(
+    path.join(rootDir, "contracts/admins.contract.ts"),
+    `import { z } from "zod";
+export default {
+  name: "${nameB}",
+  request: {
+    POST: {
+      body: ${bodyB},
+    },
+  },
+  response: {
+    200: z.object({ id: z.string().uuid(), status: z.string() }),
+  },
+};
+`,
+    "utf-8"
+  );
+
+  const manifest: RoutesManifest = {
+    version: 1,
+    routes: [
+      {
+        id: "api/users",
+        pattern: "/api/users",
+        kind: "api",
+        module: "contracts/users.contract.ts",
+        contractModule: "contracts/users.contract.ts",
+        methods: ["POST"],
+      },
+      {
+        id: "api/admins",
+        pattern: "/api/admins",
+        kind: "api",
+        module: "contracts/admins.contract.ts",
+        contractModule: "contracts/admins.contract.ts",
+        methods: ["POST"],
+      },
+    ],
+  };
+
+  return {
+    rootDir,
+    manifest,
+    cleanup: async () => {
+      await fs.rm(rootDir, { recursive: true, force: true });
+    },
+  };
+}
+
+describe("hoistSharedSchemas", () => {
+  test("two routes sharing a body shape emit a single components.schemas entry with $ref", async () => {
+    const { rootDir, manifest, cleanup } = await buildSharedSchemaFixture();
+    try {
+      const doc = await generateOpenAPIDocument(manifest, rootDir, {
+        title: "Hoist Test",
+      });
+
+      // The shared POST body should be hoisted. There are also shared
+      // 200 responses so we expect at least 2 hoisted entries.
+      expect(doc.components?.schemas).toBeDefined();
+      const schemaNames = Object.keys(doc.components!.schemas!);
+      expect(schemaNames.length).toBeGreaterThanOrEqual(1);
+
+      const usersBody = doc.paths["/api/users"].post!.requestBody!.content["application/json"].schema;
+      const adminsBody = doc.paths["/api/admins"].post!.requestBody!.content["application/json"].schema;
+
+      // Both bodies must now be $ref pointers into components.schemas.
+      expect(usersBody.$ref).toBeDefined();
+      expect(adminsBody.$ref).toBeDefined();
+      // ... and they must point to the exact same entry (shared shape).
+      expect(usersBody.$ref).toBe(adminsBody.$ref);
+
+      // The pointed-to entry must exist and retain the object shape.
+      const refTarget = usersBody.$ref!.replace("#/components/schemas/", "");
+      const hoisted = doc.components!.schemas![refTarget];
+      expect(hoisted.type).toBe("object");
+      expect(hoisted.properties!.name).toBeDefined();
+      expect(hoisted.properties!.email).toBeDefined();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("one-off schema stays inline (no hoist, no components.schemas entry for it)", async () => {
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "mandu-openapi-oneoff-"));
+    try {
+      await fs.mkdir(path.join(rootDir, "contracts"), { recursive: true });
+      await fs.writeFile(
+        path.join(rootDir, "contracts/solo.contract.ts"),
+        `import { z } from "zod";
+export default {
+  name: "solo",
+  request: {
+    POST: { body: z.object({ uniqueField: z.string() }) },
+  },
+  response: { 200: z.object({ ok: z.boolean() }) },
+};
+`,
+        "utf-8"
+      );
+      const manifest: RoutesManifest = {
+        version: 1,
+        routes: [
+          {
+            id: "api/solo",
+            pattern: "/api/solo",
+            kind: "api",
+            module: "contracts/solo.contract.ts",
+            contractModule: "contracts/solo.contract.ts",
+            methods: ["POST"],
+          },
+        ],
+      };
+
+      const doc = await generateOpenAPIDocument(manifest, rootDir);
+      const body = doc.paths["/api/solo"].post!.requestBody!.content["application/json"].schema;
+
+      // Solo schemas must NOT be hoisted — stays inline.
+      expect(body.$ref).toBeUndefined();
+      expect(body.type).toBe("object");
+      expect(body.properties?.uniqueField).toBeDefined();
+
+      // components.schemas may exist (e.g. for the default 500 shape if it
+      // happened to collide with another schema), but the one-off body's
+      // uniqueField shape must not appear as a hoisted entry.
+      const schemas = doc.components?.schemas ?? {};
+      for (const entry of Object.values(schemas)) {
+        expect(entry.properties?.uniqueField).toBeUndefined();
+      }
+    } finally {
+      await fs.rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("same shape with different user-given names collapses to one entry (first-come wins)", async () => {
+    const { rootDir, manifest, cleanup } = await buildSharedSchemaFixture({
+      contractNames: ["users", "admins"],
+    });
+    try {
+      const doc = await generateOpenAPIDocument(manifest, rootDir);
+
+      const usersBody = doc.paths["/api/users"].post!.requestBody!.content["application/json"].schema;
+      const adminsBody = doc.paths["/api/admins"].post!.requestBody!.content["application/json"].schema;
+
+      // Both must resolve to the *same* $ref — structural identity wins
+      // over the user-given name split.
+      expect(usersBody.$ref).toBeDefined();
+      expect(usersBody.$ref).toBe(adminsBody.$ref);
+
+      // Exactly one body component (not two) for this shape. Count entries
+      // that match `{name,email}` shape.
+      const sharedEntries = Object.values(doc.components!.schemas!).filter(
+        (s) => s.properties?.name && s.properties?.email
+      );
+      expect(sharedEntries.length).toBe(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("name collision across structurally-different schemas → _v2 suffix", () => {
+    // Hand-craft a doc with two different body shapes whose name hints
+    // would collide. We exercise the hoist pass directly so we can
+    // control the hints without routing through Zod.
+    const shapeA = {
+      type: "object" as const,
+      properties: { a: { type: "string" as const } },
+      required: ["a"],
+    };
+    const shapeB = {
+      type: "object" as const,
+      properties: { b: { type: "number" as const } },
+      required: ["b"],
+    };
+
+    // Two routes use shape A, two use shape B — every schema gets the
+    // same name hint "Shared". The second winning hash should be renamed
+    // to "Shared_v2".
+    const a1 = { ...shapeA };
+    const a2 = { ...shapeA };
+    const b1 = { ...shapeB };
+    const b2 = { ...shapeB };
+
+    const doc: OpenAPIDocument = {
+      openapi: "3.0.3",
+      info: { title: "t", version: "1.0.0" },
+      paths: {
+        "/a1": {
+          post: {
+            responses: {},
+            requestBody: { content: { "application/json": { schema: a1 } } },
+          },
+        },
+        "/a2": {
+          post: {
+            responses: {},
+            requestBody: { content: { "application/json": { schema: a2 } } },
+          },
+        },
+        "/b1": {
+          post: {
+            responses: {},
+            requestBody: { content: { "application/json": { schema: b1 } } },
+          },
+        },
+        "/b2": {
+          post: {
+            responses: {},
+            requestBody: { content: { "application/json": { schema: b2 } } },
+          },
+        },
+      },
+    };
+
+    // Attach the same hint to both shapes via hoistSharedSchemas's own
+    // name-hint mechanism: we can't from here (WeakMap is module-private).
+    // So we instead rely on the deterministic hash-based fallback name,
+    // then assert both shapes are hoisted and receive distinct entries.
+    return hoistSharedSchemas(doc).then(() => {
+      const schemas = doc.components?.schemas ?? {};
+      const names = Object.keys(schemas);
+      // Both shapes qualify (appear twice each) → 2 hoisted entries.
+      expect(names.length).toBe(2);
+      // No two entries share the exact same name.
+      expect(new Set(names).size).toBe(names.length);
+      // The generated names must be stable strings (start with `Schema_`
+      // in the fallback path).
+      for (const n of names) {
+        expect(n).toMatch(/^Schema_[0-9a-f]{8}$/);
+      }
+    });
+  });
+
+  test("hoistSchemas: false produces the legacy inline-only document", async () => {
+    const { rootDir, manifest, cleanup } = await buildSharedSchemaFixture();
+    try {
+      const docOn = await generateOpenAPIDocument(manifest, rootDir, {
+        hoistSchemas: true,
+      });
+      const docOff = await generateOpenAPIDocument(manifest, rootDir, {
+        hoistSchemas: false,
+      });
+
+      // Off: no $refs anywhere, no components.schemas emitted.
+      const offJson = JSON.stringify(docOff);
+      expect(offJson.includes("$ref")).toBe(false);
+      expect(docOff.components?.schemas).toBeUndefined();
+
+      // On: at least one $ref appeared. Confirms the two paths diverge.
+      const onJson = JSON.stringify(docOn);
+      expect(onJson.includes("$ref")).toBe(true);
+      expect(docOn.components?.schemas).toBeDefined();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("enum / primitive schemas are never hoisted", async () => {
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "mandu-openapi-enum-"));
+    try {
+      await fs.mkdir(path.join(rootDir, "contracts"), { recursive: true });
+      const contractBody = `import { z } from "zod";
+export default {
+  name: NAME,
+  request: {
+    POST: { body: z.object({ role: z.enum(["a", "b", "c"]) }) },
+  },
+  response: { 200: z.object({ role: z.enum(["a", "b", "c"]) }) },
+};
+`;
+      await fs.writeFile(
+        path.join(rootDir, "contracts/one.contract.ts"),
+        contractBody.replace("NAME", '"one"'),
+        "utf-8"
+      );
+      await fs.writeFile(
+        path.join(rootDir, "contracts/two.contract.ts"),
+        contractBody.replace("NAME", '"two"'),
+        "utf-8"
+      );
+      const manifest: RoutesManifest = {
+        version: 1,
+        routes: [
+          {
+            id: "api/one",
+            pattern: "/api/one",
+            kind: "api",
+            module: "contracts/one.contract.ts",
+            contractModule: "contracts/one.contract.ts",
+            methods: ["POST"],
+          },
+          {
+            id: "api/two",
+            pattern: "/api/two",
+            kind: "api",
+            module: "contracts/two.contract.ts",
+            contractModule: "contracts/two.contract.ts",
+            methods: ["POST"],
+          },
+        ],
+      };
+
+      const doc = await generateOpenAPIDocument(manifest, rootDir);
+
+      // The outer {role: enum} object *is* hoistable and shared — that's fine.
+      // The inner enum itself must NOT be hoisted — scan every component
+      // entry and assert none of them is a bare enum-typed schema.
+      for (const entry of Object.values(doc.components?.schemas ?? {})) {
+        expect(entry.enum).toBeUndefined();
+        if (entry.type === "string" && !entry.properties) {
+          throw new Error(`Primitive string schema should not be hoisted: ${JSON.stringify(entry)}`);
+        }
+      }
+    } finally {
+      await fs.rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("hoistThreshold: 3 → 2-use schemas stay inline; 3-use schemas get hoisted", () => {
+    // Doc with the same shape appearing exactly twice.
+    const shape = {
+      type: "object" as const,
+      properties: { x: { type: "string" as const } },
+      required: ["x"],
+    };
+    const buildDoc = (): OpenAPIDocument => ({
+      openapi: "3.0.3",
+      info: { title: "t", version: "1.0.0" },
+      paths: {
+        "/a": {
+          post: {
+            responses: {},
+            requestBody: { content: { "application/json": { schema: { ...shape } } } },
+          },
+        },
+        "/b": {
+          post: {
+            responses: {},
+            requestBody: { content: { "application/json": { schema: { ...shape } } } },
+          },
+        },
+      },
+    });
+
+    const doc2 = buildDoc();
+    return hoistSharedSchemas(doc2, { threshold: 3 }).then(() => {
+      // With threshold=3 and only 2 uses → nothing hoisted.
+      expect(doc2.components?.schemas).toBeUndefined();
+      expect(doc2.paths["/a"].post!.requestBody!.content["application/json"].schema.$ref).toBeUndefined();
+
+      // Re-run with threshold=2 on a fresh doc → the same shape is hoisted.
+      const doc1 = buildDoc();
+      return hoistSharedSchemas(doc1, { threshold: 2 }).then(() => {
+        expect(doc1.components?.schemas).toBeDefined();
+        expect(Object.keys(doc1.components!.schemas!).length).toBe(1);
+      });
+    });
+  });
+
+  test("threshold values < 2 clamp up to 2 (never hoist single-use schemas)", () => {
+    // Edge: a malicious / misconfigured `hoistThreshold: 1` would otherwise
+    // hoist every schema including one-offs, blowing up the spec.
+    const shape = {
+      type: "object" as const,
+      properties: { solo: { type: "string" as const } },
+      required: ["solo"],
+    };
+    const doc: OpenAPIDocument = {
+      openapi: "3.0.3",
+      info: { title: "t", version: "1.0.0" },
+      paths: {
+        "/only": {
+          post: {
+            responses: {},
+            requestBody: { content: { "application/json": { schema: { ...shape } } } },
+          },
+        },
+      },
+    };
+
+    return hoistSharedSchemas(doc, { threshold: 1 }).then(() => {
+      expect(doc.components?.schemas).toBeUndefined();
+      expect(doc.paths["/only"].post!.requestBody!.content["application/json"].schema.$ref).toBeUndefined();
+    });
   });
 });

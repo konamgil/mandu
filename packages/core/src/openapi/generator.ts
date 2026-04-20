@@ -27,6 +27,33 @@ import {
 } from "../contract/zod-utils";
 
 // ============================================
+// Schema name-hint side table
+// ============================================
+
+/**
+ * Side-channel naming hints for generated OpenAPI schemas.
+ *
+ * The hoist pass needs a preferred name for each object schema but we
+ * don't want to serialize that hint into the output document. A WeakMap
+ * keyed by the generated `OpenAPISchema` object gives us name access
+ * during the post-processing pass without polluting the spec JSON.
+ *
+ * Hints are advisory — the hoist pass falls back to a deterministic
+ * `Schema_<hash8>` name when no hint is attached.
+ */
+const schemaNameHints = new WeakMap<OpenAPISchema, string>();
+
+function setSchemaNameHint(schema: OpenAPISchema | undefined, hint: string | undefined): void {
+  if (!schema || !hint) return;
+  // Don't overwrite an existing hint — first attribution wins. This matches
+  // the "first-come wins" policy for structurally-identical schemas with
+  // different user-given names.
+  if (!schemaNameHints.has(schema)) {
+    schemaNameHints.set(schema, hint);
+  }
+}
+
+// ============================================
 // OpenAPI Types
 // ============================================
 
@@ -374,6 +401,35 @@ function generateParameters(
 }
 
 /**
+ * Convert an arbitrary identifier to a PascalCase token suitable for an
+ * OpenAPI component name. Non-alphanumeric characters become word
+ * separators; leading digits are prefixed with `_` so the result is a
+ * valid JSON Schema identifier.
+ */
+function pascal(input: string): string {
+  if (!input) return "";
+  const words = input
+    .split(/[^a-zA-Z0-9]+/g)
+    .filter((w) => w.length > 0)
+    .map((w) => w[0].toUpperCase() + w.slice(1));
+  const joined = words.join("");
+  if (!joined) return "";
+  return /^[0-9]/.test(joined) ? `_${joined}` : joined;
+}
+
+/**
+ * Derive a naming hint root for a contract. Prefers the explicit
+ * `contract.name`; falls back to the route id (e.g. `api/users` →
+ * `ApiUsers`). Guarantees we always have a non-empty PascalCase prefix
+ * for generated component names.
+ */
+function deriveContractNameRoot(contract: ContractSchema, route: RouteSpec): string {
+  const hint = contract.name ?? route.id;
+  const pascalized = pascal(hint);
+  return pascalized || "Schema";
+}
+
+/**
  * Generate OpenAPI operation for a method
  */
 function generateOperation(
@@ -389,6 +445,11 @@ function generateOperation(
     responses: {},
   };
 
+  // Derive a naming hint root from the contract for the hoist pass.
+  // Example: `contract.name = "users"` → `Users`. Falls back to a
+  // route-derived identifier so every contract has *some* stable prefix.
+  const nameRoot = deriveContractNameRoot(contract, route);
+
   // Parameters
   if (methodSchema) {
     const params = generateParameters(methodSchema, route.pattern);
@@ -398,8 +459,13 @@ function generateOperation(
 
     // Request body
     if (methodSchema.body) {
+      const bodySchema = zodToOpenAPISchema(methodSchema.body);
+      // Hint: `UsersBody` / `UsersPostBody` — method-qualified avoids
+      // collisions when GET/POST/PUT on the same contract have distinct
+      // request bodies.
+      setSchemaNameHint(bodySchema, `${nameRoot}${pascal(method)}Body`);
       const requestBodyContent: OpenAPIRequestBody["content"]["application/json"] = {
-        schema: zodToOpenAPISchema(methodSchema.body),
+        schema: bodySchema,
       };
 
       // Add examples if provided
@@ -433,6 +499,10 @@ function generateOperation(
     }
 
     const schema = zodToOpenAPISchema(zodSchema);
+    // Hint: `UsersResponse200` / `UsersPostResponse201`. Status-qualified
+    // so `200` and `400` responses don't collide when both are
+    // `{ error: string }` style objects.
+    setSchemaNameHint(schema, `${nameRoot}${pascal(method)}Response${statusCode}`);
     const hasContent = Object.keys(schema).length > 0;
 
     const responseContent: OpenAPIResponse["content"] = hasContent
@@ -496,6 +566,17 @@ export async function generateOpenAPIDocument(
     version?: string;
     description?: string;
     servers?: OpenAPIServer[];
+    /**
+     * Hoist schemas that appear ≥`hoistThreshold` times into
+     * `components.schemas` and replace inline occurrences with `$ref`.
+     * @default true
+     */
+    hoistSchemas?: boolean;
+    /**
+     * Minimum occurrence count required to hoist a schema.
+     * @default 2
+     */
+    hoistThreshold?: number;
   } = {}
 ): Promise<OpenAPIDocument> {
   const paths: Record<string, OpenAPIPathItem> = {};
@@ -530,7 +611,7 @@ export async function generateOpenAPIDocument(
     paths[openApiPattern] = pathItem;
   }
 
-  return {
+  const doc: OpenAPIDocument = {
     openapi: "3.0.3",
     info: {
       title: options.title || "Mandu API",
@@ -543,6 +624,277 @@ export async function generateOpenAPIDocument(
     paths,
     tags: Array.from(tags).map((name) => ({ name })),
   };
+
+  // Post-processing: hoist shared schemas into components.schemas.
+  // `hoistSchemas: false` → pure backwards-compatible inline output.
+  const hoistEnabled = options.hoistSchemas !== false;
+  if (hoistEnabled) {
+    await hoistSharedSchemas(doc, {
+      threshold: options.hoistThreshold ?? 2,
+    });
+  }
+
+  return doc;
+}
+
+// ============================================
+// Schema hoisting (post-processing)
+// ============================================
+
+export interface HoistOptions {
+  /** Minimum occurrences required to hoist. Default `2`. */
+  threshold?: number;
+}
+
+interface SchemaOccurrence {
+  /** Structural hash of the schema body (identity key). */
+  hash: string;
+  /** Every parent reference we might need to rewrite to `$ref`. */
+  sites: Array<{ parent: Record<string, unknown>; key: string | number }>;
+  /** The canonical schema body (first-seen value; all sites share equal shape). */
+  body: OpenAPISchema;
+  /** Ordered list of name hints collected at each occurrence site. */
+  hints: string[];
+}
+
+/**
+ * Hoist shared object schemas into `components.schemas` and replace
+ * inline occurrences with `$ref` pointers.
+ *
+ * Only hoists:
+ *   - `type: "object"` schemas (primitives / enums / unions-of-primitives stay inline).
+ *   - Schemas appearing at a "hoistable site" (requestBody/response root or a top-level
+ *     property of either). Path/query/header parameter schemas are explicitly skipped.
+ *   - Schemas reaching the occurrence threshold (default 2).
+ *
+ * Naming:
+ *   - First hint wins for structurally-identical schemas.
+ *   - Name collisions across structurally-different schemas are disambiguated with
+ *     `_v2`, `_v3`, … suffixes (deterministic by walk order).
+ *   - Hint-less schemas fall back to `Schema_<first-8-hex-of-hash>`.
+ */
+export async function hoistSharedSchemas(
+  doc: OpenAPIDocument,
+  options: HoistOptions = {}
+): Promise<void> {
+  const threshold = Math.max(2, options.threshold ?? 2);
+  const occurrences = new Map<string, SchemaOccurrence>();
+
+  // --- Pass 1: walk every hoistable site and record occurrences. ---
+  for (const pathItem of Object.values(doc.paths)) {
+    for (const method of ["get", "post", "put", "patch", "delete"] as const) {
+      const op = pathItem[method];
+      if (!op) continue;
+
+      // Request body root schema (+ top-level property values).
+      if (op.requestBody?.content) {
+        for (const mediaObj of Object.values(op.requestBody.content)) {
+          recordHoistableTree(mediaObj as Record<string, unknown>, "schema", occurrences);
+        }
+      }
+
+      // Response root schema (+ top-level property values).
+      for (const resp of Object.values(op.responses)) {
+        if (!resp.content) continue;
+        for (const mediaObj of Object.values(resp.content)) {
+          recordHoistableTree(mediaObj as Record<string, unknown>, "schema", occurrences);
+        }
+      }
+    }
+  }
+
+  // --- Pass 2: pick the winners (count ≥ threshold, type === "object"). ---
+  const winners: Array<{ name: string; hash: string; body: OpenAPISchema; sites: SchemaOccurrence["sites"] }> = [];
+  const nameIndex = new Map<string, string>(); // name → hash (for collision detection)
+
+  // Stable iteration: sort by hash so hoisted output is deterministic
+  // regardless of JS property enumeration order quirks.
+  const entries = Array.from(occurrences.entries()).sort(([a], [b]) => a.localeCompare(b));
+  for (const [hash, entry] of entries) {
+    if (entry.sites.length < threshold) continue;
+    if (!isHoistableObject(entry.body)) continue;
+
+    // Pick the first-seen hint; fall back to the hash-derived default.
+    const preferred = entry.hints[0] || `Schema_${hash.slice(0, 8)}`;
+    let finalName = preferred;
+    let suffix = 2;
+    // If the name is already claimed by a *different* hash, walk `_v2`, `_v3`…
+    while (nameIndex.has(finalName) && nameIndex.get(finalName) !== hash) {
+      finalName = `${preferred}_v${suffix++}`;
+    }
+    nameIndex.set(finalName, hash);
+    winners.push({ name: finalName, hash, body: entry.body, sites: entry.sites });
+  }
+
+  if (winners.length === 0) return;
+
+  // --- Pass 3: install winners into components.schemas + rewrite sites. ---
+  if (!doc.components) doc.components = {};
+  if (!doc.components.schemas) doc.components.schemas = {};
+  const schemas = doc.components.schemas;
+
+  for (const winner of winners) {
+    schemas[winner.name] = winner.body;
+    const ref: OpenAPISchema = { $ref: `#/components/schemas/${winner.name}` };
+    for (const site of winner.sites) {
+      // Replace inline schema with a `$ref` pointer. We write a *new*
+      // ref object per site (JSON.stringify would collapse shared refs
+      // anyway, but distinct identities make future passes safer).
+      (site.parent as Record<string | number, unknown>)[site.key] = { ...ref };
+    }
+  }
+}
+
+/**
+ * Walk a container object and record every hoistable schema site. A
+ * hoistable site is:
+ *
+ *   1. The root schema at `container[key]` (typically the `"schema"` key of a
+ *      requestBody/response media type object).
+ *   2. Every top-level property of that root, *if* the root is an object schema.
+ *
+ * Nested properties beyond depth 1 are intentionally ignored — hoisting
+ * deep nests produces spec trees that are harder for codegen tools to
+ * follow than the inline original.
+ */
+function recordHoistableTree(
+  container: Record<string, unknown>,
+  key: string,
+  occurrences: Map<string, SchemaOccurrence>
+): void {
+  const root = container[key] as OpenAPISchema | undefined;
+  if (!root || typeof root !== "object") return;
+  // Skip anything that's already a $ref (e.g., from an earlier pass).
+  if ("$ref" in root && root.$ref) return;
+
+  // Record the root itself (regardless of object vs primitive — we filter
+  // in pass 2 so that primitives with many occurrences still get counted
+  // but are never emitted as component entries).
+  recordOccurrence(root, container as Record<string, unknown>, key, occurrences);
+
+  // Drill into top-level properties for object roots.
+  if (root.type === "object" && root.properties) {
+    for (const [propKey, propSchema] of Object.entries(root.properties)) {
+      if (!propSchema || typeof propSchema !== "object") continue;
+      if ("$ref" in propSchema && propSchema.$ref) continue;
+      recordOccurrence(
+        propSchema as OpenAPISchema,
+        root.properties as Record<string, unknown>,
+        propKey,
+        occurrences
+      );
+    }
+  }
+
+  // Drill into array items when the root is an array — the element shape
+  // is the real reusable schema, not the array wrapper itself.
+  if (root.type === "array" && root.items) {
+    const items = root.items;
+    if (items && typeof items === "object" && !("$ref" in items && items.$ref)) {
+      recordOccurrence(
+        items,
+        root as unknown as Record<string, unknown>,
+        "items",
+        occurrences
+      );
+    }
+  }
+}
+
+function recordOccurrence(
+  schema: OpenAPISchema,
+  parent: Record<string, unknown>,
+  key: string | number,
+  occurrences: Map<string, SchemaOccurrence>
+): void {
+  const hash = structuralHash(schema);
+  let entry = occurrences.get(hash);
+  if (!entry) {
+    entry = { hash, sites: [], body: schema, hints: [] };
+    occurrences.set(hash, entry);
+  }
+  entry.sites.push({ parent, key });
+  const hint = schemaNameHints.get(schema);
+  if (hint && !entry.hints.includes(hint)) {
+    entry.hints.push(hint);
+  }
+}
+
+/**
+ * A schema is hoistable iff it is an object with ≥1 property. We
+ * deliberately skip:
+ *   - primitives (`string`, `number`, `boolean`, `integer`) — they are
+ *     small enough that inline is clearer than a pointer chase.
+ *   - enums and unions of primitives — same argument, and codegen tools
+ *     tend to de-duplicate these separately.
+ *   - empty object schemas — no information to share.
+ *   - $ref passthroughs — already hoisted.
+ *   - object schemas with a composed keyword (allOf/oneOf/anyOf) but no
+ *     `properties` — these are structural compositions, not data shapes.
+ */
+function isHoistableObject(schema: OpenAPISchema): boolean {
+  if (!schema || typeof schema !== "object") return false;
+  if (schema.$ref) return false;
+  if (schema.type !== "object") return false;
+  if (!schema.properties) return false;
+  if (Object.keys(schema.properties).length === 0) return false;
+  return true;
+}
+
+/**
+ * Stable structural hash of a schema. Sorts object keys recursively
+ * before stringifying so `{a:1,b:2}` and `{b:2,a:1}` hash identically,
+ * then feeds the canonical string through SHA-256.
+ */
+function structuralHash(schema: OpenAPISchema): string {
+  const canonical = stableStringify(schema);
+  return sha256Hex(canonical);
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "boolean" || typeof value === "number") return JSON.stringify(value);
+  if (typeof value === "string") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return "[" + value.map((v) => stableStringify(v)).join(",") + "]";
+  }
+  if (typeof value === "object") {
+    const keys = Object.keys(value as Record<string, unknown>).sort();
+    const parts: string[] = [];
+    for (const k of keys) {
+      const v = (value as Record<string, unknown>)[k];
+      if (v === undefined) continue;
+      parts.push(JSON.stringify(k) + ":" + stableStringify(v));
+    }
+    return "{" + parts.join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Synchronous SHA-256 hex digest. Uses `Bun.CryptoHasher` when present,
+ * then Node `crypto.createHash` as a fallback. WebCrypto is async-only
+ * so we intentionally skip it here — the hoist pass hashes many small
+ * payloads and the sync path keeps the post-process simple and fast.
+ *
+ * This is a purely structural identity key (not a security primitive),
+ * so the brief Node-fallback surface is acceptable.
+ */
+function sha256Hex(input: string): string {
+  const bunGlobal = (globalThis as { Bun?: { CryptoHasher?: new (algo: string) => { update(input: string | Uint8Array): void; digest(encoding: "hex"): string } } }).Bun;
+  if (bunGlobal?.CryptoHasher) {
+    const hasher = new bunGlobal.CryptoHasher("sha256");
+    hasher.update(input);
+    return hasher.digest("hex");
+  }
+  // Node fallback — `require` at call time to keep module-load lean.
+  // Callers who run in an edge runtime without Node crypto should have
+  // Bun available; we therefore don't bother with a WebCrypto async
+  // path (it would turn `hoistSharedSchemas` into an unnecessarily async
+  // cascade on the hot path).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const nodeCrypto = require("node:crypto") as typeof import("node:crypto");
+  return nodeCrypto.createHash("sha256").update(input).digest("hex");
 }
 
 // ============================================
