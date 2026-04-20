@@ -505,11 +505,13 @@ export interface ServerOptions {
    * When enabled (default), the server looks for a prerender index
    * under `<rootDir>/<dir>/_manifest.json` (written by `mandu build`)
    * and, for every request whose pathname maps to a prerendered file,
-   * serves that HTML directly, bypassing SSR entirely, with a long
-   * `Cache-Control` header.
+   * serves that HTML directly, bypassing SSR entirely, with a
+   * conditional-GET friendly `Cache-Control` + strong `ETag` pair.
    *
    *   - `true`      enabled with defaults (dir `.mandu/prerendered`,
-   *                 Cache-Control `public, max-age=31536000, immutable`).
+   *                 Cache-Control `public, max-age=0, must-revalidate`
+   *                 — Issue #221; prerendered URLs are stable, so
+   *                 `immutable` would pin stale HTML across deploys).
    *   - `false`     disabled. Every request goes through SSR.
    *   - object      overrides. `dir` chooses a different output;
    *                 `cacheControl` lets adapters tune the CDN hint.
@@ -3497,14 +3499,28 @@ function buildRouteCacheKey(routeId: string, url: URL): string {
  * surface as a 500).
  *
  * Responses are stamped with `Cache-Control` from the registry
- * settings (default: `public, max-age=31536000, immutable`) and an
- * `X-Mandu-Cache: PRERENDERED` tag for observability / log parity
- * with the ISR cache path.
+ * settings and an `X-Mandu-Cache: PRERENDERED` tag for observability /
+ * log parity with the ISR cache path.
+ *
+ * Issue #221 — prerendered HTML lives at a **stable URL** (route →
+ * file, no content hash in the path). Serving it with `immutable`
+ * breaks new-deploy rollout exactly like #218: browsers pin the
+ * stale HTML for up to a year. The fix mirrors #218's static-file
+ * policy:
+ *
+ *   1. Default `Cache-Control` → `public, max-age=0, must-revalidate`
+ *      (via `computeStaticCacheControl` — no hash in filename ⇒
+ *      must-revalidate). User-supplied `PrerenderSettings.cacheControl`
+ *      still wins so adapters can tune for their CDN.
+ *   2. Emit a strong ETag (`Bun.hash` over the HTML bytes).
+ *   3. On `If-None-Match` match → `304 Not Modified` with empty body,
+ *      `Cache-Control` + `ETag` preserved for intermediaries.
  */
 async function tryServePrerendered(
   pathname: string,
   settings: ServerRegistrySettings,
-  method: string
+  method: string,
+  request?: Request
 ): Promise<Response | null> {
   const p = settings.prerender;
   if (!p) return null;
@@ -3523,6 +3539,67 @@ async function tryServePrerendered(
   const filePath = resolvePrerenderedFile(p.index, settings.rootDir, p.dir, pathname);
   if (!filePath) return null;
 
+  // Load via `Bun.file` so we can reuse the #218 ETag helper (which
+  // keys the hash cache on absolute path + size + mtime). `exists()`
+  // guards the rare race where the index points at a file that was
+  // removed after load.
+  const file = Bun.file(filePath);
+  let exists = false;
+  try {
+    exists = await file.exists();
+  } catch {
+    return null;
+  }
+  if (!exists) return null;
+
+  // Strong ETag derived from HTML bytes — same wyhash primitive the
+  // static-asset dispatch uses, sharing the same LRU cache.
+  let etag: string;
+  try {
+    etag = await computeStrongEtag(filePath, file);
+  } catch {
+    return null;
+  }
+
+  // Cache-Control resolution (Issue #221):
+  //
+  //   - When `p.cacheControl` is framework-chosen (either the current
+  //     must-revalidate default or the pre-#221 `immutable` default,
+  //     which we treat as "caller never opted out"), delegate to
+  //     `computeStaticCacheControl` so dev-mode gets `no-cache,
+  //     no-store, must-revalidate` and prod gets must-revalidate
+  //     (prerendered filenames never carry a content hash, so the
+  //     hash-aware policy always lands on the revalidating form).
+  //   - Otherwise honour the override verbatim — adapters in front of
+  //     a CDN with per-deploy invalidation may legitimately want
+  //     aggressive caching.
+  //
+  // The pre-#221 `immutable` string is treated as a framework default
+  // so projects upgrading from a persisted registry state get the fix
+  // automatically rather than staying on the broken policy.
+  const isFrameworkDefault =
+    p.cacheControl === DEFAULT_PRERENDER_CACHE_CONTROL ||
+    p.cacheControl === "public, max-age=31536000, immutable" ||
+    p.cacheControl === "";
+  const cacheControl = isFrameworkDefault
+    ? computeStaticCacheControl(path.basename(filePath), settings.isDev)
+    : p.cacheControl;
+
+  // Conditional GET — RFC 7232 §3.2. Covers `"<etag>"`, `W/"<etag>"`,
+  // comma-separated lists, and `*`. 304 keeps ETag + Cache-Control so
+  // downstream caches update their freshness state.
+  const ifNoneMatch = request?.headers.get("If-None-Match");
+  if (ifNoneMatch && matchesEtag(ifNoneMatch, etag)) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        "ETag": etag,
+        "Cache-Control": cacheControl,
+        "X-Mandu-Cache": "PRERENDERED",
+      },
+    });
+  }
+
   let html: string;
   try {
     html = await fs.readFile(filePath, "utf-8");
@@ -3532,7 +3609,8 @@ async function tryServePrerendered(
 
   const headers = new Headers({
     "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": p.cacheControl,
+    "Cache-Control": cacheControl,
+    "ETag": etag,
     "X-Mandu-Cache": "PRERENDERED",
   });
   const body = method === "HEAD" ? null : html;
@@ -3670,7 +3748,7 @@ async function handleRequestInternal(
   // Must run BEFORE static-file serving and route dispatch so that
   // `mandu build`-emitted HTML short-circuits SSR. No-op if the
   // feature is disabled or the path wasn't prerendered.
-  const prerendered = await tryServePrerendered(pathname, settings, req.method);
+  const prerendered = await tryServePrerendered(pathname, settings, req.method, req);
   if (prerendered) {
     if (settings.cors && isCorsRequest(req)) {
       const corsOptions: CorsOptions = typeof settings.cors === 'object' ? settings.cors : {};

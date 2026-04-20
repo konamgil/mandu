@@ -14,7 +14,8 @@ contract is the same one Next.js popularised: a page module exports
 parameter sets, renders each one, and writes the result to
 `.mandu/prerendered/`. At request time the runtime serves the cached
 HTML directly — no SSR, no data loaders, no island boot — with
-`Cache-Control: public, max-age=31536000, immutable`.
+`Cache-Control: public, max-age=0, must-revalidate` + a strong ETag
+(see [prerender cache](#prerender-cache) below).
 
 ## Contract
 
@@ -81,13 +82,67 @@ unchanged.
 | Catch-all params                      | `string[]`                  | `string[]`                   |
 | Optional catch-all (missing prefix)   | resolves to prefix          | resolves to prefix           |
 | Fallback mode (ISR on-miss)           | `dynamicParams` flag        | `dynamicParams` flag         |
-| Runtime cache header                  | long-lived via CDN          | `immutable`, 1-year `max-age`|
+| Runtime cache header                  | long-lived via CDN          | `max-age=0, must-revalidate` + strong ETag |
 
 Mandu differs in one deliberate place:
 
-1. **No per-route revalidation window.** Prerendered HTML is immutable
-   until the next build. For time-based revalidation use the ISR cache
-   helpers in `@mandujs/core/runtime/cache` on an SSR route instead.
+1. **No per-route revalidation window.** Prerendered HTML is regenerated
+   on every build and served with a conditional-GET friendly ETag —
+   browsers hit a cheap `304 Not Modified` when nothing changed, and
+   get fresh bytes automatically on every deploy. For time-based
+   revalidation of server-rendered pages use the ISR cache helpers in
+   `@mandujs/core/runtime/cache` on an SSR route instead.
+
+## Prerender cache {#prerender-cache}
+
+Issue #221 — earlier releases stamped prerendered responses with
+`Cache-Control: public, max-age=31536000, immutable`. `immutable`
+(RFC 8246) is a **contract**: browsers skip revalidation for the
+full `max-age` window even after deploys. Because prerendered URLs
+don't carry a content hash (route → file — the path is stable across
+builds), users saw stale HTML for up to a year after a fix landed.
+
+The runtime now mirrors the [static-asset policy](./static-assets.md):
+
+| Scenario                                    | Cache-Control                                      | ETag   |
+| ------------------------------------------- | -------------------------------------------------- | ------ |
+| Default (framework-chosen)                  | `public, max-age=0, must-revalidate`               | strong |
+| `isDev: true`                               | `no-cache, no-store, must-revalidate`              | strong |
+| `PrerenderSettings.cacheControl` override   | user-supplied string (verbatim)                    | strong |
+
+Key behaviours:
+
+- Every response carries a strong ETag derived from the HTML bytes
+  via `Bun.hash`. `If-None-Match` round-trips to `304 Not Modified`
+  with an empty body — the steady-state cost is a ~300-byte header
+  exchange, not a full re-download.
+- The `X-Mandu-Cache: PRERENDERED` observability header is stamped
+  on both `200` and `304` responses (log parity with the ISR path).
+- When an adapter legitimately wants aggressive caching — e.g. a CDN
+  that performs per-deploy invalidation by path — set
+  `cacheControl` on `startServer({ prerender: { ... } })`. The
+  override is honoured verbatim.
+- For migration safety, the pre-#221 `immutable` string is treated
+  as "framework default" and replaced with the safe policy — projects
+  upgrading from persisted registry state don't stay on the broken
+  policy.
+
+```bash
+# Default policy
+curl -I http://localhost:3000/docs/intro
+# HTTP/1.1 200 OK
+# Cache-Control: public, max-age=0, must-revalidate
+# ETag: "jijm4qlja2w2"
+# X-Mandu-Cache: PRERENDERED
+
+# Conditional GET → cheap 304
+curl -I -H 'If-None-Match: "jijm4qlja2w2"' http://localhost:3000/docs/intro
+# HTTP/1.1 304 Not Modified
+```
+
+See [`docs/architect/static-assets.md` → Prerendered HTML](./static-assets.md#prerendered-html-issue-221)
+for the shared helpers (`computeStrongEtag`, `computeStaticCacheControl`,
+`matchesEtag`) and the matching `/.mandu/client/*` policy.
 
 ## `dynamicParams` — opt out of SSR fallback (Issue #214)
 
@@ -372,10 +427,16 @@ module, or pass `--prerender-skip-errors` to downgrade the failure to
 a warning while you migrate.
 
 **Stale HTML after a deploy.**
-`Cache-Control: immutable` tells the browser never to revalidate. Pair
-every deploy with a fresh build (prerendered files are regenerated
-from scratch, so the on-disk content always matches the committed
-source).
+Issue #221 — prerendered responses now default to
+`Cache-Control: public, max-age=0, must-revalidate` + a strong ETag,
+so browsers revalidate on every navigation and the `304 Not Modified`
+round-trip keeps the steady-state cost cheap. Pair every deploy with a
+fresh build (prerendered files are regenerated from scratch, so the
+on-disk content always matches the committed source). If you
+previously set `PrerenderSettings.cacheControl` to the old
+`immutable` default, drop the override or replace it with the new
+default — the runtime also reinterprets the old string as "framework
+default" for migration safety.
 
 **Request returns SSR instead of the prerendered HTML.**
 Check `.mandu/prerendered/_manifest.json` exists and lists the

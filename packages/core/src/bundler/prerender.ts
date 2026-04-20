@@ -181,9 +181,27 @@ export const DEFAULT_PRERENDER_DIR = ".mandu/prerendered";
 /** Default output directory (legacy `prerenderRoutes` callers). */
 export const LEGACY_PRERENDER_DIR = ".mandu/static";
 
-/** Default cache policy stamped on runtime prerender responses. */
+/**
+ * Default cache policy stamped on runtime prerender responses.
+ *
+ * Issue #221 — prerendered HTML lives at a **stable URL** (route → file,
+ * no content hash in the path). Serving it with `immutable` is the same
+ * trap Issue #218 closed for `/.mandu/client/*`: browsers honour
+ * `immutable` as a year-long contract and users see stale HTML until a
+ * hard refresh, even after a fresh deploy.
+ *
+ * The runtime default is therefore `public, max-age=0, must-revalidate`,
+ * which forces a conditional `If-None-Match` round-trip on every
+ * navigation. Because the runtime also emits a strong ETag (`Bun.hash`
+ * over the HTML bytes) the steady-state response is a ~300-byte
+ * `304 Not Modified` — cheap compared to re-downloading the HTML.
+ *
+ * Adapters that front the runtime with a CDN capable of per-deploy
+ * invalidation can still override this via
+ * `PrerenderSettings.cacheControl` at `startServer` call site.
+ */
 export const DEFAULT_PRERENDER_CACHE_CONTROL =
-  "public, max-age=31536000, immutable";
+  "public, max-age=0, must-revalidate";
 
 /**
  * Issue #213 — default denylist for the link crawler.

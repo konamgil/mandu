@@ -124,6 +124,53 @@ curl -I -H 'If-None-Match: "abc123def456"' http://localhost:3000/.mandu/client/g
 
 Regression tests live in `packages/core/tests/runtime/static-cache-control.test.ts`.
 
+## Prerendered HTML (Issue #221)
+
+The same policy applies to static HTML emitted by `mandu build` under
+`.mandu/prerendered/<route>/index.html` (see
+[Static Generation](./static-generation.md) for the build-side
+contract). Prerendered URLs are stable by construction — the request
+path maps 1:1 to a file path, with no content hash anywhere — so
+`immutable` would pin stale HTML for up to a year after every deploy,
+the same failure mode Issue #221 closed.
+
+```text
+/                          → public, max-age=0, must-revalidate  + strong ETag
+/docs/intro                → public, max-age=0, must-revalidate  + strong ETag
+(dev mode)                 → no-cache, no-store, must-revalidate
+```
+
+Runtime specifics:
+
+- `tryServePrerendered()` computes a strong ETag from the HTML bytes
+  using the same `computeStrongEtag()` helper that covers
+  `/.mandu/client/*` — the LRU cache is shared across both paths.
+- `If-None-Match` returns `304 Not Modified` with an empty body;
+  `ETag`, `Cache-Control`, and `X-Mandu-Cache: PRERENDERED` are kept
+  so intermediaries update their freshness state.
+- Adapters fronting the runtime with a CDN capable of per-deploy
+  invalidation can still opt into aggressive caching via
+  `PrerenderSettings.cacheControl` at the `startServer` call site
+  (the override is honoured verbatim; the framework default applies
+  only when the caller leaves it unset or passes the pre-#221
+  `immutable` string).
+
+```bash
+# Default: must-revalidate + ETag
+curl -I http://localhost:3000/docs/intro
+# HTTP/1.1 200 OK
+# Cache-Control: public, max-age=0, must-revalidate
+# ETag: "jijm4qlja2w2"
+# X-Mandu-Cache: PRERENDERED
+
+# Conditional GET → 304
+curl -I -H 'If-None-Match: "jijm4qlja2w2"' http://localhost:3000/docs/intro
+# HTTP/1.1 304 Not Modified
+```
+
+Regression tests live in
+`packages/core/tests/runtime/prerender-cache-control.test.ts`.
+
 ## Migration: opt into content-hashed bundle names (follow-up)
 
 The long-term cure for cache-driven staleness is to change the URL shape on
@@ -177,8 +224,11 @@ the #218 close-out comment.
 
 ## Related
 
-- [Issue #218](https://github.com/mandu-org/mandu/issues/218) — immutable header on stable URL
+- [Issue #218](https://github.com/mandu-org/mandu/issues/218) — immutable header on stable URL (`/.mandu/client/*`)
+- [Issue #221](https://github.com/mandu-org/mandu/issues/221) — same failure mode on prerendered HTML
+- [Static Generation](./static-generation.md#prerender-cache) — prerender cache policy (build side)
 - [RFC 7232](https://datatracker.ietf.org/doc/html/rfc7232) — Conditional Requests
 - [RFC 8246](https://datatracker.ietf.org/doc/html/rfc8246) — `Cache-Control: immutable`
-- `packages/core/src/runtime/server.ts` — `serveStaticFile`, `computeStaticCacheControl`, `computeStrongEtag`
-- `packages/core/tests/runtime/static-cache-control.test.ts` — regression suite
+- `packages/core/src/runtime/server.ts` — `serveStaticFile`, `tryServePrerendered`, `computeStaticCacheControl`, `computeStrongEtag`
+- `packages/core/tests/runtime/static-cache-control.test.ts` — #218 regression suite
+- `packages/core/tests/runtime/prerender-cache-control.test.ts` — #221 regression suite
