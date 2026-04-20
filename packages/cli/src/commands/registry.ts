@@ -160,11 +160,12 @@ registerCommand({
     "  mandu build — build client bundles",
     "",
     "  Flags:",
-    "    --watch                 Rebuild on file changes",
-    "    --target=<name>         Deployment target (workers|deno|vercel-edge|netlify-edge)",
-    "    --worker-name=<slug>    Cloudflare Workers project name (target=workers)",
-    "    --project-name=<slug>   Project name (target=deno|vercel-edge|netlify-edge)",
-    "    --analyze[=json]        Emit .mandu/analyze/report.html + report.json (Phase 18.η)",
+    "    --watch                   Rebuild on file changes",
+    "    --target=<name>           Deployment target (workers|deno|vercel-edge|netlify-edge)",
+    "    --worker-name=<slug>      Cloudflare Workers project name (target=workers)",
+    "    --project-name=<slug>     Project name (target=deno|vercel-edge|netlify-edge)",
+    "    --analyze[=json]          Emit .mandu/analyze/report.html + report.json (Phase 18.η)",
+    "    --prerender-skip-errors   Downgrade prerender errors to warnings (Issue #216)",
     "",
     "  Outputs:",
     "    .mandu/client/                              Hydration bundles (default target)",
@@ -223,6 +224,11 @@ registerCommand({
         ? ctx.options["project-name"]
         : undefined,
       analyze,
+      // Issue #216 — downgrade prerender hard-failures to warnings when
+      // the user explicitly opts in (e.g., an existing project that
+      // ships a broken `generateStaticParams` and wants CI green while
+      // they fix it).
+      prerenderSkipErrors: ctx.options["prerender-skip-errors"] === "true",
     });
   },
 });

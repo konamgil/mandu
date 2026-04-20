@@ -120,6 +120,24 @@ const GuardConfigSchema = z
   .strict();
 
 /**
+ * Issue #213 — prerender link-crawler sub-block (strict).
+ *
+ * `exclude` entries are matched against the normalized crawl target:
+ *   - Exact string (`"/example"`): matches that pathname only.
+ *   - Simple glob (`"/your-*"`): `*` → `.*`, anchored start + end.
+ *
+ * When `replaceDefaultExclude === true`, `exclude` replaces the built-in
+ * default denylist entirely. Otherwise (default), user entries are
+ * merged on top of the defaults.
+ */
+const BuildCrawlConfigSchema = z
+  .object({
+    exclude: z.array(z.string().min(1)).default([]),
+    replaceDefaultExclude: z.boolean().default(false),
+  })
+  .strict();
+
+/**
  * Build 설정 스키마 (strict)
  */
 const BuildConfigSchema = z
@@ -141,6 +159,12 @@ const BuildConfigSchema = z
      * for this project" switch.
      */
     analyze: z.boolean().default(false),
+    /**
+     * Issue #213 — prerender link-crawler denylist. See
+     * {@link BuildCrawlConfigSchema}. Omit the block to trust the
+     * default (strip code regions + built-in placeholder denylist).
+     */
+    crawl: BuildCrawlConfigSchema.optional(),
   })
   .strict();
 

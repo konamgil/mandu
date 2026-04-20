@@ -371,7 +371,10 @@ describe("prerenderRoutes + generateStaticParams", () => {
     expect(result.generated).toBe(0);
   });
 
-  it("(case 6) thrown error is captured; sibling routes still render", async () => {
+  it("(case 6) thrown error is captured; sibling routes still render (skipErrors)", async () => {
+    // Issue #216 — thrown errors now fail the build unless opted out.
+    // The sibling-continues invariant is still exercised via
+    // `skipErrors: true`.
     const root = await mkTmp();
     const outDir = path.join(root, ".mandu", "prerendered");
 
@@ -385,6 +388,7 @@ describe("prerenderRoutes + generateStaticParams", () => {
         rootDir: root,
         outDir,
         writeIndex: true,
+        skipErrors: true,
         importModule: async (specifier: string) => {
           if (specifier.includes("/bad/")) {
             return {
@@ -426,7 +430,11 @@ describe("prerenderRoutes + generateStaticParams", () => {
     expect(result.generated).toBe(50);
   });
 
-  it("(case 8) non-array return — no paths rendered, error recorded", async () => {
+  it("(case 8) non-array return — no paths rendered, error recorded (skipErrors)", async () => {
+    // Issue #216 — non-array return is now a hard build error by
+    // default. The orchestrator contract (errors array populated,
+    // generated === 0) is still exercised here via `skipErrors: true`
+    // so we keep regression coverage on the warning path.
     const root = await mkTmp();
     const result = await prerenderRoutes(
       manifestFor([{ id: "bad-shape", pattern: "/docs/:slug" }]),
@@ -434,6 +442,7 @@ describe("prerenderRoutes + generateStaticParams", () => {
       {
         rootDir: root,
         outDir: path.join(root, ".mandu", "prerendered"),
+        skipErrors: true,
         importModule: async () => ({
           generateStaticParams: async () =>
             ({ slug: "not-an-array" } as unknown as Array<{ slug: string }>),

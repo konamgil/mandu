@@ -214,6 +214,96 @@ startServer(manifest, {
 });
 ```
 
+## Prerender link crawling
+
+After rendering the initial set (static routes + `generateStaticParams`
+output), `mandu build` crawls the emitted HTML for internal `<a
+href="/...">` links and feeds any discovered paths back into the
+render queue. This lets a single static entry point seed the whole
+prerendered graph — your `<Link href="/docs/intro">` on the home page
+becomes a prerendered `/docs/intro` without an explicit config entry.
+
+### What's scanned
+
+- Every rendered HTML file (including the ones emitted by the crawler
+  itself, breadth-first).
+- Only `<a href>` attributes on the *visible* markup — the crawler
+  deliberately ignores anything inside doc code examples (see below).
+
+### What's excluded (Issue #213)
+
+Before the `href` regex runs, the engine strips the following regions
+so illustrative URLs inside docs don't leak into the render queue:
+
+- HTML comments (`<!-- ... -->`)
+- Fenced markdown code blocks (``` ``` ``` and `~~~`)
+- Block HTML code containers (`<pre>...</pre>`, `<code>...</code>`,
+  including `<pre class="language-tsx">` attributes)
+- Inline code spans (`` `...` ``)
+
+A small default denylist then filters out the remaining obvious
+placeholders that appear in tutorials but never as real routes:
+
+| Entry        | Matches                 |
+| ------------ | ----------------------- |
+| `/path`      | exactly `/path`         |
+| `/...`       | exactly `/...`          |
+| `/example`   | exactly `/example`      |
+| `/your-*`    | any `/your-<suffix>`    |
+| `/my-*`      | any `/my-<suffix>`      |
+| `/foo` / `/bar` / `/baz` | exact demo stubs        |
+| `/some-path` | exact demo stub         |
+
+External (`https://...`), protocol-relative (`//cdn.example.com/...`),
+and asset-like (`.js`, `.css`, `.png`, etc.) hrefs are ignored
+automatically.
+
+### Overriding the denylist
+
+Extend the defaults or replace them entirely from `mandu.config.ts`:
+
+```ts
+import { defineManduConfig } from "@mandujs/core/config/mandu";
+
+export default defineManduConfig({
+  build: {
+    crawl: {
+      // Extend the defaults: `/api/internal/*` joins the default denylist.
+      exclude: ["/api/internal/*", "/admin/*"],
+
+      // Or replace the defaults entirely for tighter control:
+      // replaceDefaultExclude: true,
+      // exclude: ["/api/internal/*"],
+    },
+  },
+});
+```
+
+## Prerender error handling (Issue #216)
+
+`mandu build` now distinguishes three failure modes that used to be
+collapsed into a single silent skip:
+
+| Failure mode                                              | Behavior                  |
+| --------------------------------------------------------- | ------------------------- |
+| Page module loads, `generateStaticParams` export missing  | silent (legitimate opt-out) |
+| Page module **fails to load** (compile error, missing dep)| **build fails (exit 1)**  |
+| User's `generateStaticParams` throws                       | **build fails (exit 1)**  |
+| `generateStaticParams()` returns non-array                 | **build fails (exit 1)**  |
+
+Errors are aggregated across every route so you see the full list in a
+single summary. Each entry includes the route pattern, the module
+path, and the underlying `cause` chain for fast triage.
+
+To downgrade the hard-failure to a warning (handy while migrating an
+existing project), pass `--prerender-skip-errors` to the CLI:
+
+```bash
+mandu build --prerender-skip-errors
+```
+
+The errors are still printed, but `exit 0` is preserved.
+
 ## Troubleshooting
 
 **My page isn't being prerendered.**
@@ -226,6 +316,20 @@ The transient build server rendered the page and the page loader
 threw. The build keeps going and logs the error — other routes still
 render. Fix the loader or guard with `try/catch` and return fallback
 data.
+
+**`/path/index.html` appeared in my build output.**
+The link crawler picked up a `<Link href="/path">` example from a doc
+code block. This is fixed as of Issue #213 — the crawler strips code
+regions and excludes known placeholders. If you rely on a literal
+`/path` route, name it something concrete or add its path to
+`build.crawl.exclude` so the crawler ignores it.
+
+**Build fails with `PrerenderError: Prerender failed for 1 route(s)`.**
+Issue #216 — one of your dynamic page modules either fails to load
+(import/compile error) or throws from `generateStaticParams`. The
+error summary names the offending route pattern + the `cause`. Fix the
+module, or pass `--prerender-skip-errors` to downgrade the failure to
+a warning while you migrate.
 
 **Stale HTML after a deploy.**
 `Cache-Control: immutable` tells the browser never to revalidate. Pair

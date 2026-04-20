@@ -431,6 +431,10 @@ describe("prerenderRoutes — route spec mutation (Issue #214)", () => {
     const result = await prerenderRoutes(manifest, fetchHandler(), {
       rootDir: root,
       outDir: path.join(root, "pre"),
+      // Issue #216 — user-thrown generator errors are now build-failing
+      // by default. The sibling-route invariant is still exercised here
+      // via `skipErrors: true` so the result shape contract holds.
+      skipErrors: true,
       importModule: moduleResolver({
         "app/[lang]/page.tsx": {
           dynamicParams: false,

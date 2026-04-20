@@ -65,6 +65,15 @@ export interface BuildOptions {
    * fork, no d3) — a single file you can open from a file:// URL or email.
    */
   analyze?: boolean | "json";
+  /**
+   * Issue #216 — downgrade prerender errors from build-failing to
+   * warnings. Default `false` (any broken `generateStaticParams` or
+   * module-load failure aborts the build with a non-zero exit code so
+   * CI notices). Set `true` to let a build ship even if one or more
+   * routes fail to prerender — the errors still appear in the console
+   * summary, just non-fatally.
+   */
+  prerenderSkipErrors?: boolean;
 }
 
 export async function build(options: BuildOptions = {}): Promise<boolean> {
@@ -236,26 +245,68 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
         return fetch(targetUrl);
       };
 
-      const prerenderResult = await prerenderRoutes(manifest, fetchHandler, {
-        rootDir: cwd,
-        // Phase 18 — runtime-aware output dir + manifest index.
-        outDir: ".mandu/prerendered",
-        writeIndex: true,
-        crawl: true,
-      });
+      let prerenderResult;
+      let prerenderFatal: unknown = null;
+      try {
+        prerenderResult = await prerenderRoutes(manifest, fetchHandler, {
+          rootDir: cwd,
+          // Phase 18 — runtime-aware output dir + manifest index.
+          outDir: ".mandu/prerendered",
+          writeIndex: true,
+          crawl: true,
+          // Issue #213 — pass user-configured crawl denylist into engine.
+          crawlOptions: buildConfig.crawl
+            ? {
+                exclude: buildConfig.crawl.exclude,
+                replaceDefaultExclude: buildConfig.crawl.replaceDefaultExclude,
+              }
+            : undefined,
+          // Issue #216 — surface aggregate errors unless the user opted
+          // out via `--prerender-skip-errors`.
+          skipErrors: options.prerenderSkipErrors === true,
+        });
+      } catch (err) {
+        prerenderFatal = err;
+      } finally {
+        tempServer.stop();
+      }
 
-      tempServer.stop();
+      if (prerenderFatal) {
+        // Issue #216 — `PrerenderError` is an aggregate that already
+        // prints a per-route summary. Log the full chain (name,
+        // summary, and `cause` if present) and fail the build loudly.
+        const err = prerenderFatal as Error & { errors?: Array<{ pattern: string; message: string; cause?: unknown }> };
+        console.error(`\n❌ Prerender failed — build aborted.`);
+        console.error(`   ${err.message}`);
+        if (Array.isArray(err.errors)) {
+          for (const routeErr of err.errors) {
+            if (routeErr.cause instanceof Error && routeErr.cause.stack) {
+              console.error(
+                `   ↳ [${routeErr.pattern}] cause: ${routeErr.cause.stack.split("\n").slice(0, 3).join("\n       ")}`
+              );
+            }
+          }
+        }
+        console.error(
+          "   Pass --prerender-skip-errors to downgrade these to warnings."
+        );
+        await runHook("onAfterBuild", plugins, hooks, {
+          success: false,
+          duration: Math.round(performance.now() - buildStartTime),
+        });
+        return false;
+      }
 
-      if (prerenderResult.generated > 0) {
-        console.log(`   ✅ ${prerenderResult.generated} page(s) prerendered`);
-        for (const page of prerenderResult.pages) {
+      if (prerenderResult!.generated > 0) {
+        console.log(`   ✅ ${prerenderResult!.generated} page(s) prerendered`);
+        for (const page of prerenderResult!.pages) {
           const sizeKB = (page.size / 1024).toFixed(1);
           console.log(`      ${page.path} (${sizeKB} KB, ${page.duration}ms)`);
         }
       }
-      if (prerenderResult.errors.length > 0) {
-        console.warn(`   ⚠️  ${prerenderResult.errors.length} error(s):`);
-        for (const err of prerenderResult.errors) {
+      if (prerenderResult!.errors.length > 0) {
+        console.warn(`   ⚠️  ${prerenderResult!.errors.length} error(s):`);
+        for (const err of prerenderResult!.errors) {
           console.warn(`      ${err}`);
         }
       }
@@ -280,6 +331,9 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
       }
       // ─── End Issue #214 ─────────────────────────────────────────────────
     } catch (error) {
+      // Outer catch — only surfaces errors from the transient server
+      // boot path itself (handler registration, startServer). Prerender
+      // engine errors are handled inside via `prerenderFatal`.
       console.warn("   ⚠️  Prerendering skipped:", error instanceof Error ? error.message : String(error));
     }
   }

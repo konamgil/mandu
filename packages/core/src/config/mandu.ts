@@ -197,6 +197,35 @@ export interface ManduConfig {
      * writes JSON only (useful for CI, skips the HTML render cost).
      */
     analyze?: boolean;
+    /**
+     * Issue #213 — tune the prerender link-crawler.
+     *
+     * The crawler (enabled by `mandu build` when `build.prerender !== false`)
+     * scans rendered HTML for `<a href="/...">` and enqueues those paths
+     * for prerendering. Doc sites that ship code examples (`<pre><code>
+     * &lt;Link href="/path" /&gt;</code></pre>`) previously leaked those
+     * illustrative URLs into the render queue, producing spurious
+     * `.mandu/static/path/index.html` files.
+     *
+     * The engine strips `<pre>`, `<code>`, fenced markdown, and inline
+     * code spans before scanning. It also applies a small default
+     * denylist of placeholder paths (`/path`, `/example`, `/your-*`,
+     * etc.). Use this block to extend or replace the denylist for your
+     * project.
+     */
+    crawl?: {
+      /**
+       * Extra pathnames or simple globs (`*`) to exclude when crawling.
+       * Merged with the built-in default denylist unless
+       * {@link replaceDefaultExclude} is `true`.
+       */
+      exclude?: string[];
+      /**
+       * When `true`, `exclude` replaces the built-in denylist entirely.
+       * Default `false`.
+       */
+      replaceDefaultExclude?: boolean;
+    };
   };
   dev?: {
     hmr?: boolean;

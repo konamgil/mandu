@@ -31,6 +31,17 @@ const manifest: RoutesManifest = {
   ],
 };
 
+/**
+ * Issue #216 — dynamic route modules in this fixture are not real on
+ * disk, so stub the `importModule` resolver to return an empty module
+ * (the legitimate "no `generateStaticParams` export" case). Without
+ * this, the prerender engine's new hard-fail behavior would treat the
+ * missing module as a build-breaking error.
+ */
+const noStaticParamsImport = async () => ({
+  /* intentionally empty — no generateStaticParams */
+});
+
 function createFetchHandler(extraLinks: Record<string, string[]> = {}) {
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
@@ -54,6 +65,7 @@ describe("prerenderRoutes", () => {
     const result = await prerenderRoutes(manifest, createFetchHandler(), {
       rootDir: root,
       outDir,
+      importModule: noStaticParamsImport,
     });
 
     // Two static routes: / and /about (dynamic /blog/:slug excluded)
@@ -76,6 +88,7 @@ describe("prerenderRoutes", () => {
     const result = await prerenderRoutes(manifest, createFetchHandler(), {
       rootDir: root,
       outDir: path.join(root, "static"),
+      importModule: noStaticParamsImport,
     });
 
     for (const page of result.pages) {
@@ -92,6 +105,7 @@ describe("prerenderRoutes", () => {
     const result = await prerenderRoutes(manifest, failHandler, {
       rootDir: root,
       outDir: path.join(root, "static"),
+      importModule: noStaticParamsImport,
     });
 
     expect(result.generated).toBe(0);
@@ -110,6 +124,7 @@ describe("prerenderRoutes", () => {
       rootDir: root,
       outDir,
       crawl: true,
+      importModule: noStaticParamsImport,
     });
 
     // Should render /, /about, and discovered /contact
@@ -128,6 +143,7 @@ describe("prerenderRoutes", () => {
       rootDir: root,
       outDir: path.join(root, "static"),
       crawl: false,
+      importModule: noStaticParamsImport,
     });
 
     // Only the two static routes, /contact not discovered
@@ -148,6 +164,7 @@ describe("prerenderRoutes", () => {
       rootDir: root,
       outDir: path.join(root, "static"),
       crawl: true,
+      importModule: noStaticParamsImport,
     });
 
     expect(result.generated).toBe(2);

@@ -32,6 +32,43 @@ import { runDefinePrerenderHook } from "../plugins/runner";
 
 // ========== Types ==========
 
+/**
+ * Issue #213 — link-crawler configuration.
+ *
+ * When the prerender engine crawls rendered HTML for internal links
+ * (`crawl: true`) it accidentally picks up `href` attributes embedded
+ * inside documentation code examples (`<pre>`, `<code>`, fenced
+ * blocks, inline code spans). These are illustrative, not real routes,
+ * and trying to prerender them produces spurious `/path/index.html`
+ * files or build failures.
+ *
+ * The crawl options let callers:
+ *   1. Trust the default behavior (strip code regions + a small
+ *      hard-coded denylist of obvious placeholders).
+ *   2. Extend the denylist with project-specific placeholder globs.
+ *   3. Replace the denylist entirely for maximum control.
+ */
+export interface PrerenderCrawlOptions {
+  /**
+   * Extra pathnames or prefixes to exclude when crawling links. Each
+   * entry is matched against the normalized crawl target:
+   *   - Exact string (e.g. `"/example"`): matches that pathname only.
+   *   - Glob suffix (e.g. `"/your-*"`): uses a simple `*` → `.*` regex
+   *     translation to match any pathname with that prefix / pattern.
+   *
+   * Merged with the default denylist (see
+   * {@link DEFAULT_CRAWL_DENYLIST}). Use {@link PrerenderCrawlOptions.exclude}
+   * to ADD entries; set {@link PrerenderCrawlOptions.replaceDefaultExclude}
+   * to `true` to REPLACE the defaults.
+   */
+  exclude?: string[];
+  /**
+   * When `true`, `exclude` replaces the built-in denylist entirely
+   * instead of extending it. Default `false` (safe — defaults win).
+   */
+  replaceDefaultExclude?: boolean;
+}
+
 export interface PrerenderOptions {
   /** Project root — all relative paths resolve from here. */
   rootDir: string;
@@ -46,6 +83,12 @@ export interface PrerenderOptions {
   routes?: string[];
   /** Follow internal `<a href>` links in rendered HTML (default: false). */
   crawl?: boolean;
+  /**
+   * Issue #213 — link-crawler configuration. Only consulted when
+   * `crawl: true`. Omitting the block uses the defaults (strip code
+   * regions, apply {@link DEFAULT_CRAWL_DENYLIST}).
+   */
+  crawlOptions?: PrerenderCrawlOptions;
   /**
    * When true, also write `<outDir>/_manifest.json` listing every
    * prerendered pathname. The runtime uses this index to short-circuit
@@ -67,6 +110,18 @@ export interface PrerenderOptions {
    */
   plugins?: readonly ManduPlugin[];
   configHooks?: Partial<ManduHooks>;
+
+  /**
+   * Issue #216 — opt-out from hard-failing on route errors.
+   * When `true`, errors from individual routes (module load / throw /
+   * non-array return from `generateStaticParams`) are collected in
+   * `PrerenderResult.errors` as warnings and the orchestrator returns
+   * normally. When `false` (default) the prerender still collects
+   * every route's error but throws a `PrerenderError` aggregate at
+   * the end so CI can exit non-zero. Set by the CLI's
+   * `--prerender-skip-errors` flag.
+   */
+  skipErrors?: boolean;
 }
 
 export interface PrerenderResult {
@@ -107,6 +162,61 @@ export const LEGACY_PRERENDER_DIR = ".mandu/static";
 export const DEFAULT_PRERENDER_CACHE_CONTROL =
   "public, max-age=31536000, immutable";
 
+/**
+ * Issue #213 — default denylist for the link crawler.
+ *
+ * These entries match paths that appear in doc examples (and never
+ * correspond to real routes): the classic placeholders (`/path`,
+ * `/example`), the `/your-*` and `/my-*` scaffolds people write when
+ * illustrating URL shapes, and the `/...` catch-all literal.
+ *
+ * Exact strings match a full pathname; entries containing `*` are
+ * treated as simple globs (`*` → `.*`, anchored).
+ */
+export const DEFAULT_CRAWL_DENYLIST: readonly string[] = [
+  "/path",
+  "/...",
+  "/example",
+  "/your-*",
+  "/my-*",
+  "/foo",
+  "/bar",
+  "/baz",
+  "/some-path",
+];
+
+/**
+ * Issue #216 — aggregate error thrown when one or more routes fail
+ * during prerender (and `skipErrors !== true`). Each entry carries the
+ * offending route pattern plus the underlying `cause`, so CI logs show
+ * both the symptom (the summary line) and the root cause chain.
+ */
+export class PrerenderError extends Error {
+  readonly errors: PrerenderRouteError[];
+
+  constructor(errors: PrerenderRouteError[]) {
+    const summary = errors
+      .map((e) => `  - [${e.pattern}] ${e.message}`)
+      .join("\n");
+    super(
+      `Prerender failed for ${errors.length} route(s):\n${summary}`,
+    );
+    this.name = "PrerenderError";
+    this.errors = errors;
+  }
+}
+
+export interface PrerenderRouteError {
+  /** The route pattern that failed (e.g. `/docs/:slug`). */
+  pattern: string;
+  /** Absolute module path that was loaded (or attempted). */
+  module: string;
+  /** Human-readable description of the failure. */
+  message: string;
+  /** The underlying error object, preserved for `cause` chaining. */
+  cause: unknown;
+}
+
 // ========== Implementation ==========
 
 /**
@@ -131,8 +241,10 @@ export async function prerenderRoutes(
     rootDir,
     outDir = LEGACY_PRERENDER_DIR,
     crawl = false,
+    crawlOptions,
     writeIndex = false,
     importModule,
+    skipErrors = false,
   } = options;
 
   // Phase 18.τ — resolve plugin hook bundle once so the hot render loop
@@ -150,8 +262,19 @@ export async function prerenderRoutes(
 
   const pages: PrerenderPageResult[] = [];
   const errors: string[] = [];
+  /**
+   * Issue #216 — structured per-route errors used to build the
+   * aggregate thrown at the end of the run. `errors` (the flat string
+   * array on `PrerenderResult`) is preserved for backward-compat.
+   */
+  const routeErrors: PrerenderRouteError[] = [];
   const renderedPaths = new Set<string>();
   const pageIndex: Record<string, string> = {};
+
+  // Issue #213 — compile the crawl denylist (defaults ∪ user extras, or
+  // user's replacement list) into an array of regexes once. Doing this
+  // outside the per-page crawl loop avoids recompiling N times.
+  const crawlDenylist = compileCrawlDenylist(crawlOptions);
 
   // 1. Explicit user-supplied routes.
   const pathsToRender = new Set<string>(options.routes ?? []);
@@ -170,12 +293,34 @@ export async function prerenderRoutes(
   for (const route of manifest.routes) {
     if (route.kind !== "page" || !isDynamicPattern(route.pattern)) continue;
 
+    // ─── Issue #216 ─────────────────────────────────────────────────────────
+    // Distinguish the three failure modes that were previously collapsed
+    // into a single `try/catch` silent skip:
+    //
+    //   1. Module export missing (`generateStaticParams` is undefined)
+    //      → legitimate "page doesn't opt into static params"; silent skip.
+    //   2. Module fails to load (compile error, missing import, etc.)
+    //      → real bug, surface with route + cause chain.
+    //   3. User's `generateStaticParams` throws or returns non-array
+    //      → real bug, surface with route + cause chain.
+    //
+    // The orchestrator still continues with the remaining routes so one
+    // broken page doesn't block the whole build; we just collect each
+    // failure in `routeErrors` and re-raise as a `PrerenderError` once
+    // the run finishes (unless `skipErrors === true`).
+    // ─── End Issue #216 ─────────────────────────────────────────────────────
     let mod: PageModuleWithStaticParams;
     try {
       mod = await loadPageModule(rootDir, route, resolveModule);
-    } catch {
-      // Module failed to load entirely. Silent skip — the page may
-      // simply not opt into static params; SSR can still serve it.
+    } catch (loadErr) {
+      const message = `Failed to load page module for prerender of "${route.pattern}" (${route.module}): ${describeError(loadErr)}`;
+      errors.push(`[${route.pattern}] ${message}`);
+      routeErrors.push({
+        pattern: route.pattern,
+        module: route.module,
+        message,
+        cause: loadErr,
+      });
       continue;
     }
 
@@ -190,7 +335,9 @@ export async function prerenderRoutes(
     // ─── End Issue #214 ─────────────────────────────────────────────────────
 
     if (typeof mod.generateStaticParams !== "function") {
-      // Not opted-in for this route — perfectly fine.
+      // Issue #216 — legitimate "no export" case. This is the only
+      // silent skip that survives the hardening: the whole point of
+      // the feature is that exporting the function is optional.
       continue;
     }
 
@@ -201,7 +348,19 @@ export async function prerenderRoutes(
         paramSets,
       } = await collectStaticPaths(route.pattern, mod);
       for (const p of paths) pathsToRender.add(p);
-      for (const e of paramErrors) errors.push(`[${route.pattern}] ${e}`);
+      for (const e of paramErrors) {
+        errors.push(`[${route.pattern}] ${e}`);
+        // Validation errors from individual param sets are already
+        // fine-grained (`generateStaticParams()[i] for "pattern": ...`);
+        // promote them to route-level errors so the aggregate surfaces
+        // them too.
+        routeErrors.push({
+          pattern: route.pattern,
+          module: route.module,
+          message: e,
+          cause: new Error(e),
+        });
+      }
 
       // ─── Issue #214 ───────────────────────────────────────────────────────
       // Persist the resolved param sets on the spec. The runtime #214 guard
@@ -214,11 +373,17 @@ export async function prerenderRoutes(
       }
       // ─── End Issue #214 ───────────────────────────────────────────────────
     } catch (error) {
-      // User code threw. Surface the error but keep going — other
-      // routes should not be blocked by one buggy generator.
-      errors.push(
-        `[${route.pattern}] generateStaticParams threw: ${describeError(error)}`
-      );
+      // Issue #216 — user's `generateStaticParams` threw. Capture with
+      // context (pattern + module + cause) so `PrerenderError` can
+      // rebuild a proper chain.
+      const message = `generateStaticParams threw: ${describeError(error)}`;
+      errors.push(`[${route.pattern}] ${message}`);
+      routeErrors.push({
+        pattern: route.pattern,
+        module: route.module,
+        message,
+        cause: error,
+      });
     }
   }
 
@@ -283,7 +448,9 @@ export async function prerenderRoutes(
 
       // 5. Optional crawl — harvest internal links for next pass.
       if (crawl) {
-        const links = extractInternalLinks(html);
+        // Issue #213 — strip code regions + apply denylist before adding
+        // discovered paths to the render queue.
+        const links = extractInternalLinks(html, crawlDenylist);
         for (const link of links) {
           if (!renderedPaths.has(link) && !pathsToRender.has(link)) {
             pathsToRender.add(link);
@@ -307,6 +474,13 @@ export async function prerenderRoutes(
       JSON.stringify(indexContents, null, 2),
       "utf-8"
     );
+  }
+
+  // 7. Issue #216 — if any route errored, surface as aggregate so CI
+  //    can exit non-zero. `skipErrors: true` converts errors to
+  //    warnings (collected in `errors` + the returned result).
+  if (routeErrors.length > 0 && !skipErrors) {
+    throw new PrerenderError(routeErrors);
   }
 
   return {
@@ -419,19 +593,110 @@ function getOutputPath(outDir: string, pathname: string): string {
   return path.join(outDir, decoded, "index.html");
 }
 
-/** Extract absolute internal `<a href>` paths (same-origin only). */
-function extractInternalLinks(html: string): string[] {
+/**
+ * Issue #213 — strip regions of HTML/MDX that only contain illustrative
+ * markup (doc code examples) before scanning for crawl targets.
+ *
+ * The order below is deliberate:
+ *   1. HTML comments (`<!-- ... -->`) — may wrap real `<a>` / `<code>`
+ *      tags users don't want crawled.
+ *   2. Fenced markdown code blocks (``` ... ```), including ~~~-fenced.
+ *   3. Block HTML code containers (`<pre>...</pre>`, `<code>...</code>`,
+ *      including attributes like `<pre class="language-tsx">`).
+ *   4. Inline-code backticks (`` `...` ``).
+ *
+ * Each strip uses a non-greedy, multiline-aware regex. The replacements
+ * are whitespace-only so line-based tools don't get confused, but the
+ * string lengths stay similar (we don't need precise positions — we only
+ * re-scan for `href` attributes after the strip).
+ *
+ * Exported for test coverage.
+ */
+export function stripCodeRegions(html: string): string {
+  let out = html;
+  // 1. HTML comments — nested and multiline.
+  out = out.replace(/<!--[\s\S]*?-->/g, "");
+  // 2. Fenced markdown code blocks — both ``` and ~~~ fences.
+  //    Allow optional info string on the opening fence.
+  out = out.replace(/```[^\n]*\n[\s\S]*?```/g, "");
+  out = out.replace(/~~~[^\n]*\n[\s\S]*?~~~/g, "");
+  // 3. <pre>...</pre> (case-insensitive, attributes allowed).
+  out = out.replace(/<pre\b[^>]*>[\s\S]*?<\/pre>/gi, "");
+  // 4. <code>...</code> (case-insensitive, attributes allowed).
+  out = out.replace(/<code\b[^>]*>[\s\S]*?<\/code>/gi, "");
+  // 5. Inline markdown code spans — single backtick pairs. Avoid
+  //    matching stray backticks by limiting to same-line and
+  //    disallowing embedded backticks.
+  out = out.replace(/`[^`\r\n]+`/g, "");
+  return out;
+}
+
+/**
+ * Issue #213 — compile the crawl denylist from options + defaults into
+ * an array of regexes once. Accepts exact strings and simple globs where
+ * `*` translates to `.*` (anchored).
+ */
+export function compileCrawlDenylist(
+  options: PrerenderCrawlOptions | undefined,
+): RegExp[] {
+  const defaults = options?.replaceDefaultExclude
+    ? []
+    : DEFAULT_CRAWL_DENYLIST;
+  const extras = options?.exclude ?? [];
+  const combined = Array.from(new Set([...defaults, ...extras]));
+  return combined.map((entry) => denylistEntryToRegex(entry));
+}
+
+function denylistEntryToRegex(entry: string): RegExp {
+  // Escape everything except `*`, then translate `*` → `.*`.
+  const escaped = entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = escaped.replace(/\*/g, ".*");
+  return new RegExp(`^${pattern}$`);
+}
+
+/**
+ * Normalize a discovered pathname for de-duplication + matching.
+ * Lowercases (HTML href matching is case-insensitive) and strips a
+ * trailing slash except for the root.
+ */
+function normalizeCrawlPath(href: string): string {
+  const clean = href.split("?")[0].split("#")[0];
+  let norm = clean.toLowerCase();
+  if (norm.length > 1 && norm.endsWith("/")) {
+    norm = norm.slice(0, -1);
+  }
+  return norm;
+}
+
+/**
+ * Extract absolute internal `<a href>` paths (same-origin only).
+ *
+ * Issue #213 — strips HTML/MDX code regions before scanning so `href`
+ * attributes inside doc examples (e.g. `<pre><code>&lt;Link
+ * href="/example"&gt;</code></pre>` or fenced markdown) don't leak
+ * into the crawl queue. Also applies the configurable denylist so
+ * placeholder paths like `/path` or `/your-route` are filtered out.
+ *
+ * Exported for test coverage.
+ */
+export function extractInternalLinks(
+  html: string,
+  denylist: RegExp[] = [],
+): string[] {
+  const stripped = stripCodeRegions(html);
   const links: string[] = [];
   const hrefRegex = /href=["']([^"']+)["']/g;
   let match: RegExpExecArray | null;
-  while ((match = hrefRegex.exec(html)) !== null) {
+  while ((match = hrefRegex.exec(stripped)) !== null) {
     const href = match[1];
-    if (href.startsWith("/") && !href.startsWith("//")) {
-      const cleanPath = href.split("?")[0].split("#")[0];
-      if (!cleanPath.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/)) {
-        links.push(cleanPath);
-      }
+    if (!href.startsWith("/") || href.startsWith("//")) continue;
+    const normalized = normalizeCrawlPath(href);
+    if (!normalized) continue;
+    if (normalized.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/)) {
+      continue;
     }
+    if (denylist.some((re) => re.test(normalized))) continue;
+    links.push(normalized);
   }
   return [...new Set(links)];
 }
