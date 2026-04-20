@@ -1,5 +1,44 @@
 # @mandujs/mcp
 
+## 0.21.0
+
+### Minor Changes
+
+- Phase 18 Wave E3+E4 — Mandu 차별화 레이어 완성.
+
+  **ι AI refactor MCP tools** (`@mandujs/mcp`):
+
+  - `mandu.refactor.rewrite_generated_barrel` — `__generated__/*` → `getGenerated()` + `GeneratedRegistry` augmentation
+  - `mandu.refactor.migrate_route_conventions` — 인라인 Suspense/ErrorBoundary/NotFound → per-route convention files
+  - `mandu.refactor.extract_contract` — 인라인 Zod 스키마 → `contract/<group>.contract.ts`
+
+  **κ Typed RPC** (`@mandujs/core`):
+
+  - `defineRpc({ method: { input, output, handler } })` + `createRpcClient<typeof rpc>()` Proxy 기반 end-to-end type inference. Zod 검증. tRPC 의존 없음.
+
+  **λ Bun.cron scheduler** (`@mandujs/core` + `@mandujs/cli`):
+
+  - `defineCron({ name, schedule, timezone, runOn, handler })` Bun.cron 기반
+  - `mandu build --target=workers` 시 `[triggers] crons = [...]` 자동 emission
+  - Cron 표현식 + timezone Intl 검증
+
+  Quality: 7 packages typecheck clean, +132 regression tests, zero new
+  runtime deps.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.31.0
+  - @mandujs/skills@10.0.0
+
+## 0.20.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.30.0
+  - @mandujs/skills@9.0.0
+
 ## 0.20.3
 
 ### Patch Changes
