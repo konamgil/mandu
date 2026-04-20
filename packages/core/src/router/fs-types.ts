@@ -129,6 +129,14 @@ export interface FSRouteConfig {
   /** 에러 UI 모듈 경로 */
   errorModule?: string;
 
+  /**
+   * 404 UI 모듈 경로. Nearest ancestor `not-found.tsx` resolved via
+   * `findClosestSpecialFile` at scan time. Used at runtime when a page
+   * loader calls `notFound()` or — for unmatched URLs — when the root
+   * route carries one. Phase 18.β — Next.js App Router parity.
+   */
+  notFoundModule?: string;
+
   /** Hydration 설정 */
   hydration?: HydrationConfig;
 

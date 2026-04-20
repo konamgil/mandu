@@ -188,8 +188,10 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   const hasDynamicWithStaticParams = manifest.routes.some(
     r => r.kind === "page" && r.pattern.includes(":") // generateStaticParams 가능
   );
+  // Phase 18 — honor `ManduConfig.build.prerender` (default: true).
+  const prerenderEnabled = buildConfig.prerender !== false;
 
-  if (staticRoutes.length > 0 || hasDynamicWithStaticParams) {
+  if (prerenderEnabled && (staticRoutes.length > 0 || hasDynamicWithStaticParams)) {
     console.log("\n📄 Prerendering static pages...");
 
     try {
@@ -208,6 +210,10 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
         streaming: serverConfig.streaming,
         rateLimit: serverConfig.rateLimit,
         cssPath,
+        // Disable pass-through during the build-time render — we *are*
+        // the thing generating the HTML, so serving previously-built
+        // HTML back to ourselves would produce stale output.
+        prerender: false,
       });
 
       // fetchHandler 추출 — 서버의 내부 핸들러로 프리렌더
@@ -219,6 +225,9 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
 
       const prerenderResult = await prerenderRoutes(manifest, fetchHandler, {
         rootDir: cwd,
+        // Phase 18 — runtime-aware output dir + manifest index.
+        outDir: ".mandu/prerendered",
+        writeIndex: true,
         crawl: true,
       });
 

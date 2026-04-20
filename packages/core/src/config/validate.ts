@@ -5,6 +5,7 @@ import { CONFIG_FILES, coerceConfig } from "./mandu";
 import { readJsonFile } from "../utils/bun";
 import type { ManduAdapter } from "../runtime/adapter";
 import type { ManduPlugin, ManduHooks } from "../plugins/hooks";
+import type { Middleware } from "../middleware/define";
 
 /**
  * DNA-003: Strict mode schema helper
@@ -98,6 +99,12 @@ const BuildConfigSchema = z
     minify: z.boolean().default(true),
     sourcemap: z.boolean().default(false),
     splitting: z.boolean().default(false),
+    /**
+     * Phase 18 — prerender static HTML for pages during `mandu build`.
+     * Default: `true` (every static page + every dynamic page whose
+     * module exports `generateStaticParams` is prerendered).
+     */
+    prerender: z.boolean().default(true),
   })
   .strict();
 
@@ -264,6 +271,28 @@ const ManduHooksSchema = z.custom<Partial<ManduHooks>>(
   { message: "hooks must be an object" }
 );
 
+/**
+ * Phase 18.ε — canonical request-level middleware. Each entry must be an
+ * object with a non-empty `name` string and a `handler` function.
+ * `match` is optional but must be a function when present. Zod cannot
+ * introspect closures, so this is a structural check; `defineMiddleware`
+ * enforces the same shape at definition time for the clearest DX error.
+ */
+const MiddlewareSchema = z.custom<Middleware>(
+  (v) => {
+    if (typeof v !== "object" || v === null) return false;
+    const obj = v as { name?: unknown; handler?: unknown; match?: unknown };
+    if (typeof obj.name !== "string" || obj.name.length === 0) return false;
+    if (typeof obj.handler !== "function") return false;
+    if (obj.match !== undefined && typeof obj.match !== "function") return false;
+    return true;
+  },
+  {
+    message:
+      "Each middleware must be an object with a non-empty `name` string, a `handler` function, and (optionally) a `match` function. Use `defineMiddleware({...})` to construct.",
+  }
+);
+
 export const ManduConfigSchema = z
   .object({
     adapter: AdapterConfigSchema.optional(),
@@ -295,6 +324,13 @@ export const ManduConfigSchema = z
     observability: ObservabilityConfigSchema.default({}),
     plugins: z.array(ManduPluginSchema).optional(),
     hooks: ManduHooksSchema.optional(),
+    /**
+     * Phase 18.ε — request-level middleware chain. Array validated
+     * structurally (see {@link MiddlewareSchema}); no default, so
+     * omitting the field leaves the chain empty (zero-overhead
+     * passthrough at runtime).
+     */
+    middleware: z.array(MiddlewareSchema).optional(),
   })
   .strict();
 

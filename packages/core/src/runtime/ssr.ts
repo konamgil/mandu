@@ -11,6 +11,7 @@ import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
 import { generateFastRefreshPreamble } from "../bundler/dev";
 import { PREFETCH_HELPER_SCRIPT } from "../client/prefetch-helper";
 import { SPA_NAV_HELPER_SCRIPT } from "../client/spa-nav-helper";
+import { maybeInjectDevOverlay } from "../dev-error-overlay";
 
 /**
  * Issue #192 — `@view-transition` at-rule block.
@@ -136,6 +137,20 @@ export interface SSROptions {
    * flag is a no-op in prod regardless of value).
    */
   devtools?: boolean;
+  /**
+   * Phase 18.α — Dev error overlay opt-out. When `true` (default) dev-mode
+   * SSR responses receive an inlined `<style>` + `<script>` block that
+   * renders a Next.js-style full-screen overlay for:
+   *   - uncaught `window.onerror` events
+   *   - `unhandledrejection` Promise rejections
+   *   - custom `__MANDU_ERROR__` CustomEvent dispatches (used by the 500
+   *     response path to surface SSR render failures)
+   *
+   * Wired from `ManduConfig.dev.errorOverlay`. Prod builds NEVER emit
+   * the overlay — `shouldInjectOverlay()` triple-gates against
+   * `NODE_ENV=production`, `isDev=false`, and explicit opt-out.
+   */
+  devErrorOverlay?: boolean;
 }
 
 let projectRenderToString: ((element: ReactElement) => string) | null | undefined;
@@ -255,16 +270,56 @@ function generateHydrationScripts(
 /**
  * Island 래퍼로 컨텐츠 감싸기
  * v0.8.0: data-mandu-src 속성 추가 (Runtime이 dynamic import로 로드)
+ *
+ * Phase 18.δ — emit `data-hydrate` alongside legacy `data-mandu-priority`.
+ * The new attribute is the canonical per-island hydration strategy spec
+ * read by `packages/core/src/client/hydrate.ts::parseHydrateStrategy`.
+ *
+ * Mapping of legacy priorities → Astro-grade strategies:
+ *   - `immediate`   → `load`        (hydrate right away)
+ *   - `visible`     → `visible`     (IntersectionObserver, 200px rootMargin)
+ *   - `idle`        → `idle`        (requestIdleCallback)
+ *   - `interaction` → `interaction` (click/touchstart/keydown)
+ *
+ * `hydrate` (the formalized strategy spec, including `media(<query>)`)
+ * takes precedence when provided; otherwise we derive `data-hydrate` from
+ * `priority` for backward compatibility. `data-mandu-priority` stays so
+ * existing bundler-generated runtimes and dev-tools keep working.
  */
 export function wrapWithIsland(
   content: string,
   routeId: string,
   priority: HydrationPriority = "visible",
-  bundleSrc?: string
+  bundleSrc?: string,
+  hydrate?: string
 ): string {
   const cacheBustedSrc = bundleSrc ? `${bundleSrc}?t=${Date.now()}` : undefined;
   const srcAttr = cacheBustedSrc ? ` data-mandu-src="${escapeHtmlAttr(cacheBustedSrc)}"` : "";
-  return `<div data-mandu-island="${escapeHtmlAttr(routeId)}"${srcAttr} data-mandu-priority="${escapeHtmlAttr(priority)}" style="display:contents">${content}</div>`;
+  const hydrateValue = hydrate ?? priorityToHydrateStrategy(priority);
+  const hydrateAttr = ` data-hydrate="${escapeHtmlAttr(hydrateValue)}"`;
+  return `<div data-mandu-island="${escapeHtmlAttr(routeId)}"${srcAttr} data-mandu-priority="${escapeHtmlAttr(priority)}"${hydrateAttr} style="display:contents">${content}</div>`;
+}
+
+/**
+ * Legacy `HydrationPriority` → Phase 18.δ `data-hydrate` strategy name.
+ *
+ * Kept local to ssr.ts (no public export) because the mapping is purely an
+ * attribute-emission concern; callers that know the new spec pass `hydrate`
+ * directly to `wrapWithIsland`.
+ */
+function priorityToHydrateStrategy(priority: HydrationPriority): string {
+  switch (priority) {
+    case "immediate":
+      return "load";
+    case "visible":
+      return "visible";
+    case "idle":
+      return "idle";
+    case "interaction":
+      return "interaction";
+    default:
+      return "load";
+  }
 }
 
 /**
@@ -558,6 +613,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     prefetch = true,
     spa,
     devtools,
+    devErrorOverlay,
   } = options;
 
   // CSS 링크 태그 생성
@@ -711,6 +767,17 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   });
   const hoistedLinkTags = hoistedLinks.join("\n  ");
 
+  // Phase 18.α — Dev Error Overlay injection.
+  // Only emitted when `isDev` AND the user has not opted out (via
+  // `ManduConfig.dev.errorOverlay: false` → `devErrorOverlay: false`).
+  // The injector itself re-checks `NODE_ENV !== "production"` as a
+  // belt-and-suspenders guard, so prod HTML is byte-identical
+  // regardless of whether this option is wired.
+  const devErrorOverlayTag = maybeInjectDevOverlay({
+    isDev,
+    enabled: devErrorOverlay,
+  });
+
   return `<!doctype html>
 <html lang="${escapeHtmlAttr(lang)}">
 <head>
@@ -725,6 +792,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   ${headTags}
   ${collectedHeadTags}
   ${fastRefreshPreamble}
+  ${devErrorOverlayTag}
 </head>
 <body>
   <div id="root">${bodyContent}</div>

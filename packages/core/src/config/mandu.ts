@@ -2,6 +2,7 @@ import path from "path";
 import { readJsonFile } from "../utils/bun";
 import type { ManduAdapter } from "../runtime/adapter";
 import type { ManduPlugin, ManduHooks } from "../plugins/hooks";
+import type { Middleware } from "../middleware/define";
 
 export type GuardRuleSeverity = "error" | "warn" | "warning" | "off";
 
@@ -232,6 +233,29 @@ export interface ManduConfig {
      * to re-read this comment to recover.
      */
     prebuildTimeoutMs?: number;
+    /**
+     * Phase 18.α — Dev-only full-screen error overlay (Next.js / Astro
+     * style). When `true` (default) Mandu injects a ~10 KB inline
+     * `<style>` + `<script>` block into every dev SSR response that
+     * renders a modal on:
+     *
+     *   - `window.onerror` — uncaught script errors
+     *   - `unhandledrejection` — unhandled Promise rejections
+     *   - custom `__MANDU_ERROR__` CustomEvent — used by the server's
+     *     500 path to surface SSR render failures directly in the
+     *     browser instead of only in the terminal
+     *
+     * The overlay ships a "Copy for AI" button that formats a markdown
+     * snapshot of the error + stack for paste-into-Claude triage.
+     *
+     * Production builds NEVER emit the overlay regardless of this flag:
+     * `shouldInjectOverlay()` triple-gates against `isDev`,
+     * `NODE_ENV=production`, and explicit opt-out.
+     *
+     * Set `false` to disable in dev (e.g. when capturing screenshots
+     * for docs). Default: `true`.
+     */
+    errorOverlay?: boolean;
   };
   fsRoutes?: {
     routesDir?: string;
@@ -265,6 +289,22 @@ export interface ManduConfig {
   };
   plugins?: ManduPlugin[];
   hooks?: Partial<ManduHooks>;
+  /**
+   * Phase 18.ε — canonical request-level middleware chain.
+   *
+   * Array of {@link Middleware} executed in declaration order (outermost
+   * first) BEFORE route dispatch. Each middleware may short-circuit by
+   * returning a Response without calling `next()`, or mutate the
+   * downstream Response after `next()` returns. This is the Next.js
+   * `middleware.ts` / SvelteKit `handle` sequence analogue.
+   *
+   * Compose with {@link defineMiddleware} + bridge wrappers
+   * (`csrfMiddleware`, `sessionMiddleware`, `secureMiddleware`,
+   * `rateLimitMiddleware`) from `@mandujs/core/middleware`.
+   *
+   * @see `docs/architect/middleware-composition.md`
+   */
+  middleware?: Middleware[];
 }
 
 export const CONFIG_FILES = [

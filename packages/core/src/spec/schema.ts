@@ -92,6 +92,7 @@ export const PageRouteSpec = z
     layoutChain: z.array(z.string()).optional(),
     loadingModule: z.string().optional(),
     errorModule: z.string().optional(),
+    notFoundModule: z.string().optional(),
   })
   .refine(
     (route) => {
@@ -119,6 +120,7 @@ export const ApiRouteSpec = z.object({
   layoutChain: z.array(z.string()).optional(),
   loadingModule: z.string().optional(),
   errorModule: z.string().optional(),
+  notFoundModule: z.string().optional(),
 });
 
 export type ApiRouteSpec = z.infer<typeof ApiRouteSpec>;
@@ -140,6 +142,7 @@ export const MetadataRouteSpec = z.object({
   layoutChain: z.array(z.string()).optional(),
   loadingModule: z.string().optional(),
   errorModule: z.string().optional(),
+  notFoundModule: z.string().optional(),
 });
 
 export type MetadataRouteSpec = z.infer<typeof MetadataRouteSpec>;
@@ -155,6 +158,7 @@ export const RouteSpec = z.discriminatedUnion("kind", [
     layoutChain: z.array(z.string()).optional(),
     loadingModule: z.string().optional(),
     errorModule: z.string().optional(),
+    notFoundModule: z.string().optional(),
   }),
   z.object({
     ...RouteSpecBase,
@@ -164,6 +168,7 @@ export const RouteSpec = z.discriminatedUnion("kind", [
     layoutChain: z.array(z.string()).optional(),
     loadingModule: z.string().optional(),
     errorModule: z.string().optional(),
+    notFoundModule: z.string().optional(),
   }),
   z.object({
     ...RouteSpecBase,
@@ -175,6 +180,7 @@ export const RouteSpec = z.discriminatedUnion("kind", [
     layoutChain: z.array(z.string()).optional(),
     loadingModule: z.string().optional(),
     errorModule: z.string().optional(),
+    notFoundModule: z.string().optional(),
   }),
 ]);
 

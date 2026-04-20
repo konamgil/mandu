@@ -62,6 +62,13 @@ import {
   type MiddlewareConfig,
   loadMiddlewareSync,
 } from "./middleware";
+// Phase 18.ε — canonical request-level middleware composition API.
+// See `packages/core/src/middleware/{define,compose,bridge}.ts`.
+import {
+  compose as composeMiddleware,
+  type ComposedHandler,
+} from "../middleware/compose";
+import type { Middleware } from "../middleware/define";
 import { createFetchHandler } from "./handler";
 import { wrapBunWebSocket, type WSUpgradeData } from "../filling/ws";
 import { handleImageRequest } from "./image-handler";
@@ -70,6 +77,18 @@ import { isRedirectResponse } from "./redirect";
 import { isNotFoundResponse } from "./not-found";
 import { newId } from "../id";
 import { handleMetadataRoute as dispatchMetadataRoute } from "../routes/metadata-routes";
+import {
+  DEFAULT_PRERENDER_DIR,
+  DEFAULT_PRERENDER_CACHE_CONTROL,
+  loadPrerenderIndex,
+  resolvePrerenderedFile,
+  type PrerenderIndex,
+} from "../bundler/prerender";
+import {
+  buildOverlayErrorHtml,
+  buildPayloadFromError,
+  shouldInjectOverlay,
+} from "../dev-error-overlay";
 
 export interface RateLimitOptions {
   windowMs?: number;
@@ -411,6 +430,44 @@ export interface ServerOptions {
     heapEndpoint?: boolean;
     metricsEndpoint?: boolean;
   };
+  /**
+   * Phase 18 — prerendered HTML pass-through (SSG).
+   *
+   * When enabled (default), the server looks for a prerender index
+   * under `<rootDir>/<dir>/_manifest.json` (written by `mandu build`)
+   * and, for every request whose pathname maps to a prerendered file,
+   * serves that HTML directly, bypassing SSR entirely, with a long
+   * `Cache-Control` header.
+   *
+   *   - `true`      enabled with defaults (dir `.mandu/prerendered`,
+   *                 Cache-Control `public, max-age=31536000, immutable`).
+   *   - `false`     disabled. Every request goes through SSR.
+   *   - object      overrides. `dir` chooses a different output;
+   *                 `cacheControl` lets adapters tune the CDN hint.
+   *
+   * Wired from `ManduConfig.build.prerender`; see
+   * `@mandujs/core/bundler/prerender` for the build-side contract.
+   */
+  prerender?:
+    | boolean
+    | {
+        dir?: string;
+        cacheControl?: string;
+      };
+  /**
+   * Phase 18.ε — canonical request-level middleware chain.
+   *
+   * Middleware execute in declaration order (outermost first) BEFORE
+   * route dispatch. Each layer may short-circuit by returning a
+   * Response without calling `next()`, or wrap the downstream Response
+   * after `next()` returns. Composed via `compose()`.
+   *
+   * Typically wired from `ManduConfig.middleware`. See
+   * `@mandujs/core/middleware` for `defineMiddleware` / `compose`
+   * helpers plus bridge wrappers (`csrfMiddleware`, `sessionMiddleware`,
+   * `secureMiddleware`, `rateLimitMiddleware`).
+   */
+  middleware?: Middleware[];
 }
 
 export interface ManduServer {
@@ -553,6 +610,12 @@ export interface ServerRegistrySettings {
    */
   devtools?: boolean;
   /**
+   * Phase 18.α — threaded from `ManduConfig.dev.errorOverlay`. `undefined`
+   * means "use default (enabled in dev)"; `false` suppresses both the
+   * in-head `<script>` and the 500-response HTML overlay. No-op in prod.
+   */
+  errorOverlay?: boolean;
+  /**
    * Phase 17 — `/_mandu/heap` JSON exposure. `undefined` uses the
    * default for the current mode (dev → on, prod → MANDU_DEBUG_HEAP).
    */
@@ -562,6 +625,31 @@ export interface ServerRegistrySettings {
    * as `heapEndpoint`.
    */
   metricsEndpoint?: boolean;
+  /**
+   * Phase 18 — resolved prerender pass-through state. `undefined`
+   * means the feature is disabled for this server instance.
+   */
+  prerender?: {
+    /** Absolute output directory containing `_manifest.json`. */
+    dir: string;
+    /** `Cache-Control` header to stamp on served prerendered HTML. */
+    cacheControl: string;
+    /**
+     * Loaded index. `undefined` = not yet attempted; `null` = attempted
+     * and missing / unreadable (fall through to SSR). Populated lazily
+     * on the first request so `startServer` stays synchronous.
+     */
+    index?: PrerenderIndex | null;
+    /** In-flight load promise so concurrent requests share one read. */
+    pending?: Promise<PrerenderIndex | null>;
+  };
+  /**
+   * Phase 18.ε — precompiled request-level middleware chain. `undefined`
+   * means "no middleware configured" (zero overhead — the pipeline falls
+   * straight through to route dispatch). Wired from
+   * `ServerOptions.middleware` at {@link startServer} time.
+   */
+  middlewareChain?: ComposedHandler;
 }
 
 export class ServerRegistry {
@@ -2019,7 +2107,7 @@ function extractTitleText(titleHtml: string): string | null {
  * SSR 렌더링 (Streaming/Non-streaming)
  */
 async function renderPageSSR(
-  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig; errorModule?: string },
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig; errorModule?: string; loadingModule?: string; notFoundModule?: string },
   params: Record<string, string>,
   loaderData: unknown,
   url: string,
@@ -2038,6 +2126,30 @@ async function renderPageSSR(
       params,
       loaderData,
     });
+
+    // Phase 18.β — per-route Suspense wrapper (Next.js `loading.tsx` parity).
+    // If the route declared a `loading.tsx`, wrap the page element in a
+    // `<Suspense fallback={<Loading/>}>` so async children (async server
+    // components, React.lazy island hosts) can suspend without losing the
+    // layout chain. Fallback import failure downgrades to render-without-
+    // fallback rather than crashing the route.
+    if (route.loadingModule) {
+      try {
+        const loadingMod = await import(path.join(settings.rootDir, route.loadingModule));
+        const LoadingComponent = loadingMod.default as React.ComponentType<unknown>;
+        if (typeof LoadingComponent === "function") {
+          const fallback = React.createElement(LoadingComponent, {});
+          app = React.createElement(React.Suspense, { fallback }, app);
+        }
+      } catch (loadingImportError) {
+        if (settings.isDev) {
+          console.warn(
+            `[Mandu] loading.tsx import failed for ${route.id}; rendering without Suspense fallback:`,
+            loadingImportError,
+          );
+        }
+      }
+    }
 
     // Island 래핑: 레이아웃 적용 전에 페이지 콘텐츠만 island div로 감쌈
     // 이렇게 하면 레이아웃은 island 바깥에 위치하여 하이드레이션 시 레이아웃이 유지됨
@@ -2199,6 +2311,30 @@ async function renderPageSSR(
       renderError
     );
     console.error(`[Mandu] ${ssrError.errorType}:`, ssrError.message);
+
+    // Phase 18.α — In dev mode, emit a 500 HTML response carrying the
+    // full-screen error overlay so agents + developers see a structured
+    // error UI in the browser instead of only the terminal stdout.
+    // The overlay payload is embedded inside the HTML and the client
+    // IIFE mounts it on DOMContentLoaded. Prod paths are untouched:
+    // `shouldInjectOverlay` returns `false` for any non-dev setting.
+    if (shouldInjectOverlay({ isDev: settings.isDev, enabled: settings.errorOverlay })) {
+      const payload = buildPayloadFromError(renderError, {
+        kind: "ssr",
+        routeId: route.id,
+        url,
+      });
+      const overlayHtml = buildOverlayErrorHtml(payload);
+      const res = new Response(overlayHtml, {
+        status: 500,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
+      });
+      return ok(cookies ? cookies.applyToResponse(res) : res);
+    }
+
     return err(ssrError);
   }
 }
@@ -2232,7 +2368,7 @@ async function readNotFoundMessage(response: Response): Promise<string> {
  */
 async function renderNotFoundPage(
   req: Request,
-  route: { id: string; pattern: string; layoutChain?: string[]; hydration?: HydrationConfig; streaming?: boolean },
+  route: { id: string; pattern: string; layoutChain?: string[]; hydration?: HydrationConfig; streaming?: boolean; notFoundModule?: string },
   params: Record<string, string>,
   registry: ServerRegistry,
   pageCookies: CookieManager | undefined,
@@ -2244,14 +2380,42 @@ async function renderNotFoundPage(
   const mergedCookies = mergeCookieManagers(req, layoutCookies, pageCookies);
   const message = await readNotFoundMessage(notFoundResponse);
 
-  const handler = registry.notFoundHandler;
-  if (!handler) {
-    // No app/not-found.tsx registered — return the existing 404 path.
-    return errorToResponse(createNotFoundResponse(new URL(req.url).pathname), settings.isDev);
+  // Phase 18.β — per-route `not-found.tsx` takes precedence over the global
+  // notFoundHandler. fs-scanner has already resolved the nearest ancestor
+  // at scan time (`findClosestSpecialFile`), so `route.notFoundModule` is
+  // the closest match up the segment tree. Falls back to the registered
+  // global handler, then to the built-in JSON 404 so broken user code
+  // never tarpits the request.
+  let registration: { component: React.ComponentType<Record<string, unknown>>; filling?: { hasLoader(): boolean; executeLoader(ctx: ManduContext): Promise<unknown> } } | null = null;
+
+  if (route.notFoundModule) {
+    try {
+      const mod = await import(path.join(settings.rootDir, route.notFoundModule));
+      if (typeof mod.default === "function") {
+        registration = { component: mod.default as React.ComponentType<Record<string, unknown>> };
+      }
+    } catch (importError) {
+      if (settings.isDev) {
+        console.warn(`[Mandu] not-found module "${route.notFoundModule}" import failed; falling back to global handler:`, importError);
+      }
+    }
+  }
+
+  if (!registration) {
+    const handler = registry.notFoundHandler;
+    if (!handler) {
+      return errorToResponse(createNotFoundResponse(new URL(req.url).pathname), settings.isDev);
+    }
+    try {
+      const globalReg = await handler();
+      registration = { component: globalReg.component as React.ComponentType<Record<string, unknown>>, filling: globalReg.filling };
+    } catch (handlerError) {
+      console.error(`[Mandu] global notFoundHandler failed; falling back to built-in 404:`, handlerError);
+      return errorToResponse(createNotFoundResponse(new URL(req.url).pathname), settings.isDev);
+    }
   }
 
   try {
-    const registration = await handler();
     const NotFoundComponent = registration.component;
 
     // Let the not-found page's own loader contribute data (e.g. nav links,
@@ -2319,7 +2483,7 @@ const pendingRevalidations = new Set<string>();
 async function handlePageRoute(
   req: Request,
   url: URL,
-  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig },
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig; errorModule?: string; loadingModule?: string; notFoundModule?: string },
   params: Record<string, string>,
   registry: ServerRegistry
 ): Promise<Result<Response>> {
@@ -2533,7 +2697,7 @@ async function handlePageRoute(
 async function regenerateCache(
   req: Request,
   url: URL,
-  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig },
+  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig; errorModule?: string; loadingModule?: string; notFoundModule?: string },
   params: Record<string, string>,
   registry: ServerRegistry,
   cache: CacheStore,
@@ -2659,11 +2823,70 @@ function buildRouteCacheKey(routeId: string, url: URL): string {
 
 /**
  * 메인 요청 디스패처
+ *
+ * `skipMiddleware` is the Phase 18.ε re-entry flag: when a composed
+ * request-level middleware chain invokes its `finalHandler`, we recurse
+ * into this same dispatcher with `skipMiddleware=true` so we don't run
+ * the chain twice. End users never pass this — it's only set by the
+ * Phase 18.ε injection block below.
  */
+/**
+ * Phase 18 — try to serve a prerendered HTML file for `pathname`.
+ *
+ * Returns the HTTP response on hit, or `null` on miss (caller falls
+ * through to static-file serving + SSR). Index load happens lazily
+ * on the first request so `startServer` stays synchronous; failures
+ * short-circuit to `null` (the feature is best-effort and must never
+ * surface as a 500).
+ *
+ * Responses are stamped with `Cache-Control` from the registry
+ * settings (default: `public, max-age=31536000, immutable`) and an
+ * `X-Mandu-Cache: PRERENDERED` tag for observability / log parity
+ * with the ISR cache path.
+ */
+async function tryServePrerendered(
+  pathname: string,
+  settings: ServerRegistrySettings,
+  method: string
+): Promise<Response | null> {
+  const p = settings.prerender;
+  if (!p) return null;
+  if (method !== "GET" && method !== "HEAD") return null;
+  if (settings.edge) return null;
+
+  if (p.index === undefined) {
+    if (!p.pending) {
+      p.pending = loadPrerenderIndex(settings.rootDir, p.dir).catch(() => null);
+    }
+    p.index = await p.pending;
+    p.pending = undefined;
+  }
+  if (!p.index) return null;
+
+  const filePath = resolvePrerenderedFile(p.index, settings.rootDir, p.dir, pathname);
+  if (!filePath) return null;
+
+  let html: string;
+  try {
+    html = await fs.readFile(filePath, "utf-8");
+  } catch {
+    return null;
+  }
+
+  const headers = new Headers({
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": p.cacheControl,
+    "X-Mandu-Cache": "PRERENDERED",
+  });
+  const body = method === "HEAD" ? null : html;
+  return new Response(body, { status: 200, headers });
+}
+
 async function handleRequestInternal(
   req: Request,
   router: Router,
-  registry: ServerRegistry
+  registry: ServerRegistry,
+  skipMiddleware: boolean = false
 ): Promise<Result<Response>> {
   const url = new URL(req.url);
   const pathname = url.pathname;
@@ -2673,6 +2896,19 @@ async function handleRequestInternal(
   if (settings.cors && isPreflightRequest(req)) {
     const corsOptions: CorsOptions = typeof settings.cors === 'object' ? settings.cors : {};
     return ok(handlePreflightRequest(req, corsOptions));
+  }
+
+  // 0.5. Phase 18 — prerendered HTML pass-through (SSG).
+  // Must run BEFORE static-file serving and route dispatch so that
+  // `mandu build`-emitted HTML short-circuits SSR. No-op if the
+  // feature is disabled or the path wasn't prerendered.
+  const prerendered = await tryServePrerendered(pathname, settings, req.method);
+  if (prerendered) {
+    if (settings.cors && isCorsRequest(req)) {
+      const corsOptions: CorsOptions = typeof settings.cors === 'object' ? settings.cors : {};
+      return ok(applyCorsToResponse(prerendered, req, corsOptions));
+    }
+    return ok(prerendered);
   }
 
   // 1. 정적 파일 서빙 시도 (최우선)
@@ -2737,6 +2973,40 @@ async function handleRequestInternal(
     const kitchenResponse = await registry.kitchen.handle(req, pathname);
     if (kitchenResponse) return ok(kitchenResponse);
   }
+
+  // ─── Phase 18.ε — canonical request-level middleware chain ───────────────
+  // Runs BEFORE route dispatch, AFTER infrastructure fast-paths (static
+  // files, CORS preflight, internal endpoints, γ's prerendered pass-through,
+  // Kitchen). Each composed layer can short-circuit with its own Response
+  // or wrap the downstream Response after `next()` returns. Zero overhead
+  // when no middleware is configured (settings.middlewareChain === undefined).
+  //
+  // Errors inside middleware propagate to the outer `handleRequest` catch,
+  // which converts them to 5xx via `errorToResponse`. Middleware authors
+  // don't need their own top-level try/catch.
+  //
+  // Re-entry: the chain's `finalHandler` recurses into this same function
+  // with `skipMiddleware=true` so the chain is not executed twice. The
+  // `next(rewrittenReq)` rewrite pattern flows through transparently —
+  // `finalReq` is whatever the innermost middleware asked us to dispatch.
+  //
+  // NOTE: intentionally contained. Does NOT alter route dispatch semantics.
+  // Coexists with α's 500-path, β's dispatch, γ's prerendered check,
+  // δ's island section. See `docs/architect/middleware-composition.md`.
+  if (!skipMiddleware && settings.middlewareChain) {
+    const composed = settings.middlewareChain;
+    const dispatchRoute = async (finalReq: Request): Promise<Response> => {
+      const result = await handleRequestInternal(finalReq, router, registry, true);
+      if (result.ok) return result.value;
+      // Surface error-path responses to the chain so logging / metrics
+      // layers see the final status. The outer `handleRequest` still owns
+      // dev-mode Cache-Control stamping + eventBus emission.
+      return errorToResponse(result.error, settings.isDev);
+    };
+    const composedResponse = await composed(req, dispatchRoute);
+    return ok(composedResponse);
+  }
+  // ─── End Phase 18.ε ──────────────────────────────────────────────────────
 
   // 3. 라우트 매칭
   const match = router.match(pathname);
@@ -2934,7 +3204,35 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     spa,
     devtools,
     observability: observabilityOption,
+    prerender: prerenderOption,
+    middleware: middlewareOption,
   } = options;
+
+  // Phase 18.ε — build the request-level middleware chain once at boot.
+  // `compose()` returns a passthrough when the list is empty; storing
+  // `undefined` for "no middleware" keeps the hot path branch-free.
+  const middlewareChain: ComposedHandler | undefined =
+    middlewareOption && middlewareOption.length > 0
+      ? composeMiddleware(...middlewareOption)
+      : undefined;
+
+  // Phase 18 — normalize prerender pass-through settings. `undefined`
+  // defaults to enabled (Next.js parity); explicit `false` opts out.
+  let prerenderSettings: ServerRegistrySettings["prerender"] | undefined;
+  if (prerenderOption !== false) {
+    const dirOption =
+      typeof prerenderOption === "object" && prerenderOption?.dir
+        ? prerenderOption.dir
+        : DEFAULT_PRERENDER_DIR;
+    const cacheControl =
+      typeof prerenderOption === "object" && prerenderOption?.cacheControl
+        ? prerenderOption.cacheControl
+        : DEFAULT_PRERENDER_CACHE_CONTROL;
+    const absoluteDir = path.isAbsolute(dirOption)
+      ? dirOption
+      : path.join(options.rootDir ?? process.cwd(), dirOption);
+    prerenderSettings = { dir: absoluteDir, cacheControl };
+  }
 
   // cssPath 처리:
   // - string: 해당 경로로 <link> 주입
@@ -2975,6 +3273,8 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     devtools,
     heapEndpoint: observabilityOption?.heapEndpoint,
     metricsEndpoint: observabilityOption?.metricsEndpoint,
+    prerender: prerenderSettings,
+    middlewareChain,
   };
 
   registry.rateLimiter = rateLimitOptions ? new MemoryRateLimiter() : null;

@@ -1,32 +1,71 @@
 /**
  * Mandu Prerender Engine
- * 빌드 타임에 정적 HTML 생성 (SSG)
+ *
+ * Build-time static HTML generation (SSG) driven by two signals:
+ *
+ *   1. Static page routes (no dynamic segments) in the routes manifest.
+ *   2. Dynamic page routes whose module exports `generateStaticParams`
+ *      — see `./generate-static-params.ts` for the contract.
+ *
+ * For each resolved URL the engine invokes the build's fetch handler
+ * (a transient server spun up by `mandu build`) and writes the HTML
+ * payload under `.mandu/prerendered/` when callers opt into the new
+ * runtime-aware layout, or `.mandu/static/` for legacy callers.
+ *
+ * When `writeIndex: true` the engine also emits `_manifest.json`
+ * alongside the HTML — the runtime consults that index to serve
+ * prerendered pages directly with `Cache-Control: immutable`, skipping
+ * SSR entirely.
  */
 
 import path from "path";
 import fs from "fs/promises";
-import type { RoutesManifest } from "../spec/schema";
+import type { RoutesManifest, RouteSpec } from "../spec/schema";
+import {
+  collectStaticPaths,
+  isDynamicPattern,
+  type PageModuleWithStaticParams,
+} from "./generate-static-params";
 
 // ========== Types ==========
 
 export interface PrerenderOptions {
-  /** 프로젝트 루트 */
+  /** Project root — all relative paths resolve from here. */
   rootDir: string;
-  /** 출력 디렉토리 (기본: ".mandu/static") */
+  /**
+   * Output directory (absolute, or relative to `rootDir`).
+   * Defaults to `.mandu/static` to preserve behavior for older
+   * callers; `mandu build` opts into `.mandu/prerendered` +
+   * `writeIndex: true` to enable runtime pass-through.
+   */
   outDir?: string;
-  /** 프리렌더할 추가 경로 목록 */
+  /** Extra URL paths to prerender in addition to the manifest. */
   routes?: string[];
-  /** 링크 크롤링으로 자동 발견 (기본: false) */
+  /** Follow internal `<a href>` links in rendered HTML (default: false). */
   crawl?: boolean;
+  /**
+   * When true, also write `<outDir>/_manifest.json` listing every
+   * prerendered pathname. The runtime uses this index to short-circuit
+   * dispatch for matching URLs.
+   */
+  writeIndex?: boolean;
+  /**
+   * Optional injected `import` function. Tests pass a stub so we can
+   * exercise `generateStaticParams` without touching disk; production
+   * callers leave this undefined (the default dynamic import is used).
+   */
+  importModule?: (specifier: string) => Promise<PageModuleWithStaticParams>;
 }
 
 export interface PrerenderResult {
-  /** 생성된 페이지 수 */
+  /** Number of pages rendered successfully. */
   generated: number;
-  /** 생성된 경로별 정보 */
+  /** Per-page telemetry. */
   pages: PrerenderPageResult[];
-  /** 에러 목록 */
+  /** Errors encountered during the run (non-fatal). */
   errors: string[];
+  /** Pathnames that were rendered. */
+  paths: string[];
 }
 
 export interface PrerenderPageResult {
@@ -35,16 +74,39 @@ export interface PrerenderPageResult {
   duration: number;
 }
 
+/** Shape of the index file written to `<outDir>/_manifest.json`. */
+export interface PrerenderIndex {
+  version: 1;
+  generatedAt: string;
+  /** Pathname → relative HTML file path (posix separators). */
+  pages: Record<string, string>;
+}
+
+/** File name used for the runtime index. */
+export const PRERENDER_INDEX_FILE = "_manifest.json";
+
+/** Default output directory (runtime-aware location). */
+export const DEFAULT_PRERENDER_DIR = ".mandu/prerendered";
+
+/** Default output directory (legacy `prerenderRoutes` callers). */
+export const LEGACY_PRERENDER_DIR = ".mandu/static";
+
+/** Default cache policy stamped on runtime prerender responses. */
+export const DEFAULT_PRERENDER_CACHE_CONTROL =
+  "public, max-age=31536000, immutable";
+
 // ========== Implementation ==========
 
 /**
- * 정적 라우트를 HTML로 프리렌더링
+ * Prerender the routes declared in a manifest (plus any extras) to
+ * static HTML. See `PrerenderOptions` for the full contract.
  *
  * @example
  * ```typescript
  * const result = await prerenderRoutes(manifest, fetchHandler, {
  *   rootDir: process.cwd(),
- *   routes: ["/about", "/blog/hello-world"],
+ *   outDir: ".mandu/prerendered",
+ *   writeIndex: true,
  * });
  * ```
  */
@@ -53,49 +115,70 @@ export async function prerenderRoutes(
   fetchHandler: (req: Request) => Promise<Response>,
   options: PrerenderOptions
 ): Promise<PrerenderResult> {
-  const { rootDir, outDir = ".mandu/static", crawl = false } = options;
-  const outputDir = path.isAbsolute(outDir) ? outDir : path.join(rootDir, outDir);
+  const {
+    rootDir,
+    outDir = LEGACY_PRERENDER_DIR,
+    crawl = false,
+    writeIndex = false,
+    importModule,
+  } = options;
 
+  const outputDir = path.isAbsolute(outDir) ? outDir : path.join(rootDir, outDir);
   await fs.mkdir(outputDir, { recursive: true });
 
   const pages: PrerenderPageResult[] = [];
   const errors: string[] = [];
   const renderedPaths = new Set<string>();
+  const pageIndex: Record<string, string> = {};
 
-  // 1. 명시적으로 지정된 경로 수집
+  // 1. Explicit user-supplied routes.
   const pathsToRender = new Set<string>(options.routes ?? []);
 
-  // 2. 매니페스트에서 정적 페이지 라우트 수집 (동적 파라미터 없는 것)
+  // 2. Static page routes (no dynamic segments).
   for (const route of manifest.routes) {
-    if (route.kind === "page" && !route.pattern.includes(":")) {
+    if (route.kind === "page" && !isDynamicPattern(route.pattern)) {
       pathsToRender.add(route.pattern);
     }
   }
 
-  // 3. 동적 라우트의 generateStaticParams 수집
+  // 3. Dynamic routes that export `generateStaticParams`.
+  const resolveModule =
+    importModule ?? ((specifier: string) => import(specifier));
+
   for (const route of manifest.routes) {
-    if (route.kind === "page" && route.pattern.includes(":")) {
-      try {
-        const modulePath = path.join(rootDir, route.module).replace(/\\/g, "/");
-        const mod = await import(modulePath);
-        if (typeof mod.generateStaticParams === "function") {
-          const paramSets = await mod.generateStaticParams();
-          if (Array.isArray(paramSets)) {
-            for (const params of paramSets) {
-              const resolvedPath = resolvePattern(route.pattern, params);
-              pathsToRender.add(resolvedPath);
-            }
-          } else if (paramSets) {
-            console.warn(`[Mandu Prerender] generateStaticParams() for ${route.pattern} returned non-array. Expected an array of param objects.`);
-          }
-        }
-      } catch {
-        // generateStaticParams 없으면 스킵
-      }
+    if (route.kind !== "page" || !isDynamicPattern(route.pattern)) continue;
+
+    let mod: PageModuleWithStaticParams;
+    try {
+      mod = await loadPageModule(rootDir, route, resolveModule);
+    } catch {
+      // Module failed to load entirely. Silent skip — the page may
+      // simply not opt into static params; SSR can still serve it.
+      continue;
+    }
+
+    if (typeof mod.generateStaticParams !== "function") {
+      // Not opted-in for this route — perfectly fine.
+      continue;
+    }
+
+    try {
+      const { paths, errors: paramErrors } = await collectStaticPaths(
+        route.pattern,
+        mod
+      );
+      for (const p of paths) pathsToRender.add(p);
+      for (const e of paramErrors) errors.push(`[${route.pattern}] ${e}`);
+    } catch (error) {
+      // User code threw. Surface the error but keep going — other
+      // routes should not be blocked by one buggy generator.
+      errors.push(
+        `[${route.pattern}] generateStaticParams threw: ${describeError(error)}`
+      );
     }
   }
 
-  // 4. 각 경로를 렌더링
+  // 4. Render every queued path.
   for (const pathname of pathsToRender) {
     if (renderedPaths.has(pathname)) continue;
     renderedPaths.add(pathname);
@@ -118,10 +201,11 @@ export async function prerenderRoutes(
 
       const duration = Date.now() - start;
       pages.push({ path: pathname, size: html.length, duration });
+      pageIndex[pathname] = toPosix(path.relative(outputDir, filePath));
 
-      // 5. 크롤링: 생성된 HTML에서 내부 링크 추출
+      // 5. Optional crawl — harvest internal links for next pass.
       if (crawl) {
-        const links = extractInternalLinks(html, pathname);
+        const links = extractInternalLinks(html);
         for (const link of links) {
           if (!renderedPaths.has(link) && !pathsToRender.has(link)) {
             pathsToRender.add(link);
@@ -129,67 +213,156 @@ export async function prerenderRoutes(
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      errors.push(`[${pathname}] ${message}`);
+      errors.push(`[${pathname}] ${describeError(error)}`);
     }
   }
 
-  return { generated: pages.length, pages, errors };
+  // 6. Emit runtime index.
+  if (writeIndex) {
+    const indexContents: PrerenderIndex = {
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      pages: pageIndex,
+    };
+    await fs.writeFile(
+      path.join(outputDir, PRERENDER_INDEX_FILE),
+      JSON.stringify(indexContents, null, 2),
+      "utf-8"
+    );
+  }
+
+  return {
+    generated: pages.length,
+    pages,
+    errors,
+    paths: pages.map((p) => p.path),
+  };
+}
+
+/**
+ * Load the prerender manifest index emitted under `outDir`. Returns
+ * `null` if it doesn't exist or can't be parsed — callers should
+ * treat that as "no prerendered content" rather than an error.
+ */
+export async function loadPrerenderIndex(
+  rootDir: string,
+  outDir: string = DEFAULT_PRERENDER_DIR
+): Promise<PrerenderIndex | null> {
+  const dir = path.isAbsolute(outDir) ? outDir : path.join(rootDir, outDir);
+  const file = path.join(dir, PRERENDER_INDEX_FILE);
+  try {
+    const contents = await fs.readFile(file, "utf-8");
+    const parsed = JSON.parse(contents) as PrerenderIndex;
+    if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || !parsed.pages) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a pathname against a loaded index. Returns the absolute
+ * file path of the prerendered HTML, or `null` on miss.
+ *
+ * Tolerates both `/foo` and `/foo/` forms, and an optional `.html`
+ * suffix. Path-traversal in the index value is defensively rejected
+ * so a hand-edited / malicious index cannot escape the output root.
+ */
+export function resolvePrerenderedFile(
+  index: PrerenderIndex,
+  rootDir: string,
+  outDir: string,
+  pathname: string
+): string | null {
+  const dir = path.isAbsolute(outDir) ? outDir : path.join(rootDir, outDir);
+  const candidates = [pathname];
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    candidates.push(pathname.slice(0, -1));
+  } else if (pathname !== "/") {
+    candidates.push(pathname + "/");
+  }
+  if (pathname.endsWith(".html")) {
+    candidates.push(pathname.slice(0, -".html".length));
+  }
+  for (const candidate of candidates) {
+    const rel = index.pages[candidate];
+    if (rel) {
+      const resolved = path.resolve(dir, rel);
+      const normalizedDir = path.resolve(dir) + path.sep;
+      if (resolved === path.resolve(dir) || resolved.startsWith(normalizedDir)) {
+        return resolved;
+      }
+    }
+  }
+  return null;
 }
 
 // ========== Helpers ==========
 
 /**
- * 라우트 패턴에 파라미터를 대입하여 실제 경로 생성
+ * Dynamic-import a page module given its declared `module` path in
+ * the manifest. Normalizes the path for Windows dynamic-import
+ * (forward slashes + absolute) before delegating.
  */
-function resolvePattern(pattern: string, params: Record<string, string>): string {
-  let result = pattern;
-  for (const [key, value] of Object.entries(params)) {
-    // catch-all (:param*) / optional catch-all (:param*?) 지원
-    const paramRegex = new RegExp(`:${key}\\*\\??`);
-    if (paramRegex.test(result)) {
-      // catch-all: 각 세그먼트를 개별 인코딩 (슬래시 보존)
-      const encoded = value.split("/").map(encodeURIComponent).join("/");
-      result = result.replace(paramRegex, encoded);
-    } else {
-      result = result.replace(`:${key}`, encodeURIComponent(value));
-    }
-  }
-  return result;
+async function loadPageModule(
+  rootDir: string,
+  route: RouteSpec,
+  importFn: (specifier: string) => Promise<PageModuleWithStaticParams>
+): Promise<PageModuleWithStaticParams> {
+  const absolute = path.isAbsolute(route.module)
+    ? route.module
+    : path.join(rootDir, route.module);
+  const specifier = absolute.replace(/\\/g, "/");
+  return importFn(specifier);
 }
 
 /**
- * 출력 파일 경로 생성
- * /about → .mandu/static/about/index.html
- * / → .mandu/static/index.html
+ * URL path → output file path.
+ *   /            → <outDir>/index.html
+ *   /about       → <outDir>/about/index.html (clean URL)
+ *   /blog/a/b    → <outDir>/blog/a/b/index.html
  */
 function getOutputPath(outDir: string, pathname: string): string {
   const trimmed = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
   if (trimmed === "/") return path.join(outDir, "index.html");
-  // /blog/post → .mandu/static/blog/post/index.html (clean URL)
-  return path.join(outDir, trimmed, "index.html");
+  // Decode percent-encoding so on-disk names are stable across platforms.
+  const decoded = trimmed
+    .split("/")
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    })
+    .join("/");
+  return path.join(outDir, decoded, "index.html");
 }
 
-/**
- * HTML에서 내부 링크 추출 (크롤링용)
- */
-function extractInternalLinks(html: string, currentPath: string): string[] {
+/** Extract absolute internal `<a href>` paths (same-origin only). */
+function extractInternalLinks(html: string): string[] {
   const links: string[] = [];
   const hrefRegex = /href=["']([^"']+)["']/g;
   let match: RegExpExecArray | null;
-
   while ((match = hrefRegex.exec(html)) !== null) {
     const href = match[1];
-    // 내부 링크만 (절대 경로이면서 프로토콜 없는 것)
     if (href.startsWith("/") && !href.startsWith("//")) {
-      // 쿼리스트링/해시 제거
       const cleanPath = href.split("?")[0].split("#")[0];
-      // 정적 파일 제외
       if (!cleanPath.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/)) {
         links.push(cleanPath);
       }
     }
   }
-
   return [...new Set(links)];
+}
+
+function toPosix(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }

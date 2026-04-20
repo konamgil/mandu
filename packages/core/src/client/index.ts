@@ -63,6 +63,17 @@ export {
   type HydrationPriority,
 } from "./runtime";
 
+// Phase 18.δ — Per-Island hydration scheduler (Astro-grade)
+export {
+  scheduleHydration,
+  parseHydrateStrategy,
+  VISIBLE_ROOT_MARGIN,
+  INTERACTION_EVENTS,
+  type HydrationStrategyName,
+  type ParsedStrategy,
+  type Disposer,
+} from "./hydrate";
+
 // SSE / ReadableStream API (microtask-starvation-safe)
 export {
   useSSE,

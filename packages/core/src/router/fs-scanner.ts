@@ -241,6 +241,7 @@ export class FSScanner {
     const layoutMap = new Map<string, ScannedFile>();
     const loadingMap = new Map<string, ScannedFile>();
     const errorMap = new Map<string, ScannedFile>();
+    const notFoundMap = new Map<string, ScannedFile>();
     const islandMap = new Map<string, ScannedFile[]>();
     const routeFiles: ScannedFile[] = [];
     const metadataFiles: ScannedFile[] = [];
@@ -257,6 +258,9 @@ export class FSScanner {
           break;
         case "error":
           errorMap.set(dirPath, file);
+          break;
+        case "not-found":
+          notFoundMap.set(dirPath, file);
           break;
         case "island": {
           const existing = islandMap.get(dirPath);
@@ -392,9 +396,13 @@ export class FSScanner {
         }
       }
 
-      // 로딩/에러 모듈 찾기
+      // 로딩/에러/404 모듈 찾기 — nearest-ancestor resolution.
+      // Phase 18.β: `not-found.tsx` joins `loading.tsx`/`error.tsx` in
+      // walking up the segment tree so a deeply nested route inherits
+      // its parent's 404 UI unless it declares its own.
       const loadingModule = this.findClosestSpecialFile(file.segments, loadingMap);
       const errorModule = this.findClosestSpecialFile(file.segments, errorMap);
+      const notFoundModule = this.findClosestSpecialFile(file.segments, notFoundMap);
 
       const route: FSRouteConfig = {
         id: routeId,
@@ -407,6 +415,7 @@ export class FSScanner {
         layoutChain,
         loadingModule,
         errorModule,
+        notFoundModule,
         sourceFile: file.absolutePath,
       };
 

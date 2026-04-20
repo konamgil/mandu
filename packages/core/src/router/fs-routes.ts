@@ -82,6 +82,7 @@ export function fsRouteToRouteSpec(fsRoute: FSRouteConfig): RouteSpec {
         : {}),
       ...(fsRoute.loadingModule ? { loadingModule: normalizePath(fsRoute.loadingModule) } : {}),
       ...(fsRoute.errorModule ? { errorModule: normalizePath(fsRoute.errorModule) } : {}),
+      ...(fsRoute.notFoundModule ? { notFoundModule: normalizePath(fsRoute.notFoundModule) } : {}),
     };
     return pageRoute;
   }
