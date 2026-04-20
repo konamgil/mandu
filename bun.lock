@@ -45,7 +45,7 @@
     },
     "demo/auth-starter": {
       "name": "mandu-auth-starter",
-      "version": "0.1.6",
+      "version": "0.1.18",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -64,7 +64,7 @@
     },
     "demo/desktop-starter": {
       "name": "mandu-desktop-starter",
-      "version": "0.1.5",
+      "version": "0.1.17",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -80,7 +80,7 @@
     },
     "demo/edge-workers-starter": {
       "name": "mandu-edge-workers-starter",
-      "version": "0.1.6",
+      "version": "0.1.18",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "@mandujs/edge": "workspace:*",
@@ -144,22 +144,22 @@
     },
     "packages/cli": {
       "name": "@mandujs/cli",
-      "version": "0.27.0",
+      "version": "0.28.2",
       "bin": {
         "mandu": "src/main.ts",
       },
       "dependencies": {
         "@mandujs/ate": "^0.19.1",
-        "@mandujs/core": "^0.24.0",
-        "@mandujs/edge": "^0.3.0",
-        "@mandujs/mcp": "^0.20.1",
-        "@mandujs/skills": "^4.0.0",
+        "@mandujs/core": "^0.30.0",
+        "@mandujs/edge": "^0.4.9",
+        "@mandujs/mcp": "^0.20.7",
+        "@mandujs/skills": "^9.0.0",
         "cfonts": "^3.3.0",
       },
     },
     "packages/core": {
       "name": "@mandujs/core",
-      "version": "0.25.2",
+      "version": "0.34.0",
       "dependencies": {
         "chokidar": "^5.0.0",
         "fast-glob": "catalog:",
@@ -173,6 +173,9 @@
       },
       "peerDependencies": {
         "@tailwindcss/cli": ">=4.0.0",
+        "axe-core": ">=4.8.0",
+        "happy-dom": ">=15.0.0",
+        "jsdom": ">=24.0.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "react-refresh": ">=0.18.0",
@@ -180,13 +183,16 @@
       },
       "optionalPeers": [
         "@tailwindcss/cli",
+        "axe-core",
+        "happy-dom",
+        "jsdom",
         "react-refresh",
         "webview-bun",
       ],
     },
     "packages/edge": {
       "name": "@mandujs/edge",
-      "version": "0.4.2",
+      "version": "0.4.14",
       "dependencies": {
         "@mandujs/core": "workspace:*",
       },
@@ -201,7 +207,7 @@
     },
     "packages/mcp": {
       "name": "@mandujs/mcp",
-      "version": "0.20.2",
+      "version": "0.22.1",
       "bin": {
         "mandu-mcp": "./src/index.ts",
         "mandujs-mcp": "./src/index.ts",
@@ -209,14 +215,14 @@
       },
       "dependencies": {
         "@mandujs/ate": "^0.19.1",
-        "@mandujs/core": "^0.24.0",
+        "@mandujs/core": "^0.30.0",
         "@mandujs/skills": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.25.3",
       },
     },
     "packages/playground-runner": {
       "name": "@mandujs/playground-runner",
-      "version": "0.1.0",
+      "version": "6.0.0",
       "devDependencies": {
         "@cloudflare/sandbox": "^0.1.0",
         "@cloudflare/workers-types": "^4.20250101.0",
@@ -228,12 +234,12 @@
     },
     "packages/skills": {
       "name": "@mandujs/skills",
-      "version": "5.0.0",
+      "version": "13.0.0",
       "bin": {
         "mandu-skills": "./src/cli.ts",
       },
       "peerDependencies": {
-        "@mandujs/core": ">=0.24.0",
+        "@mandujs/core": ">=0.30.0",
       },
       "optionalPeers": [
         "@mandujs/core",
