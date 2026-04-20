@@ -112,7 +112,17 @@ export { Link, NavLink, type LinkProps, type NavLinkProps } from "./Link";
 export { Form, type FormProps, type FormState } from "./Form";
 
 // RPC Client
-export { createClient, RpcError, type RpcMethods, type RpcRequestOptions, type RpcClientOptions } from "./rpc";
+export {
+  createClient,
+  RpcError,
+  type RpcMethods,
+  type RpcRequestOptions,
+  type RpcClientOptions,
+  // Phase 18.κ — typed RPC proxy
+  createRpcClient,
+  RpcCallError,
+  type CreateRpcClientOptions,
+} from "./rpc";
 
 // useFetch Composable
 export { useFetch, type UseFetchOptions, type UseFetchReturn } from "./use-fetch";

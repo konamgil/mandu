@@ -289,11 +289,24 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   if (options.target === "workers") {
     try {
       const { emitWorkersBundle } = await import("../util/workers-emitter");
+      // Phase 18.λ — extract workers-eligible cron schedules from
+      // `mandu.config.ts` `scheduler.jobs`. `extractWorkersCrons` is
+      // pure — it de-duplicates schedule strings, filters by `runOn`,
+      // and collects advisory warnings (timezone mismatch, skipInDev
+      // ignored on Workers, etc.) so we can surface them to the user.
+      const { extractWorkersCrons } = await import("../util/cron-wrangler");
+      const cronExtraction = extractWorkersCrons(config.scheduler?.jobs);
+      if (cronExtraction.warnings.length > 0) {
+        for (const w of cronExtraction.warnings) {
+          console.warn(`⚠️  [scheduler] ${w}`);
+        }
+      }
       await emitWorkersBundle({
         rootDir: cwd,
         manifest,
         cssPath,
         workerName: options.workerName,
+        crons: cronExtraction.crons,
       });
     } catch (error) {
       console.error(

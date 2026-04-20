@@ -84,6 +84,11 @@ import {
   type ComposedHandler,
 } from "../middleware/compose";
 import type { Middleware } from "../middleware/define";
+// Phase 18.λ — scheduler wiring (statically imported so `startServer` stays
+// synchronous; the cost of unused code is trivial — `defineCron` is a thin
+// wrapper around `Bun.cron`).
+import { defineCron as schedulerDefineCron } from "../scheduler";
+import { setActiveSchedulerRegistration } from "../middleware/scheduler-cron";
 import { createFetchHandler } from "./handler";
 import { wrapBunWebSocket, type WSUpgradeData } from "../filling/ws";
 import { handleImageRequest } from "./image-handler";
@@ -91,6 +96,14 @@ import { extractShellHtml, createPPRResponse } from "./ppr";
 import { isRedirectResponse } from "./redirect";
 import { isNotFoundResponse } from "./not-found";
 import { newId } from "../id";
+// Phase 18.κ — typed RPC dispatch (tRPC-like). See
+// `packages/core/src/contract/rpc.ts` + `docs/architect/typed-rpc.md`.
+import {
+  matchRpcPath,
+  dispatchRpc,
+  registerRpc,
+  clearRpcRegistry,
+} from "../contract/rpc";
 import { handleMetadataRoute as dispatchMetadataRoute } from "../routes/metadata-routes";
 import {
   DEFAULT_PRERENDER_DIR,
@@ -504,6 +517,37 @@ export interface ServerOptions {
    * `secureMiddleware`, `rateLimitMiddleware`).
    */
   middleware?: Middleware[];
+  /**
+   * Phase 18.κ — tRPC-like typed RPC endpoints.
+   *
+   * Keys map to `/api/rpc/<name>/<method>` routes. Each value is a
+   * `defineRpc()` result (see `@mandujs/core/contract/rpc`). Populating
+   * this field at `startServer()` time registers every endpoint with
+   * the global RPC registry; the dispatcher runs BEFORE β's route
+   * matcher so RPC routes never collide with file-system API routes.
+   *
+   * Typically threaded from `ManduConfig.rpc.endpoints`.
+   */
+  rpc?: {
+    endpoints?: Record<string, import("../contract/rpc").RpcDefinition<import("../contract/rpc").RpcProcedureRecord>>;
+  };
+  /**
+   * Phase 18.λ — declarative cron scheduler.
+   *
+   * When `jobs` is non-empty and `disabled !== true`, `startServer()`
+   * instantiates a `CronRegistration` via `defineCron(jobs)`, calls
+   * `.start()` after the HTTP listener is bound, and wires the handle
+   * into `stop()` so the returned `ManduServer.stop()` also drains any
+   * in-flight cron tick before returning. Jobs whose `runOn` omits
+   * `"bun"` are registered but never fire on the local Bun host — they
+   * still appear in `status()` so dashboards can render their existence.
+   *
+   * Typically threaded from `ManduConfig.scheduler`.
+   */
+  scheduler?: {
+    jobs?: import("../scheduler").CronDef[];
+    disabled?: boolean;
+  };
 }
 
 export interface ManduServer {
@@ -3325,6 +3369,47 @@ async function handleRequestInternal(
   }
   // ─── End Phase 18.ε ──────────────────────────────────────────────────────
 
+  // ─── Phase 18.κ — typed RPC dispatch ──────────────────────────────────────
+  // Runs AFTER γ's prerendered pass-through (handled earlier at step 0.5),
+  // AFTER ζ's ISR/SWR cache check (per-route, inside handlePageRoute), and
+  // BEFORE β's file-system route dispatch below. The canonical URL shape is
+  //
+  //   POST /api/rpc/<endpoint>/<method>
+  //
+  // with JSON body `{ input: <value> }`. The dispatcher:
+  //   1. matches `/api/rpc/<name>/<method>` via `matchRpcPath()` (returns
+  //      `null` for any other path — then we fall through to β),
+  //   2. looks up the registered `RpcDefinition` in the module-level
+  //      `rpcRegistry` (populated by `registerRpc` at boot from
+  //      `ServerOptions.rpc.endpoints`),
+  //   3. validates the request body against `procedure.input` (Zod),
+  //      invokes `procedure.handler`, validates the return value against
+  //      `procedure.output` (Zod), and ships a
+  //      `{ ok: true, data } | { ok: false, error }` JSON envelope.
+  //
+  // All failure paths return structured envelopes — never throws — so the
+  // outer request handler's 5xx catch is unreachable on the happy path.
+  // See `packages/core/src/contract/rpc.ts` and
+  // `docs/architect/typed-rpc.md`.
+  {
+    const rpcMatch = matchRpcPath(pathname);
+    if (rpcMatch) {
+      const rpcResponse = await dispatchRpc(
+        req,
+        rpcMatch.endpoint,
+        rpcMatch.method,
+        { isDev: settings.isDev }
+      );
+      if (settings.cors && isCorsRequest(req)) {
+        const corsOptions: CorsOptions =
+          typeof settings.cors === "object" ? settings.cors : {};
+        return ok(applyCorsToResponse(rpcResponse, req, corsOptions));
+      }
+      return ok(rpcResponse);
+    }
+  }
+  // ─── End Phase 18.κ ───────────────────────────────────────────────────────
+
   // 3. 라우트 매칭
   const match = router.match(pathname);
   if (!match) {
@@ -3523,6 +3608,8 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     observability: observabilityOption,
     prerender: prerenderOption,
     middleware: middlewareOption,
+    rpc: rpcOption,
+    scheduler: schedulerOption,
   } = options;
 
   // Phase 18.ε — build the request-level middleware chain once at boot.
@@ -3608,6 +3695,22 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   };
 
   registry.rateLimiter = rateLimitOptions ? new MemoryRateLimiter() : null;
+
+  // ─── Phase 18.κ — register RPC endpoints from options ──────────────────
+  // The RPC registry is module-scoped (shared across all server
+  // instances in this process). Clearing first keeps repeated
+  // `startServer()` calls in tests deterministic — otherwise a stale
+  // endpoint from a prior run could answer a later instance's requests.
+  //
+  // This runs once at boot; HMR-time re-registration goes through the
+  // exported `registerRpc()` from `@mandujs/core/contract/rpc`.
+  clearRpcRegistry();
+  if (rpcOption?.endpoints) {
+    for (const [name, definition] of Object.entries(rpcOption.endpoints)) {
+      registerRpc(name, definition);
+    }
+  }
+  // ─── End Phase 18.κ ────────────────────────────────────────────────────
 
   // ─── Phase 18.ζ — ISR/SWR 캐시 초기화 ──────────────────────────────────
   // `cacheOption` 는 `true` | `false` | `CacheStore` | `CacheConfig` 를 받는다:
@@ -3788,12 +3891,64 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     }
   }
 
+  // ─── Phase 18.λ — declarative cron scheduler ────────────────────────────
+  // Boot the scheduler AFTER the HTTP listener is live so a malformed cron
+  // expression (caught by validateCronExpression) surfaces alongside the
+  // other boot errors rather than aborting the server. `startServer` is
+  // synchronous by contract, so we use the already-imported scheduler
+  // module rather than `await import`.
+  let schedulerRegistration: import("../scheduler").CronRegistration | null = null;
+  const jobDefs = schedulerOption?.jobs ?? [];
+  const schedulerDisabled = schedulerOption?.disabled === true;
+  if (jobDefs.length > 0 && !schedulerDisabled) {
+    try {
+      schedulerRegistration = schedulerDefineCron(jobDefs);
+      schedulerRegistration.start();
+      setActiveSchedulerRegistration(schedulerRegistration);
+      const bunJobCount = Object.keys(schedulerRegistration.status()).filter(
+        (name) => {
+          const def = jobDefs.find((j) => j.name === name);
+          const runOn = def?.runOn && def.runOn.length > 0 ? def.runOn : ["bun", "workers"];
+          return runOn.includes("bun");
+        },
+      ).length;
+      console.log(
+        `⏰ Scheduler: ${bunJobCount} cron job(s) registered on Bun runtime` +
+          (jobDefs.length !== bunJobCount
+            ? ` (${jobDefs.length - bunJobCount} workers-only — see wrangler.toml)`
+            : ""),
+      );
+    } catch (err) {
+      // Scheduler failures MUST NOT crash the server — a bad cron string is
+      // a developer error, but the HTTP surface should keep serving. Log
+      // loudly and leave the registration null.
+      console.error(
+        "❌ [scheduler] failed to start — HTTP server continues without cron jobs:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   return {
     server,
     router,
     registry,
     stop: () => {
       registry.kitchen?.stop();
+      // Fire-and-forget the async scheduler drain so `stop()` stays
+      // synchronous for backwards compatibility with existing consumers.
+      // Tests that need to await drain can reach for `registration.stop()`
+      // directly; `server.stop()` triggers shutdown but doesn't block on
+      // in-flight cron handler completion here.
+      if (schedulerRegistration) {
+        const reg = schedulerRegistration;
+        schedulerRegistration = null;
+        void reg.stop()
+          .then(() => setActiveSchedulerRegistration(null))
+          .catch((err) => {
+            console.error("[scheduler] shutdown error:", err);
+          });
+      }
       server.stop();
     },
   };

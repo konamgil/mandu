@@ -54,13 +54,41 @@
  * @module scheduler
  */
 
+import { validateCronExpression, validateTimezone } from "./validate";
+export { validateCronExpression, validateTimezone } from "./validate";
+
 /** Context passed to each job handler. */
 export interface CronContext {
   /** Job name (the key under which the job was registered). */
   name: string;
   /** The scheduled firing time (close to, but not exactly, now). */
   scheduledAt: Date;
+  /**
+   * Lightweight namespaced logger. Avoids forcing consumers to import the full
+   * `@mandujs/core/logging` surface from inside a cron handler. Writes through
+   * to `console.*` with a `[scheduler:<name>]` prefix.
+   */
+  log: {
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+  };
 }
+
+/**
+ * Where a job may execute. Consumers declare `runOn` on each job so a single
+ * config can drive BOTH the local Bun runtime AND Cloudflare Workers Cron
+ * Triggers:
+ *
+ *   - `"bun"`     — register with `Bun.cron()` at server boot.
+ *   - `"workers"` — emit into `wrangler.toml` `[triggers] crons = [...]` at
+ *                   build time; `createWorkersHandler` dispatches to the
+ *                   handler on `scheduled(event)` invocation.
+ *
+ * Omitting the field defaults to `["bun", "workers"]` so a single job runs
+ * everywhere it can without ceremony.
+ */
+export type CronRuntime = "bun" | "workers";
 
 /** Configuration for a single cron job. */
 export interface CronJobConfig {
@@ -76,6 +104,58 @@ export interface CronJobConfig {
    * Bun.cron has no cancellation primitive. Default: unlimited.
    */
   timeoutMs?: number;
+  /**
+   * IANA timezone for the schedule (e.g., `"UTC"`, `"America/New_York"`).
+   * Passed through to `Bun.cron` which interprets the crontab expression
+   * against this zone. **Not supported on Cloudflare Workers** — Workers cron
+   * triggers always fire in UTC; emit a warning but still emit the crontab.
+   *
+   * Default: host system timezone (Bun.cron's default).
+   */
+  timezone?: string;
+  /**
+   * Runtimes on which this job should execute. When the job is instantiated
+   * via `_defineCronWith` on a Bun host, only entries including `"bun"` are
+   * registered with `Bun.cron`. The CLI emits wrangler triggers only for
+   * entries including `"workers"`. Default: `["bun", "workers"]`.
+   */
+  runOn?: CronRuntime[];
+}
+
+/**
+ * Declarative cron job definition (array form). Mirrors `CronJobConfig` but
+ * lifts `name` inside the object so a single flat array can be passed:
+ *
+ * ```ts
+ * export const cleanupJob = defineCron({
+ *   name: 'cleanup-expired-sessions',
+ *   schedule: '0 * * * *',
+ *   timezone: 'UTC',
+ *   runOn: ['bun', 'workers'],
+ *   handler: async (ctx) => { ... },
+ * });
+ * ```
+ *
+ * `handler` is the canonical field name (Cloudflare convention); `run` is
+ * accepted as an alias to match the existing object-form API.
+ */
+export interface CronDef {
+  /** Unique job name. Used for logs, status(), and as the Map key internally. */
+  name: string;
+  /** Crontab expression or `@alias`. */
+  schedule: string;
+  /** Handler invoked on every tick. Canonical field. */
+  handler?: (ctx: CronContext) => void | Promise<void>;
+  /** Alias for `handler` — matches the object-form `CronJobConfig.run`. */
+  run?: (ctx: CronContext) => void | Promise<void>;
+  /** See {@link CronJobConfig.skipInDev}. */
+  skipInDev?: boolean;
+  /** See {@link CronJobConfig.timeoutMs}. */
+  timeoutMs?: number;
+  /** See {@link CronJobConfig.timezone}. */
+  timezone?: string;
+  /** See {@link CronJobConfig.runOn}. */
+  runOn?: CronRuntime[];
 }
 
 /** Observable status for a single job. */
@@ -150,17 +230,130 @@ interface JobState {
 }
 
 /**
- * Registers a set of cron jobs. Returns a handle; does NOT auto-start —
- * call `.start()` from your server boot sequence.
+ * Public `defineCron` — registers one or more cron jobs. Accepts two shapes:
  *
- * The public API. Internally dispatches to {@link _defineCronWith} passing
- * `Bun.cron` as the scheduler.
+ *   1. Object-form: `defineCron({ name1: CronJobConfig, name2: CronJobConfig })`
+ *      — the original API, preserved for backwards compatibility.
+ *
+ *   2. Array / single-entry form: `defineCron(CronDef | CronDef[])` — the
+ *      flat-object shape documented in the Phase 18.λ spec. `name` is
+ *      embedded in the object and `handler` is the canonical handler field
+ *      (aliased as `run` for symmetry).
+ *
+ * Returns a `CronRegistration` handle. Does NOT auto-start — call `.start()`
+ * from your server boot sequence (or let `startServer()` do it for you when
+ * `scheduler.jobs` is set in `mandu.config.ts`).
+ *
+ * Schedule strings are validated synchronously via {@link validateCronExpression}
+ * so malformed cron expressions fail fast at module-load time instead of
+ * producing a silent "never fires" at runtime.
  */
-export function defineCron(jobs: Record<string, CronJobConfig>): CronRegistration {
+export function defineCron(
+  input: Record<string, CronJobConfig> | CronDef | CronDef[],
+): CronRegistration {
+  const jobs = normalizeDefineCronInput(input);
   // Probe lazily so `defineCron({})` with no entries can still be called in
   // environments without `Bun.cron`. When the user actually goes to `start()`,
   // the probe runs — matching `getBunPassword()` behaviour.
   return _defineCronWith(jobs, (schedule, handler) => getBunCron()(schedule, handler));
+}
+
+/**
+ * Normalize the public `defineCron` input into the internal
+ * `Record<string, CronJobConfig>` shape. Validates schedule + timezone fields
+ * at the boundary so downstream code can assume they're well-formed.
+ *
+ * @internal — exported for test coverage only.
+ */
+export function normalizeDefineCronInput(
+  input: Record<string, CronJobConfig> | CronDef | CronDef[],
+): Record<string, CronJobConfig> {
+  const out: Record<string, CronJobConfig> = {};
+
+  const defs: CronDef[] = Array.isArray(input)
+    ? input
+    : isCronDef(input)
+      ? [input as CronDef]
+      : []; // fall through to the object-form branch below.
+
+  if (defs.length > 0) {
+    for (const def of defs) {
+      if (typeof def.name !== "string" || def.name.length === 0) {
+        throw new Error(
+          `[@mandujs/core/scheduler] defineCron: every CronDef must have a non-empty "name" field.`,
+        );
+      }
+      if (out[def.name] !== undefined) {
+        throw new Error(
+          `[@mandujs/core/scheduler] defineCron: duplicate job name "${def.name}".`,
+        );
+      }
+      validateCronExpression(def.schedule);
+      if (def.timezone !== undefined) validateTimezone(def.timezone);
+      const handler = def.handler ?? def.run;
+      if (typeof handler !== "function") {
+        throw new Error(
+          `[@mandujs/core/scheduler] defineCron: job "${def.name}" must define a "handler" (or "run") function.`,
+        );
+      }
+      out[def.name] = {
+        schedule: def.schedule,
+        run: handler,
+        skipInDev: def.skipInDev,
+        timeoutMs: def.timeoutMs,
+        timezone: def.timezone,
+        runOn: def.runOn,
+      };
+    }
+    return out;
+  }
+
+  // Object-form branch.
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    for (const [name, cfg] of Object.entries(input as Record<string, CronJobConfig>)) {
+      if (!cfg || typeof cfg !== "object") {
+        throw new Error(
+          `[@mandujs/core/scheduler] defineCron: job "${name}" config must be an object.`,
+        );
+      }
+      validateCronExpression(cfg.schedule);
+      if (cfg.timezone !== undefined) validateTimezone(cfg.timezone);
+      if (typeof cfg.run !== "function") {
+        throw new Error(
+          `[@mandujs/core/scheduler] defineCron: job "${name}" must define a "run" function.`,
+        );
+      }
+      out[name] = cfg;
+    }
+  }
+
+  return out;
+}
+
+function isCronDef(v: unknown): v is CronDef {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    "name" in (v as Record<string, unknown>) &&
+    "schedule" in (v as Record<string, unknown>) &&
+    (typeof (v as CronDef).handler === "function" ||
+      typeof (v as CronDef).run === "function")
+  );
+}
+
+/**
+ * Return the list of jobs slated to run on a given runtime. Default `runOn`
+ * for any job that omits the field is `["bun", "workers"]`, so a job with no
+ * `runOn` key runs everywhere.
+ */
+export function filterJobsForRuntime<T extends { runOn?: CronRuntime[] }>(
+  jobs: T[],
+  runtime: CronRuntime,
+): T[] {
+  return jobs.filter((j) => {
+    const runOn = j.runOn && j.runOn.length > 0 ? j.runOn : ["bun", "workers"];
+    return runOn.includes(runtime);
+  });
 }
 
 /**
@@ -181,7 +374,12 @@ export function _defineCronWith(
   const states: Map<string, JobState> = new Map();
   for (const name of names) {
     const config = jobs[name];
-    const skipped = config.skipInDev === true && !isProd;
+    // A job is "skipped" on this Bun host if:
+    //   (a) skipInDev=true and we're not in prod, OR
+    //   (b) runOn is set and does not include "bun" (workers-only, etc.).
+    const runOn = config.runOn && config.runOn.length > 0 ? config.runOn : ["bun", "workers"];
+    const skipped =
+      (config.skipInDev === true && !isProd) || !runOn.includes("bun");
     states.set(name, {
       name,
       config,
@@ -216,9 +414,15 @@ export function _defineCronWith(
       state.status.inFlight = true;
       const startedAt = Date.now();
 
+      const prefix = `[scheduler:${state.name}]`;
       const ctx: CronContext = {
         name: state.name,
         scheduledAt: new Date(startedAt),
+        log: {
+          info: (...args: unknown[]) => { console.log(prefix, ...args); },
+          warn: (...args: unknown[]) => { console.warn(prefix, ...args); },
+          error: (...args: unknown[]) => { console.error(prefix, ...args); },
+        },
       };
 
       // The promise that future ticks (and `stop()`) wait on. We capture it

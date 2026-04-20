@@ -37,6 +37,19 @@ export { runTestsTools, runTestsToolDefinitions } from "./run-tests.js";
 export { deployPreviewTools, deployPreviewToolDefinitions } from "./deploy-preview.js";
 export { aiBriefTools, aiBriefToolDefinitions } from "./ai-brief.js";
 export { loopCloseTools, loopCloseToolDefinitions } from "./loop-close.js";
+// Phase 18.ι — AI refactor MCP tools
+export {
+  rewriteGeneratedBarrelTools,
+  rewriteGeneratedBarrelToolDefinitions,
+} from "./rewrite-generated-barrel.js";
+export {
+  migrateRouteConventionsTools,
+  migrateRouteConventionsToolDefinitions,
+} from "./migrate-route-conventions.js";
+export {
+  extractContractTools,
+  extractContractToolDefinitions,
+} from "./extract-contract.js";
 
 // 도구 모듈 import (등록용)
 import { specTools, specToolDefinitions } from "./spec.js";
@@ -63,6 +76,19 @@ import { runTestsTools, runTestsToolDefinitions } from "./run-tests.js";
 import { deployPreviewTools, deployPreviewToolDefinitions } from "./deploy-preview.js";
 import { aiBriefTools, aiBriefToolDefinitions } from "./ai-brief.js";
 import { loopCloseTools, loopCloseToolDefinitions } from "./loop-close.js";
+// Phase 18.ι — AI refactor MCP tools
+import {
+  rewriteGeneratedBarrelTools,
+  rewriteGeneratedBarrelToolDefinitions,
+} from "./rewrite-generated-barrel.js";
+import {
+  migrateRouteConventionsTools,
+  migrateRouteConventionsToolDefinitions,
+} from "./migrate-route-conventions.js";
+import {
+  extractContractTools,
+  extractContractToolDefinitions,
+} from "./extract-contract.js";
 
 /**
  * 도구 모듈 정보
@@ -108,6 +134,22 @@ const TOOL_MODULES: ToolModule[] = [
   { category: "deploy-preview", definitions: deployPreviewToolDefinitions, handlers: deployPreviewTools },
   { category: "ai-brief", definitions: aiBriefToolDefinitions, handlers: aiBriefTools },
   { category: "loop-close", definitions: loopCloseToolDefinitions, handlers: loopCloseTools },
+  // Phase 18.ι — AI refactor tools (destructive writes; dry-run by default)
+  {
+    category: "refactor-barrel",
+    definitions: rewriteGeneratedBarrelToolDefinitions,
+    handlers: rewriteGeneratedBarrelTools,
+  },
+  {
+    category: "refactor-routes",
+    definitions: migrateRouteConventionsToolDefinitions,
+    handlers: migrateRouteConventionsTools,
+  },
+  {
+    category: "refactor-contract",
+    definitions: extractContractToolDefinitions,
+    handlers: extractContractTools,
+  },
 ];
 
 /**

@@ -6,6 +6,7 @@ import { readJsonFile } from "../utils/bun";
 import type { ManduAdapter } from "../runtime/adapter";
 import type { ManduPlugin, ManduHooks } from "../plugins/hooks";
 import type { Middleware } from "../middleware/define";
+import type { CronDef } from "../scheduler";
 
 /**
  * DNA-003: Strict mode schema helper
@@ -335,6 +336,47 @@ const CacheConfigSchema = z
   })
   .strict();
 
+/**
+ * Phase 18.λ — declarative cron scheduler (strict).
+ *
+ * Each `jobs[i]` entry is structurally validated: `name` must be a non-empty
+ * string, `schedule` a string (deeper cron validation runs at `defineCron`
+ * time), and `handler` (or `run` alias) a function. Zod cannot introspect
+ * closures, so the handler field is a structural check.
+ *
+ * `disabled` short-circuits registration in environments where cron
+ * shouldn't fire (e.g., a read-only replica reading the same config file
+ * its primary uses).
+ */
+const CronDefSchema = z.custom<CronDef>(
+  (v) => {
+    if (typeof v !== "object" || v === null) return false;
+    const obj = v as Record<string, unknown>;
+    if (typeof obj.name !== "string" || obj.name.length === 0) return false;
+    if (typeof obj.schedule !== "string" || obj.schedule.length === 0) return false;
+    if (typeof obj.handler !== "function" && typeof obj.run !== "function") return false;
+    if (obj.timezone !== undefined && typeof obj.timezone !== "string") return false;
+    if (obj.runOn !== undefined) {
+      if (!Array.isArray(obj.runOn)) return false;
+      for (const r of obj.runOn) {
+        if (r !== "bun" && r !== "workers") return false;
+      }
+    }
+    return true;
+  },
+  {
+    message:
+      "Each cron job must be an object with `name` (string), `schedule` (string), and `handler` (function). Optional: `timezone` (string), `runOn` (array of 'bun'|'workers'), `skipInDev` (boolean), `timeoutMs` (number).",
+  }
+);
+
+const SchedulerConfigSchema = z
+  .object({
+    jobs: z.array(CronDefSchema).optional(),
+    disabled: z.boolean().optional(),
+  })
+  .strict();
+
 export const ManduConfigSchema = z
   .object({
     adapter: AdapterConfigSchema.optional(),
@@ -375,6 +417,12 @@ export const ManduConfigSchema = z
      * passthrough at runtime).
      */
     middleware: z.array(MiddlewareSchema).optional(),
+    /**
+     * Phase 18.λ — declarative cron scheduler. See {@link SchedulerConfigSchema}.
+     * Omit the block to disable scheduling entirely (zero-overhead
+     * passthrough).
+     */
+    scheduler: SchedulerConfigSchema.optional(),
   })
   .strict();
 

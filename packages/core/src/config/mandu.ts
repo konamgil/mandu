@@ -3,6 +3,8 @@ import { readJsonFile } from "../utils/bun";
 import type { ManduAdapter } from "../runtime/adapter";
 import type { ManduPlugin, ManduHooks } from "../plugins/hooks";
 import type { Middleware } from "../middleware/define";
+import type { RpcDefinition, RpcProcedureRecord } from "../contract/rpc";
+import type { CronDef } from "../scheduler";
 
 export type GuardRuleSeverity = "error" | "warn" | "warning" | "off";
 
@@ -373,6 +375,53 @@ export interface ManduConfig {
    * @see `docs/architect/middleware-composition.md`
    */
   middleware?: Middleware[];
+  /**
+   * Phase 18.κ — tRPC-like typed RPC endpoints.
+   *
+   * Keys become URL segments: `endpoints.posts` is served from
+   * `/api/rpc/posts/<method>`. Each value is a `defineRpc()` result —
+   * a tagged object carrying Zod input/output schemas and handler
+   * functions. The runtime dispatcher (`runtime/server.ts`) registers
+   * every declared endpoint at `startServer()` time and validates
+   * both request inputs and handler outputs against the schemas.
+   *
+   * Wire protocol: `POST /api/rpc/<name>/<method>` with JSON body
+   * `{ "input": <value> }`; returns `{ ok: true, data }` or
+   * `{ ok: false, error: { code, message, issues? } }`.
+   *
+   * Client: `createRpcClient<typeof postsRpc>({ baseUrl: "/api/rpc/posts" })`.
+   *
+   * @see `docs/architect/typed-rpc.md`
+   * @see `@mandujs/core/contract/rpc` for `defineRpc`.
+   * @see `@mandujs/core/client/rpc` for `createRpcClient`.
+   */
+  rpc?: {
+    endpoints?: Record<string, RpcDefinition<RpcProcedureRecord>>;
+  };
+  /**
+   * Phase 18.λ — declarative cron job scheduler.
+   *
+   * `scheduler.jobs` is an array of {@link CronDef} objects (from
+   * `@mandujs/core/scheduler`). At `startServer()` boot time the runtime
+   * filters the set by `runOn === "bun"` (or `runOn` omitted) and registers
+   * each surviving job with `Bun.cron`. At build time, when
+   * `--target=workers` is set, the CLI filters by `runOn === "workers"` (or
+   * omitted) and emits the schedule strings into the generated
+   * `wrangler.toml` `[triggers] crons = [...]` block.
+   *
+   * Schedule strings are validated synchronously at `defineCron` time, so
+   * malformed crontabs fail boot instead of silently never firing.
+   *
+   * `scheduler.disabled` is an escape hatch for environments where cron
+   * should not fire (e.g., a read-only replica). Default: `false`.
+   *
+   * @see `docs/architect/cron-scheduler.md`
+   * @see `@mandujs/core/scheduler` for `defineCron`.
+   */
+  scheduler?: {
+    jobs?: CronDef[];
+    disabled?: boolean;
+  };
 }
 
 export const CONFIG_FILES = [

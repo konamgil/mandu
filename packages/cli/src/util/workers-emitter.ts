@@ -38,6 +38,18 @@ export interface EmitWorkersBundleOptions {
   cssPath: string | false;
   /** Override the wrangler `name` field. Defaults to a slug of the project dir. */
   workerName?: string;
+  /**
+   * Phase 18.λ — cron schedule strings to emit into the `[triggers]` block
+   * of a newly-generated `wrangler.toml`. Pre-filtered by
+   * {@link import("./cron-wrangler").extractWorkersCrons} — duplicates
+   * removed, workers-ineligible jobs dropped. When an existing
+   * `wrangler.toml` is preserved, this field is ignored (users are assumed
+   * to have hand-tuned their triggers block).
+   *
+   * Empty / undefined leaves the `[triggers]` block out of the generated
+   * config entirely.
+   */
+  crons?: string[];
 }
 
 export interface EmitWorkersBundleResult {
@@ -58,7 +70,13 @@ export interface EmitWorkersBundleResult {
 export async function emitWorkersBundle(
   options: EmitWorkersBundleOptions
 ): Promise<EmitWorkersBundleResult> {
-  const { rootDir, manifest, cssPath, workerName: explicitName } = options;
+  const {
+    rootDir,
+    manifest,
+    cssPath,
+    workerName: explicitName,
+    crons,
+  } = options;
 
   console.log(`\n☁️  Building Cloudflare Workers bundle...`);
 
@@ -137,6 +155,11 @@ export async function emitWorkersBundle(
       projectName,
       main: `${WORKER_OUTPUT_DIR}/${WORKER_OUTPUT_FILENAME}`.replace(/\\/g, "/"),
       assetsDir: hasPublic ? "public" : undefined,
+      // Phase 18.λ — emit scheduler's workers-eligible crons into the
+      // `[triggers]` block. When the user has hand-authored a
+      // `wrangler.toml`, `wranglerExists` is true and we skip regeneration
+      // entirely — their triggers block wins.
+      crons: crons && crons.length > 0 ? crons : undefined,
     });
     await fs.writeFile(wranglerPath, toml);
   }
@@ -144,6 +167,13 @@ export async function emitWorkersBundle(
   const sizeKB = (bundleSize / 1024).toFixed(1);
   console.log(`   ✅ worker.js (${sizeKB} KB)`);
   console.log(`   📄 wrangler.toml ${wranglerExists ? "(preserved)" : "(generated)"}`);
+  if (!wranglerExists && crons && crons.length > 0) {
+    console.log(`   ⏰ Cron triggers: ${crons.length} (${crons.join(", ")})`);
+  } else if (wranglerExists && crons && crons.length > 0) {
+    console.log(
+      `   ⚠️  wrangler.toml preserved — merge these cron triggers manually: ${crons.join(", ")}`
+    );
+  }
   console.log(`   Output: ${WORKER_OUTPUT_DIR}/worker.js`);
   console.log(`\n   Next: wrangler dev   or   wrangler deploy`);
 

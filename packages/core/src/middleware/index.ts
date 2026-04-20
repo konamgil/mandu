@@ -29,6 +29,13 @@ export {
   rateLimitMiddleware,
 } from "./bridge";
 
+export {
+  schedulerCron,
+  setActiveSchedulerRegistration,
+  getActiveSchedulerRegistration,
+  type SchedulerCronMiddlewareOptions,
+} from "./scheduler-cron";
+
 export { cors, type CorsMiddlewareOptions } from "./cors";
 export { jwt, type JwtMiddlewareOptions } from "./jwt";
 export { csrf, type CsrfMiddlewareOptions } from "./csrf";

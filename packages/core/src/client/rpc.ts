@@ -138,3 +138,156 @@ export interface RpcMethods {
   patch: (input?: RpcRequestOptions) => Promise<unknown>;
   delete: (input?: RpcRequestOptions) => Promise<unknown>;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 18.κ — Typed RPC Client (tRPC-like)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// `createRpcClient<typeof postsRpc>()` returns a Proxy whose properties
+// are the RPC procedure names (`list`, `get`, …). Each access produces
+// an async function whose input type is the procedure's Zod input
+// type and whose return type is the procedure's Zod output type.
+//
+// Wire protocol:
+//   POST <baseUrl>/<method>
+//   body: { "input": <value> }
+//   response: { "ok": true, "data": <value> }
+//            | { "ok": false, "error": { code, message, issues? } }
+//
+// Errors throw {@link RpcCallError} with the structured fields
+// preserved so UI code can surface field-level validation issues.
+
+import type { RpcClient, RpcDefinition, RpcProcedureRecord, RpcWireEnvelope, RpcWireError } from "../contract/rpc";
+
+/** Options passed to {@link createRpcClient}. */
+export interface CreateRpcClientOptions {
+  /**
+   * Absolute or site-relative base URL for the RPC endpoint —
+   * typically `/api/rpc/<name>`. The method name is appended.
+   */
+  baseUrl: string;
+  /** Extra headers sent with every call. */
+  headers?: Record<string, string>;
+  /** Custom fetch (e.g. test double or node-fetch polyfill). */
+  fetch?: typeof globalThis.fetch;
+  /**
+   * Optional per-call AbortSignal factory. Useful when the proxy is
+   * shared across React components that want independent cancellation.
+   */
+  signal?: AbortSignal;
+}
+
+/**
+ * Typed error thrown by {@link createRpcClient} calls on non-OK
+ * envelopes. Carries the wire-level {@link RpcWireError} + HTTP
+ * status so callers can distinguish validation vs. handler errors
+ * without string-matching on `message`.
+ */
+export class RpcCallError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly error: RpcWireError
+  ) {
+    super(`[Mandu RPC] ${error.code}: ${error.message}`);
+    this.name = "RpcCallError";
+  }
+
+  /** Machine-readable code (forwarded from the server). */
+  get code(): string {
+    return this.error.code;
+  }
+
+  /** Field-level issues, if any. */
+  get issues(): RpcWireError["issues"] {
+    return this.error.issues;
+  }
+}
+
+/**
+ * Create a typed RPC client from an `RpcDefinition` type import.
+ *
+ * The implementation uses a `Proxy` so no codegen step is required —
+ * TypeScript infers call signatures from the imported `typeof` at
+ * compile time, and at runtime every property access produces a
+ * fetch wrapper.
+ *
+ * @example
+ * ```ts
+ * import { createRpcClient } from "@mandujs/core/client";
+ * import type { postsRpc } from "../server/rpc/posts";
+ *
+ * const api = createRpcClient<typeof postsRpc>({ baseUrl: "/api/rpc/posts" });
+ * const posts = await api.list({ limit: 20 });   // fully typed
+ * const post  = await api.get({ id: "abc" });    // fully typed
+ * ```
+ *
+ * Type-check failures at the call site are real compile errors:
+ * `api.list({ limit: "not-a-number" })` is a TS2322.
+ */
+export function createRpcClient<TDef extends RpcDefinition<RpcProcedureRecord>>(
+  options: CreateRpcClientOptions
+): RpcClient<TDef> {
+  const baseFetch = options.fetch ?? globalThis.fetch;
+  const baseUrl = options.baseUrl.replace(/\/$/, "");
+  const baseHeaders = options.headers ?? {};
+
+  const call = async (method: string, input: unknown): Promise<unknown> => {
+    const url = `${baseUrl}/${method}`;
+    const payload = input === undefined ? { input: undefined } : { input };
+    const response = await baseFetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...baseHeaders,
+      },
+      body: JSON.stringify(payload),
+      signal: options.signal,
+    });
+
+    // Prefer JSON parse (every legitimate RPC response is JSON), but
+    // tolerate non-JSON failure paths (e.g. upstream proxy error).
+    let envelope: RpcWireEnvelope | null = null;
+    const text = await response.text();
+    try {
+      envelope = text.length > 0 ? (JSON.parse(text) as RpcWireEnvelope) : null;
+    } catch {
+      envelope = null;
+    }
+
+    if (envelope && envelope.ok === true) {
+      return envelope.data;
+    }
+
+    // Non-OK path — throw a structured error. Prefer server-emitted
+    // envelope; fall back to a synthesized one for transport errors.
+    let error: RpcWireError;
+    if (envelope && envelope.ok === false) {
+      error = envelope.error;
+    } else {
+      error = {
+        code: response.ok ? "BAD_RESPONSE" : `HTTP_${response.status}`,
+        message:
+          text.length > 0
+            ? text.slice(0, 500)
+            : `RPC call to ${url} failed with HTTP ${response.status}`,
+      };
+    }
+    throw new RpcCallError(response.status, error);
+  };
+
+  // A Proxy on a plain object: every property access returns a
+  // pre-curried call fn. Symbol keys (`Symbol.toStringTag`, etc.) fall
+  // through so `console.log(api)` does not throw.
+  const target = Object.create(null) as Record<string, unknown>;
+  return new Proxy(target, {
+    get(_t, prop) {
+      if (typeof prop !== "string") return undefined;
+      // Allow common non-method inspection hooks to no-op.
+      if (prop === "then") return undefined; // not thenable
+      if (prop === "toJSON") return undefined;
+      return (input?: unknown) => call(prop, input);
+    },
+  }) as RpcClient<TDef>;
+}
+

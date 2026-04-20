@@ -19,6 +19,24 @@ export * from "./client-safe";
 export * from "./protection";
 export * from "./route-helpers";
 
+// Phase 18.κ — tRPC-like typed RPC (see `./rpc.ts`).
+export {
+  defineRpc,
+  registerRpc,
+  getRpc,
+  clearRpcRegistry,
+  listRpcEndpoints,
+  matchRpcPath,
+  dispatchRpc,
+  type RpcContext,
+  type RpcProcedure,
+  type RpcProcedureRecord,
+  type RpcDefinition,
+  type RpcClient,
+  type RpcWireEnvelope,
+  type RpcWireError,
+} from "./rpc";
+
 import type { ContractDefinition, ContractInstance, ContractSchema } from "./schema";
 import type { ContractHandlers, RouteDefinition } from "./handler";
 import { defineHandler, defineRoute } from "./handler";
