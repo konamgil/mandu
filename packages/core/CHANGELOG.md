@@ -1,5 +1,19 @@
 # @mandujs/core
 
+## 0.34.0
+
+### Minor Changes
+
+- Phase 18 Wave E7 — 본연 주변 primitives 완결.
+
+  **φ Bundle size budget** — `ManduConfig.build.budget` per-island + total raw/gz caps, mode `'error'|'warning'`, `mandu build --no-budget` bypass, analyzer HTML에 budget bar inline.
+
+  **χ Accessibility audit** (`@mandujs/core/a11y`) — `mandu build --audit` axe-core 실행, optional peerDep (axe-core/jsdom/happy-dom 없으면 graceful skip), 25+ rule fix-hints, `--audit-fail-on=<impact>` 게이트.
+
+  **ψ Perf marks dev API** — `time()` / `timeAsync()` / `createPerf()` zero-overhead disabled path + OTel span 자동 생성 + `/_mandu/heap` histogram (p50/p95/p99, LRU 1000).
+
+  +61 regression tests, 7 packages typecheck clean, zero new runtime deps.
+
 ## 0.33.1
 
 ### Patch Changes
