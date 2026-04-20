@@ -57,6 +57,32 @@ export async function start(options: StartOptions = {}): Promise<void> {
     console.warn("⚠️  Failed to parse bundle manifest. Island hydration will be disabled.");
   }
 
+  // #211 — guard against stale / dev / empty manifest. `mandu start` is
+  // a production command; serving a dev manifest silently produces
+  // unstyled pages because CSS/JS referenced in the HTML was never
+  // emitted by the build. Symmetric with the strict lockfile gate.
+  if (bundleManifest) {
+    const env = bundleManifest.env;
+    if (env && env !== "production") {
+      console.error(
+        `❌ Stale manifest detected (env=${env}). 'mandu start' requires a production build.\n` +
+        `   Run 'mandu build' first, then retry.`
+      );
+      process.exit(1);
+    }
+    const bundleCount = bundleManifest.bundles
+      ? Object.keys(bundleManifest.bundles).length
+      : 0;
+    if (bundleCount === 0 && env !== "production") {
+      // Empty bundles on a non-production manifest — definitely not a real build.
+      console.error(
+        `❌ Empty manifest (bundles: {}). 'mandu start' would serve unstyled pages.\n` +
+        `   Run 'mandu build' first, then retry.`
+      );
+      process.exit(1);
+    }
+  }
+
   // Lockfile validation (strict: block policy)
   const { lockfile, lockResult, action, bypassed } = await validateRuntimeLockfile(config, rootDir);
   handleBlockedLockfile(action, lockResult);
