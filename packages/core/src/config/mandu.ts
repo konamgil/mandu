@@ -526,6 +526,34 @@ export interface ManduConfig {
     disabled?: boolean;
   };
   /**
+   * Production-grade OpenAPI endpoint.
+   *
+   * When enabled, the runtime serves the contracts-derived OpenAPI 3.0.3
+   * document at `<path>.json` / `<path>.yaml` (default base path
+   * `/__mandu/openapi`). The spec is materialized from `.mandu/openapi.json`
+   * (emitted by `mandu build`) on first request and cached for the
+   * lifetime of the server instance.
+   *
+   *   - `enabled` — default `false`. Do NOT leak the API surface on
+   *     every internet-facing deployment. Operators must opt in
+   *     explicitly, or set `MANDU_OPENAPI_ENABLED=1` in the environment
+   *     for a one-off probe without editing config.
+   *   - `path` — base URL path (with or without `.json` suffix). The
+   *     runtime appends `.json` / `.yaml` to serve each variant.
+   *     Default `/__mandu/openapi`.
+   *
+   * The response stamps `Cache-Control: public, max-age=0,
+   * must-revalidate` plus a SHA-256 ETag over the JSON body so CDNs and
+   * browsers revalidate cheaply after every deploy without serving
+   * stale specs.
+   *
+   * @see `docs/runtime/openapi.md`
+   */
+  openapi?: {
+    enabled?: boolean;
+    path?: string;
+  };
+  /**
    * Phase 18.μ — first-class internationalization.
    *
    * Declaring this block opts the project into the framework's built-in

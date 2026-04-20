@@ -62,6 +62,11 @@ import {
   isObservabilityExposed,
   recordHttpRequest,
 } from "../observability/metrics";
+import {
+  handleOpenAPIRequest,
+  isOpenAPIEndpointEnabled,
+  resolveOpenAPIEndpointSettings,
+} from "./openapi-endpoint";
 // Phase 18.ψ — user-facing perf marks dashboard append. We include a
 // `perf` block on the `/_mandu/heap` payload when the feature is active
 // so operators see a unified view (heap + caches + perf histogram).
@@ -500,6 +505,30 @@ export interface ServerOptions {
     };
   };
   /**
+   * Production-grade OpenAPI endpoint.
+   *
+   * When enabled, the runtime serves the contracts-derived OpenAPI 3.0.3
+   * document at `<path>.json` / `<path>.yaml` (default base path
+   * `/__mandu/openapi`). The body is loaded once from the build-time
+   * artifacts under `.mandu/openapi.{json,yaml}` (emitted by
+   * `mandu build`) and cached for the lifetime of the server.
+   *
+   *   - `enabled` — default `false`. Security-conscious: production
+   *     deployments must explicitly opt in, or set
+   *     `MANDU_OPENAPI_ENABLED=1` in the environment.
+   *   - `path` — base URL path (with or without `.json` suffix).
+   *     Default `/__mandu/openapi`.
+   *
+   * Wired from `ManduConfig.openapi`. The response carries
+   * `Cache-Control: public, max-age=0, must-revalidate` + a SHA-256
+   * ETag so CDNs / browsers revalidate on every deploy without holding
+   * stale specs.
+   */
+  openapi?: {
+    enabled?: boolean;
+    path?: string;
+  };
+  /**
    * Phase 18 — prerendered HTML pass-through (SSG).
    *
    * When enabled (default), the server looks for a prerender index
@@ -787,6 +816,14 @@ export interface ServerRegistrySettings {
    * request opens a root span via `tracer.startSpanFromRequest()`.
    */
   tracer?: import("../observability/tracing").Tracer;
+  /**
+   * Production OpenAPI endpoint — resolved from `ServerOptions.openapi`.
+   * `undefined` means the endpoint is disabled (hot path branch-free).
+   * When populated, every request whose pathname matches
+   * `<basePath>.json` / `<basePath>.yaml` short-circuits before route
+   * dispatch to serve the cached spec body.
+   */
+  openapi?: import("./openapi-endpoint").OpenAPIEndpointSettings;
   /**
    * Phase 18 — resolved prerender pass-through state. `undefined`
    * means the feature is disabled for this server instance.
@@ -3916,6 +3953,26 @@ async function handleRequestInternal(
     }
   }
 
+  // Production OpenAPI endpoint — `/__mandu/openapi.json` + `.yaml`.
+  // Gated behind `ManduConfig.openapi.enabled` (or MANDU_OPENAPI_ENABLED=1).
+  // Every response carries an ETag so CDNs / browsers revalidate cheaply
+  // after a deploy. Falls through to route dispatch if disabled OR the
+  // pathname doesn't match the configured base path.
+  if (settings.openapi) {
+    const openapiManifest: RoutesManifest = {
+      version: 1,
+      routes: router.getRoutes(),
+    };
+    const openapiResponse = await handleOpenAPIRequest(
+      req,
+      pathname,
+      openapiManifest,
+      settings.rootDir,
+      settings.openapi
+    );
+    if (openapiResponse) return ok(openapiResponse);
+  }
+
   // 2. Kitchen dev dashboard (dev mode only)
   if (settings.isDev && pathname.startsWith(KITCHEN_PREFIX) && registry.kitchen) {
     const kitchenResponse = await registry.kitchen.handle(req, pathname);
@@ -4252,6 +4309,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     spa,
     devtools,
     observability: observabilityOption,
+    openapi: openapiOption,
     prerender: prerenderOption,
     middleware: middlewareOption,
     rpc: rpcOption,
@@ -4373,6 +4431,13 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     heapEndpoint: observabilityOption?.heapEndpoint,
     metricsEndpoint: observabilityOption?.metricsEndpoint,
     tracer: tracerInstance.enabled ? tracerInstance : undefined,
+    // Production OpenAPI endpoint — default OFF so an internet-facing
+    // deployment does not leak its API surface without explicit opt-in.
+    // `MANDU_OPENAPI_ENABLED=1` in the environment forces-on without a
+    // config edit; explicit `enabled: false` still wins (explicit > env).
+    openapi: isOpenAPIEndpointEnabled(openapiOption?.enabled)
+      ? resolveOpenAPIEndpointSettings(rootDir, openapiOption?.path)
+      : undefined,
     prerender: prerenderSettings,
     middlewareChain,
     i18n: i18nOption,

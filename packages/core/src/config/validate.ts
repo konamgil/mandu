@@ -384,6 +384,28 @@ const ObservabilityConfigSchema = z
   })
   .strict();
 
+/**
+ * Production OpenAPI endpoint config (strict).
+ *
+ * Default `enabled: false` — we validate permissive so `openapi: {}`
+ * still loads (equivalent to disabled). Operators explicitly set
+ * `enabled: true` OR export `MANDU_OPENAPI_ENABLED=1` to turn the
+ * endpoint on.
+ */
+const OpenApiConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    path: z
+      .string()
+      .min(1)
+      .refine(
+        (value) => value.startsWith("/"),
+        { message: "openapi.path must start with '/'" }
+      )
+      .optional(),
+  })
+  .strict();
+
 const AdapterConfigSchema = z.custom<ManduAdapter | undefined>(
   (value) =>
     value === undefined ||
@@ -591,6 +613,11 @@ export const ManduConfigSchema = z
     seo: SeoConfigSchema.default({}),
     test: TestConfigSchema.default({}),
     observability: ObservabilityConfigSchema.default({}),
+    /**
+     * Production OpenAPI endpoint (default disabled). See
+     * {@link OpenApiConfigSchema} + `docs/runtime/openapi.md`.
+     */
+    openapi: OpenApiConfigSchema.optional(),
     /** Phase 18.ζ — ISR / tag-based cache invalidation. Optional. */
     cache: CacheConfigSchema.optional(),
     plugins: z.array(ManduPluginSchema).optional(),

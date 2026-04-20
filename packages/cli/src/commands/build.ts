@@ -241,6 +241,46 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     console.log(renderBuildSummaryTable(summaryRows, Number(elapsed)));
   }
 
+  // 5.4. OpenAPI artifact emission — .mandu/openapi.json + .mandu/openapi.yaml
+  //
+  // Emitted BEFORE prerender so that a transient server booted for
+  // prerender rendering can (optionally) serve the artifacts via the
+  // `/__mandu/openapi.*` endpoint without racing the build.
+  //
+  // Always emitted when at least one contract route is registered — the
+  // artifact exists on disk as a deploy-time deliverable even if the
+  // runtime endpoint is disabled by default. Consumers who never want
+  // the artifact can skip the block entirely by shipping zero
+  // `contractModule` routes (which is the only scenario where the spec
+  // would be empty anyway).
+  {
+    const hasContracts = manifest.routes.some((r) => r.contractModule);
+    if (hasContracts) {
+      try {
+        const { writeOpenAPIArtifacts } = await import("@mandujs/core/openapi/generator");
+        const result = await writeOpenAPIArtifacts(
+          manifest,
+          cwd,
+          ".mandu"
+        );
+        const relJson = path.relative(cwd, result.paths.json).replace(/\\/g, "/");
+        const relYaml = path.relative(cwd, result.paths.yaml).replace(/\\/g, "/");
+        console.log(
+          `\n📜 OpenAPI spec written (${result.pathCount} path(s))`
+        );
+        console.log(`   ${relJson}`);
+        console.log(`   ${relYaml}`);
+        console.log(`   SHA-256: ${result.hash.slice(0, 12)}…`);
+      } catch (error) {
+        console.warn(
+          `\n⚠️  OpenAPI artifact emission failed (non-fatal): ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+  }
+
   // 5.5. Prerendering (SSG) — 정적 페이지를 HTML로 사전 생성
   const staticRoutes = manifest.routes.filter(
     r => r.kind === "page" && !r.pattern.includes(":")
