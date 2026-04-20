@@ -1,5 +1,14 @@
 # @mandujs/core
 
+## 0.25.2
+
+### Patch Changes
+
+- fix: resolve #202 — add `./content/prebuild` + sibling subpath exports
+  (collection / sidebar / slug / llms-txt / schema). Same pattern as #194
+  kitchen export. `mandu dev` no longer fails with "Cannot find module
+  '@mandujs/core/content/prebuild'".
+
 ## 0.25.1
 
 ### Patch Changes
