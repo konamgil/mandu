@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/mcp",
-  "version": "0.22.3",
+  "version": "0.22.4",
   "description": "Mandu MCP Server - Agent-native interface for Mandu framework operations",
   "type": "module",
   "main": "./src/index.ts",
@@ -34,8 +34,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@mandujs/core": "^0.36.0",
-    "@mandujs/ate": "^0.19.1",
+    "@mandujs/core": "^0.37.0",
+    "@mandujs/ate": "^0.19.2",
     "@mandujs/skills": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.25.3"
   },

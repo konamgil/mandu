@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/edge",
-  "version": "0.4.19",
+  "version": "0.4.20",
   "description": "Mandu edge adapters — Cloudflare Workers, Deno Deploy, Vercel Edge, Netlify Edge",
   "type": "module",
   "sideEffects": false,
