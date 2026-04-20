@@ -1,5 +1,17 @@
 # @mandujs/core
 
+## 0.34.2
+
+### Patch Changes
+
+- fix(core): #222 — preserve hash anchor target after SPA body swap.
+  `window.scrollTo(0, 0)` unconditional call was clobbering hash anchors
+  (`<a href="/docs#section">` 가 `#section` 대신 top으로 스크롤). 이제
+  `extractHash(url)` + `document.getElementById` + `[name=]` fallback +
+  `CSS.escape` 기반 `scrollIntoView`. Fragment-only 같은 페이지 링크는
+  fetch 없이 pushState + scroll 만. 9 regression tests, 2466 B gz
+  (budget 3072).
+
 ## 0.34.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "mandu-desktop-starter",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "private": true,
   "type": "module",
   "description": "Minimal Mandu desktop app (Phase 9c). Opens a native WebView pointing at a local Bun.serve() instance.",
