@@ -260,6 +260,38 @@ describe("Domain Coverage", () => {
     }
   });
 
+  test("#231 L1/L2 assertions never emit Playwright-invalid toHaveCount({ min: N })", () => {
+    // Regression guard: toHaveCount(number) is the only valid signature.
+    // The agent-facing codegen must never produce `toHaveCount({ min: 1 })`
+    // or similar object-argument forms — it fails Playwright at runtime.
+    const domains: AppDomain[] = ["ecommerce", "blog", "dashboard", "auth", "generic"];
+    const probeRoutes = [
+      "/shop", "/cart", "/product/42", "/checkout",
+      "/blog", "/blog/post", "/author/x",
+      "/dashboard", "/dashboard/analytics", "/settings",
+      "/login", "/signup", "/forgot-password",
+      "/random", "/",
+    ];
+    const invalidPatterns = [
+      /toHaveCount\(\s*\{/,           // object argument
+      /toHaveCount\(\s*"/,            // string argument
+      /toHaveCount\(\s*\[/,           // array argument
+    ];
+    for (const domain of domains) {
+      for (const route of probeRoutes) {
+        const assertions = generateL1Assertions(domain, route);
+        const joined = assertions.join("\n");
+        for (const bad of invalidPatterns) {
+          if (bad.test(joined)) {
+            throw new Error(
+              `Invalid Playwright call in L1 assertions (domain=${domain}, route=${route}): ${joined}`,
+            );
+          }
+        }
+      }
+    }
+  });
+
   test("each domain has unique assertions", () => {
     const ecommerceAssertions = generateL1Assertions("ecommerce", "/shop");
     const blogAssertions = generateL1Assertions("blog", "/blog");

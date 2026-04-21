@@ -53,12 +53,12 @@ export function generateL1Assertions(domain: AppDomain, routePath: string): stri
         assertions.push(`await expect(page.locator("form, [data-testid='checkout-form']")).toBeVisible();`);
         assertions.push(`await expect(page.locator("input[type='email'], input[name*='email']")).toBeVisible();`);
       } else if (routePath.includes("/shop")) {
-        assertions.push(`await expect(page.locator("[data-testid='product-card'], .product, [class*='product']")).toHaveCount({ min: 1 });`);
-        assertions.push(`await expect(page.locator("a[href*='/product'], [data-testid='product-link']")).toHaveCount({ min: 1 });`);
+        assertions.push(`expect(await page.locator("[data-testid='product-card'], .product, [class*='product']").count()).toBeGreaterThanOrEqual(1);`);
+        assertions.push(`expect(await page.locator("a[href*='/product'], [data-testid='product-link']").count()).toBeGreaterThanOrEqual(1);`);
       } else {
         // Generic ecommerce page fallback
         assertions.push(`await expect(page.locator("nav, [role='navigation']")).toBeVisible();`);
-        assertions.push(`await expect(page.locator("a, button")).toHaveCount({ min: 1 });`);
+        assertions.push(`expect(await page.locator("a, button").count()).toBeGreaterThanOrEqual(1);`);
       }
       break;
 
@@ -73,22 +73,22 @@ export function generateL1Assertions(domain: AppDomain, routePath: string): stri
       } else {
         // Blog index/listing fallback
         assertions.push(`await expect(page.locator("h1, h2")).toBeVisible();`);
-        assertions.push(`await expect(page.locator("a")).toHaveCount({ min: 1 });`);
+        assertions.push(`expect(await page.locator("a").count()).toBeGreaterThanOrEqual(1);`);
       }
       break;
 
     case "dashboard":
       assertions.push(`await expect(page.locator("nav, [role='navigation'], aside, [data-testid='sidebar']")).toBeVisible();`);
       if (routePath.includes("/analytics") || routePath.includes("/dashboard")) {
-        assertions.push(`await expect(page.locator("canvas, svg, [data-testid='chart']")).toHaveCount({ min: 1 });`);
-        assertions.push(`await expect(page.locator("[data-testid='metric'], .metric, [class*='stat']")).toHaveCount({ min: 1 });`);
+        assertions.push(`expect(await page.locator("canvas, svg, [data-testid='chart']").count()).toBeGreaterThanOrEqual(1);`);
+        assertions.push(`expect(await page.locator("[data-testid='metric'], .metric, [class*='stat']").count()).toBeGreaterThanOrEqual(1);`);
       } else if (routePath.includes("/settings")) {
         assertions.push(`await expect(page.locator("form, [data-testid='settings-form']")).toBeVisible();`);
         assertions.push(`await expect(page.locator("button:has-text('Save'), button[type='submit']")).toBeVisible();`);
       } else {
         // Generic dashboard page fallback
         assertions.push(`await expect(page.locator("h1, h2")).toBeVisible();`);
-        assertions.push(`await expect(page.locator("a, button")).toHaveCount({ min: 1 });`);
+        assertions.push(`expect(await page.locator("a, button").count()).toBeGreaterThanOrEqual(1);`);
       }
       break;
 
@@ -107,8 +107,8 @@ export function generateL1Assertions(domain: AppDomain, routePath: string): stri
         assertions.push(`await expect(page.locator("button:has-text('Reset'), button:has-text('Send')")).toBeVisible();`);
       } else {
         // Generic auth page fallback
-        assertions.push(`await expect(page.locator("input")).toHaveCount({ min: 1 });`);
-        assertions.push(`await expect(page.locator("button[type='submit'], button")).toHaveCount({ min: 1 });`);
+        assertions.push(`expect(await page.locator("input").count()).toBeGreaterThanOrEqual(1);`);
+        assertions.push(`expect(await page.locator("button[type='submit'], button").count()).toBeGreaterThanOrEqual(1);`);
       }
       break;
 
@@ -116,7 +116,7 @@ export function generateL1Assertions(domain: AppDomain, routePath: string): stri
     default:
       // Generic fallback assertions
       assertions.push(`await expect(page.locator("h1")).toBeVisible();`);
-      assertions.push(`await expect(page.locator("a, button")).toHaveCount({ min: 1 });`);
+      assertions.push(`expect(await page.locator("a, button").count()).toBeGreaterThanOrEqual(1);`);
       assertions.push(`await expect(page).toHaveTitle(/.+/);`);
       break;
   }
