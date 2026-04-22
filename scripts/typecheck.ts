@@ -75,34 +75,61 @@ console.log(`⚡ Checker: ${checker.name}${checker.name === "tsgo" ? " (TypeScri
 const startedAt = performance.now();
 let hasError = false;
 
-for (const pkg of packages) {
+// TS 7 — `--checkers` enables parallel type-check workers inside a single
+// project. We parallelize BETWEEN projects too (across packages) by running
+// them concurrently; each subprocess uses one checker worker by default. On
+// an 8-core machine that's 7 parallel package checks + 1 worker each,
+// capped naturally by CPU count.
+const cpuCount = Math.max(1, Math.min(packages.length, 8));
+const checkersPerProject = checker.name === "tsgo" ? "2" : undefined;
+
+async function typecheckPackage(pkg: string): Promise<{ pkg: string; ok: boolean; stderr?: string; stdout?: string }> {
   const pkgDir = join(ROOT, "packages", pkg);
   const tsconfigPath = join(pkgDir, "tsconfig.json");
 
   if (!existsSync(tsconfigPath)) {
     console.log(`⏭️  ${pkg} — tsconfig.json not found, skipping`);
-    continue;
+    return { pkg, ok: true };
   }
 
   console.log(`🔍 ${pkg} — type-checking...`);
-
   try {
     if (checker.name === "tsgo") {
-      await $`tsgo --noEmit --project ${tsconfigPath}`.quiet();
+      await $`tsgo --noEmit --project ${tsconfigPath} --checkers ${checkersPerProject}`.quiet();
     } else {
       await $`tsc --noEmit --project ${tsconfigPath}`.quiet();
     }
     console.log(`✅ ${pkg} — no errors`);
+    return { pkg, ok: true };
   } catch (err: unknown) {
-    hasError = true;
-    console.error(`❌ ${pkg} — type errors found:\n`);
     const shellErr = err as { stdout?: Buffer; stderr?: Buffer };
-    if (shellErr.stdout) {
-      console.error(shellErr.stdout.toString());
-    }
-    if (shellErr.stderr) {
-      console.error(shellErr.stderr.toString());
-    }
+    const stdout = shellErr.stdout?.toString();
+    const stderr = shellErr.stderr?.toString();
+    console.error(`❌ ${pkg} — type errors found`);
+    return { pkg, ok: false, stdout, stderr };
+  }
+}
+
+// Bounded concurrency across packages.
+const results: Array<{ pkg: string; ok: boolean; stderr?: string; stdout?: string }> = [];
+let cursor = 0;
+async function worker() {
+  while (cursor < packages.length) {
+    const idx = cursor++;
+    const pkg = packages[idx];
+    if (!pkg) continue;
+    results.push(await typecheckPackage(pkg));
+  }
+}
+await Promise.all(Array.from({ length: cpuCount }, () => worker()));
+
+// Sort back to input order for deterministic output.
+results.sort((a, b) => packages.indexOf(a.pkg) - packages.indexOf(b.pkg));
+for (const r of results) {
+  if (!r.ok) {
+    hasError = true;
+    if (r.stdout) console.error(r.stdout);
+    if (r.stderr) console.error(r.stderr);
   }
 }
 

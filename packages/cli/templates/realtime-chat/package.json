@@ -31,7 +31,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "tailwindcss": "^4.1.0",
-    "typescript": "^6.0.0",
+    "typescript": ">=6.0.0",
     "@typescript/native-preview": "beta"
   }
 }
