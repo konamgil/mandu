@@ -32,6 +32,7 @@ describe("resolveBrainAdapter — priority order", () => {
       adapter: "auto",
       credentialStore: store,
       probeOllama: async () => true,
+      probeChatGPTAuth: () => ({ authenticated: false, path: null }),
     });
     expect(res.resolved).toBe("openai");
     expect(res.adapter.name).toBe("openai-oauth");
@@ -43,6 +44,7 @@ describe("resolveBrainAdapter — priority order", () => {
       adapter: "auto",
       credentialStore: store,
       probeOllama: async () => true,
+      probeChatGPTAuth: () => ({ authenticated: false, path: null }),
     });
     expect(res.resolved).toBe("anthropic");
     expect(res.adapter.name).toBe("anthropic-oauth");
@@ -54,6 +56,7 @@ describe("resolveBrainAdapter — priority order", () => {
       adapter: "auto",
       credentialStore: store,
       probeOllama: async () => true,
+      probeChatGPTAuth: () => ({ authenticated: false, path: null }),
     });
     expect(res.resolved).toBe("ollama");
     expect(res.adapter.name).toBe("ollama");
@@ -65,6 +68,7 @@ describe("resolveBrainAdapter — priority order", () => {
       adapter: "auto",
       credentialStore: store,
       probeOllama: async () => false,
+      probeChatGPTAuth: () => ({ authenticated: false, path: null }),
     });
     expect(res.resolved).toBe("template");
     expect(res.adapter.name).toBe("noop");
@@ -104,6 +108,7 @@ describe("resolveBrainAdapter — explicit pins degrade gracefully", () => {
     const res = await resolveBrainAdapter({
       adapter: "openai",
       credentialStore: store,
+      probeChatGPTAuth: () => ({ authenticated: false, path: null }),
     });
     expect(res.resolved).toBe("template");
     expect(res.reason).toContain("no token");

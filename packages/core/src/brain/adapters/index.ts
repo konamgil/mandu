@@ -34,6 +34,7 @@ import {
   createOpenAIOAuthAdapter,
   type OpenAIOAuthAdapterOptions,
 } from "./openai-oauth";
+import { ChatGPTAuth } from "./chatgpt-auth";
 import {
   AnthropicOAuthAdapter,
   createAnthropicOAuthAdapter,
@@ -82,6 +83,13 @@ export interface BrainAdapterConfig {
    * default consults `credentialStore.load(provider)`.
    */
   probeToken?: (provider: "openai" | "anthropic") => Promise<StoredToken | null>;
+  /**
+   * Override the ChatGPT session-token probe. Default: instantiate
+   * `new ChatGPTAuth()` and check its on-disk auth.json. Tests inject
+   * a stub returning `false` so the developer's real `~/.codex/auth.json`
+   * doesn't leak into unit-test expectations.
+   */
+  probeChatGPTAuth?: () => { authenticated: boolean; path: string | null };
 }
 
 /**
@@ -122,6 +130,13 @@ export async function resolveBrainAdapter(
     config.probeOllama ??
     (async (ollama: OllamaAdapter) => ollama.isServerRunning());
 
+  const probeChatGPTAuth =
+    config.probeChatGPTAuth ??
+    (() => {
+      const c = new ChatGPTAuth();
+      return { authenticated: c.isAuthenticated(), path: c.locateAuthFile() };
+    });
+
   // Explicit template — skip every other check.
   if (requested === "template") {
     return {
@@ -145,14 +160,17 @@ export async function resolveBrainAdapter(
           "adapter: 'openai' requested but telemetryOptOut=true — forcing template",
       };
     }
-    const token = await probeToken("openai");
-    if (!token) {
+    // Primary: ChatGPT session token (written by `@openai/codex login`).
+    const cg = probeChatGPTAuth();
+    const hasChatGPT = cg.authenticated;
+    const token = hasChatGPT ? null : await probeToken("openai");
+    if (!hasChatGPT && !token) {
       return {
         adapter: new NoopAdapter(),
         resolved: "template",
         requested,
         reason:
-          "adapter: 'openai' requested but no token in keychain — run `mandu brain login --provider=openai`",
+          "adapter: 'openai' requested but no token found — run `mandu brain login --provider=openai`",
       };
     }
     return {
@@ -164,7 +182,9 @@ export async function resolveBrainAdapter(
       }),
       resolved: "openai",
       requested,
-      reason: "Explicit adapter: 'openai' + token present",
+      reason: hasChatGPT
+        ? "Explicit adapter: 'openai' + ChatGPT session token present"
+        : "Explicit adapter: 'openai' + keychain token present",
     };
   }
 
@@ -217,6 +237,21 @@ export async function resolveBrainAdapter(
   // Auto — try cloud providers first (when allowed), then ollama,
   // then template.
   if (!telemetryOptOut) {
+    // Primary: ChatGPT session token (managed by `@openai/codex`).
+    const cg2 = probeChatGPTAuth();
+    if (cg2.authenticated) {
+      return {
+        adapter: createOpenAIOAuthAdapter({
+          ...(config.openaiOptions ?? {}),
+          model: config.openai?.model ?? config.openaiOptions?.model,
+          credentialStore: store,
+          projectRoot,
+        }),
+        resolved: "openai",
+        requested,
+        reason: `auto: ChatGPT session token at ${cg2.path ?? "(unknown)"}`,
+      };
+    }
     const openaiToken = await probeToken("openai");
     if (openaiToken) {
       return {

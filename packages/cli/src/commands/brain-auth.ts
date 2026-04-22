@@ -291,8 +291,19 @@ export async function brainAuthStatus(
   log(`Backend     : ${store.backendName}`);
   log("");
 
+  // OpenAI: prefer ChatGPT session token (codex-managed) over keychain.
+  const { ChatGPTAuth } = await import("@mandujs/core");
+  const chatgpt = new ChatGPTAuth();
+  const chatgptFile = chatgpt.locateAuthFile();
+
   for (const provider of ["openai", "anthropic"] as const) {
     const token = await store.load(provider);
+    if (provider === "openai" && !token && chatgptFile) {
+      log(
+        `  openai     : logged in (ChatGPT session at ${chatgptFile}, managed by @openai/codex)`,
+      );
+      continue;
+    }
     if (!token) {
       log(`  ${provider.padEnd(10)} : not logged in`);
       continue;

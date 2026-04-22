@@ -171,7 +171,7 @@ export const brainToolDefinitions: Tool[] = [
   {
     name: "mandu.brain.login",
     description:
-      "Authenticate the brain to an LLM provider. For openai, delegates to the OpenAI-official `@openai/codex` CLI (writes ~/.codex/auth.json; Mandu reads + auto-refreshes). MUST be invoked from a context where a terminal / browser is available — the CLI opens a browser tab for OAuth. Anthropic path uses the Mandu OAuth flow with a local loopback listener.",
+      "Authenticate the brain to an LLM provider. For openai, spawns `npx @openai/codex login` which opens the user's default browser to the OpenAI OAuth page; on approval, the token lands in ~/.codex/auth.json and this tool returns. Anthropic path uses the Mandu OAuth flow with a local loopback listener.",
     annotations: { readOnlyHint: false },
     inputSchema: {
       type: "object",
@@ -180,6 +180,11 @@ export const brainToolDefinitions: Tool[] = [
           type: "string",
           enum: ["openai", "anthropic"],
           description: "Which provider to sign into. Default: openai.",
+        },
+        waitMs: {
+          type: "number",
+          description:
+            "How long to wait for auth.json to appear after spawning the OAuth flow. Default 180000 (3 min). Increase if the user takes longer to approve in the browser.",
         },
       },
       required: [],
@@ -649,26 +654,28 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
   };
 
   handlers["mandu.brain.login"] = async (args) => {
-    const { provider = "openai" } = args as { provider?: "openai" | "anthropic" };
-    const { spawnSync } = await import("node:child_process");
+    const { provider = "openai", waitMs = 180000 } = args as {
+      provider?: "openai" | "anthropic";
+      waitMs?: number;
+    };
 
     if (provider === "openai") {
-      // Delegate to the OpenAI-official Codex CLI. This MUST run
-      // interactively (browser-based OAuth). If stdin/stdout aren't a
-      // TTY the agent should surface the command for the user to run
-      // manually instead of attempting to spawn.
-      const isTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
-      if (!isTty) {
+      const core = await import("@mandujs/core");
+      const auth = new core.ChatGPTAuth();
+      const existing = auth.locateAuthFile();
+      if (existing) {
         return {
           content: [
             {
               type: "text",
               text: JSON.stringify(
                 {
-                  ok: false,
-                  reason: "not_a_tty",
-                  instruction:
-                    "Run this in your terminal, then call mandu.brain.status:\n\n    npx @openai/codex login\n",
+                  ok: true,
+                  provider: "openai",
+                  already_authenticated: true,
+                  auth_file: existing,
+                  note:
+                    "ChatGPT session already present. Call mandu.brain.logout + mandu.brain.login again to re-authenticate.",
                 },
                 null,
                 2,
@@ -677,26 +684,62 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
           ],
         };
       }
-      const result = spawnSync("npx", ["-y", "@openai/codex", "login"], {
-        stdio: "inherit",
+
+      // Spawn `npx @openai/codex login` detached from the MCP process.
+      // Codex itself opens the user's default browser (`start` on
+      // Windows, `open` on macOS, `xdg-open` on Linux) — no TTY needed
+      // on our side. We poll for ~/.codex/auth.json to appear and
+      // return once it does.
+      const { spawn } = await import("node:child_process");
+      const child = spawn("npx", ["-y", "@openai/codex", "login"], {
+        cwd: projectRoot,
+        detached: false,
+        stdio: ["ignore", "pipe", "pipe"],
         shell: process.platform === "win32",
       });
-      const core = await import("@mandujs/core");
-      const auth = new core.ChatGPTAuth();
-      const file = auth.locateAuthFile();
+
+      let stdoutBuffer = "";
+      let stderrBuffer = "";
+      child.stdout?.on("data", (d) => {
+        stdoutBuffer += d.toString();
+      });
+      child.stderr?.on("data", (d) => {
+        stderrBuffer += d.toString();
+      });
+
+      const deadline = Date.now() + Math.max(15_000, Math.min(waitMs, 600_000));
+      let file: string | null = null;
+      while (Date.now() < deadline) {
+        file = auth.locateAuthFile();
+        if (file) break;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+
+      // Kill the codex process if it's still running (normally it exits
+      // on its own once auth.json is written).
+      if (!child.killed) {
+        try { child.kill(); } catch { /* ignore */ }
+      }
+
+      const urlMatch = stdoutBuffer.match(
+        /https:\/\/auth\.openai\.com\/oauth\/authorize\?[^\s]+/,
+      );
+
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify(
               {
-                ok: result.status === 0 && Boolean(file),
-                exit_code: result.status,
-                auth_file: file,
+                ok: Boolean(file),
                 provider: "openai",
+                auth_file: file,
+                oauth_url: urlMatch ? urlMatch[0] : undefined,
+                stdout_tail: stdoutBuffer.slice(-500),
+                stderr_tail: stderrBuffer.slice(-500),
                 note: file
-                  ? "auth.json present; brain will use it automatically."
-                  : "Login flow exited without writing auth.json.",
+                  ? "auth.json written; Mandu brain will now use the OpenAI tier."
+                  : "No auth.json detected before waitMs expired. If the OAuth URL is present above, open it in a browser; otherwise rerun with a larger waitMs or run `npx @openai/codex login` in your own terminal.",
               },
               null,
               2,
