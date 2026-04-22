@@ -148,3 +148,9 @@ export default {
 | `mandu_guard` | Run architecture check |
 | `mandu_guard_heal` | Auto-fix violations |
 | `mandu_negotiate` | Analyze with preset awareness |
+
+## See also
+
+- `mandu-mcp-verify` — guard 위반 drill-down (`guard_explain` → `guard_heal`) 순서
+- `mandu-mcp-safe-change` — 대규모 guard 수정은 snapshot + tx 안에서
+

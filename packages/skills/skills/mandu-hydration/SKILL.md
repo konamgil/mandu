@@ -132,3 +132,8 @@ export default function UserProfile() {
 - Using `useState`/`useEffect` in server components (non-island files)
 - Setting all Islands to `"immediate"` priority (defeats partial hydration)
 - Putting heavy server imports in `.island.tsx` files (increases bundle size)
+
+## See also
+
+- `mandu-mcp-verify` — island 편집 후 `mandu_doctor` (import/location 진단) drill-down
+

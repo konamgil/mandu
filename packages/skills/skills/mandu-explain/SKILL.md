@@ -119,3 +119,8 @@ spec/          Slots, tests
 | Island files | `@mandujs/core/client` |
 | Server files | `@mandujs/core` |
 | Shared code | `@/shared/*` |
+
+## See also
+
+- `mandu-mcp-index` — MCP 도구 108개의 계층 구조 / 상황별 workflow skill 매핑
+

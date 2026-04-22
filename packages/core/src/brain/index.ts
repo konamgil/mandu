@@ -10,8 +10,46 @@
 // Types
 export * from "./types";
 
-// Adapters
+// Adapters (includes Ollama, OpenAI OAuth, Anthropic OAuth, and the
+// `createBrainAdapter` / `resolveBrainAdapter` resolver — Issue #235).
 export * from "./adapters";
+
+// Credential store (OS keychain + filesystem fallback).
+export {
+  CredentialStore,
+  getCredentialStore,
+  setCredentialStore,
+  filesystemBackend,
+  macosBackend,
+  linuxBackend,
+  windowsBackend,
+  pickPlatformBackend,
+  type CredentialBackend,
+  type StoredToken,
+} from "./credentials";
+
+// Consent prompt + cache (Issue #235).
+export {
+  ensureConsent,
+  hasConsent,
+  grantConsent,
+  revokeConsent,
+  fingerprintProject,
+  consentFilePath,
+  type ConsentContext,
+  type ConsentEntry,
+  type ConsentProvider,
+  type ConsentPromptDeps,
+} from "./consent";
+
+// Redactor (pre-transmission secret scrubbing — Issue #235).
+export {
+  redact,
+  redactSecrets,
+  type RedactionHit,
+  type RedactionKind,
+  type RedactionResult,
+} from "./redactor";
 
 // Permissions
 export {

@@ -122,6 +122,7 @@ const CLI_UX_ERRORS_DIR_REL = "errors";
  * at CI time.
  */
 const SKILL_IDS = [
+  // Task-shaped (domain knowledge)
   "mandu-create-feature",
   "mandu-create-api",
   "mandu-debug",
@@ -131,6 +132,13 @@ const SKILL_IDS = [
   "mandu-slot",
   "mandu-fs-routes",
   "mandu-hydration",
+  // Workflow-shaped (MCP tool orchestration — #234)
+  "mandu-mcp-index",
+  "mandu-mcp-orient",
+  "mandu-mcp-create-flow",
+  "mandu-mcp-verify",
+  "mandu-mcp-safe-change",
+  "mandu-mcp-deploy",
 ] as const;
 
 /**

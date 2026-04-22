@@ -13,22 +13,20 @@ import { readFile, writeFile, mkdir, copyFile } from "fs/promises";
 import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 
+import { SKILL_IDS } from "./index.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PACKAGE_ROOT = resolve(__dirname, "..");
 
-/** Skill directories containing SKILL.md files */
-const SKILL_DIRS = [
-  "mandu-create-feature",
-  "mandu-create-api",
-  "mandu-debug",
-  "mandu-explain",
-  "mandu-guard-guide",
-  "mandu-deploy",
-  "mandu-slot",
-  "mandu-fs-routes",
-  "mandu-hydration",
-];
+/**
+ * Skill directories containing SKILL.md files.
+ *
+ * Sourced from `SKILL_IDS` (src/index.ts) so `setupClaudeSkills` (dev-mode
+ * `mandu init`) and `installSkills` (public CLI) always agree on the skill
+ * set. Adding a new skill now requires updating one list, not two.
+ */
+const SKILL_DIRS: readonly string[] = SKILL_IDS;
 
 export interface SetupResult {
   skillsInstalled: number;
@@ -42,7 +40,7 @@ export interface SetupResult {
  *
  * This function:
  * 1. Creates .claude/skills/ directory
- * 2. Copies all 9 skill markdown files (skills/<id>/SKILL.md -> .claude/skills/<id>/SKILL.md)
+ * 2. Copies every skill's SKILL.md (skills/<id>/SKILL.md -> .claude/skills/<id>/SKILL.md)
  * 3. Creates .claude/settings.json with hooks and permissions
  *
  * The `<id>/SKILL.md` subdirectory layout follows the Claude Code skills

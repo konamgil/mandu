@@ -97,3 +97,9 @@ negotiate → add_route(page) → generate → island 파일에 "use client" 확
 3. 생성 후 `mandu_guard_heal`로 검증
 4. Layout에 `<html>/<head>/<body>` 태그 사용 금지
 5. Island 파일은 `@mandujs/core/client`에서 import
+
+## See also
+
+- `mandu-mcp-create-flow` — MCP 도구 오케스트레이션 순서 (`negotiate → contract → generate`)
+- `mandu-mcp-verify` — 생성 직후 자동 검증 루프
+

@@ -130,3 +130,9 @@ export default Mandu.filling()
 - Forgetting to `await ctx.body()`
 - Using inline auth checks instead of `.guard()`
 - Not returning `void` from guard when request should continue
+
+## See also
+
+- `mandu-mcp-create-flow` — slot 생성 시 `contract → generate` 순서 고정
+- `mandu-mcp-verify` — slot 편집 후 `mandu_validate_slot` drill-down 규칙
+

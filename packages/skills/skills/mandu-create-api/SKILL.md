@@ -143,3 +143,9 @@ tests/api/{resource}.test.ts
 3. `.guard()`로 인증/인가 처리 (인라인 체크 금지)
 4. 에러는 `ctx.error(status, message)` 사용
 5. `ctx.body()`는 반드시 await
+
+## See also
+
+- `mandu-mcp-create-flow` — Track C (single route) 레시피로 이 워크플로우를 MCP 도구 순서로 정리
+- `mandu-mcp-verify` — API 추가 직후 `ate.auto_pipeline` + `guard_check` 병렬 검증
+

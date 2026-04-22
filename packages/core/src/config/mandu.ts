@@ -618,6 +618,45 @@ export interface ManduConfig {
     /** Domain → locale map; required when strategy === "domain". */
     domains?: Record<string, LocaleCode>;
   };
+  /**
+   * Issue #235 — Brain LLM adapter selection.
+   *
+   * Mandu is a CONNECTOR for third-party LLMs, not an LLM owner. Cloud
+   * adapters forward requests using the user's own OAuth credentials,
+   * obtained via `mandu brain login --provider=<name>` and stored in
+   * the OS keychain. No API keys ever live in Mandu's process memory;
+   * Mandu-controlled billing is not a thing.
+   *
+   * Fields:
+   *   - `adapter`          — Which connector to use. Default `"auto"`.
+   *                          Auto resolves in priority order:
+   *                          openai → anthropic → ollama → template.
+   *                          Explicit values pin the choice but still
+   *                          degrade to template when the dependency is
+   *                          unreachable (no hard failures).
+   *   - `openai.model`     — Override the OpenAI model (default
+   *                          `"gpt-4o-mini"`).
+   *   - `anthropic.model`  — Override the Anthropic model (default
+   *                          `"claude-haiku-4-5-20251001"`).
+   *   - `ollama.model`     — Override the local Ollama model (default
+   *                          `"ministral-3:3b"`).
+   *   - `telemetryOptOut`  — When `true`, cloud adapters are disabled
+   *                          entirely regardless of stored tokens. The
+   *                          resolver falls to ollama/template. Use for
+   *                          privacy-strict environments.
+   *
+   * Omitting this block is equivalent to `{ adapter: "auto" }`.
+   *
+   * @see `@mandujs/core/brain/adapters` for the resolver implementation.
+   * @see `docs/brain/oauth-adapters.md` (when authored).
+   */
+  brain?: {
+    adapter?: "auto" | "openai" | "anthropic" | "ollama" | "template";
+    openai?: { model?: string };
+    anthropic?: { model?: string };
+    ollama?: { model?: string; baseUrl?: string };
+    telemetryOptOut?: boolean;
+  };
 }
 
 export const CONFIG_FILES = [

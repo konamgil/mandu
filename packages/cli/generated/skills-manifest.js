@@ -29,6 +29,12 @@ import skill_mandu_deploy from "../../skills/skills/mandu-deploy/SKILL.md" with 
 import skill_mandu_slot from "../../skills/skills/mandu-slot/SKILL.md" with { type: "text" };
 import skill_mandu_fs_routes from "../../skills/skills/mandu-fs-routes/SKILL.md" with { type: "text" };
 import skill_mandu_hydration from "../../skills/skills/mandu-hydration/SKILL.md" with { type: "text" };
+import skill_mandu_mcp_index from "../../skills/skills/mandu-mcp-index/SKILL.md" with { type: "text" };
+import skill_mandu_mcp_orient from "../../skills/skills/mandu-mcp-orient/SKILL.md" with { type: "text" };
+import skill_mandu_mcp_create_flow from "../../skills/skills/mandu-mcp-create-flow/SKILL.md" with { type: "text" };
+import skill_mandu_mcp_verify from "../../skills/skills/mandu-mcp-verify/SKILL.md" with { type: "text" };
+import skill_mandu_mcp_safe_change from "../../skills/skills/mandu-mcp-safe-change/SKILL.md" with { type: "text" };
+import skill_mandu_mcp_deploy from "../../skills/skills/mandu-mcp-deploy/SKILL.md" with { type: "text" };
 import skill_settings_claude_settings_json from "../../skills/templates/.claude/settings.json" with { type: "text" };
 
 /**
@@ -52,6 +58,12 @@ export const SKILLS_MANIFEST = new Map([
   ["mandu-slot", skill_mandu_slot],
   ["mandu-fs-routes", skill_mandu_fs_routes],
   ["mandu-hydration", skill_mandu_hydration],
+  ["mandu-mcp-index", skill_mandu_mcp_index],
+  ["mandu-mcp-orient", skill_mandu_mcp_orient],
+  ["mandu-mcp-create-flow", skill_mandu_mcp_create_flow],
+  ["mandu-mcp-verify", skill_mandu_mcp_verify],
+  ["mandu-mcp-safe-change", skill_mandu_mcp_safe_change],
+  ["mandu-mcp-deploy", skill_mandu_mcp_deploy],
   ["settings/.claude/settings.json", skill_settings_claude_settings_json],
 ]);
 
@@ -70,7 +82,13 @@ export const EMBEDDED_SKILL_IDS = [
   "mandu-slot",
   "mandu-fs-routes",
   "mandu-hydration",
+  "mandu-mcp-index",
+  "mandu-mcp-orient",
+  "mandu-mcp-create-flow",
+  "mandu-mcp-verify",
+  "mandu-mcp-safe-change",
+  "mandu-mcp-deploy",
 ];
 
 /** Sanity check: expected total count (9 SKILL.md + 1 settings.json). */
-export const SKILLS_PAYLOAD_COUNT = 10;
+export const SKILLS_PAYLOAD_COUNT = 16;

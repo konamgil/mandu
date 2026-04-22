@@ -15,8 +15,22 @@ const __dirname = dirname(__filename);
 /** Root of the @mandujs/skills package */
 const PACKAGE_ROOT = resolve(__dirname, "..");
 
-/** Available skill IDs (9 skills) */
+/**
+ * Available skill IDs.
+ *
+ * Two families:
+ * - Task-shaped skills (domain knowledge — "how to make an API", "what is
+ *   an Island", etc.)
+ * - `mandu-mcp-*` workflow skills (MCP tool orchestration — "when editing,
+ *   run ate_auto_pipeline + guard_check + doctor in parallel"). See #234.
+ *
+ * The MCP workflow skills are loaded alongside the task-shaped ones so
+ * agents see both "what" (domain) and "how to invoke" (orchestration).
+ * `mandu-mcp-index` is the always-on router that points to the other
+ * `mandu-mcp-*` skills.
+ */
 export const SKILL_IDS = [
+  // Task-shaped (domain knowledge)
   "mandu-create-feature",
   "mandu-create-api",
   "mandu-debug",
@@ -26,6 +40,13 @@ export const SKILL_IDS = [
   "mandu-slot",
   "mandu-fs-routes",
   "mandu-hydration",
+  // Workflow-shaped (MCP tool orchestration — #234)
+  "mandu-mcp-index",
+  "mandu-mcp-orient",
+  "mandu-mcp-create-flow",
+  "mandu-mcp-verify",
+  "mandu-mcp-safe-change",
+  "mandu-mcp-deploy",
 ] as const;
 
 export type SkillId = (typeof SKILL_IDS)[number];

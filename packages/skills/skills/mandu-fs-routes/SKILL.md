@@ -129,3 +129,8 @@ app/(app)/dashboard/page.tsx     -> /dashboard
 - Using `route.tsx` instead of `route.ts` for API handlers
 - Forgetting to export default from page/layout files
 - Mixing page.tsx and route.ts in the same directory
+
+## See also
+
+- `mandu-mcp-create-flow` — 라우트 추가 시 `mandu_add_route` + contract + generate 순서
+

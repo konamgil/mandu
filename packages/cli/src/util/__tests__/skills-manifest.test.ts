@@ -10,8 +10,11 @@
  *
  * This test suite pins the embedding contract end-to-end:
  *
- *   1. Manifest ships the expected 9 SKILL.md payloads + 1 settings.json =
- *      **10 payloads total**. Drift is caught on the count alone.
+ *   1. Manifest ships the expected SKILL.md payloads + 1 settings.json.
+ *      The count is derived from `EXPECTED_SKILL_IDS.length + 1` so adding
+ *      new skills only requires updating that list. (#234 added 6 workflow
+ *      skills bringing the total from 9 to 15.) Drift is caught on the
+ *      count alone.
  *   2. `EMBEDDED_SKILL_IDS` exported by `generated/skills-manifest.js`
  *      matches `@mandujs/skills`'s runtime `SKILL_IDS` exactly — order
  *      included. Catches the scenario where the skills package grows a
@@ -43,7 +46,12 @@ const CLI_ROOT = path.resolve(import.meta.dir, "..", "..", "..");
 const REPO_ROOT = path.resolve(CLI_ROOT, "..", "..");
 const SKILLS_PKG_ROOT = path.join(REPO_ROOT, "packages", "skills");
 
+// Must stay in sync with `@mandujs/skills` SKILL_IDS and with the
+// generator's own hardcoded list in
+// `packages/cli/scripts/generate-template-manifest.ts`.
+// Two task-shaped families (9) + workflow-shaped family (6, #234) = 15.
 const EXPECTED_SKILL_IDS = [
+  // Task-shaped (domain knowledge)
   "mandu-create-feature",
   "mandu-create-api",
   "mandu-debug",
@@ -53,10 +61,17 @@ const EXPECTED_SKILL_IDS = [
   "mandu-slot",
   "mandu-fs-routes",
   "mandu-hydration",
+  // Workflow-shaped (MCP tool orchestration — #234)
+  "mandu-mcp-index",
+  "mandu-mcp-orient",
+  "mandu-mcp-create-flow",
+  "mandu-mcp-verify",
+  "mandu-mcp-safe-change",
+  "mandu-mcp-deploy",
 ] as const;
 
 describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
-  it("embeds exactly 10 payloads (9 SKILL.md + 1 settings.json)", async () => {
+  it("embeds exactly (EXPECTED_SKILL_IDS + 1) payloads (SKILL.md set + 1 settings.json)", async () => {
     const mod = (await import(
       path.join(CLI_ROOT, "generated", "skills-manifest.js")
     )) as {
@@ -64,9 +79,10 @@ describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
       EMBEDDED_SKILL_IDS: readonly string[];
       SKILLS_PAYLOAD_COUNT: number;
     };
-    expect(mod.SKILLS_PAYLOAD_COUNT).toBe(10);
-    expect(mod.SKILLS_MANIFEST.size).toBe(10);
-    // 9 skill IDs + 1 settings key.
+    const expectedCount = EXPECTED_SKILL_IDS.length + 1; // +1 for settings.json
+    expect(mod.SKILLS_PAYLOAD_COUNT).toBe(expectedCount);
+    expect(mod.SKILLS_MANIFEST.size).toBe(expectedCount);
+    // All skill IDs + 1 settings key.
     expect([...mod.SKILLS_MANIFEST.keys()].sort()).toEqual(
       [...EXPECTED_SKILL_IDS, "settings/.claude/settings.json"].sort()
     );

@@ -587,6 +587,48 @@ const I18nConfigSchema = z
     }
   });
 
+/**
+ * Issue #235 — Brain adapter block (strict).
+ *
+ * All fields optional; omitting the block is equivalent to
+ * `{ adapter: "auto" }`. `telemetryOptOut: true` forces the resolver
+ * to skip every cloud tier regardless of stored tokens.
+ *
+ * Per-provider sub-blocks are strict so stale `apiKey` / `endpoint` /
+ * etc. keys from ad-hoc configs fail fast — Mandu's connector model
+ * does NOT accept inline API keys.
+ */
+const BrainOpenAIConfigSchema = z
+  .object({
+    model: z.string().min(1).optional(),
+  })
+  .strict();
+
+const BrainAnthropicConfigSchema = z
+  .object({
+    model: z.string().min(1).optional(),
+  })
+  .strict();
+
+const BrainOllamaConfigSchema = z
+  .object({
+    model: z.string().min(1).optional(),
+    baseUrl: z.string().url().optional(),
+  })
+  .strict();
+
+const BrainConfigSchema = z
+  .object({
+    adapter: z
+      .enum(["auto", "openai", "anthropic", "ollama", "template"])
+      .default("auto"),
+    openai: BrainOpenAIConfigSchema.optional(),
+    anthropic: BrainAnthropicConfigSchema.optional(),
+    ollama: BrainOllamaConfigSchema.optional(),
+    telemetryOptOut: z.boolean().optional(),
+  })
+  .strict();
+
 export const ManduConfigSchema = z
   .object({
     adapter: AdapterConfigSchema.optional(),
@@ -643,6 +685,13 @@ export const ManduConfigSchema = z
      * Optional; omission leaves i18n disabled with zero runtime overhead.
      */
     i18n: I18nConfigSchema.optional(),
+    /**
+     * Issue #235 — Brain adapter selection. See {@link BrainConfigSchema}.
+     * Optional; omission is equivalent to `{ adapter: "auto" }`, which
+     * resolves in priority order: openai-oauth → anthropic-oauth →
+     * ollama → template.
+     */
+    brain: BrainConfigSchema.optional(),
   })
   .strict();
 

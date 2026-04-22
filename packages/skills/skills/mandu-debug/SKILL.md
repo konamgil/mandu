@@ -107,3 +107,9 @@ bun run dev                  # 런타임 검증
 | `mandu_guard` | 아키텍처 규칙 검사 |
 | `mandu_guard_heal` | 위반 자동 수정 |
 | `mandu_runtime_check` | 런타임 상태 점검 |
+
+## See also
+
+- `mandu-mcp-verify` — 진단 시작점 (fast path: `ate.auto_pipeline` + `guard_check` + `doctor` 병렬), drill-down 규칙
+- `mandu-mcp-orient` — 세션 진입 직후 상태 파악으로 문제 배경 확보
+
