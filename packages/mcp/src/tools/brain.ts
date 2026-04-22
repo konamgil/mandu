@@ -212,6 +212,40 @@ export const brainToolDefinitions: Tool[] = [
 /** Module-level unsubscribe handle for MCP warning notifications */
 let mcpWarningUnsubscribe: (() => void) | null = null;
 
+/**
+ * #236 — surface a clear error when a stale `@mandujs/core` resolves
+ * under `node_modules/@mandujs/mcp/node_modules/` (Bun's installer
+ * sometimes lands an older nested copy even with `linker=hoisted`).
+ * Without this check the user saw `getCredentialStore is not a
+ * function` / `undefined is not a constructor` with no hint.
+ */
+function assertBrainAuthSurface(core: Record<string, unknown>): void {
+  const missing: string[] = [];
+  if (typeof core.getCredentialStore !== "function")
+    missing.push("getCredentialStore");
+  if (typeof core.resolveBrainAdapter !== "function")
+    missing.push("resolveBrainAdapter");
+  if (typeof core.ChatGPTAuth !== "function") missing.push("ChatGPTAuth");
+  if (typeof core.AnthropicOAuthAdapter !== "function")
+    missing.push("AnthropicOAuthAdapter");
+  if (typeof core.revokeConsent !== "function") missing.push("revokeConsent");
+  if (missing.length === 0) return;
+
+  const pkgVersion =
+    typeof core.__MANDU_CORE_VERSION__ === "string"
+      ? core.__MANDU_CORE_VERSION__
+      : "unknown";
+  throw new Error(
+    `[mandu-mcp] The resolved @mandujs/core (v${pkgVersion}) is missing brain-auth exports: ${missing.join(
+      ", ",
+    )}. ` +
+      `This usually means Bun's installer placed a stale nested copy at ` +
+      `node_modules/@mandujs/mcp/node_modules/@mandujs/core instead of hoisting to the top level. ` +
+      `Fix: \`rm -rf node_modules bun.lock && bun install\` (or confirm linker=hoisted in bunfig.toml). ` +
+      `See https://github.com/konamgil/mandu/issues/236 for details.`,
+  );
+}
+
 export function brainTools(projectRoot: string, server?: Server, monitor?: ActivityMonitor) {
   const paths = getProjectPaths(projectRoot);
 
@@ -600,6 +634,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
   // #235 followup — brain auth tools (status / login / logout).
   handlers["mandu.brain.status"] = async () => {
     const core = await import("@mandujs/core");
+    assertBrainAuthSurface(core);
     const store = core.getCredentialStore();
     const resolution = await core.resolveBrainAdapter({
       adapter: "auto",
@@ -661,6 +696,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
 
     if (provider === "openai") {
       const core = await import("@mandujs/core");
+      assertBrainAuthSurface(core);
       const auth = new core.ChatGPTAuth();
       const existing = auth.locateAuthFile();
       if (existing) {
@@ -751,6 +787,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
 
     // Anthropic — Mandu-managed OAuth loopback flow.
     const core = await import("@mandujs/core");
+    assertBrainAuthSurface(core);
     try {
       const adapter = new core.AnthropicOAuthAdapter({
         credentialStore: core.getCredentialStore(),
@@ -803,6 +840,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
       provider?: "openai" | "anthropic" | "all";
     };
     const core = await import("@mandujs/core");
+    assertBrainAuthSurface(core);
     const store = core.getCredentialStore();
     const targets =
       provider === "all"

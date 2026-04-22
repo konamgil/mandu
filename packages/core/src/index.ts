@@ -1,3 +1,26 @@
+/**
+ * Version marker — consumers (notably `@mandujs/mcp`) use this to detect
+ * that a stale nested copy of `@mandujs/core` was resolved and produce
+ * a helpful error instead of a cryptic "X is not a function". See #236.
+ *
+ * Read directly from the package's own `package.json` at module load
+ * time so the value can NEVER drift from the real published version.
+ * Best-effort — falls back to "unknown" if the file cannot be read
+ * (e.g. when the bundler strips `package.json` from the tree; we never
+ * strip it but keep this defensive).
+ */
+export const __MANDU_CORE_VERSION__: string = (() => {
+  try {
+    // `import.meta.dir` → `<install>/src`; package.json is one level up.
+    const pkgPath = `${import.meta.dir}/../package.json`;
+    const raw = require("node:fs").readFileSync(pkgPath, "utf-8") as string;
+    const parsed = JSON.parse(raw) as { version?: string };
+    return typeof parsed.version === "string" ? parsed.version : "unknown";
+  } catch {
+    return "unknown";
+  }
+})();
+
 export * from "./spec";
 export * from "./runtime";
 export * from "./generator";
