@@ -1,5 +1,13 @@
 # mandu-edge-workers-starter
 
+## 0.1.34
+
+### Patch Changes
+
+- Updated dependencies [[`e56697e`](https://github.com/konamgil/mandu/commit/e56697eaabef2d615f9d637f8b10d152006a0975)]:
+  - @mandujs/core@0.42.0
+  - @mandujs/edge@0.4.30
+
 ## 0.1.33
 
 ### Patch Changes
