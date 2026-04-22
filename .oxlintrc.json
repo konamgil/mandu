@@ -1,0 +1,45 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "pedantic": "off",
+    "style": "off",
+    "perf": "off",
+    "restriction": "off",
+    "nursery": "off"
+  },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": "warn",
+    "no-unused-vars": "off",
+    "typescript/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-console": "off",
+    "no-debugger": "error",
+    "no-await-in-loop": "off",
+    "consistent-function-scoping": "off",
+    "no-useless-escape": "off",
+    "unicorn/no-array-sort": "off",
+    "unicorn/prefer-spread": "off",
+    "no-shadow": "off",
+    "unicorn/no-useless-fallback-in-spread": "off"
+  },
+  "ignorePatterns": [
+    "DNA/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.mandu/**",
+    "**/generated/**",
+    "packages/cli/templates/**",
+    "packages/cli/generated/**"
+  ],
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/tests/**"],
+      "rules": {
+        "typescript/no-explicit-any": "off",
+        "typescript/no-unused-vars": "off"
+      }
+    }
+  ]
+}

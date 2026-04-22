@@ -40,6 +40,9 @@
     "publish:force": "bun run scripts/publish.ts --skip-check",
     "release": "bun run version && bun run publish",
     "typecheck": "bun run scripts/typecheck.ts",
+    "lint": "oxlint packages/",
+    "lint:type-aware": "oxlint --type-aware packages/",
+    "lint:fix": "oxlint --fix packages/",
     "check:publish": "bun run scripts/pre-publish-check.ts",
     "prepare": "lefthook install"
   },
@@ -52,6 +55,8 @@
     "@typescript/native-preview": "^7.0.0-dev.20260421.2",
     "bun-types": "^1.3.7",
     "lefthook": "^1.11.0",
+    "oxlint": "^1.61.0",
+    "oxlint-tsgolint": "^0.21.1",
     "playwright": "^1.49.0",
     "typescript": ">=6.0.0"
   },
