@@ -157,6 +157,51 @@ export const brainToolDefinitions: Tool[] = [
       required: [],
     },
   },
+  {
+    name: "mandu.brain.status",
+    description:
+      "Check which LLM adapter is active for brain (openai / anthropic / ollama / template) and whether auth tokens are present. Read-only — does not call an LLM or spawn subprocesses.",
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "mandu.brain.login",
+    description:
+      "Authenticate the brain to an LLM provider. For openai, delegates to the OpenAI-official `@openai/codex` CLI (writes ~/.codex/auth.json; Mandu reads + auto-refreshes). MUST be invoked from a context where a terminal / browser is available — the CLI opens a browser tab for OAuth. Anthropic path uses the Mandu OAuth flow with a local loopback listener.",
+    annotations: { readOnlyHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: {
+          type: "string",
+          enum: ["openai", "anthropic"],
+          description: "Which provider to sign into. Default: openai.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "mandu.brain.logout",
+    description:
+      "Delete stored brain credentials for a provider. For openai, deletes the keychain-stored enterprise token only — the ~/.codex/auth.json owned by the Codex CLI is intentionally left in place (run `npx @openai/codex logout` to revoke that).",
+    annotations: { readOnlyHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: {
+          type: "string",
+          enum: ["openai", "anthropic", "all"],
+          description: "Which provider to log out of. Default: all.",
+        },
+      },
+      required: [],
+    },
+  },
 ];
 
 /** Module-level unsubscribe handle for MCP warning notifications */
@@ -545,6 +590,203 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
         };
       }
     },
+  };
+
+  // #235 followup — brain auth tools (status / login / logout).
+  handlers["mandu.brain.status"] = async () => {
+    const core = await import("@mandujs/core");
+    const store = core.getCredentialStore();
+    const resolution = await core.resolveBrainAdapter({
+      adapter: "auto",
+      credentialStore: store,
+      projectRoot,
+    });
+
+    // Check ChatGPT session token (managed by @openai/codex, not the keychain).
+    const chatgpt = new core.ChatGPTAuth();
+    const chatgptFile = chatgpt.locateAuthFile();
+
+    const providers: Record<string, unknown> = {};
+    for (const provider of ["openai", "anthropic"] as const) {
+      const token = await store.load(provider);
+      providers[provider] = token
+        ? {
+            logged_in: true,
+            source: "keychain",
+            model: token.default_model ?? null,
+            expires_at: token.expires_at
+              ? new Date(token.expires_at * 1000).toISOString()
+              : null,
+            last_used_at: token.last_used_at ?? null,
+          }
+        : provider === "openai" && chatgptFile
+          ? {
+              logged_in: true,
+              source: "chatgpt_session",
+              auth_file: chatgptFile,
+              note: "Managed by `@openai/codex` CLI. Mandu reads + auto-refreshes.",
+            }
+          : { logged_in: false };
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              active_tier: resolution.resolved,
+              reason: resolution.reason,
+              backend: store.backendName,
+              providers,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  };
+
+  handlers["mandu.brain.login"] = async (args) => {
+    const { provider = "openai" } = args as { provider?: "openai" | "anthropic" };
+    const { spawnSync } = await import("node:child_process");
+
+    if (provider === "openai") {
+      // Delegate to the OpenAI-official Codex CLI. This MUST run
+      // interactively (browser-based OAuth). If stdin/stdout aren't a
+      // TTY the agent should surface the command for the user to run
+      // manually instead of attempting to spawn.
+      const isTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+      if (!isTty) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  ok: false,
+                  reason: "not_a_tty",
+                  instruction:
+                    "Run this in your terminal, then call mandu.brain.status:\n\n    npx @openai/codex login\n",
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+      const result = spawnSync("npx", ["-y", "@openai/codex", "login"], {
+        stdio: "inherit",
+        shell: process.platform === "win32",
+      });
+      const core = await import("@mandujs/core");
+      const auth = new core.ChatGPTAuth();
+      const file = auth.locateAuthFile();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                ok: result.status === 0 && Boolean(file),
+                exit_code: result.status,
+                auth_file: file,
+                provider: "openai",
+                note: file
+                  ? "auth.json present; brain will use it automatically."
+                  : "Login flow exited without writing auth.json.",
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    }
+
+    // Anthropic — Mandu-managed OAuth loopback flow.
+    const core = await import("@mandujs/core");
+    try {
+      const adapter = new core.AnthropicOAuthAdapter({
+        credentialStore: core.getCredentialStore(),
+        projectRoot,
+        strict: true,
+        skipConsent: true,
+      });
+      const token = await adapter.login({});
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                ok: true,
+                provider: "anthropic",
+                model: token.default_model ?? null,
+                expires_at: token.expires_at
+                  ? new Date(token.expires_at * 1000).toISOString()
+                  : null,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                ok: false,
+                provider: "anthropic",
+                error: err instanceof Error ? err.message : String(err),
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    }
+  };
+
+  handlers["mandu.brain.logout"] = async (args) => {
+    const { provider = "all" } = args as {
+      provider?: "openai" | "anthropic" | "all";
+    };
+    const core = await import("@mandujs/core");
+    const store = core.getCredentialStore();
+    const targets =
+      provider === "all"
+        ? (["openai", "anthropic"] as const)
+        : ([provider] as const);
+    for (const p of targets) {
+      await store.delete(p);
+      await core.revokeConsent(p, projectRoot);
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              ok: true,
+              logged_out: targets,
+              note: targets.includes("openai")
+                ? "Keychain-stored openai token cleared. To revoke the Codex CLI session (~/.codex/auth.json), run `npx @openai/codex logout`."
+                : undefined,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
   };
 
   // Backward-compatible aliases (deprecated)
