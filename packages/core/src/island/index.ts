@@ -58,20 +58,30 @@ export type IslandComponent<P = unknown> = ComponentType<P> & IslandMeta;
 // Island Registry (서버/클라이언트 공용)
 // ============================================================================
 
-const islandRegistry = new Map<string, IslandComponent<any>>();
+// Registry bag for heterogeneous React components. React's `ComponentType<P>`
+// is contravariant on `P` — a `ComponentType<{id:string}>` is NOT assignable
+// to `ComponentType<Record<string, unknown>>`. The correct bag type for a
+// heterogeneous component map is `ComponentType<any>`; narrowing happens at
+// call sites via each island's own typed `IslandComponent<P>` signature.
+// Same pattern used in client/island.ts `createPartialGroup()`.
+// oxlint-disable no-explicit-any -- heterogeneous React component registry
+type AnyIslandComponent = IslandComponent<any>;
+
+const islandRegistry = new Map<string, AnyIslandComponent>();
 let islandCounter = 0;
 
-export function registerIsland(name: string, component: IslandComponent<any>): void {
+export function registerIsland(name: string, component: AnyIslandComponent): void {
   islandRegistry.set(name, component);
 }
 
-export function getIsland(name: string): IslandComponent<any> | undefined {
+export function getIsland(name: string): AnyIslandComponent | undefined {
   return islandRegistry.get(name);
 }
 
-export function getAllIslands(): Map<string, IslandComponent<any>> {
+export function getAllIslands(): Map<string, AnyIslandComponent> {
   return islandRegistry;
 }
+// oxlint-enable no-explicit-any
 
 // ============================================================================
 // Client Island Types (setup/render 패턴)
@@ -98,14 +108,10 @@ export interface CompiledClientIsland<TServerData, TSetupResult> {
 
 /** Type guard: is this a ClientIslandDefinition? */
 function isClientIslandDefinition(arg: unknown): arg is ClientIslandDefinition<unknown, unknown> {
-  return (
-    arg !== null &&
-    typeof arg === 'object' &&
-    'setup' in arg &&
-    'render' in arg &&
-    typeof (arg as any).setup === 'function' &&
-    typeof (arg as any).render === 'function'
-  );
+  if (arg === null || typeof arg !== 'object') return false;
+  if (!('setup' in arg) || !('render' in arg)) return false;
+  const candidate = arg as { setup?: unknown; render?: unknown };
+  return typeof candidate.setup === 'function' && typeof candidate.render === 'function';
 }
 
 // ============================================================================
@@ -140,6 +146,15 @@ function isClientIslandDefinition(arg: unknown): arg is ClientIslandDefinition<u
  * });
  */
 
+// Using `unknown` generic arguments on the internal impl types keeps the
+// overloads below as the single source of truth for external type inference
+// while avoiding `any` in the implementation. Callers always hit one of
+// the overloads and never see this input/output type.
+type IslandImplInput =
+  | IslandHydrationStrategy
+  | IslandOptions<unknown>
+  | ClientIslandDefinition<unknown, unknown>;
+
 // Overload 1: Setup/Render client island pattern
 export function island<TServerData, TSetupResult = TServerData>(
   definition: ClientIslandDefinition<TServerData, TSetupResult>
@@ -159,9 +174,9 @@ export function island<P extends Record<string, unknown>>(
 
 // Implementation
 export function island(
-  strategyOrOptionsOrDefinition: IslandHydrationStrategy | IslandOptions<any> | ClientIslandDefinition<any, any>,
-  Component?: ComponentType<any>
-): IslandComponent<any> | CompiledClientIsland<any, any> {
+  strategyOrOptionsOrDefinition: IslandImplInput,
+  Component?: ComponentType<unknown>,
+): AnyIslandComponent | CompiledClientIsland<unknown, unknown> {
   // Pattern 2: Setup/Render client island
   if (Component === undefined && isClientIslandDefinition(strategyOrOptionsOrDefinition)) {
     return {
@@ -175,20 +190,21 @@ export function island(
     throw new Error('[Mandu Island] Component is required for declarative island pattern');
   }
 
-  const options: IslandOptions<any> = typeof strategyOrOptionsOrDefinition === 'string'
+  const options: IslandOptions<unknown> = typeof strategyOrOptionsOrDefinition === 'string'
     ? { hydrate: strategyOrOptionsOrDefinition }
-    : strategyOrOptionsOrDefinition as IslandOptions<any>;
+    : (strategyOrOptionsOrDefinition as IslandOptions<unknown>);
 
   const name = options.name || `island_${++islandCounter}_${Component.name || 'Anonymous'}`;
 
-  // Island 메타데이터 부착
-  const IslandWrapper = Component as IslandComponent<any>;
+  // Island 메타데이터 부착 — mutate the component in-place so the caller's
+  // reference carries the attached `IslandMeta` fields.
+  const IslandWrapper = Component as unknown as AnyIslandComponent;
   IslandWrapper.__island = true;
   IslandWrapper.__hydrate = options.hydrate;
   IslandWrapper.__media = options.media;
   IslandWrapper.__fallback = options.fallback;
   IslandWrapper.__name = name;
-  IslandWrapper.__propsSchema = options.props;
+  IslandWrapper.__propsSchema = options.props as IslandMeta['__propsSchema'];
 
   // 레지스트리에 등록
   registerIsland(name, IslandWrapper);
@@ -200,10 +216,10 @@ export function island(
 // isIsland() - Island 컴포넌트 체크
 // ============================================================================
 
-export function isIsland(component: unknown): component is IslandComponent<any> {
+export function isIsland(component: unknown): component is AnyIslandComponent {
   return (
     typeof component === 'function' &&
-    (component as IslandComponent<any>).__island === true
+    (component as Partial<IslandMeta>).__island === true
   );
 }
 
