@@ -1,6 +1,19 @@
 # @mandujs/skills
 
-## 17.0.0
+## 0.17.0
+
+### Version reset (2026-04-22)
+
+- Reset from `17.0.0` → `0.17.0` to realign with sibling packages (all 0.x).
+  The 12 → 17 climb was caused by Changesets' default "major-bump on any
+  peer-dep update" policy combined with a tight `@mandujs/core` peer
+  range. Neither reflected actual breaking changes.
+- 17.x line deprecated on npm with a pointer to 0.17.x.
+- Going forward: Changesets is configured with
+  `onlyUpdatePeerDependentsWhenOutOfRange: true`, and the core peer is
+  relaxed to `">=0.1.0"` — future peer-dep bumps stay on the patch track.
+
+## 17.0.0 (deprecated — see 0.17.0 reset note above)
 
 ### Patch Changes
 

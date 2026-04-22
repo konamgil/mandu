@@ -10,5 +10,8 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["mandu-ai-chat", "mandu-starter", "mandu-todo-app"]
+  "ignore": ["mandu-ai-chat", "mandu-starter", "mandu-todo-app"],
+  "___experimentalUnsafeOptions_WILL_CHANGE_IN_PATCH": {
+    "onlyUpdatePeerDependentsWhenOutOfRange": true
+  }
 }
