@@ -11,8 +11,92 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import type { ActivityMonitor } from "../activity-monitor.js";
 import { spawn, type Subprocess } from "bun";
 import { execSync } from "child_process";
+import { createConnection } from "node:net";
 import path from "path";
 import fs from "fs/promises";
+
+/**
+ * Issue #237 Concern 3 — read `server.port` from `mandu.config.*` so
+ * `mandu.dev.start` can poll a deterministic port instead of timing
+ * out while scraping stdout. Returns `null` if the config is absent
+ * or doesn't explicitly set `server.port` (callers fall back to 3333,
+ * Mandu's documented default). We use the un-schema'd raw loader
+ * (`loadManduConfig`) so the schema's fill-in default doesn't mask a
+ * missing value — a user who set no port should poll 3333, not the
+ * schema's internal default.
+ *
+ * We intentionally catch every error — a brittle config reader here
+ * must never block dev_start. The polling path still proves liveness.
+ */
+export async function readConfiguredServerPort(
+  cwd: string,
+): Promise<number | null> {
+  try {
+    const core = await import("@mandujs/core");
+    const raw = await core.loadManduConfig(cwd);
+    const port = raw?.server?.port;
+    if (typeof port === "number" && Number.isFinite(port) && port > 0) {
+      return port;
+    }
+  } catch {
+    /* ignore — fall back to default */
+  }
+  return null;
+}
+
+/**
+ * Issue #237 Concern 3 — TCP connect probe. Resolves `true` on the
+ * first successful `connect`, `false` on any error or timeout.
+ * `node:net` is Node builtin and ships with Bun; no new dependency.
+ */
+export function probeTcpPort(
+  port: number,
+  hostname: string,
+  timeoutMs: number,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = createConnection({ host: hostname, port });
+    const done = (ok: boolean) => {
+      try {
+        sock.destroy();
+      } catch {
+        /* noop */
+      }
+      resolve(ok);
+    };
+    sock.setTimeout(timeoutMs);
+    sock.once("connect", () => done(true));
+    sock.once("timeout", () => done(false));
+    sock.once("error", () => done(false));
+  });
+}
+
+/**
+ * Issue #237 Concern 3 — poll the configured port at a fixed interval
+ * until `waitMs` elapses. Returns the port on success, `null` on
+ * timeout. The caller chooses whether to fall back to the stdout
+ * scrape or report `port: <polled>` alongside the timeout message.
+ */
+export async function pollServerPort(
+  port: number,
+  hostname: string,
+  waitMs: number,
+  intervalMs = 200,
+): Promise<number | null> {
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    const remaining = deadline - Date.now();
+    const probeTimeout = Math.min(500, Math.max(50, remaining));
+    if (await probeTcpPort(port, hostname, probeTimeout)) {
+      return port;
+    }
+    const sleep = Math.min(intervalMs, Math.max(0, deadline - Date.now()));
+    if (sleep > 0) {
+      await new Promise((r) => setTimeout(r, sleep));
+    }
+  }
+  return null;
+}
 
 type DevServerState = {
   process: Subprocess;
@@ -173,7 +257,11 @@ export const projectToolDefinitions: Tool[] = [
   },
   {
     name: "mandu.dev.start",
-    description: "Start Mandu dev server (bun run dev).",
+    description:
+      "Start Mandu dev server (bun run dev). Issue #237 — polls server.port from " +
+      "mandu.config.ts (fallback 3333) via TCP connect for up to waitMs (default 15s) " +
+      "before declaring a port-detection timeout. On success: { port, url, message }. " +
+      "On timeout: still returns { port: <polled>, message } so callers can retry / probe.",
     annotations: {
       readOnlyHint: false,
     },
@@ -183,6 +271,12 @@ export const projectToolDefinitions: Tool[] = [
         cwd: {
           type: "string",
           description: "Project directory to run dev server in (default: current project)",
+        },
+        waitMs: {
+          type: "number",
+          description:
+            "How long (ms) to wait for the dev server to accept TCP connections on " +
+            "the configured port. Default 15000 (15s).",
         },
       },
       required: [],
@@ -318,7 +412,7 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
     },
 
     "mandu.dev.start": async (args: Record<string, unknown>) => {
-      const { cwd } = args as { cwd?: string };
+      const { cwd, waitMs } = args as { cwd?: string; waitMs?: number };
       if (devServerState || devServerStarting) {
         return {
           success: false,
@@ -333,6 +427,22 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
       devServerStarting = true;
       try {
         const targetDir = cwd ? path.resolve(projectRoot, cwd) : projectRoot;
+
+        // Issue #237 Concern 3 — read `server.port` from mandu.config.*
+        // so we can poll a deterministic port instead of racing a
+        // regex against stdout. The env override takes precedence (it
+        // also takes precedence in the CLI — see cli/commands/dev.ts).
+        // Fall back to 3333 (Mandu's default) when neither is set.
+        const envPort = process.env.PORT ? Number(process.env.PORT) : null;
+        const configPort =
+          envPort && Number.isFinite(envPort)
+            ? envPort
+            : await readConfiguredServerPort(targetDir);
+        const polledPort = configPort ?? 3333;
+        const pollWaitMs =
+          typeof waitMs === "number" && Number.isFinite(waitMs) && waitMs > 0
+            ? waitMs
+            : 15_000;
 
         const proc = spawn(["bun", "run", "dev"], {
           cwd: targetDir,
@@ -350,32 +460,6 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
         };
         devServerState = state;
 
-        // Wait for the server to output its port before returning
-        const portPromise = new Promise<{ port: number; url: string } | null>((resolve) => {
-          const PORT_DETECT_TIMEOUT_MS = 15_000;
-          const timeout = setTimeout(() => resolve(null), PORT_DETECT_TIMEOUT_MS);
-          const portPattern = /https?:\/\/[^:\s]+:(\d+)/;
-
-          const originalPush = state.output.push.bind(state.output);
-          state.output.push = (...items: string[]) => {
-            const result = originalPush(...items);
-            for (const item of items) {
-              const match = item.match(portPattern);
-              if (match) {
-                const detectedPort = parseInt(match[1], 10);
-                clearTimeout(timeout);
-                state.output.push = originalPush;
-                resolve({
-                  port: detectedPort,
-                  url: match[0],
-                });
-                break;
-              }
-            }
-            return result;
-          };
-        });
-
         consumeStream(proc.stdout, state, "stdout", server).catch(() => {});
         consumeStream(proc.stderr, state, "stderr", server).catch(() => {});
 
@@ -389,19 +473,28 @@ export function projectTools(projectRoot: string, server?: Server, monitor?: Act
           monitor.logEvent("dev", `Dev server started (${targetDir})`);
         }
 
-        // Wait for port detection (with timeout fallback)
-        const detected = await portPromise;
+        // Issue #237 Concern 3 — TCP poll the expected port. 127.0.0.1
+        // matches what the CLI prints; dual-stack (`::`) binds accept
+        // loopback v4 connects. We use 127.0.0.1 because `localhost`
+        // resolution varies across Windows + macOS.
+        const detectedPort = await pollServerPort(
+          polledPort,
+          "127.0.0.1",
+          pollWaitMs,
+        );
+
+        const url = detectedPort ? `http://localhost:${detectedPort}` : null;
 
         return {
           success: true,
           pid: proc.pid,
-          port: detected?.port ?? null,
-          url: detected?.url ?? null,
+          port: detectedPort ?? polledPort,
+          url,
           cwd: targetDir,
           startedAt: state.startedAt.toISOString(),
-          message: detected
-            ? `Dev server started on port ${detected.port}`
-            : "Dev server started (port detection timed out)",
+          message: detectedPort
+            ? `Dev server ready at http://localhost:${detectedPort}`
+            : `Dev server started (port detection timed out after ${pollWaitMs}ms polling ${polledPort})`,
         };
       } finally {
         devServerStarting = false;

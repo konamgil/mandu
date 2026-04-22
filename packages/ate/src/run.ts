@@ -73,6 +73,13 @@ export interface RunSpecOptions {
    */
   runId?: string;
   /**
+   * Issue #237 — pass-through to Playwright `--grep` / bun:test filter.
+   * When set, only `test(...)` blocks whose title matches run inside
+   * the selected spec. No-op when `spec` targets a file with a single
+   * test block.
+   */
+  grep?: string;
+  /**
    * Injected run executor — tests use this to skip spawning. Receives
    * the resolved runner name + argv + env. Should return the raw
    * runner exit code, stdout, stderr.
@@ -284,11 +291,18 @@ function buildInvocation(
     if (options.shard) {
       args.push(`--shard=${options.shard.current}/${options.shard.total}`);
     }
+    if (typeof options.grep === "string" && options.grep.trim().length > 0) {
+      args.push("--grep", options.grep.trim());
+    }
     return { command: "bun", args, env, specPath: options.spec };
   }
 
   // bun:test
   const args = ["test", options.spec];
+  // bun:test uses `--test-name-pattern` for title-level filtering.
+  if (typeof options.grep === "string" && options.grep.trim().length > 0) {
+    args.push("--test-name-pattern", options.grep.trim());
+  }
   if (options.shard) {
     // Hash-based partitioning: only run when the spec path maps to the
     // current shard. We encode the filter as an env var the test harness

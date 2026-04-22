@@ -57,7 +57,10 @@ export const ateRunToolDefinitions: Tool[] = [
       "`graphVersion` (agent cache invalidation key), and trace/screenshot/dom artifacts " +
       "staged under .mandu/ate-artifacts/<runId>/. Use `shard: { current, total }` to " +
       "distribute across CI workers. Emits notifications/progress per spec_done event. " +
-      "On timeout / cancel, writes .mandu/reports/run-<runId>/results.json with partial state.",
+      "On timeout / cancel, writes .mandu/reports/run-<runId>/results.json with partial state. " +
+      "Issue #237 — `grep` narrows execution to specific `test(...)` titles inside the " +
+      "selected spec (forwarded to Playwright --grep / bun:test --test-name-pattern). " +
+      "For batch / multi-spec runs use mandu.ate.run (which also accepts onlyFiles + onlyRoutes).",
     inputSchema: {
       type: "object",
       properties: {
@@ -87,6 +90,12 @@ export const ateRunToolDefinitions: Tool[] = [
         trace: {
           type: "boolean",
           description: "Playwright only — capture trace. Default: true.",
+        },
+        grep: {
+          type: "string",
+          description:
+            "Issue #237 — pass-through to Playwright --grep / bun:test --test-name-pattern. " +
+            "Filters by test-block title within the selected spec.",
         },
         shard: {
           type: "object",
@@ -264,12 +273,13 @@ export function createAteProgressTracker(options: {
 export function ateRunTools(_projectRoot: string, server?: Server) {
   return {
     mandu_ate_run: async (args: Record<string, unknown>) => {
-      const { repoRoot, spec, headed, trace, shard, progressToken } = args as {
+      const { repoRoot, spec, headed, trace, shard, grep, progressToken } = args as {
         repoRoot: string;
         spec: string | { path: string };
         headed?: boolean;
         trace?: boolean;
         shard?: { current: number; total: number };
+        grep?: string;
         progressToken?: string | number;
       };
       if (!repoRoot || typeof repoRoot !== "string") {
@@ -336,6 +346,7 @@ export function ateRunTools(_projectRoot: string, server?: Server) {
           headed,
           trace,
           shard,
+          grep,
         });
       } catch (err) {
         // Runner timeout / exec error — persist partial state so heal

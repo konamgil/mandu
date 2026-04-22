@@ -245,8 +245,27 @@ export interface RunInput {
   ci?: boolean;
   headless?: boolean;
   browsers?: ("chromium" | "firefox" | "webkit")[];
-  /** Filter test execution to specs matching these route paths (e.g. ["/api/users", "/dashboard"]) */
+  /**
+   * Filter test execution to specs matching these route ids (e.g.
+   * ["api-users", "dashboard-slug"]). Route ids are resolved to
+   * concrete spec file paths via the spec-indexer before being handed
+   * to Playwright. Route ids that don't match any indexed spec emit a
+   * warning but don't fail the run — the remaining ids proceed.
+   */
   onlyRoutes?: string[];
+  /**
+   * Issue #237 — explicit spec file paths (absolute or relative to
+   * `repoRoot`). Forwarded to Playwright as positional `<file>` args
+   * so only those specs run. Combines with `onlyRoutes`: the final
+   * set is the deduped union.
+   */
+  onlyFiles?: string[];
+  /**
+   * Issue #237 — pass-through to Playwright `--grep`. Applied on top of
+   * the `onlyFiles ∪ resolved(onlyRoutes)` set, useful when a spec
+   * contains multiple `test(...)` blocks and only a subset should run.
+   */
+  grep?: string;
 }
 
 export interface ImpactInput {

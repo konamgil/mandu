@@ -93,7 +93,10 @@ export const ateToolDefinitions: Tool[] = [
       "Returns a runId for use with mandu.ate.report and mandu.ate.heal. " +
       "Streams notifications/progress per spec_done event (issue #238). " +
       "On timeout / kill, persists partial state under .mandu/reports/run-<runId>/results.json " +
-      "so mandu.ate.heal remains reachable after the 10-min watchdog.",
+      "so mandu.ate.heal remains reachable after the 10-min watchdog. " +
+      "Issue #237 — scope filters (onlyFiles / onlyRoutes / grep) let callers " +
+      "run a single spec or route and stay under the 10-min MCP watchdog; omit " +
+      "them for the full suite.",
     inputSchema: {
       type: "object",
       properties: {
@@ -108,6 +111,26 @@ export const ateToolDefinitions: Tool[] = [
           type: "array",
           items: { type: "string", enum: ["chromium", "firefox", "webkit"] },
           description: "Browsers to test against (default: ['chromium'])",
+        },
+        onlyFiles: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Issue #237 — explicit spec file paths (absolute or relative to repoRoot). " +
+            "Forwarded to Playwright as positional <file> args.",
+        },
+        onlyRoutes: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Issue #237 — route ids (e.g. 'api-signup'). Resolved to spec paths via " +
+            "the spec-indexer. Unknown ids emit a warning; the remaining ids run.",
+        },
+        grep: {
+          type: "string",
+          description:
+            "Issue #237 — pass-through to Playwright --grep. Applied on top of the " +
+            "onlyFiles ∪ resolved(onlyRoutes) set.",
         },
         progressToken: {
           type: ["string", "number"],
@@ -170,6 +193,10 @@ export const ateToolDefinitions: Tool[] = [
       "ATE Step 5 — Heal: Analyze test failures from a run and generate safe diff suggestions for fixing the code. " +
       "Classifies failures by root cause (schema mismatch, missing handler, wrong status, selector stale, etc.) " +
       "and produces reviewable diffs — never auto-commits or overwrites files. " +
+      "Requires a runId produced by mandu.ate.run (or the partial-results stub written " +
+      "on timeout under .mandu/reports/run-<runId>/results.json). " +
+      "See mandu.brain.status for LLM availability — template-based heals always run; " +
+      "LLM-assisted analysis activates when active_tier is openai or anthropic. " +
       "Use mandu.ate.apply_heal to apply a specific suggestion after review. " +
       "Supports rollback via mandu_rollback if applied changes cause regressions.",
     inputSchema: {
@@ -404,16 +431,38 @@ export function ateTools(projectRoot: string, server?: Server) {
       return ateGenerate({ repoRoot, oracleLevel, onlyRoutes });
     },
     "mandu.ate.run": async (args: Record<string, unknown>) => {
-      const { repoRoot, baseURL, ci, headless, browsers, progressToken } = args as {
+      const {
+        repoRoot,
+        baseURL,
+        ci,
+        headless,
+        browsers,
+        onlyFiles,
+        onlyRoutes,
+        grep,
+        progressToken,
+      } = args as {
         repoRoot: string;
         baseURL?: string;
         ci?: boolean;
         headless?: boolean;
         browsers?: ("chromium" | "firefox" | "webkit")[];
+        onlyFiles?: string[];
+        onlyRoutes?: string[];
+        grep?: string;
         progressToken?: string | number;
       };
       return await runWithObservability(
-        { repoRoot, baseURL, ci, headless, browsers },
+        {
+          repoRoot,
+          baseURL,
+          ci,
+          headless,
+          browsers,
+          onlyFiles,
+          onlyRoutes,
+          grep,
+        },
         { progressToken },
       );
     },

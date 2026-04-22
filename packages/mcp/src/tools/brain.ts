@@ -33,7 +33,10 @@ export const brainToolDefinitions: Tool[] = [
   {
     name: "mandu.brain.doctor",
     description:
-      "Analyze Guard failures and suggest patches. Works with or without LLM - template-based analysis is always available.",
+      "Analyze Guard failures and suggest patches. Returns early with no LLM call when " +
+      "guard has no violations (passed: true). When violations are present and an LLM " +
+      "tier is active (see mandu.brain.status), runs LLM-assisted analysis and returns " +
+      "llmAssisted: true. Template-based analysis is always available as a fallback.",
     annotations: {
       readOnlyHint: true,
     },
@@ -211,6 +214,32 @@ export const brainToolDefinitions: Tool[] = [
 
 /** Module-level unsubscribe handle for MCP warning notifications */
 let mcpWarningUnsubscribe: (() => void) | null = null;
+
+/**
+ * Issue #237 Concern 4 — build a list of next-step suggestions for the
+ * currently resolved brain tier. Exposed for unit tests so the tier →
+ * suggestion mapping is pinned without spinning up a credential store.
+ *
+ * - openai / anthropic tiers → point at the LLM-heal loop + guard doctor.
+ * - ollama / template tiers → point at `mandu brain login` for higher
+ *   quality. Everyone also gets a generic status pointer.
+ */
+export function buildBrainStatusSuggestions(activeTier: string): string[] {
+  const suggestions: string[] = [];
+  if (activeTier === "openai" || activeTier === "anthropic") {
+    suggestions.push(
+      "Run mandu.ate.auto_pipeline or mandu.ate.run followed by mandu.ate.heal to exercise the LLM-healing loop.",
+    );
+    suggestions.push(
+      "Call mandu.brain.doctor after a mandu.guard.check failure to get LLM-assisted diagnosis + patch suggestions.",
+    );
+  } else if (activeTier === "ollama" || activeTier === "template") {
+    suggestions.push(
+      "Run `mandu brain login --provider=openai` (or --provider=anthropic) to unlock higher-quality LLM-assisted heal + doctor output.",
+    );
+  }
+  return suggestions;
+}
 
 /**
  * #236 — surface a clear error when a stale `@mandujs/core` resolves
@@ -669,6 +698,12 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
           : { logged_in: false };
     }
 
+    // Issue #237 Concern 4 — surface next-step suggestions keyed to the
+    // active tier so agents can find the LLM invocation paths without
+    // grep-archaeology. LLM tiers point at ate.heal / brain.doctor;
+    // offline tiers point at `mandu brain login` for an upgrade.
+    const suggestions = buildBrainStatusSuggestions(resolution.resolved);
+
     return {
       content: [
         {
@@ -679,6 +714,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
               reason: resolution.reason,
               backend: store.backendName,
               providers,
+              suggestions,
             },
             null,
             2,

@@ -1,7 +1,64 @@
 import { spawn, execFileSync } from "node:child_process";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { getAtePaths, ensureDir, writeJson } from "./fs";
+import { indexSpecs, specsForRouteId } from "./spec-indexer";
 import type { RunInput } from "./types";
+
+/**
+ * Issue #237 — resolve `onlyFiles` + `onlyRoutes` into a deduped set
+ * of Playwright positional args.
+ *
+ * `onlyFiles` are normalized to `repoRoot`-relative, forward-slash paths
+ * so Playwright's matcher (which is relative-only) behaves identically
+ * on Windows + POSIX.
+ *
+ * `onlyRoutes` are resolved through the existing Phase A.1 spec-indexer.
+ * Route ids with no matching spec emit a warning to `stderr` but never
+ * fail the run; the remaining ids continue.
+ *
+ * Returns `{ files, warnings }`. An empty `files` means "no filter" and
+ * Playwright picks up every spec in its config.
+ */
+export function resolveRunFilter(
+  repoRoot: string,
+  input: Pick<RunInput, "onlyFiles" | "onlyRoutes">,
+): { files: string[]; warnings: string[] } {
+  const seen = new Set<string>();
+  const files: string[] = [];
+  const warnings: string[] = [];
+
+  const addFile = (raw: string) => {
+    const rel = isAbsolute(raw) ? relative(repoRoot, raw) : raw;
+    const normalized = rel.replace(/\\/g, "/");
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    files.push(normalized);
+  };
+
+  for (const f of input.onlyFiles ?? []) {
+    if (typeof f === "string" && f.trim().length > 0) {
+      addFile(f.trim());
+    }
+  }
+
+  if (input.onlyRoutes && input.onlyRoutes.length > 0) {
+    // Index only once — spec-indexer is in-memory but we're paying a
+    // glob + readFile per spec. One call suffices for a list of route ids.
+    const index = indexSpecs(repoRoot);
+    for (const routeId of input.onlyRoutes) {
+      const matches = specsForRouteId(index, routeId);
+      if (matches.length === 0) {
+        warnings.push(
+          `onlyRoutes: no spec found for routeId '${routeId}' (skipped)`,
+        );
+        continue;
+      }
+      for (const m of matches) addFile(m.path);
+    }
+  }
+
+  return { files, warnings };
+}
 
 /**
  * bunx 또는 bun x 중 사용 가능한 실행 명령을 반환한다.
@@ -56,12 +113,29 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
     "tests/e2e/playwright.config.ts",
   ];
 
-  // Route filtering: pass --grep to Playwright so only matching specs run
-  if (input.onlyRoutes && input.onlyRoutes.length > 0) {
-    const grepPattern = input.onlyRoutes
-      .map((r) => r.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join("|");
-    args.push("--grep", grepPattern);
+  // Issue #237 — spec / route filtering.
+  //
+  // Old behavior (pre-#237): `onlyRoutes` was shoved into `--grep`,
+  // which failed as soon as a route id didn't appear verbatim in the
+  // spec's `test(...)` title. The new flow resolves both surfaces
+  // into concrete spec file paths via the spec-indexer (routeId →
+  // spec), then hands the deduped union to Playwright as positional
+  // `<file>` args. `grep` remains a pass-through for per-title
+  // filtering on top of the file set.
+  const filter = resolveRunFilter(repoRoot, {
+    onlyFiles: input.onlyFiles,
+    onlyRoutes: input.onlyRoutes,
+  });
+  for (const w of filter.warnings) {
+    // Warnings are advisory — surface them on stderr so the caller
+    // sees them in the captured tail without failing the run.
+    console.warn(`[ATE] ${w}`);
+  }
+  for (const file of filter.files) {
+    args.push(file);
+  }
+  if (typeof input.grep === "string" && input.grep.trim().length > 0) {
+    args.push("--grep", input.grep.trim());
   }
 
   const env = {

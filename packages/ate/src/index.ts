@@ -134,7 +134,7 @@ export type { GraphVersionInput } from "./graph-version";
 export { generateAndWriteScenarios } from "./scenario";
 export type { ScenarioKind, GeneratedScenario, ScenarioBundle } from "./scenario";
 export { generatePlaywrightSpecs } from "./codegen";
-export { runPlaywright } from "./runner";
+export { runPlaywright, resolveRunFilter } from "./runner";
 export { composeSummary, writeSummary, generateReport } from "./report";
 export type { ReportFormat, GenerateReportOptions } from "./report";
 export { generateHtmlReport } from "./reporter/html";
