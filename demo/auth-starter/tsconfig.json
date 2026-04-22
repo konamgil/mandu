@@ -8,7 +8,6 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "types": ["bun-types"],
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
