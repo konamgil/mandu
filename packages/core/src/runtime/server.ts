@@ -1,4 +1,4 @@
-import type { Server } from "bun";
+import type { Server, ServerWebSocket } from "bun";
 import type { RoutesManifest, RouteSpec, HydrationConfig, StaticParamSetSchema } from "../spec/schema";
 import type { BundleManifest } from "../bundler/types";
 import type { ManduFilling, RenderMode } from "../filling/filling";
@@ -4306,12 +4306,17 @@ function startBunServerWithFallback(options: {
   const { port: startPort, hostname, fetch, websocket } = options;
   let lastError: unknown = null;
 
+  // `Parameters<typeof Bun.serve>[0]` captures the full `Serve.Options`
+  // XOR union. We only ever use the hostname/port branch, so cast through
+  // `unknown` at the call site to express "these are valid options we've
+  // assembled dynamically" without widening the whole local to `any`.
+  type BunServeOptions = Parameters<typeof Bun.serve>[0];
   const serveOptions: Record<string, unknown> = { hostname, fetch, idleTimeout: 255 };
   if (websocket) serveOptions.websocket = websocket;
 
   // Port 0: let Bun/OS pick an available ephemeral port.
   if (startPort === 0) {
-    const server = Bun.serve({ port: 0, ...serveOptions } as any);
+    const server = Bun.serve({ port: 0, ...serveOptions } as unknown as BunServeOptions);
     return { server, port: server.port ?? 0, attempts: 0 };
   }
 
@@ -4321,7 +4326,7 @@ function startBunServerWithFallback(options: {
       continue;
     }
     try {
-      const server = Bun.serve({ port: candidate, ...serveOptions } as any);
+      const server = Bun.serve({ port: candidate, ...serveOptions } as unknown as BunServeOptions);
       return { server, port: server.port ?? candidate, attempts: attempt };
     } catch (error) {
       if (!isPortInUseError(error)) {
@@ -4670,27 +4675,26 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     handleRequest,
   });
 
-  // WebSocket 핸들러 빌드 (등록된 WS 라우트가 있을 때만)
+  // WebSocket 핸들러 빌드 (등록된 WS 라우트가 있을 때만).
+  // Bun's `ServerWebSocket<T>` carries the upgrade payload in `ws.data`;
+  // we set `T = WSUpgradeData` at upgrade time (see `bunServer.upgrade`
+  // below) so downstream handlers get proper inference without casts.
   const hasWsRoutes = registry.wsHandlers.size > 0;
   const wsConfig = hasWsRoutes ? {
-    open(ws: any) {
-      const data = ws.data as WSUpgradeData;
-      const handlers = registry.wsHandlers.get(data.routeId);
+    open(ws: ServerWebSocket<WSUpgradeData>) {
+      const handlers = registry.wsHandlers.get(ws.data.routeId);
       handlers?.open?.(wrapBunWebSocket(ws));
     },
-    message(ws: any, message: string | ArrayBuffer) {
-      const data = ws.data as WSUpgradeData;
-      const handlers = registry.wsHandlers.get(data.routeId);
+    message(ws: ServerWebSocket<WSUpgradeData>, message: string | ArrayBuffer) {
+      const handlers = registry.wsHandlers.get(ws.data.routeId);
       handlers?.message?.(wrapBunWebSocket(ws), message);
     },
-    close(ws: any, code: number, reason: string) {
-      const data = ws.data as WSUpgradeData;
-      const handlers = registry.wsHandlers.get(data.routeId);
+    close(ws: ServerWebSocket<WSUpgradeData>, code: number, reason: string) {
+      const handlers = registry.wsHandlers.get(ws.data.routeId);
       handlers?.close?.(wrapBunWebSocket(ws), code, reason);
     },
-    drain(ws: any) {
-      const data = ws.data as WSUpgradeData;
-      const handlers = registry.wsHandlers.get(data.routeId);
+    drain(ws: ServerWebSocket<WSUpgradeData>) {
+      const handlers = registry.wsHandlers.get(ws.data.routeId);
       handlers?.drain?.(wrapBunWebSocket(ws));
     },
   } : undefined;
@@ -4711,6 +4715,13 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   };
 
   // fetch handler: WS upgrade 감지 추가
+  //
+  // Bun narrows `server.upgrade()` to require the matching WS data generic
+  // (see `Server<T>` in bun-types/serve.d.ts:908). Our wsConfig is typed
+  // against `WSUpgradeData`, so the server we receive at runtime is really
+  // `Server<WSUpgradeData>`. The outer startBunServerWithFallback returns
+  // `Server<undefined>` for back-compat; a single cast here threads the
+  // correct generic through to `.upgrade()` without widening to `any`.
   const wrappedFetch = hasWsRoutes
     ? async (req: Request, bunServer: Server<undefined>): Promise<Response | undefined> => {
         // WebSocket upgrade 요청 감지
@@ -4718,7 +4729,8 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
           const url = new URL(req.url);
           const match = router.match(url.pathname);
           if (match && registry.wsHandlers.has(match.route.id)) {
-            const upgraded = (bunServer as any).upgrade(req, {
+            const wsServer = bunServer as unknown as Server<WSUpgradeData>;
+            const upgraded = wsServer.upgrade(req, {
               data: { routeId: match.route.id, params: match.params, id: newId() },
             });
             return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
@@ -4737,7 +4749,11 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   const { server, port: actualPort, attempts } = startBunServerWithFallback({
     port,
     hostname,
-    fetch: wrappedFetch as any,
+    // `wrappedFetch` has a `Server<undefined>` signature but the WS-enabled
+    // branch internally treats it as `Server<WSUpgradeData>` (see wsServer
+    // cast above). The fallback helper accepts the narrower type; a cast
+    // through `unknown` threads the WS-aware fetch without `any`.
+    fetch: wrappedFetch as unknown as Parameters<typeof startBunServerWithFallback>[0]["fetch"],
     websocket: wsConfig,
   });
 
