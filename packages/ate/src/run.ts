@@ -44,6 +44,13 @@ import {
 } from "./flake-detector";
 import { graphVersionFromGraph } from "./graph-version";
 import { readJson, fileExists, getAtePaths } from "./fs";
+import {
+  emitRunStart,
+  emitSpecProgress,
+  emitSpecDone,
+  emitFailureCaptured,
+  emitRunEnd,
+} from "./run-events";
 import type { InteractionGraph } from "./types";
 
 export interface ShardSpec {
@@ -120,8 +127,22 @@ export async function runSpec(options: RunSpecOptions): Promise<RunResult> {
   );
 
   const started = Date.now();
+
+  // ── run_start — single entry covering this spec. `specPaths` is a
+  // list even for a single-spec run so the shape matches batch calls.
+  emitRunStart({
+    runId,
+    specPaths: [specPath],
+    shard: options.shard,
+    graphVersion,
+  });
+
+  // Phase boundary: loading → about to hand off to runner.
+  emitSpecProgress({ runId, specPath, phase: "loading" });
+
   let runnerResult: RunnerExecResult;
   try {
+    emitSpecProgress({ runId, specPath, phase: "executing" });
     runnerResult = await exec({
       runner,
       command,
@@ -130,6 +151,7 @@ export async function runSpec(options: RunSpecOptions): Promise<RunResult> {
       cwd: options.repoRoot,
     });
   } catch (err) {
+    const totalDur = Date.now() - started;
     const failure = translateExecError(err, {
       repoRoot: options.repoRoot,
       specPath,
@@ -137,16 +159,33 @@ export async function runSpec(options: RunSpecOptions): Promise<RunResult> {
       graphVersion,
       runner,
     });
-    recordHistory(options.repoRoot, failure, runId, Date.now() - started);
+    emitFailureCaptured({ runId, specPath, failure });
+    emitSpecDone({
+      runId,
+      specPath,
+      status: "fail",
+      durationMs: totalDur,
+    });
+    recordHistory(options.repoRoot, failure, runId, totalDur);
     pruneArtifacts(options.repoRoot);
+    emitRunEnd({
+      runId,
+      passed: 0,
+      failed: 1,
+      skipped: 0,
+      durationMs: totalDur,
+      graphVersion,
+    });
     return failure;
   }
 
   if (runnerResult.exitCode === 0) {
+    const durationMs = runnerResult.durationMs ?? Date.now() - started;
+    const assertions = extractAssertionCount(runnerResult);
     const pass: PassResult = {
       status: "pass",
-      durationMs: runnerResult.durationMs ?? Date.now() - started,
-      assertions: extractAssertionCount(runnerResult),
+      durationMs,
+      assertions,
       graphVersion,
       runId,
       runner,
@@ -160,10 +199,28 @@ export async function runSpec(options: RunSpecOptions): Promise<RunResult> {
       graphVersion,
     });
     pruneArtifacts(options.repoRoot);
+    emitSpecDone({
+      runId,
+      specPath,
+      status: "pass",
+      durationMs,
+      assertions,
+    });
+    emitRunEnd({
+      runId,
+      passed: 1,
+      failed: 0,
+      skipped: 0,
+      durationMs,
+      graphVersion,
+    });
     return pass;
   }
 
   // Non-zero exit — classify and translate to failure.v1.
+  // Artifact capture happens inside translateFailure → collectArtifacts;
+  // those writes emit their own `artifact_saved` events.
+  emitSpecProgress({ runId, specPath, phase: "capturing_artifacts" });
   const translated = translateFailure({
     runner,
     repoRoot: options.repoRoot,
@@ -173,8 +230,23 @@ export async function runSpec(options: RunSpecOptions): Promise<RunResult> {
     runnerResult,
   });
 
+  emitFailureCaptured({ runId, specPath, failure: translated });
+  emitSpecDone({
+    runId,
+    specPath,
+    status: "fail",
+    durationMs: runnerResult.durationMs,
+  });
   recordHistory(options.repoRoot, translated, runId, runnerResult.durationMs);
   pruneArtifacts(options.repoRoot);
+  emitRunEnd({
+    runId,
+    passed: 0,
+    failed: 1,
+    skipped: 0,
+    durationMs: runnerResult.durationMs,
+    graphVersion,
+  });
   return translated;
 }
 
@@ -585,7 +657,7 @@ function collectArtifacts(
     ];
     for (const c of candidates) {
       if (existsSync(c)) {
-        const staged = stageArtifact(args.repoRoot, args.runId, c, "trace.zip");
+        const staged = stageArtifact(args.repoRoot, args.runId, c, "trace.zip", args.specPath);
         if (staged) {
           trace.path = staged;
           break;
@@ -594,7 +666,7 @@ function collectArtifacts(
     }
     const shot = join(args.repoRoot, "test-results", "screenshot.png");
     if (existsSync(shot)) {
-      const staged = stageArtifact(args.repoRoot, args.runId, shot, "screenshot.png");
+      const staged = stageArtifact(args.repoRoot, args.runId, shot, "screenshot.png", args.specPath);
       if (staged) trace.screenshot = staged;
     }
   }
@@ -612,6 +684,7 @@ function collectArtifacts(
     args.runId,
     "dom.html",
     combined,
+    args.specPath,
   );
   trace.dom = domPath;
 

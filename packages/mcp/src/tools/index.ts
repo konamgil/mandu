@@ -160,7 +160,19 @@ interface ToolModule {
     server?: Server,
     monitor?: ActivityMonitor
   ) => Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
+  /**
+   * Hard requirement: skip registration entirely when `server` is
+   * absent. Used for tools that cannot function without MCP transport
+   * access (e.g. brain, project).
+   */
   requiresServer?: boolean;
+  /**
+   * Soft requirement: forward the `Server` instance when one is
+   * available, but register the tool either way. Used for tools that
+   * gracefully degrade (e.g. notifications/progress silently no-ops
+   * when the transport isn't attached).
+   */
+  acceptsServer?: boolean;
 }
 
 /**
@@ -182,10 +194,14 @@ const TOOL_MODULES: ToolModule[] = [
   { category: "runtime", definitions: runtimeToolDefinitions, handlers: runtimeTools },
   { category: "seo", definitions: seoToolDefinitions, handlers: seoTools },
   { category: "project", definitions: projectToolDefinitions, handlers: projectTools as ToolModule["handlers"], requiresServer: true },
-  { category: "ate", definitions: ateToolDefinitions, handlers: ateTools as ToolModule["handlers"] },
+  // ate + ate-run accept an optional Server so notifications/progress
+  // can flow (issue #238). `acceptsServer: true` forwards the server
+  // when available but still registers when it isn't — callers that
+  // boot without an MCP transport get progress no-oped silently.
+  { category: "ate", definitions: ateToolDefinitions, handlers: ateTools as ToolModule["handlers"], acceptsServer: true },
   { category: "ate-phase5", definitions: atePhase5ToolDefinitions, handlers: createAtePhase5Handlers as unknown as ToolModule["handlers"] },
   { category: "ate-context", definitions: ateContextToolDefinitions, handlers: ateContextTools },
-  { category: "ate-run", definitions: ateRunToolDefinitions, handlers: ateRunTools },
+  { category: "ate-run", definitions: ateRunToolDefinitions, handlers: ateRunTools as ToolModule["handlers"], acceptsServer: true },
   { category: "ate-flakes", definitions: ateFlakesToolDefinitions, handlers: ateFlakesTools },
   { category: "ate-prompt", definitions: atePromptToolDefinitions, handlers: atePromptTools },
   { category: "ate-exemplar", definitions: ateExemplarToolDefinitions, handlers: ateExemplarTools },
@@ -290,13 +306,21 @@ export function registerBuiltinTools(
     }
 
     try {
-      const handlers = module.requiresServer
-        ? (module.handlers as (root: string, srv: Server, mon: ActivityMonitor) => Record<string, (args: Record<string, unknown>) => Promise<unknown>>)(
-            projectRoot,
-            server!,
-            monitor!
-          )
-        : module.handlers(projectRoot);
+      let handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
+      if (module.requiresServer) {
+        handlers = (module.handlers as (root: string, srv: Server, mon: ActivityMonitor) => Record<string, (args: Record<string, unknown>) => Promise<unknown>>)(
+          projectRoot,
+          server!,
+          monitor!,
+        );
+      } else if (module.acceptsServer) {
+        // Forward the Server when available; fall back to just projectRoot.
+        handlers = server
+          ? module.handlers(projectRoot, server)
+          : module.handlers(projectRoot);
+      } else {
+        handlers = module.handlers(projectRoot);
+      }
 
       const plugins = moduleToPlugins(module.definitions, handlers);
       mcpToolRegistry.registerAll(plugins, module.category);

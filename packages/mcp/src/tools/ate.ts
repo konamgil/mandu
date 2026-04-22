@@ -1,4 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   ateExtract,
   ateGenerate,
@@ -13,7 +14,13 @@ import {
   detectCoverageGaps,
   precommitCheck,
 } from "@mandujs/ate";
-import type { OracleLevel } from "@mandujs/ate";
+import type { OracleLevel, AteMonitorEvent, FailureV1 } from "@mandujs/ate";
+import { eventBus } from "@mandujs/core/observability";
+import {
+  writePartialResults,
+  createAteProgressTracker,
+  type PartialRunResults,
+} from "./ate-run.js";
 
 export const ateToolDefinitions: Tool[] = [
   {
@@ -83,7 +90,10 @@ export const ateToolDefinitions: Tool[] = [
       "ATE Step 3 — Run: Execute the generated Playwright specs against a running Mandu dev server. " +
       "Collects test artifacts (screenshots, traces, results) in .mandu/ate/runs/{runId}/. " +
       "Requires the Mandu dev server to be running (use mandu_dev_start first). " +
-      "Returns a runId for use with mandu.ate.report and mandu.ate.heal.",
+      "Returns a runId for use with mandu.ate.report and mandu.ate.heal. " +
+      "Streams notifications/progress per spec_done event (issue #238). " +
+      "On timeout / kill, persists partial state under .mandu/reports/run-<runId>/results.json " +
+      "so mandu.ate.heal remains reachable after the 10-min watchdog.",
     inputSchema: {
       type: "object",
       properties: {
@@ -98,6 +108,12 @@ export const ateToolDefinitions: Tool[] = [
           type: "array",
           items: { type: "string", enum: ["chromium", "firefox", "webkit"] },
           description: "Browsers to test against (default: ['chromium'])",
+        },
+        progressToken: {
+          type: ["string", "number"],
+          description:
+            "Optional MCP progress token. When present, per-spec progress notifications are " +
+            "sent with this token so the client can correlate them with the originating call.",
         },
       },
       required: ["repoRoot"],
@@ -288,7 +304,87 @@ export const ateToolDefinitions: Tool[] = [
   },
 ];
 
-export function ateTools(projectRoot: string) {
+export function ateTools(projectRoot: string, server?: Server) {
+  /**
+   * Shared subscription helper for `mandu.ate.run`. Wraps ateRun (which
+   * drives Playwright) with eventBus listeners so per-spec progress
+   * notifications flow through the MCP transport and a partial
+   * results.json is persisted on timeout / kill. Downstream consumers
+   * can then hand the runId to `mandu.ate.heal` even when the 10-min
+   * watchdog fired mid-run.
+   */
+  const runWithObservability = async (
+    input: Parameters<typeof ateRun>[0],
+    opts: { progressToken?: string | number } = {},
+  ) => {
+    const started = new Date().toISOString();
+
+    const tracker = createAteProgressTracker({
+      progressToken: opts.progressToken,
+      sendProgress: async (progress, total, message) => {
+        if (!server) return;
+        const snap = tracker.snapshot();
+        const token = opts.progressToken ?? snap.runId;
+        if (!token) return;
+        try {
+          await server.notification({
+            method: "notifications/progress",
+            params: { progressToken: token, progress, total, message },
+          });
+        } catch {
+          /* transport offline — never fail the run */
+        }
+      },
+    });
+
+    const unsubscribe = eventBus.on("ate", (event) => {
+      try {
+        const data = event.data as unknown as AteMonitorEvent | undefined;
+        if (!data || typeof data.kind !== "string") return;
+        tracker.handle(data);
+      } catch {
+        /* swallow — never break the run */
+      }
+    });
+
+    try {
+      return await ateRun(input);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isTimeout = /timed out/i.test(message);
+      const snap = tracker.snapshot();
+      const partial: PartialRunResults = {
+        runId: snap.runId ?? `unknown-${Date.now()}`,
+        status: isTimeout ? "timed_out" : "error",
+        graphVersion: snap.graphVersion,
+        completedSpecs: snap.completedSpecs,
+        inProgressSpec: snap.inProgressSpec,
+        failures: snap.failures,
+        startedAt: started,
+        killedAt: new Date().toISOString(),
+        error: message,
+      };
+      const resultsPath = writePartialResults(input.repoRoot, partial);
+      return {
+        ok: false,
+        error: `ateRun failed: ${message}`,
+        partial,
+        resultsPath,
+        runId: partial.runId,
+      };
+    } finally {
+      try {
+        unsubscribe();
+      } catch {
+        /* no-op */
+      }
+    }
+  };
+  // Reserved for future use (progress capability detection). Not used
+  // during registration today but documented on the closure so the
+  // next caller understands the parameter shape.
+  void projectRoot;
+
   return {
     "mandu.ate.extract": async (args: Record<string, unknown>) => {
       const { repoRoot, tsconfigPath, routeGlobs, buildSalt } = args as {
@@ -308,14 +404,18 @@ export function ateTools(projectRoot: string) {
       return ateGenerate({ repoRoot, oracleLevel, onlyRoutes });
     },
     "mandu.ate.run": async (args: Record<string, unknown>) => {
-      const { repoRoot, baseURL, ci, headless, browsers } = args as {
+      const { repoRoot, baseURL, ci, headless, browsers, progressToken } = args as {
         repoRoot: string;
         baseURL?: string;
         ci?: boolean;
         headless?: boolean;
         browsers?: ("chromium" | "firefox" | "webkit")[];
+        progressToken?: string | number;
       };
-      return await ateRun({ repoRoot, baseURL, ci, headless, browsers });
+      return await runWithObservability(
+        { repoRoot, baseURL, ci, headless, browsers },
+        { progressToken },
+      );
     },
     "mandu.ate.report": async (args: Record<string, unknown>) => {
       const { repoRoot, runId, startedAt, finishedAt, exitCode, oracleLevel, format, impact } = args as {

@@ -21,12 +21,40 @@ import {
   copyFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { emitArtifactSaved } from "./run-events";
+import type { AteArtifactSavedEvent } from "./types";
 
 export interface ArtifactPaths {
   runDir: string;
   tracePath: string;
   screenshotPath: string;
   domPath: string;
+}
+
+/**
+ * Classify an on-disk artifact from its filename. Used by the
+ * run-events emitter so we can tag `artifact_saved` with a stable
+ * kind that downstream renderers can filter.
+ */
+function classifyArtifact(filename: string): AteArtifactSavedEvent["artifactKind"] {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".zip") || lower.includes("trace")) return "trace";
+  if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.includes("screenshot")) {
+    return "screenshot";
+  }
+  if (lower.endsWith(".html") || lower.includes("dom")) return "dom";
+  return "other";
+}
+
+/**
+ * Best-effort file-size lookup — on failure returns 0. Never throws.
+ */
+function sizeOf(path: string): number {
+  try {
+    return statSync(path).size;
+  } catch {
+    return 0;
+  }
 }
 
 export interface ArtifactRun {
@@ -67,16 +95,27 @@ export function ensureArtifactDir(repoRoot: string, runId: string): string {
 /**
  * Write a text artifact (DOM snapshot, JSON diagnostic, log). Creates
  * the run directory lazily.
+ *
+ * Emits an `artifact_saved` event on successful write. `specPath` is
+ * forwarded into the event payload when provided.
  */
 export function writeTextArtifact(
   repoRoot: string,
   runId: string,
   filename: string,
   content: string,
+  specPath?: string,
 ): string {
   const dir = ensureArtifactDir(repoRoot, runId);
   const target = join(dir, filename);
   writeFileSync(target, content, "utf8");
+  emitArtifactSaved({
+    runId,
+    specPath,
+    artifactKind: classifyArtifact(filename),
+    path: target,
+    sizeBytes: sizeOf(target),
+  });
   return target;
 }
 
@@ -84,17 +123,28 @@ export function writeTextArtifact(
  * Stage an existing file into the artifact run directory. Used when
  * the runner itself emits a file (Playwright trace.zip) that we just
  * need to relocate.
+ *
+ * Emits an `artifact_saved` event on successful copy. `specPath` is
+ * forwarded into the event payload when provided.
  */
 export function stageArtifact(
   repoRoot: string,
   runId: string,
   sourceAbsPath: string,
   destFilename: string,
+  specPath?: string,
 ): string | null {
   if (!existsSync(sourceAbsPath)) return null;
   const dir = ensureArtifactDir(repoRoot, runId);
   const target = join(dir, destFilename);
   copyFileSync(sourceAbsPath, target);
+  emitArtifactSaved({
+    runId,
+    specPath,
+    artifactKind: classifyArtifact(destFilename),
+    path: target,
+    sizeBytes: sizeOf(target),
+  });
   return target;
 }
 

@@ -9,6 +9,14 @@ import fs from "fs";
 import path from "path";
 import type { Subprocess } from "bun";
 import { eventBus } from "@mandujs/core/observability";
+import type { AteMonitorEvent } from "@mandujs/ate";
+
+/**
+ * Local alias — reserved in case we need to accept slightly looser
+ * shapes at the subscription boundary (forward-compat with events
+ * emitted by newer ATE versions). Today it is a direct re-export.
+ */
+type AteMonitorEventShape = AteMonitorEvent;
 
 const TOOL_ICONS: Record<string, string> = {
   // Spec
@@ -60,6 +68,10 @@ const TOOL_ICONS: Record<string, string> = {
   mandu_add_client_slot: "CLIENT+",
   // Error
   mandu_analyze_error: "ERROR",
+  // ATE — display tokens for per-run/per-spec lifecycle events
+  "ate.run": "ATE-RUN",
+  "ate.pass": "ATE-PASS",
+  "ate.fail": "ATE-FAIL",
 };
 
 type MonitorSeverity = "info" | "warn" | "error";
@@ -281,6 +293,12 @@ export class ActivityMonitor {
   private toolStartTimes = new Map<string, number>();
   // Phase 5-1: 에이전트 세션 식별 (MCP 클라이언트별 추적)
   public sessionId: string = crypto.randomUUID();
+  // ATE monitor plumbing — subscription handle + per-run accumulator for
+  // artifacts (so run_end can summarize them) + per-spec failure kind
+  // cache (so spec_done can inline it).
+  private ateUnsubscribe: (() => void) | null = null;
+  private ateRunArtifacts = new Map<string, { count: number; dir?: string }>();
+  private ateSpecFailureKinds = new Map<string, string>();
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
@@ -338,9 +356,25 @@ export class ActivityMonitor {
     if (this.config.openTerminal) {
       this.openTerminal();
     }
+
+    // Subscribe to ATE runner events — structured per-run progress,
+    // per-spec pass/fail, failure.v1 captures, artifact writes.
+    this.ateUnsubscribe = eventBus.on("ate", (event) => {
+      try {
+        const payload = event.data as unknown as AteMonitorEventShape | undefined;
+        if (!payload || typeof payload.kind !== "string") return;
+        this.handleAteEvent(payload);
+      } catch {
+        // Never let a bad payload tear the monitor down.
+      }
+    });
   }
 
   stop(): void {
+    if (this.ateUnsubscribe) {
+      this.ateUnsubscribe();
+      this.ateUnsubscribe = null;
+    }
     this.flush(true);
     if (this.tailProcess) {
       this.tailProcess.kill();
@@ -635,6 +669,148 @@ export class ActivityMonitor {
         },
       });
     }
+  }
+
+  /**
+   * Render an ATE monitor event (run_start / spec_progress / spec_done /
+   * failure_captured / artifact_saved / run_end). Writes through the
+   * shared output path so both pretty + JSON modes work uniformly.
+   *
+   * Pretty mode policies:
+   *  - `spec_progress` suppressed unless MANDU_ATE_VERBOSE=1 or the
+   *    phase is `capturing_artifacts` (signal useful for debugging).
+   *  - `artifact_saved` collected silently and summarized in run_end.
+   *  - `spec_done(fail)` inlines the `failure.v1` kind when a matching
+   *    `failure_captured` fired within the same spec.
+   */
+  private handleAteEvent(data: AteMonitorEventShape): void {
+    if (!this.logStream) return;
+
+    // JSON mode → verbatim line per event.
+    if (this.outputFormat === "json") {
+      const payload: MonitorEvent = {
+        ts: new Date().toISOString(),
+        type: `ate.${data.kind}`,
+        severity: this.ateSeverityFor(data),
+        source: "ate",
+        data: data as unknown as Record<string, unknown>,
+      };
+      const line = this.formatEvent(payload);
+      if (line) {
+        this.write(line);
+        this.updateSummary(payload);
+      }
+      return;
+    }
+
+    // Pretty mode — route per-kind.
+    const verbose = process.env.MANDU_ATE_VERBOSE === "1";
+    const time = getTime();
+
+    switch (data.kind) {
+      case "run_start": {
+        this.ateRunArtifacts.set(data.runId, { count: 0 });
+        const runIdShort = data.runId.slice(-8);
+        const line = `${time} > [ATE-RUN] ${runIdShort} starting (${data.specPaths.length} specs)\n`;
+        this.write(line);
+        this.updateSummary({
+          ts: new Date().toISOString(),
+          type: "ate.run_start",
+          severity: "info",
+          source: "ate",
+        });
+        return;
+      }
+      case "spec_progress": {
+        // Suppressed by default — too noisy. Render only when
+        // MANDU_ATE_VERBOSE=1 is set.
+        if (!verbose) return;
+        const line = `${time}   [ATE] ${data.specPath} (${data.phase})\n`;
+        this.write(line);
+        return;
+      }
+      case "failure_captured": {
+        // Cache the failure kind so `spec_done` can inline it. Render
+        // nothing here — the line is attached to the spec_done row.
+        this.ateSpecFailureKinds.set(
+          `${data.runId}:${data.specPath}`,
+          data.failure.kind,
+        );
+        return;
+      }
+      case "spec_done": {
+        const secs = (data.durationMs / 1000).toFixed(1);
+        const file = data.specPath.split(/[\\/]/).pop() ?? data.specPath;
+        if (data.status === "pass") {
+          const line = `${time} + [ATE] ${file} (${secs}s)\n`;
+          this.write(line);
+          this.updateSummary({
+            ts: new Date().toISOString(),
+            type: "ate.spec_done",
+            severity: "info",
+            source: "ate",
+          });
+        } else if (data.status === "fail") {
+          const kindKey = `${data.runId}:${data.specPath}`;
+          const failureKind = this.ateSpecFailureKinds.get(kindKey);
+          this.ateSpecFailureKinds.delete(kindKey);
+          const suffix = failureKind ? ` [${failureKind}]` : "";
+          const line = `${time} x [ATE] ${file} (${secs}s)${suffix}\n`;
+          this.write(line);
+          this.updateSummary({
+            ts: new Date().toISOString(),
+            type: "ate.spec_done",
+            severity: "error",
+            source: "ate",
+          });
+        } else {
+          // skip
+          if (verbose) {
+            const line = `${time}   [ATE] ${file} skipped\n`;
+            this.write(line);
+          }
+        }
+        return;
+      }
+      case "artifact_saved": {
+        // Accumulate silently; run_end summarizes.
+        const entry = this.ateRunArtifacts.get(data.runId) ?? { count: 0 };
+        entry.count += 1;
+        if (!entry.dir) {
+          const dir = path.dirname(data.path);
+          entry.dir = dir;
+        }
+        this.ateRunArtifacts.set(data.runId, entry);
+        return;
+      }
+      case "run_end": {
+        const runIdShort = data.runId.slice(-8);
+        const secs = (data.durationMs / 1000).toFixed(1);
+        const artifactInfo = this.ateRunArtifacts.get(data.runId);
+        this.ateRunArtifacts.delete(data.runId);
+        const artifactSuffix = artifactInfo && artifactInfo.count > 0 && artifactInfo.dir
+          ? `. artifacts: ${artifactInfo.dir}`
+          : "";
+        const line =
+          `${time} * [ATE-RUN] ${runIdShort} done — ` +
+          `${data.passed} pass, ${data.failed} fail, ${data.skipped} skip (${secs}s)${artifactSuffix}\n`;
+        this.write(line);
+        this.updateSummary({
+          ts: new Date().toISOString(),
+          type: "ate.run_end",
+          severity: data.failed > 0 ? "error" : "info",
+          source: "ate",
+        });
+        return;
+      }
+    }
+  }
+
+  private ateSeverityFor(data: AteMonitorEventShape): MonitorSeverity {
+    if (data.kind === "failure_captured") return "error";
+    if (data.kind === "spec_done" && data.status === "fail") return "error";
+    if (data.kind === "run_end" && data.failed > 0) return "error";
+    return "info";
   }
 
   private enqueue(event: MonitorEvent): void {

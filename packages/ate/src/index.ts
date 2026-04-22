@@ -1,4 +1,13 @@
 export * from "./types";
+export {
+  emitAteEvent,
+  emitRunStart,
+  emitSpecProgress,
+  emitSpecDone,
+  emitFailureCaptured,
+  emitArtifactSaved,
+  emitRunEnd,
+} from "./run-events";
 export * as ATEFS from "./fs";
 export { ATEFileError, ensureDir, readJson, writeJson, fileExists, getAtePaths } from "./fs";
 

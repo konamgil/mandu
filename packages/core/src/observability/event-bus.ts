@@ -2,7 +2,7 @@
 
 import { newId } from "../id";
 
-export type EventType = "http" | "mcp" | "guard" | "build" | "error" | "cache" | "ws";
+export type EventType = "http" | "mcp" | "guard" | "build" | "error" | "cache" | "ws" | "ate";
 export type ObservabilitySeverity = "info" | "warn" | "error";
 
 export interface ObservabilityEvent {
@@ -60,7 +60,7 @@ class ManduEventBus {
 
   getStats(windowMs?: number): Record<EventType, { count: number; errors: number; avgDuration: number }> {
     const cutoff = windowMs ? Date.now() - windowMs : 0;
-    const ALL: EventType[] = ["http", "mcp", "guard", "build", "error", "cache", "ws"];
+    const ALL: EventType[] = ["http", "mcp", "guard", "build", "error", "cache", "ws", "ate"];
     const stats = {} as Record<EventType, { count: number; errors: number; avgDuration: number }>;
     const dur = {} as Record<EventType, number[]>;
     for (const t of ALL) { stats[t] = { count: 0, errors: 0, avgDuration: 0 }; dur[t] = []; }
