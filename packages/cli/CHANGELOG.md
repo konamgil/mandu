@@ -1,5 +1,13 @@
 # @mandujs/cli
 
+## 0.30.4
+
+### Patch Changes
+
+- Updated dependencies [[`cb32140`](https://github.com/konamgil/mandu/commit/cb32140b58aef9cc8d78a5d4975329cc8d81b2a7)]:
+  - @mandujs/ate@0.25.1
+  - @mandujs/mcp@0.30.0
+
 ## 0.30.3
 
 ### Patch Changes
