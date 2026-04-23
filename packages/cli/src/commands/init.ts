@@ -228,6 +228,23 @@ const TEXT_EXTENSIONS = new Set([
   ".txt", ".env", ".gitignore",
 ]);
 
+/**
+ * #244 — npm / bun publish silently drops `.gitignore` from tarballs.
+ * We ship template ignore files as plain `gitignore` (no leading dot)
+ * and rename on extraction so the scaffolded project still has a valid
+ * `.gitignore`. Nothing else is remapped — this is a narrow workaround
+ * for a single tooling quirk.
+ */
+function renameNpmStrippedDotfile(relPath: string): string {
+  const parts = relPath.split("/");
+  const last = parts[parts.length - 1];
+  if (last === "gitignore") {
+    parts[parts.length - 1] = ".gitignore";
+    return parts.join("/");
+  }
+  return relPath;
+}
+
 function looksLikeText(relPath: string): boolean {
   const basename = relPath.split("/").pop() ?? "";
   // Dotfiles without an extension (e.g. `.gitignore`, `.env`) are text.
@@ -283,7 +300,12 @@ async function copyEmbeddedTemplate(
   for (const entry of files) {
     if (shouldSkipFile(entry.relPath, options)) continue;
 
-    const destPath = path.join(dest, entry.relPath);
+    // #244 — npm / bun publish unconditionally strip `.gitignore` from
+    // tarballs (legacy convention). Ship template as `gitignore` and
+    // rename to `.gitignore` on extraction so scaffolded projects get
+    // a valid ignore file.
+    const destRelPath = renameNpmStrippedDotfile(entry.relPath);
+    const destPath = path.join(dest, destRelPath);
     await fs.mkdir(path.dirname(destPath), { recursive: true });
 
     const bunFile = Bun.file(entry.embeddedPath);

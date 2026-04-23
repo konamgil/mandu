@@ -19,13 +19,13 @@
 import tpl_default_github_README_md from "../templates/default/.github/README.md" with { type: "file" };
 import tpl_default_github_workflows_ate_e2e_subset_yml from "../templates/default/.github/workflows/ate-e2e-subset.yml" with { type: "file" };
 import tpl_default_github_workflows_ate_e2e_yml from "../templates/default/.github/workflows/ate-e2e.yml" with { type: "file" };
-import tpl_default_gitignore from "../templates/default/.gitignore" with { type: "file" };
 import tpl_default_oxlintrc_json from "../templates/default/.oxlintrc.json" with { type: "file" };
 import tpl_default_AGENTS_md from "../templates/default/AGENTS.md" with { type: "file" };
 import tpl_default_app_api_health_route_ts from "../templates/default/app/api/health/route.ts" with { type: "file" };
 import tpl_default_app_globals_css from "../templates/default/app/globals.css" with { type: "file" };
 import tpl_default_app_layout_tsx from "../templates/default/app/layout.tsx" with { type: "file" };
 import tpl_default_app_page_tsx from "../templates/default/app/page.tsx" with { type: "file" };
+import tpl_default_gitignore from "../templates/default/gitignore" with { type: "file" };
 import tpl_default_lefthook_yml from "../templates/default/lefthook.yml" with { type: "file" };
 import tpl_default_package_json from "../templates/default/package.json" with { type: "file" };
 import tpl_default_scripts_analyze_impact_ts from "../templates/default/scripts/analyze-impact.ts" with { type: "file" };
@@ -59,7 +59,6 @@ import tpl_default_tsconfig_json from "../templates/default/tsconfig.json" with 
 import tpl_realtime_chat_github_README_md from "../templates/realtime-chat/.github/README.md" with { type: "file" };
 import tpl_realtime_chat_github_workflows_ate_e2e_subset_yml from "../templates/realtime-chat/.github/workflows/ate-e2e-subset.yml" with { type: "file" };
 import tpl_realtime_chat_github_workflows_ate_e2e_yml from "../templates/realtime-chat/.github/workflows/ate-e2e.yml" with { type: "file" };
-import tpl_realtime_chat_gitignore from "../templates/realtime-chat/.gitignore" with { type: "file" };
 import tpl_realtime_chat_oxlintrc_json from "../templates/realtime-chat/.oxlintrc.json" with { type: "file" };
 import tpl_realtime_chat_AGENTS_md from "../templates/realtime-chat/AGENTS.md" with { type: "file" };
 import tpl_realtime_chat_app_api_chat_messages_route_ts from "../templates/realtime-chat/app/api/chat/messages/route.ts" with { type: "file" };
@@ -68,6 +67,7 @@ import tpl_realtime_chat_app_api_health_route_ts from "../templates/realtime-cha
 import tpl_realtime_chat_app_globals_css from "../templates/realtime-chat/app/globals.css" with { type: "file" };
 import tpl_realtime_chat_app_layout_tsx from "../templates/realtime-chat/app/layout.tsx" with { type: "file" };
 import tpl_realtime_chat_app_page_tsx from "../templates/realtime-chat/app/page.tsx" with { type: "file" };
+import tpl_realtime_chat_gitignore from "../templates/realtime-chat/gitignore" with { type: "file" };
 import tpl_realtime_chat_lefthook_yml from "../templates/realtime-chat/lefthook.yml" with { type: "file" };
 import tpl_realtime_chat_package_json from "../templates/realtime-chat/package.json" with { type: "file" };
 import tpl_realtime_chat_scripts_analyze_impact_ts from "../templates/realtime-chat/scripts/analyze-impact.ts" with { type: "file" };
@@ -106,7 +106,6 @@ import tpl_realtime_chat_tests_example_test_ts from "../templates/realtime-chat/
 import tpl_realtime_chat_tests_helpers_ts from "../templates/realtime-chat/tests/helpers.ts" with { type: "file" };
 import tpl_realtime_chat_tests_setup_ts from "../templates/realtime-chat/tests/setup.ts" with { type: "file" };
 import tpl_realtime_chat_tsconfig_json from "../templates/realtime-chat/tsconfig.json" with { type: "file" };
-import tpl_auth_starter_gitignore from "../templates/auth-starter/.gitignore" with { type: "file" };
 import tpl_auth_starter_oxlintrc_json from "../templates/auth-starter/.oxlintrc.json" with { type: "file" };
 import tpl_auth_starter_app_api_avatar_userId_route_ts from "../templates/auth-starter/app/api/avatar/[userId]/route.ts" with { type: "file" };
 import tpl_auth_starter_app_api_avatar_route_ts from "../templates/auth-starter/app/api/avatar/route.ts" with { type: "file" };
@@ -123,6 +122,7 @@ import tpl_auth_starter_app_login_page_tsx from "../templates/auth-starter/app/l
 import tpl_auth_starter_app_not_found_tsx from "../templates/auth-starter/app/not-found.tsx" with { type: "file" };
 import tpl_auth_starter_app_page_tsx from "../templates/auth-starter/app/page.tsx" with { type: "file" };
 import tpl_auth_starter_app_signup_page_tsx from "../templates/auth-starter/app/signup/page.tsx" with { type: "file" };
+import tpl_auth_starter_gitignore from "../templates/auth-starter/gitignore" with { type: "file" };
 import tpl_auth_starter_lefthook_yml from "../templates/auth-starter/lefthook.yml" with { type: "file" };
 import tpl_auth_starter_mandu_config_ts from "../templates/auth-starter/mandu.config.ts" with { type: "file" };
 import tpl_auth_starter_package_json from "../templates/auth-starter/package.json" with { type: "file" };
@@ -144,13 +144,13 @@ export const TEMPLATE_MANIFEST = new Map([
     [".github/README.md", tpl_default_github_README_md],
     [".github/workflows/ate-e2e-subset.yml", tpl_default_github_workflows_ate_e2e_subset_yml],
     [".github/workflows/ate-e2e.yml", tpl_default_github_workflows_ate_e2e_yml],
-    [".gitignore", tpl_default_gitignore],
     [".oxlintrc.json", tpl_default_oxlintrc_json],
     ["AGENTS.md", tpl_default_AGENTS_md],
     ["app/api/health/route.ts", tpl_default_app_api_health_route_ts],
     ["app/globals.css", tpl_default_app_globals_css],
     ["app/layout.tsx", tpl_default_app_layout_tsx],
     ["app/page.tsx", tpl_default_app_page_tsx],
+    ["gitignore", tpl_default_gitignore],
     ["lefthook.yml", tpl_default_lefthook_yml],
     ["package.json", tpl_default_package_json],
     ["scripts/analyze-impact.ts", tpl_default_scripts_analyze_impact_ts],
@@ -186,7 +186,6 @@ export const TEMPLATE_MANIFEST = new Map([
     [".github/README.md", tpl_realtime_chat_github_README_md],
     [".github/workflows/ate-e2e-subset.yml", tpl_realtime_chat_github_workflows_ate_e2e_subset_yml],
     [".github/workflows/ate-e2e.yml", tpl_realtime_chat_github_workflows_ate_e2e_yml],
-    [".gitignore", tpl_realtime_chat_gitignore],
     [".oxlintrc.json", tpl_realtime_chat_oxlintrc_json],
     ["AGENTS.md", tpl_realtime_chat_AGENTS_md],
     ["app/api/chat/messages/route.ts", tpl_realtime_chat_app_api_chat_messages_route_ts],
@@ -195,6 +194,7 @@ export const TEMPLATE_MANIFEST = new Map([
     ["app/globals.css", tpl_realtime_chat_app_globals_css],
     ["app/layout.tsx", tpl_realtime_chat_app_layout_tsx],
     ["app/page.tsx", tpl_realtime_chat_app_page_tsx],
+    ["gitignore", tpl_realtime_chat_gitignore],
     ["lefthook.yml", tpl_realtime_chat_lefthook_yml],
     ["package.json", tpl_realtime_chat_package_json],
     ["scripts/analyze-impact.ts", tpl_realtime_chat_scripts_analyze_impact_ts],
@@ -235,7 +235,6 @@ export const TEMPLATE_MANIFEST = new Map([
     ["tsconfig.json", tpl_realtime_chat_tsconfig_json],
   ])],
   ["auth-starter", new Map([
-    [".gitignore", tpl_auth_starter_gitignore],
     [".oxlintrc.json", tpl_auth_starter_oxlintrc_json],
     ["app/api/avatar/[userId]/route.ts", tpl_auth_starter_app_api_avatar_userId_route_ts],
     ["app/api/avatar/route.ts", tpl_auth_starter_app_api_avatar_route_ts],
@@ -252,6 +251,7 @@ export const TEMPLATE_MANIFEST = new Map([
     ["app/not-found.tsx", tpl_auth_starter_app_not_found_tsx],
     ["app/page.tsx", tpl_auth_starter_app_page_tsx],
     ["app/signup/page.tsx", tpl_auth_starter_app_signup_page_tsx],
+    ["gitignore", tpl_auth_starter_gitignore],
     ["lefthook.yml", tpl_auth_starter_lefthook_yml],
     ["mandu.config.ts", tpl_auth_starter_mandu_config_ts],
     ["package.json", tpl_auth_starter_package_json],
