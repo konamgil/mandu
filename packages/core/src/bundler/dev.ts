@@ -96,6 +96,16 @@ export interface DevBundlerOptions {
    */
   onContentChange?: (filePath: string) => void | Promise<void>;
   /**
+   * Issue #240 — React Compiler opt-in. Forwarded verbatim to each
+   * `buildClientBundles()` invocation (initial build + every rebuild
+   * triggered by `handleFileChange`). Off by default. SSR paths are
+   * never affected regardless of this flag.
+   */
+  reactCompiler?: {
+    enabled?: boolean;
+    compilerConfig?: Record<string, unknown>;
+  };
+  /**
    * Phase 7.0 R2 Agent D — package.json change notification.
    *
    * We intentionally do NOT auto-restart on `package.json` — dependency
@@ -392,6 +402,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     onResourceChange,
     onContentChange,
     onPackageJsonChange,
+    reactCompiler,
     watchDirs: customWatchDirs = [],
     disableDefaultWatchDirs = false,
   } = options;
@@ -401,6 +412,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
   const initialBuild = await buildClientBundles(manifest, rootDir, {
     minify: false,
     sourcemap: true,
+    reactCompiler,
   });
 
   if (initialBuild.success) {
@@ -1312,6 +1324,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
           minify: false,
           sourcemap: true,
           targetRouteIds: targetIds,
+          reactCompiler,
         });
         const buildTime = performance.now() - startTime;
         if (result.success) {
@@ -1369,6 +1382,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
           minify: false,
           sourcemap: true,
           skipFrameworkBundles: true,
+          reactCompiler,
         });
 
         const buildTime = performance.now() - startTime;
@@ -1493,6 +1507,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
         minify: false,
         sourcemap: true,
         targetRouteIds: [routeId],
+        reactCompiler,
       });
 
       const buildTime = performance.now() - startTime;
