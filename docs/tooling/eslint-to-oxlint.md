@@ -43,6 +43,34 @@ related_docs:
 **언제 이전하면 안 되나**: custom ESLint 플러그인에 의존 중이면
 당분간 보류. oxlint 는 dynamic plugin 을 지원하지 않습니다 (Rust 바이너리).
 
+## 1.5 Mandu 기존 프로젝트 자동 설치
+
+Mandu 프로젝트라면 아래 한 줄로 §2 / §3.1 과정을 전부 자동화:
+
+```bash
+mandu lint --setup
+```
+
+이게 해주는 것:
+
+- `.oxlintrc.json` 없으면 Mandu 표준 템플릿으로 생성
+- `package.json` 의 `scripts.lint` / `scripts.lint:fix` 없으면 추가 (있으면 보존)
+- `devDependencies.oxlint` 없으면 `^1.61.0` 추가
+- `bun install` 실행
+- 초기 lint 패스로 현재 error/warning 베이스라인 출력
+
+**Idempotent** — 두 번째 실행 시 전부 skip 되고 "nothing to do" 로 끝남.
+
+**안전장치** — 이미 `scripts.lint` 가 ESLint 를 가리키고 있으면 덮어쓰지 않고 경고만 표시. 사용자가 수동으로 전환할 수 있게.
+
+`--dry-run` 으로 미리보기 가능:
+
+```bash
+mandu lint --setup --dry-run
+```
+
+`mandu lint` (인자 없음) 은 그냥 `bun run lint` 를 대신 실행합니다.
+
 ## 2. 설치
 
 ### 2.1 의존성

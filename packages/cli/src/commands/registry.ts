@@ -649,6 +649,34 @@ registerCommand({
 });
 
 registerCommand({
+  id: "lint",
+  description: "Run oxlint (or set it up with --setup on an existing project)",
+  help: [
+    "",
+    "  mandu lint — run the project's lint script (usually `oxlint .`)",
+    "",
+    "  Flags:",
+    "    --setup       Install oxlint + scaffold .oxlintrc.json + wire scripts",
+    "    --dry-run     With --setup, print the plan without writing",
+    "    --yes         With --setup, skip any confirmation prompts",
+    "",
+    "  Examples:",
+    "    mandu lint",
+    "    mandu lint --setup",
+    "    mandu lint --setup --dry-run",
+    "",
+  ].join("\n"),
+  async run(ctx) {
+    const { lint } = await import("./lint");
+    return lint({
+      setup: ctx.options.setup === "true" || ctx.options.setup === "",
+      dryRun: ctx.options["dry-run"] === "true" || ctx.options["dry-run"] === "",
+      yes: ctx.options.yes === "true" || ctx.options.yes === "",
+    });
+  },
+});
+
+registerCommand({
   id: "doctor",
   description: "Analyze Guard failures + suggest patches",
   async run(ctx) {
