@@ -13,6 +13,8 @@
     "start": "mandu start",
     "check": "mandu check",
     "guard": "mandu guard",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
     "test": "bun test",
     "test:auto": "mandu test:auto",
     "test:e2e:ci": "mandu test:auto --ci"
@@ -35,6 +37,7 @@
     "@types/react-dom": "^19.2.0",
     "tailwindcss": "^4.1.0",
     "typescript": ">=6.0.0",
-    "@typescript/native-preview": "beta"
+    "@typescript/native-preview": "beta",
+    "oxlint": "^1.61.0"
   }
 }

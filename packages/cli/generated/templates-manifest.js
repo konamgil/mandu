@@ -20,6 +20,7 @@ import tpl_default_github_README_md from "../templates/default/.github/README.md
 import tpl_default_github_workflows_ate_e2e_subset_yml from "../templates/default/.github/workflows/ate-e2e-subset.yml" with { type: "file" };
 import tpl_default_github_workflows_ate_e2e_yml from "../templates/default/.github/workflows/ate-e2e.yml" with { type: "file" };
 import tpl_default_gitignore from "../templates/default/.gitignore" with { type: "file" };
+import tpl_default_oxlintrc_json from "../templates/default/.oxlintrc.json" with { type: "file" };
 import tpl_default_AGENTS_md from "../templates/default/AGENTS.md" with { type: "file" };
 import tpl_default_app_api_health_route_ts from "../templates/default/app/api/health/route.ts" with { type: "file" };
 import tpl_default_app_globals_css from "../templates/default/app/globals.css" with { type: "file" };
@@ -58,6 +59,7 @@ import tpl_realtime_chat_github_README_md from "../templates/realtime-chat/.gith
 import tpl_realtime_chat_github_workflows_ate_e2e_subset_yml from "../templates/realtime-chat/.github/workflows/ate-e2e-subset.yml" with { type: "file" };
 import tpl_realtime_chat_github_workflows_ate_e2e_yml from "../templates/realtime-chat/.github/workflows/ate-e2e.yml" with { type: "file" };
 import tpl_realtime_chat_gitignore from "../templates/realtime-chat/.gitignore" with { type: "file" };
+import tpl_realtime_chat_oxlintrc_json from "../templates/realtime-chat/.oxlintrc.json" with { type: "file" };
 import tpl_realtime_chat_AGENTS_md from "../templates/realtime-chat/AGENTS.md" with { type: "file" };
 import tpl_realtime_chat_app_api_chat_messages_route_ts from "../templates/realtime-chat/app/api/chat/messages/route.ts" with { type: "file" };
 import tpl_realtime_chat_app_api_chat_stream_route_ts from "../templates/realtime-chat/app/api/chat/stream/route.ts" with { type: "file" };
@@ -103,6 +105,7 @@ import tpl_realtime_chat_tests_helpers_ts from "../templates/realtime-chat/tests
 import tpl_realtime_chat_tests_setup_ts from "../templates/realtime-chat/tests/setup.ts" with { type: "file" };
 import tpl_realtime_chat_tsconfig_json from "../templates/realtime-chat/tsconfig.json" with { type: "file" };
 import tpl_auth_starter_gitignore from "../templates/auth-starter/.gitignore" with { type: "file" };
+import tpl_auth_starter_oxlintrc_json from "../templates/auth-starter/.oxlintrc.json" with { type: "file" };
 import tpl_auth_starter_app_api_avatar_userId_route_ts from "../templates/auth-starter/app/api/avatar/[userId]/route.ts" with { type: "file" };
 import tpl_auth_starter_app_api_avatar_route_ts from "../templates/auth-starter/app/api/avatar/route.ts" with { type: "file" };
 import tpl_auth_starter_app_api_login_route_ts from "../templates/auth-starter/app/api/login/route.ts" with { type: "file" };
@@ -139,6 +142,7 @@ export const TEMPLATE_MANIFEST = new Map([
     [".github/workflows/ate-e2e-subset.yml", tpl_default_github_workflows_ate_e2e_subset_yml],
     [".github/workflows/ate-e2e.yml", tpl_default_github_workflows_ate_e2e_yml],
     [".gitignore", tpl_default_gitignore],
+    [".oxlintrc.json", tpl_default_oxlintrc_json],
     ["AGENTS.md", tpl_default_AGENTS_md],
     ["app/api/health/route.ts", tpl_default_app_api_health_route_ts],
     ["app/globals.css", tpl_default_app_globals_css],
@@ -179,6 +183,7 @@ export const TEMPLATE_MANIFEST = new Map([
     [".github/workflows/ate-e2e-subset.yml", tpl_realtime_chat_github_workflows_ate_e2e_subset_yml],
     [".github/workflows/ate-e2e.yml", tpl_realtime_chat_github_workflows_ate_e2e_yml],
     [".gitignore", tpl_realtime_chat_gitignore],
+    [".oxlintrc.json", tpl_realtime_chat_oxlintrc_json],
     ["AGENTS.md", tpl_realtime_chat_AGENTS_md],
     ["app/api/chat/messages/route.ts", tpl_realtime_chat_app_api_chat_messages_route_ts],
     ["app/api/chat/stream/route.ts", tpl_realtime_chat_app_api_chat_stream_route_ts],
@@ -226,6 +231,7 @@ export const TEMPLATE_MANIFEST = new Map([
   ])],
   ["auth-starter", new Map([
     [".gitignore", tpl_auth_starter_gitignore],
+    [".oxlintrc.json", tpl_auth_starter_oxlintrc_json],
     ["app/api/avatar/[userId]/route.ts", tpl_auth_starter_app_api_avatar_userId_route_ts],
     ["app/api/avatar/route.ts", tpl_auth_starter_app_api_avatar_route_ts],
     ["app/api/login/route.ts", tpl_auth_starter_app_api_login_route_ts],
@@ -254,4 +260,4 @@ export const TEMPLATE_MANIFEST = new Map([
 ]);
 
 /** Total number of embedded template files (sanity check). */
-export const EMBEDDED_FILE_COUNT = 111;
+export const EMBEDDED_FILE_COUNT = 114;

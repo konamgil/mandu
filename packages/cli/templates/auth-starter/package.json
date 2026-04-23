@@ -14,6 +14,8 @@
     "start": "mandu start",
     "check": "mandu check",
     "guard": "mandu guard",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
     "test:e2e": "playwright test --config=tests/e2e/playwright.config.ts",
     "test:e2e:ci": "playwright test --config=tests/e2e/playwright.config.ts --reporter=html,json,junit"
   },
@@ -32,6 +34,7 @@
     "@tailwindcss/cli": "^4.1.0",
     "tailwindcss": "^4.1.0",
     "@playwright/test": "^1.59.1",
-    "playwright": "^1.59.1"
+    "playwright": "^1.59.1",
+    "oxlint": "^1.61.0"
   }
 }
