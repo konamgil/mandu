@@ -75,7 +75,7 @@ describe("createRpcClient — request shape", () => {
     const [url, init] = (fx as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
     expect(url).toBe("/api/rpc/posts/list");
     expect(init?.method).toBe("POST");
-    expect((init?.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expect(((init?.headers ?? {}) as Record<string, string>)["Content-Type"]).toBe("application/json");
     expect(JSON.parse(init?.body as string)).toEqual({ input: { limit: 5 } });
   });
 

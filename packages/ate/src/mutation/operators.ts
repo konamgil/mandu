@@ -335,7 +335,7 @@ const skipMiddleware: MutationOperator = {
       const expr = (c as unknown as { getExpression(): Node }).getExpression();
       if (expr.getKind() !== SK.PropertyAccessExpression) continue;
       const exprText = expr.getText();
-      if (!/\.use$/.test(exprText)) continue;
+      if (!exprText.endsWith(".use")) continue;
       const receiverNode = (expr as unknown as { getExpression(): Node }).getExpression();
       const receiverText = receiverNode.getText();
       const start = c.getStart();

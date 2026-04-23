@@ -229,6 +229,10 @@ export class CloudflareSandboxAdapter implements PlaygroundAdapter {
         "Complete the SDK wiring in Phase 16.2-live before deploying. " +
         "See docs/playground/deployment.md."
     );
+    // Unreachable — present so the compiler/linter treats this as a
+    // generator even though every invocation throws synchronously on
+    // the first `next()`. Removing it flips `require-yield` to error.
+    yield undefined as never;
   }
 
   async dispose(): Promise<void> {

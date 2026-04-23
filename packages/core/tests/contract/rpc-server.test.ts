@@ -19,11 +19,14 @@ import {
 } from "../../src/contract/rpc";
 
 function makeReq(url: string, body: unknown, method = "POST"): Request {
-  return new Request(url, {
+  const init: RequestInit = {
     method,
     headers: { "Content-Type": "application/json" },
-    body: body === undefined ? null : JSON.stringify(body),
-  });
+  };
+  if (method !== "GET" && method !== "HEAD") {
+    init.body = body === undefined ? null : JSON.stringify(body);
+  }
+  return new Request(url, init);
 }
 
 async function envelope<T>(r: Response): Promise<RpcWireEnvelope<T>> {

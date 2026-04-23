@@ -26,13 +26,7 @@
 
     "no-control-regex": "off",
     "no-useless-catch": "off",
-    "no-useless-empty-export": "off",
-    "no-unsafe-optional-chaining": "off",
-    "no-empty-pattern": "off",
-    "require-yield": "off",
-    "unicorn/prefer-string-starts-ends-with": "off",
     "unicorn/no-new-array": "off",
-    "unicorn/no-invalid-fetch-options": "off",
     "typescript/no-this-alias": "off",
     "oxc/only-used-in-recursion": "off"
   },

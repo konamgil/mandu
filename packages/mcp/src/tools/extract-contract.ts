@@ -226,7 +226,7 @@ export function renderContractModule(
       .replace(/[^A-Za-z0-9_-]/g, "") || "api";
 
   const contractName = `${camelize(group)}Contract`;
-  const urlPath = "/api/" + segs.filter((s) => !/^route\./.test(s)).join("/");
+  const urlPath = "/api/" + segs.filter((s) => !s.startsWith("route.")).join("/");
 
   const endpoints = schemas
     .map((s) => {

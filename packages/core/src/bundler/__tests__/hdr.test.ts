@@ -285,7 +285,7 @@ describe("Phase 7.2 Agent B — slot-refetch broadcast", () => {
     );
     expect(custom).toBeDefined();
     expect(custom?.payload?.event).toBe("mandu:slot-refetch");
-    expect((custom?.payload?.data as { routeId: string }).routeId).toBe(
+    expect(((custom?.payload?.data ?? {}) as { routeId: string }).routeId).toBe(
       "dashboard",
     );
     ws.close();

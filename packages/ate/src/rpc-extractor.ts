@@ -223,7 +223,7 @@ function scanMiddlewareLike(sf: SourceFile, SK: typeof SyntaxKindEnum): string[]
     const expr = (c as unknown as { getExpression(): TsmNode }).getExpression();
     if (expr.getKind() !== SK.PropertyAccessExpression) continue;
     const text = expr.getText();
-    if (!/\.use$/.test(text)) continue;
+    if (!text.endsWith(".use")) continue;
     const args = (c as unknown as { getArguments(): TsmNode[] }).getArguments();
     if (args.length === 0) continue;
     const first = args[0];

@@ -125,7 +125,7 @@ describe("island() - Pattern Detection", () => {
   });
 
   test("detects declarative pattern (strategy + Component)", () => {
-    const Component = ({}: {}) => null;
+    const Component = (_props: Record<string, never>) => null;
     const result = island("visible", Component);
 
     // Should be IslandComponent, not CompiledClientIsland

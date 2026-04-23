@@ -124,5 +124,3 @@ declare global {
     __MANDU_HMR__?: ManduHMRGlobal;
   }
 }
-
-export {}; // ensure this file is a module for `declare global`

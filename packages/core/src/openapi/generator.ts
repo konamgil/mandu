@@ -937,7 +937,7 @@ function yamlScalar(value: unknown): string {
     const reservedScalar = /^(~|null|true|false|yes|no|on|off)$/i.test(value);
     const leadingIndicator = /^[-?&*!|>'"%@`]/.test(value);
     const hasFlowOrComment = /[\[\]{},#]/.test(value);
-    const hasKeyLike = /:\s/.test(value) || /:$/.test(value);
+    const hasKeyLike = /:\s/.test(value) || value.endsWith(":");
     const needsQuote =
       value === "" ||
       /^[\s]|[\s]$/.test(value) ||

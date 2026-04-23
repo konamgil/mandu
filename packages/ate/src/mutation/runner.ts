@@ -354,7 +354,7 @@ export function resolveTestCommand(repoRoot: string, absTarget: string): string[
 
 function deriveRouteIdFromPath(relPath: string): string | null {
   // Only attempt for `app/**/route.ts` / `app/**/page.tsx`.
-  if (!/^app\//.test(relPath)) return null;
+  if (!relPath.startsWith("app/")) return null;
   const base = basename(relPath);
   if (base !== "route.ts" && base !== "route.tsx" && base !== "page.tsx") return null;
   try {
