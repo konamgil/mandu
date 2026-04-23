@@ -20,8 +20,12 @@ import {
   guardConfig,
   formatConfigGuardResult,
   calculateHealthScore,
+  collectCompilerLintTargets,
+  runReactCompilerLint,
+  formatCompilerReport,
   type GuardConfig,
   type ConfigGuardResult,
+  type ReactCompilerDiagnostic,
 } from "@mandujs/core";
 import path from "path";
 import { resolveFromCwd, isDirectory, pathExists } from "../util/fs";
@@ -111,6 +115,11 @@ export async function check(): Promise<boolean> {
     count: 0,
     warnings: [],
   };
+  // Issue #240 Phase 2 — the generated manifest is reused below by the
+  // React Compiler bailout linter, which needs the hydrated-routes set
+  // to know which files to feed ESLint. Stored here so we don't
+  // regenerate the manifest twice.
+  let fsRoutesManifest: Awaited<ReturnType<typeof generateManifest>>["manifest"] | null = null;
 
   if (enableFsRoutes) {
     routesSummary.enabled = true;
@@ -122,6 +131,7 @@ export async function check(): Promise<boolean> {
         });
         routesSummary.count = result.manifest.routes.length;
         routesSummary.warnings = result.warnings;
+        fsRoutesManifest = result.manifest;
 
         if (quiet) {
           print(`✅ FS Routes: ${routesSummary.count}`);
@@ -275,7 +285,64 @@ export async function check(): Promise<boolean> {
     }
   }
 
-  // 5) Combined health score
+  // 5) React Compiler bailout diagnostics (#240 Phase 2)
+  //
+  // Only runs when:
+  //   - `experimental.reactCompiler.enabled: true` in mandu.config.ts
+  //   - A manifest was generated above (needs hydrated routes)
+  //   - Output format is console (JSON mode keeps a minimal summary)
+  //
+  // Peer deps (`eslint`, `eslint-plugin-react-compiler`) are optional;
+  // the runner logs a single warning and returns `[]` when absent so
+  // a user who enabled the flag but forgot to install ESLint never
+  // sees `mandu check` blow up.
+  const rcConfig = config.experimental?.reactCompiler;
+  let compilerDiagnostics: ReactCompilerDiagnostic[] = [];
+  let compilerSkipped = false;
+  if (rcConfig?.enabled === true && fsRoutesManifest) {
+    try {
+      const targets = await collectCompilerLintTargets(fsRoutesManifest, rootDir);
+      if (targets.length === 0) {
+        if (format === "console" && !quiet) {
+          log("🧠 React Compiler — no hydrated-route files to lint");
+          log("");
+        }
+      } else {
+        const result = await runReactCompilerLint({
+          projectRoot: rootDir,
+          targetFiles: targets,
+          severity: rcConfig.strict === true ? "error" : "warning",
+        });
+        compilerDiagnostics = result.diagnostics;
+        compilerSkipped = result.skipped;
+
+        if (format === "console") {
+          if (!quiet) {
+            log(formatCompilerReport(compilerDiagnostics, { projectRoot: rootDir }));
+            log("");
+          } else if (compilerDiagnostics.length > 0) {
+            print(
+              `🧠 React Compiler: ${compilerDiagnostics.length} bailout(s) in ${new Set(compilerDiagnostics.map((d) => d.file)).size} file(s)`,
+            );
+          } else if (!compilerSkipped) {
+            print("✅ React Compiler: no bailouts");
+          }
+        }
+
+        if (rcConfig.strict === true && compilerDiagnostics.length > 0) {
+          success = false;
+        }
+      }
+    } catch (err) {
+      if (format === "console") {
+        console.warn(
+          `⚠️  React Compiler lint failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
+  // 6) Combined health score
   const healthScore = calculateHealthScore(
     report.totalViolations,
     report.bySeverity.error,

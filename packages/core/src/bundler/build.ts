@@ -164,6 +164,62 @@ export const _testOnly_scanIslandFiles = scanIslandFiles;
  */
 export const _testOnly_getHydratedRoutes = getHydratedRoutes;
 
+/**
+ * Issue #240 Phase 2 — collect every file the React Compiler plugin
+ * would touch during a client build. Used by `mandu check` to feed
+ * `runReactCompilerLint` so developers see which components are
+ * silently bailing out.
+ *
+ * Included:
+ *   - `*.island.tsx` / `*.island.ts` under each hydrated route dir
+ *     (+ `_components/` / `_islands/` siblings — matches
+ *     `scanIslandFiles` exactly).
+ *   - `route.clientModule` for every hydrated route (`"use client"`
+ *     page entry).
+ *   - `*.partial.ts` / `*.partial.tsx` anywhere under `rootDir`.
+ *
+ * Paths are absolute and deduplicated. Returns `[]` when the manifest
+ * has no hydrated routes.
+ */
+export async function collectCompilerLintTargets(
+  manifest: RoutesManifest,
+  rootDir: string,
+): Promise<string[]> {
+  const hydratedRoutes = getHydratedRoutes(manifest);
+  if (hydratedRoutes.length === 0) return [];
+
+  const out = new Set<string>();
+
+  // 1) Islands (reuses the bundler's canonical scanner).
+  const islandFiles = await scanIslandFiles(hydratedRoutes, rootDir);
+  for (const entry of islandFiles) {
+    out.add(path.resolve(entry.filePath));
+  }
+
+  // 2) `"use client"` page modules — the hydrated-route filter
+  //    already asserted `clientModule` exists.
+  for (const route of hydratedRoutes) {
+    const rel = route.clientModule ?? route.module;
+    if (rel) out.add(path.resolve(rootDir, rel));
+  }
+
+  // 3) Partials — glob the whole project once. Partials live anywhere
+  //    the user chooses, they're not sibling-scoped like islands.
+  try {
+    const glob = new Bun.Glob("**/*.partial.{ts,tsx}");
+    for await (const rel of glob.scan({ cwd: rootDir, absolute: true })) {
+      if (rel.includes(`${path.sep}node_modules${path.sep}`)) continue;
+      if (rel.includes(`${path.sep}.mandu${path.sep}`)) continue;
+      out.add(path.resolve(rel));
+    }
+  } catch {
+    // Bun.Glob unavailable or scan failed — skip partials rather than
+    // aborting the whole diagnostic run.
+  }
+
+  return Array.from(out).sort();
+}
+
 /** Build a single per-island bundle. */
 async function buildPerIslandBundle(
   entry: IslandFileEntry, outDir: string, options: BundlerOptions

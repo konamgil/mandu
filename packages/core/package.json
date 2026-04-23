@@ -113,7 +113,9 @@
     "jsdom": ">=24.0.0",
     "happy-dom": ">=15.0.0",
     "@babel/core": "^7.29.0",
-    "babel-plugin-react-compiler": "^1.0.0"
+    "babel-plugin-react-compiler": "^1.0.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-react-compiler": "^19.0.0 || ^1.0.0"
   },
   "peerDependenciesMeta": {
     "@tailwindcss/cli": {
@@ -138,6 +140,12 @@
       "optional": true
     },
     "babel-plugin-react-compiler": {
+      "optional": true
+    },
+    "eslint": {
+      "optional": true
+    },
+    "eslint-plugin-react-compiler": {
       "optional": true
     }
   },

@@ -721,6 +721,13 @@ export const ManduConfigSchema = z
           .object({
             enabled: z.boolean().optional(),
             compilerConfig: z.record(z.unknown()).optional(),
+            /**
+             * Phase 2 — `mandu check` fails (exit 1) when any bailout
+             * diagnostic is produced. Useful as a CI gate once a
+             * project stabilises its client components. Default
+             * `false` (report but do not fail).
+             */
+            strict: z.boolean().optional(),
           })
           .strict()
           .optional(),

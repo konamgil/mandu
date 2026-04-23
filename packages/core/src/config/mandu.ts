@@ -705,6 +705,13 @@ export interface ManduConfig {
        * Omit to use react-compiler defaults.
        */
       compilerConfig?: Record<string, unknown>;
+      /**
+       * Phase 2 — CI-strict mode. When `true`, `mandu check` exits
+       * non-zero if the bailout linter reports any diagnostic. Useful
+       * as a regression gate once a project's client components are
+       * known-good. Default `false` (report without failing).
+       */
+      strict?: boolean;
     };
   };
 }

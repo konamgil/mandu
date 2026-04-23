@@ -27,6 +27,15 @@ export {
   type ReactCompilerPluginOptions,
 } from "./react-compiler";
 
+export {
+  runReactCompilerLint,
+  formatCompilerReport,
+  type ReactCompilerDiagnostic,
+  type RunReactCompilerLintOptions,
+  type RunReactCompilerLintResult,
+  type FormatCompilerReportOptions,
+} from "./react-compiler-lint";
+
 /**
  * Subset of `ManduConfig.guard` consumed by `defaultBundlerPlugins()`.
  * We deliberately don't import the full `ManduConfig` type to keep the
