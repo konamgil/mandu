@@ -13,13 +13,13 @@
     "test:e2e:ci": "playwright test --config=tests/e2e/playwright.config.ts --reporter=html,json,junit"
   },
   "dependencies": {
-    "@mandujs/core": "^0.19.2",
+    "@mandujs/core": "workspace:*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@mandujs/cli": "^0.20.0",
-    "@mandujs/mcp": "^0.18.10",
+    "@mandujs/cli": "workspace:*",
+    "@mandujs/mcp": "workspace:*",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "typescript": "^5.0.0",
