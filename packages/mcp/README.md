@@ -138,8 +138,7 @@ bunx @mandujs/mcp --root /path/to/project
 
 | Tool | Description |
 |------|-------------|
-| `mandu_validate_slot` | Validate slot against constraints |
-| `mandu_validate_slots` | Batch validate multiple slots |
+| `mandu_get_slot_constraints` | Get recommended slot constraint presets |
 
 ### Architecture Negotiation (RFC-001) 🆕
 

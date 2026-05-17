@@ -145,15 +145,15 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     process.exit(1);
   }
 
-  // Per-command --help routing.
-  //
-  // Issue #269 — every `mandu <cmd> ... --help` invocation prints the
-  // command's own help (or a synthesized summary), not the global help
-  // surface that hid which command was being asked about. Subcommand-
-  // specific help (e.g. `mandu ai chat --help` → chat's help) is a
-  // follow-up: today every command falls back to the parent's help block
-  // when --help is set anywhere in the argv.
-  if (options.help) {
+  // Per-command --help routing. Known subcommands get first chance to
+  // render their own help, e.g. `mandu ai chat --help` -> CHAT_HELP.
+  const positional = options._positional;
+  const isKnownSubcommandHelp = !!(
+    options.help &&
+    positional &&
+    registration.subcommands?.includes(positional)
+  );
+  if (options.help && !isKnownSubcommandHelp) {
     const helpCtx: CommandContext = { args, options };
     const help = registration.help;
     if (typeof help === "string") {

@@ -124,6 +124,11 @@ export async function emitWorkersBundle(
       "cloudflare:workers",
       // node: builtins — Workers nodejs_compat polyfills these.
       "node:*",
+      // Optional a11y peer deps. They are dynamically loaded only when
+      // `mandu build --audit` runs and must not be resolved for edge bundles.
+      "axe-core",
+      "jsdom",
+      "happy-dom",
     ],
   });
 

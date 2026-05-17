@@ -1124,8 +1124,26 @@ registerCommand({
       });
     }
 
+    if (subCommand === "page" || subCommand === "api" || subCommand === "feature") {
+      const { generateScaffold } = await import("./generate-scaffold");
+      return generateScaffold({
+        kind: subCommand,
+        name: ctx.args[2] || ctx.options._positional,
+        methods: ctx.options.methods,
+        force: ctx.options.force === "true",
+      });
+    }
+
+    if (subCommand === "both") {
+      const { generateApply } = await import("./generate-apply");
+      return generateApply({
+        force: ctx.options.force === "true",
+      });
+    }
+
     // Default: generate all (FS Routes + Resources)
     if (subCommand && !subCommand.startsWith("--")) {
+      console.error(`Unknown generate subcommand: ${subCommand}`);
       return false; // Unknown subcommand
     }
 

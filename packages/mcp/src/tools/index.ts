@@ -162,7 +162,7 @@ import {
 /**
  * 도구 모듈 정보
  */
-interface ToolModule {
+export interface ToolModule {
   category: string;
   definitions: Tool[];
   handlers: (
@@ -188,7 +188,7 @@ interface ToolModule {
 /**
  * 빌트인 도구 모듈 목록
  */
-const TOOL_MODULES: ToolModule[] = [
+export const TOOL_MODULES: ToolModule[] = [
   { category: "spec", definitions: specToolDefinitions, handlers: specTools },
   { category: "generate", definitions: generateToolDefinitions, handlers: generateTools },
   { category: "transaction", definitions: transactionToolDefinitions, handlers: transactionTools },
@@ -200,18 +200,18 @@ const TOOL_MODULES: ToolModule[] = [
   { category: "slot", definitions: slotToolDefinitions, handlers: slotTools },
   { category: "hydration", definitions: hydrationToolDefinitions, handlers: hydrationTools },
   { category: "contract", definitions: contractToolDefinitions, handlers: contractTools },
-  { category: "brain", definitions: brainToolDefinitions, handlers: brainTools as ToolModule["handlers"], requiresServer: true },
+  { category: "brain", definitions: brainToolDefinitions, handlers: brainTools, requiresServer: true },
   { category: "runtime", definitions: runtimeToolDefinitions, handlers: runtimeTools },
   { category: "seo", definitions: seoToolDefinitions, handlers: seoTools },
-  { category: "project", definitions: projectToolDefinitions, handlers: projectTools as ToolModule["handlers"], requiresServer: true },
+  { category: "project", definitions: projectToolDefinitions, handlers: projectTools, requiresServer: true },
   // ate + ate-run accept an optional Server so notifications/progress
   // can flow (issue #238). `acceptsServer: true` forwards the server
   // when available but still registers when it isn't — callers that
   // boot without an MCP transport get progress no-oped silently.
-  { category: "ate", definitions: ateToolDefinitions, handlers: ateTools as ToolModule["handlers"], acceptsServer: true },
-  { category: "ate-phase5", definitions: atePhase5ToolDefinitions, handlers: createAtePhase5Handlers as unknown as ToolModule["handlers"] },
+  { category: "ate", definitions: ateToolDefinitions, handlers: ateTools, acceptsServer: true },
+  { category: "ate-phase5", definitions: atePhase5ToolDefinitions, handlers: createAtePhase5Handlers },
   { category: "ate-context", definitions: ateContextToolDefinitions, handlers: ateContextTools },
-  { category: "ate-run", definitions: ateRunToolDefinitions, handlers: ateRunTools as ToolModule["handlers"], acceptsServer: true },
+  { category: "ate-run", definitions: ateRunToolDefinitions, handlers: ateRunTools, acceptsServer: true },
   { category: "ate-flakes", definitions: ateFlakesToolDefinitions, handlers: ateFlakesTools },
   { category: "ate-prompt", definitions: atePromptToolDefinitions, handlers: atePromptTools },
   { category: "ate-exemplar", definitions: ateExemplarToolDefinitions, handlers: ateExemplarTools },
@@ -284,6 +284,37 @@ const TOOL_MODULES: ToolModule[] = [
   },
 ];
 
+export function validateBuiltinToolModules(
+  modules: readonly ToolModule[] = TOOL_MODULES
+): string[] {
+  const issues: string[] = [];
+  const categories = new Set<string>();
+  const toolNames = new Map<string, string>();
+
+  for (const module of modules) {
+    if (categories.has(module.category)) {
+      issues.push(`duplicate tool category: ${module.category}`);
+    }
+    categories.add(module.category);
+
+    if (module.definitions.length === 0) {
+      issues.push(`tool category has no definitions: ${module.category}`);
+    }
+
+    for (const definition of module.definitions) {
+      const previousCategory = toolNames.get(definition.name);
+      if (previousCategory) {
+        issues.push(
+          `duplicate tool definition: ${definition.name} in ${previousCategory} and ${module.category}`
+        );
+      }
+      toolNames.set(definition.name, module.category);
+    }
+  }
+
+  return issues;
+}
+
 /**
  * 빌트인 도구들을 레지스트리에 등록
  *
@@ -309,6 +340,10 @@ export function registerBuiltinTools(
   const allowedCategories = options?.profile
     ? getProfileCategories(options.profile)
     : null;
+  const definitionIssues = validateBuiltinToolModules();
+  if (definitionIssues.length > 0) {
+    throw new Error(`Invalid MCP tool module registry:\n${definitionIssues.join("\n")}`);
+  }
 
   for (const module of TOOL_MODULES) {
     // Profile filtering: skip categories not in the allowed list
@@ -324,11 +359,7 @@ export function registerBuiltinTools(
     try {
       let handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
       if (module.requiresServer) {
-        handlers = (module.handlers as (root: string, srv: Server, mon: ActivityMonitor) => Record<string, (args: Record<string, unknown>) => Promise<unknown>>)(
-          projectRoot,
-          server!,
-          monitor!,
-        );
+        handlers = module.handlers(projectRoot, server, monitor);
       } else if (module.acceptsServer) {
         // Forward the Server when available; fall back to just projectRoot.
         handlers = server

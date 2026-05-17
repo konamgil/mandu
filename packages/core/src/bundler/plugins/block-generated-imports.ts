@@ -1,5 +1,5 @@
 /**
- * Bun bundler plugin — hard-fail on direct `__generated__/` imports.
+ * Bun bundler plugin — hard-fail on direct generated-artifact imports.
  *
  * Background
  * ──────────
@@ -8,14 +8,15 @@
  * but it only runs when the user (or CI) invokes `mandu guard check`.
  * Autonomous coding agents routinely bypass that step. This plugin closes
  * the gap at the bundler level: every `mandu dev` / `mandu build` pass
- * installs it by default, and any import whose specifier contains
- * `__generated__` fails the build with a structured, actionable error.
+ * installs it by default, and any import whose specifier targets
+ * `__generated__` or `.mandu/generated` fails the build with a structured,
+ * actionable error.
  *
  * Design
  * ──────
- * - `onResolve({ filter: /__generated__/ })` — Bun hands us every import
- *   whose *specifier* matches the regex, along with the importer's path
- *   (`args.importer`). We never return a result; we always throw.
+ * - `onResolve({ filter: DEFAULT_BLOCK_FILTER })` — Bun hands us every
+ *   import whose *specifier* matches the regex, along with the importer's
+ *   path (`args.importer`). We never return a result; we always throw.
  * - The error is `ForbiddenGeneratedImportError`, a named subclass of
  *   `Error`. Tests can `instanceof`-check; Bun surfaces `error.message` in
  *   its `result.logs` output for CLI display.
@@ -90,8 +91,8 @@ export interface BlockGeneratedImportsOptions {
   allowImporter?: (importerPath: string) => boolean;
   /**
    * Custom filter regex applied to the import specifier. Defaults to
-   * `/__generated__/`. Mandu ships a single default — exposing this for
-   * test harnesses that want to narrow or broaden the filter.
+   * generated-artifact paths. Mandu ships a single default — exposing this
+   * for test harnesses that want to narrow or broaden the filter.
    */
   filter?: RegExp;
 }
@@ -114,7 +115,7 @@ export function defaultAllowImporter(importerPath: string): boolean {
 }
 
 /**
- * Build a `BunPlugin` that blocks direct `__generated__/` imports.
+ * Build a `BunPlugin` that blocks direct generated-artifact imports.
  *
  * Usage — call from `defaultBundlerPlugins(config)` (see `./index.ts`).
  * Every `safeBuild` / `Bun.build` invocation in Mandu funnels through
@@ -123,7 +124,7 @@ export function defaultAllowImporter(importerPath: string): boolean {
 export function blockGeneratedImports(
   options: BlockGeneratedImportsOptions = {},
 ): BunPlugin {
-  const filter = options.filter ?? /__generated__/;
+  const filter = options.filter ?? DEFAULT_BLOCK_FILTER;
   const allowImporter = options.allowImporter ?? defaultAllowImporter;
 
   return {
@@ -152,4 +153,4 @@ export function blockGeneratedImports(
 }
 
 /** Exported for unit-test convenience — keep the filter text assertable. */
-export const DEFAULT_BLOCK_FILTER = /__generated__/;
+export const DEFAULT_BLOCK_FILTER = /__generated__|(?:^|[\/\\])\.mandu[\/\\]generated(?:[\/\\]|$)/;

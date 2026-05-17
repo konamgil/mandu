@@ -1,5 +1,11 @@
 # @mandujs/ate
 
+## 0.26.1
+
+### Patch Changes
+
+- Fix issue #273 dogfooding regressions across SSR data documentation, island guidance, dev routing, generators, diagnostics, deploy inference, generated import guards, metadata routes, and JSX title hoisting.
+
 ## 1.0.0
 
 ### Patch Changes

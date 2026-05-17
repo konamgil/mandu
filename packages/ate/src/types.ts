@@ -266,6 +266,8 @@ export interface RunInput {
    * contains multiple `test(...)` blocks and only a subset should run.
    */
   grep?: string;
+  /** Hard timeout for the whole Playwright process. Default: 10 minutes. */
+  timeoutMs?: number;
 }
 
 export interface ImpactInput {

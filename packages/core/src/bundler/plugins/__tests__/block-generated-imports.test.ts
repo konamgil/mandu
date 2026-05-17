@@ -84,6 +84,10 @@ describe("DEFAULT_BLOCK_FILTER", () => {
     expect("./__generated__/foo").toMatch(DEFAULT_BLOCK_FILTER);
     expect("../../src/__generated__/routes").toMatch(DEFAULT_BLOCK_FILTER);
   });
+  test("matches direct .mandu/generated relative specifiers", () => {
+    expect("../.mandu/generated/routes").toMatch(DEFAULT_BLOCK_FILTER);
+    expect("../../../.mandu/generated/server/repos/party.repo").toMatch(DEFAULT_BLOCK_FILTER);
+  });
   test("does NOT match look-alikes without double underscores", () => {
     expect("./generated/foo".match(DEFAULT_BLOCK_FILTER)).toBeNull();
     expect("./src/generate/foo".match(DEFAULT_BLOCK_FILTER)).toBeNull();

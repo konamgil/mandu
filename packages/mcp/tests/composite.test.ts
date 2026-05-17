@@ -2,6 +2,9 @@
  * Composite Tools – structure & definition tests
  */
 import { describe, it, expect } from "bun:test";
+import { mkdtemp, readFile, rm } from "fs/promises";
+import { tmpdir } from "os";
+import path from "path";
 import { compositeToolDefinitions, compositeTools } from "../src/tools/composite";
 
 const EXPECTED_NAMES = [
@@ -59,5 +62,25 @@ describe("compositeTools()", () => {
       expect(typeof handlers[n]).toBe("function");
     }
     expect(Object.keys(handlers)).toHaveLength(7);
+  });
+
+  it("mandu.island.add emits the supported @mandujs/core/client wrapper API", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mandu-mcp-island-"));
+    try {
+      const handlers = compositeTools(root);
+      const result = await handlers["mandu.island.add"]({
+        route: "home",
+        name: "Counter",
+        strategy: "visible",
+      }) as { success: boolean; file: string };
+
+      expect(result.success).toBe(true);
+      const source = await readFile(path.join(root, result.file), "utf8");
+      expect(source).toContain('import { wrapComponent } from "@mandujs/core/client"');
+      expect(source).toContain("export default wrapComponent(CounterInner)");
+      expect(source).not.toContain('island("visible"');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

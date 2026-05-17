@@ -194,7 +194,7 @@ export default route()
 
 - 페이지 대부분은 SSR HTML 그대로 / React 트리 복원 안 함.
 - `*.client.tsx` 로 선언한 island 만 별도 번들 + 하이드레이트.
-- 하이드레이션 전략은 island 단위로도 override 가능: `island("visible", <CommentsIsland />)`.
+- 페이지 레벨 하이드레이션 우선순위는 route hydration 설정으로 지정합니다.
 
 ### hydration: "full" — 전체 페이지 하이드레이션
 
@@ -221,14 +221,12 @@ export default route()
   .hydration("progressive", { trigger: "visible" })
   .handle(...);
 
-// 개별 island 에서도:
+// 인라인 interactive 영역:
 // app/components/Chart.client.tsx
-import { island } from "@mandujs/core/client";
-export default island("idle", <Chart />);             // 메인 쓰레드 idle 시
-// 또는
-export default island("interaction", <Popover />);    // 사용자 상호작용 순간
-// 또는
-export default island("media(min-width: 768px)", <DesktopNav />);  // 조건부 viewport
+import { partial } from "@mandujs/core/client";
+
+export const ChartPartial = partial({ component: Chart, priority: "idle" });
+export const PopoverPartial = partial({ component: Popover, priority: "interaction" });
 ```
 
 - **visible**: IntersectionObserver 로 viewport 진입 시.
@@ -336,7 +334,7 @@ export default route()
 
 ```tsx
 // app/ClientApp.client.tsx
-import { island } from "@mandujs/core/client";
+import { wrapComponent } from "@mandujs/core/client";
 import { useState, useEffect } from "react";
 
 function ClientApp() {
@@ -349,7 +347,7 @@ function ClientApp() {
   return <>{data ? <Main data={data} /> : <LoadingSpinner />}</>;
 }
 
-export default island("eager", <ClientApp />);  // 즉시 마운트
+export default wrapComponent(ClientApp);
 ```
 
 - 서버는 빈 div 하나만 렌더링 → 사실상 `index.html + app.js` 형태.
@@ -378,8 +376,8 @@ A. 쓰기 빈도 + TTFB 민감도:
 ### Q. `ppr` 에서 `Suspense` 경계 내부가 에러나면?
 A. React 의 `ErrorBoundary` 로 감싸면 fallback 렌더링. Mandu 가 emit 하는 에러 boundary 는 `[data-mandu-error-boundary]` attribute 달려 있어 E2E 에서 추적 가능.
 
-### Q. 한 페이지 안에서 여러 island 가 다른 hydration 전략 써도 되나?
-A. 네. 페이지 레벨 `hydration: "island"` 안에서 island 마다 `island("visible", ...)` / `island("idle", ...)` / `island("interaction", ...)` 따로 지정 가능.
+### Q. 한 페이지 안에서 여러 interactive 영역이 다른 hydration 전략을 써도 되나?
+A. 네. 페이지 레벨 island 는 route hydration 우선순위를 따르고, 인라인 영역은 `partial({ priority })` 로 `"visible"`, `"idle"`, `"interaction"` 등을 지정합니다.
 
 ### Q. `static` + `hydration: "full"` 조합은 언제 쓰나?
 A. 거의 안 씁니다. 전체 트리를 client 에서 복원할 거면 서버 렌더링 한 번의 비용이 정당화 안 됨. 그 경우 보통 `static + island` 로 interactive 부분만 분리합니다.

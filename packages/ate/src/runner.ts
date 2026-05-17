@@ -105,6 +105,7 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
   }
 
   const baseURL = input.baseURL ?? process.env.BASE_URL ?? "http://localhost:3333";
+  const timeoutMs = normalizeTimeoutMs(input.timeoutMs);
 
   const args = [
     "playwright",
@@ -158,11 +159,11 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
   }
 
   const exitCode: number = await new Promise((resolve, reject) => {
-    // Timeout protection (10 minutes)
+    // Timeout protection for the whole Playwright process.
     const timeout = setTimeout(() => {
       child.kill("SIGTERM");
-      reject(new Error("Playwright 실행 타임아웃 (10분 초과)"));
-    }, 10 * 60 * 1000);
+      reject(new Error(`Playwright 실행 타임아웃 (${timeoutMs}ms 초과)`));
+    }, timeoutMs);
 
     child.on("exit", (code) => {
       clearTimeout(timeout);
@@ -193,4 +194,10 @@ export async function runPlaywright(input: RunInput): Promise<RunResult> {
   }
 
   return result;
+}
+
+function normalizeTimeoutMs(value: unknown): number {
+  const n = typeof value === "number" ? value : Number.NaN;
+  if (!Number.isFinite(n) || n <= 0) return 10 * 60 * 1000;
+  return Math.floor(n);
 }

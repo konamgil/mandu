@@ -1,5 +1,16 @@
 # @mandujs/mcp
 
+## 0.37.2
+
+### Patch Changes
+
+- Fix issue #273 dogfooding regressions across SSR data documentation, island guidance, dev routing, generators, diagnostics, deploy inference, generated import guards, metadata routes, and JSX title hoisting.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.2
+  - @mandujs/ate@0.26.1
+  - @mandujs/skills@0.20.1
+
 ## 0.37.0
 
 ### Minor Changes

@@ -1,5 +1,12 @@
 # @mandujs/playground-runner
 
+## 25.0.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.2
+
 ## 25.0.0
 
 ### Patch Changes

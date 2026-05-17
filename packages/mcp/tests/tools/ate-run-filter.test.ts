@@ -164,7 +164,7 @@ describe("mandu.ate.run — scope filters (#237)", () => {
     expect(capturedArgs[grepIdx + 1]).toBe("only-me");
   });
 
-  test("mandu.ate.run tool definition exposes onlyFiles / onlyRoutes / grep", async () => {
+  test("mandu.ate.run tool definition exposes onlyFiles / onlyRoutes / grep / timeoutMs", async () => {
     const { ateToolDefinitions } = await import("../../src/tools/ate.js");
     const runDef = ateToolDefinitions.find((d) => d.name === "mandu.ate.run")!;
     expect(runDef).toBeDefined();
@@ -174,6 +174,16 @@ describe("mandu.ate.run — scope filters (#237)", () => {
     expect(schema.properties).toHaveProperty("onlyFiles");
     expect(schema.properties).toHaveProperty("onlyRoutes");
     expect(schema.properties).toHaveProperty("grep");
+    expect(schema.properties).toHaveProperty("timeoutMs");
+  });
+
+  test("mandu.ate.auto_pipeline tool definition exposes timeoutMs", async () => {
+    const { ateToolDefinitions } = await import("../../src/tools/ate.js");
+    const runDef = ateToolDefinitions.find((d) => d.name === "mandu.ate.auto_pipeline")!;
+    const schema = runDef.inputSchema as {
+      properties: Record<string, unknown>;
+    };
+    expect(schema.properties).toHaveProperty("timeoutMs");
   });
 
   test("mandu_ate_run tool definition exposes grep", async () => {

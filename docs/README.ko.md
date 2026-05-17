@@ -30,15 +30,18 @@ bun run dev
 모든 인터랙티브 컴포넌트는 Island입니다. 하이드레이션 시점을 직접 선택합니다.
 
 ```tsx
-import { island } from "@mandujs/core";
+import { wrapComponent } from "@mandujs/core/client";
+import { useState } from "react";
 
-export default island("visible", ({ name }) => {
+function Counter({ name }: { name: string }) {
   const [count, setCount] = useState(0);
   return <button onClick={() => setCount((c) => c + 1)}>{name}: {count}</button>;
-});
+}
+
+export default wrapComponent(Counter);
 ```
 
-5가지 하이드레이션 전략: `load` (즉시), `idle` (requestIdleCallback), `visible` (IntersectionObserver), `media` (미디어 쿼리 매치), `never` (SSR 전용, JS 없음).
+페이지 레벨 우선순위는 `export const hydration = { strategy: "island", priority: "visible" }` 로 설정합니다.
 
 ### Filling API
 

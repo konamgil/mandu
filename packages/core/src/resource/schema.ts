@@ -246,9 +246,17 @@ export function getPluralName(definition: ResourceDefinition): string {
     return definition.name;
   }
 
-  // Simple pluralization: add 's'
-  // TODO: Add more sophisticated pluralization rules if needed
-  return `${definition.name}s`;
+  return pluralize(definition.name);
+}
+
+function pluralize(singular: string): string {
+  if (/[^aeiou]y$/i.test(singular)) {
+    return singular.slice(0, -1) + "ies";
+  }
+  if (/(?:s|x|z|ch|sh)$/i.test(singular)) {
+    return singular + "es";
+  }
+  return singular + "s";
 }
 
 /**

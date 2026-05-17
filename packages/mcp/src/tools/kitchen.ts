@@ -7,6 +7,7 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { loadManduConfig } from "@mandujs/core";
 import { getDevServerState } from "./project.js";
+import { readRuntimeControl } from "../utils/runtime-control.js";
 
 export const kitchenToolDefinitions: Tool[] = [
   {
@@ -22,6 +23,14 @@ export const kitchenToolDefinitions: Tool[] = [
         clear: {
           type: "boolean",
           description: "Clear errors after reading (default: false)",
+        },
+        baseURL: {
+          type: "string",
+          description: "Explicit dev server URL. Overrides runtime-control/config discovery.",
+        },
+        port: {
+          type: "number",
+          description: "Explicit dev server port. Overrides runtime-control/config discovery.",
         },
       },
       required: [],
@@ -52,6 +61,14 @@ export const kitchenToolDefinitions: Tool[] = [
           description:
             "Include git diff against MANDU_DIFF_BASE (default HEAD). Default true. Set false to skip when git is unavailable.",
         },
+        baseURL: {
+          type: "string",
+          description: "Explicit dev server URL. Overrides runtime-control/config discovery.",
+        },
+        port: {
+          type: "number",
+          description: "Explicit dev server port. Overrides runtime-control/config discovery.",
+        },
       },
       required: [],
     },
@@ -59,12 +76,29 @@ export const kitchenToolDefinitions: Tool[] = [
 ];
 
 /**
- * Resolve the dev server base URL. Prefers the port parsed from the
- * currently running `mandu dev` stdout; falls back to mandu config; final
- * default is 3333. Shared by every Kitchen-backed MCP tool so they all
- * agree on where to fetch from.
+ * Resolve the dev server base URL. Prefers explicit args, then
+ * `.mandu/runtime-control.json` from the running dev/start process, then
+ * captured stdout, then config/default 3333. Shared by every Kitchen-backed
+ * MCP tool so they all agree on where to fetch from.
  */
-async function resolveDevServerBaseUrl(projectRoot: string): Promise<string> {
+async function resolveDevServerBaseUrl(
+  projectRoot: string,
+  args: { baseURL?: unknown; port?: unknown } = {},
+): Promise<string> {
+  if (typeof args.baseURL === "string" && args.baseURL.trim()) {
+    return args.baseURL.trim().replace(/\/+$/, "");
+  }
+
+  const explicitPort = normalizePort(args.port);
+  if (explicitPort) {
+    return `http://localhost:${explicitPort}`;
+  }
+
+  const control = await readRuntimeControl(projectRoot);
+  if (control?.baseUrl) {
+    return control.baseUrl.replace(/\/+$/, "");
+  }
+
   let port: number | undefined;
 
   const serverState = getDevServerState();
@@ -85,11 +119,17 @@ async function resolveDevServerBaseUrl(projectRoot: string): Promise<string> {
   return `http://localhost:${port}`;
 }
 
+function normalizePort(value: unknown): number | undefined {
+  const raw = typeof value === "number" ? value : typeof value === "string" ? Number.parseInt(value, 10) : NaN;
+  if (!Number.isInteger(raw) || raw < 1 || raw > 65535) return undefined;
+  return raw;
+}
+
 export function kitchenTools(projectRoot: string) {
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
     "mandu.kitchen.errors": async (args: Record<string, unknown>) => {
       const { clear = false } = args as { clear?: boolean };
-      const baseUrl = await resolveDevServerBaseUrl(projectRoot);
+      const baseUrl = await resolveDevServerBaseUrl(projectRoot, args);
 
       try {
         // Fetch errors from Kitchen API
@@ -150,7 +190,7 @@ export function kitchenTools(projectRoot: string) {
         includeDiff = true,
       } = args as { includeBundle?: boolean; includeDiagnose?: boolean; includeDiff?: boolean };
 
-      const baseUrl = await resolveDevServerBaseUrl(projectRoot);
+      const baseUrl = await resolveDevServerBaseUrl(projectRoot, args);
       const params = new URLSearchParams();
       if (!includeBundle) params.set("bundle", "0");
       if (!includeDiagnose) params.set("diagnose", "0");

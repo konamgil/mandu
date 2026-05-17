@@ -13,6 +13,7 @@ import os from "os";
 import {
   buildDeployInferenceContext,
   classifyImports,
+  classifySourceDependencies,
   extractImports,
   hashSource,
 } from "../../../src/deploy/inference/context";
@@ -84,6 +85,22 @@ describe("classifyImports", () => {
 
   it("returns fetch-only when there are no imports at all", () => {
     expect(classifyImports([]).has("fetch-only")).toBe(true);
+  });
+});
+
+describe("classifySourceDependencies", () => {
+  it("flags local server/infra imports as database-backed", () => {
+    const source = `import { db } from "@/server/infra/db";\nexport default db.query("select 1");`;
+    const classes = classifySourceDependencies(source);
+    expect(classes.has("db")).toBe(true);
+    expect(classes.has("fetch-only")).toBe(false);
+  });
+
+  it("flags db tagged templates even when imports look edge-safe", () => {
+    const source = `import { Mandu } from "@mandujs/core";\nexport default Mandu.filling().get(() => db\`select 1\`);`;
+    const classes = classifySourceDependencies(source);
+    expect(classes.has("db")).toBe(true);
+    expect(classes.has("fetch-only")).toBe(false);
   });
 });
 
@@ -181,6 +198,25 @@ export default async function POST() { return new Response(); }`,
     };
     const ctx = await buildDeployInferenceContext(TEST_DIR, route);
     expect(ctx.dependencyClasses.has("db")).toBe(true);
+  });
+
+  it("classifies server/infra DB API as server runtime material", async () => {
+    const file = path.join(TEST_DIR, "app", "api", "embed", "route.ts");
+    await fs.writeFile(
+      file,
+      `import { db } from "@/server/infra/db";
+export default async function GET() { return Response.json(await db.query("select 1")); }
+`,
+    );
+    const route: RouteSpec = {
+      id: "api/embed",
+      pattern: "/api/embed",
+      module: path.relative(TEST_DIR, file),
+      kind: "api",
+    };
+    const ctx = await buildDeployInferenceContext(TEST_DIR, route);
+    expect(ctx.dependencyClasses.has("db")).toBe(true);
+    expect(ctx.dependencyClasses.has("fetch-only")).toBe(false);
   });
 
   it("survives a missing module file", async () => {

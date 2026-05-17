@@ -1013,6 +1013,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
     const resolved = await resolveManifest(rootDir, { fsRoutes: config.fsRoutes });
     manifest = resolved.manifest;
+    server.updateManifest(manifest);
     await registerHandlers(manifest, true);
     // #232 follow-up — see onChange above for rationale.
     await prewarmPageRoutes();
@@ -1163,6 +1164,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
         // Update server with new manifest
         manifest = result.manifest;
+        server.updateManifest(manifest);
         logDevEvent("Route manifest updated", [
           `Routes: ${manifest.routes.length}`,
           "Browser: full reload",

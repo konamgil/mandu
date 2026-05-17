@@ -39,7 +39,7 @@ describe("ManduConfigSchema — valid configs", () => {
     const result = ManduConfigSchema.safeParse({});
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.server.port).toBe(3000);
+      expect(result.data.server.port).toBe(3333);
       // Default: #190 moved from "localhost" → "0.0.0.0"; #223 moved
       // from "0.0.0.0" → "::" (IPv6 wildcard, dual-stack) so Windows
       // Node fetch("localhost") — which resolves to `::1` — reaches
@@ -284,7 +284,7 @@ describe("validateConfig — file-level", () => {
     const result = await validateConfig(tmpDir);
     expect(result.valid).toBe(true);
     expect(result.config).toBeDefined();
-    expect(result.config!.server.port).toBe(3000);
+    expect(result.config!.server.port).toBe(3333);
   });
 
   it("returns validation errors for invalid JSON config", async () => {

@@ -14,6 +14,7 @@ export interface AutoPipelineOptions {
   tsconfigPath?: string;
   routeGlobs?: string[];
   buildSalt?: string;
+  timeoutMs?: number;
 }
 
 export interface AutoPipelineResult {
@@ -116,6 +117,12 @@ export async function runFullPipeline(options: AutoPipelineOptions): Promise<Aut
     }
 
     // Step 4: Run
+    const timeoutMs = options.timeoutMs ?? 10 * 60 * 1000;
+    console.log(
+      "🧭 [ATE Pipeline] Browser setup: Playwright browsers must already be installed. " +
+      "If this step fails on first use, run `bunx playwright install chromium`.",
+    );
+    console.log(`⏱️ [ATE Pipeline] Playwright timeout: ${timeoutMs}ms`);
     console.log("🧪 [ATE Pipeline] Step 4/5: Run - Playwright 테스트 실행 중...");
     let runId = "";
     let exitCode = -1;
@@ -127,6 +134,7 @@ export async function runFullPipeline(options: AutoPipelineOptions): Promise<Aut
         baseURL: options.baseURL,
         ci: options.ci,
         onlyRoutes: impactResult?.selectedRoutes,
+        timeoutMs,
       });
       runId = runResult.runId;
       exitCode = runResult.exitCode;

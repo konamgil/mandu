@@ -249,6 +249,34 @@ describe("startServer 기본 동작", () => {
     expect(server.router).toBeDefined();
     expect(server.registry).toBeDefined();
     expect(typeof server.stop).toBe("function");
+    expect(typeof server.updateManifest).toBe("function");
+  });
+
+  it("updateManifest() refreshes the router dispatch table without restart", async () => {
+    const registry = createServerRegistry();
+    server = startServer({ version: 1, routes: [] }, { port: 0, registry });
+    registry.registerApiHandler("api/live", async () => Response.json({ live: true }));
+
+    const port = server.server.port;
+    const before = await fetch(`http://localhost:${port}/api/live`);
+    expect(before.status).toBe(404);
+
+    server.updateManifest({
+      version: 1,
+      routes: [
+        {
+          id: "api/live",
+          pattern: "/api/live",
+          kind: "api",
+          module: ".mandu/generated/server/api-live.ts",
+          methods: ["GET"],
+        },
+      ],
+    });
+
+    const after = await fetch(`http://localhost:${port}/api/live`);
+    expect(after.status).toBe(200);
+    expect(await after.json()).toEqual({ live: true });
   });
 
   it("stop() 호출 후 서버 객체를 반환한다", () => {

@@ -208,8 +208,8 @@ export function generateTemplatePatches(
           type: "modify",
           content:
             `// Example: app/my-feature.island.tsx\n` +
-            `import { island } from "@mandujs/core/client";\n\n` +
-            `export default island("visible", MyComponent);\n\n` +
+            `import { wrapComponent } from "@mandujs/core/client";\n\n` +
+            `export default wrapComponent(MyComponent);\n\n` +
             `// In page.tsx, reference via: <div data-island="my-feature">...</div>`,
           confidence: 0.9,
         });

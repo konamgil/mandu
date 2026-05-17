@@ -43,7 +43,7 @@ function _strictWithWarnings<T extends z.ZodRawShape>(
  */
 const ServerConfigSchema = z
   .object({
-    port: z.number().min(1).max(65535).default(3000),
+    port: z.number().min(1).max(65535).default(3333),
     // Default `"::"` (IPv6 wildcard, dual-stack): accepts both IPv4 and
     // IPv6 clients on one socket. Fixes Windows Node 17+ fetch failing
     // with `ECONNREFUSED ::1:PORT` because `localhost` resolves to `::1`

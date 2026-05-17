@@ -1,10 +1,10 @@
-import type { BunFile, Server, ServerWebSocket } from "bun";
+import type { Server, ServerWebSocket } from "bun";
 import type { RoutesManifest, RouteSpec, HydrationConfig, StaticParamSetSchema } from "../spec/schema";
 import type { BundleManifest } from "../bundler/types";
 import type { ManduFilling, RenderMode } from "../filling/filling";
 import { ManduContext, CookieManager } from "../filling/context";
 import { Router } from "./router";
-import { renderSSR, renderStreamingResponse, resolveAsyncElement } from "./ssr";
+import { renderSSR, resolveAsyncElement } from "./ssr";
 import {
   resolveMetadata,
   renderMetadata,
@@ -50,54 +50,33 @@ import {
   isCorsRequest,
 } from "./cors";
 import { validateImportPath } from "./security";
-import { KITCHEN_PREFIX, KitchenHandler, recordRequest } from "../kitchen/kitchen-handler";
 import {
-  eventBus,
-  type EventType,
-  type ObservabilityEvent,
-  type ObservabilitySeverity,
-} from "../observability/event-bus";
+  createRuntimeDevtoolsAdapter,
+  recordRuntimeRequest,
+  shouldRecordRuntimeRequest,
+  type RuntimeDevtoolsAdapter,
+  type RuntimeKitchenHandler,
+} from "./devtools-adapter";
 import {
-  HEAP_ENDPOINT,
-  METRICS_ENDPOINT,
-  buildMetricsResponse,
-  collectHeapSnapshot,
-  isObservabilityExposed,
-  recordHttpRequest,
-} from "../observability/metrics";
+  createRuntimeObservabilityLifecycle,
+  type RuntimeObservabilityLifecycle,
+} from "./observability-lifecycle";
 import {
   handleOpenAPIRequest,
   isOpenAPIEndpointEnabled,
   resolveOpenAPIEndpointSettings,
   type OpenAPIEndpointSettings,
 } from "./openapi-endpoint";
-// Phase 18.ψ — user-facing perf marks dashboard append. We include a
-// `perf` block on the `/_mandu/heap` payload when the feature is active
-// so operators see a unified view (heap + caches + perf histogram).
-// Importing the snapshot collector (rather than the whole module) keeps
-// the tree-shake footprint tight when perf is gated off.
-import { collectPerfSnapshot } from "../perf/user-marks";
-// Phase 18.θ — request tracing. Tracer lifecycle is owned by
-// `startServer()`; `runWithSpan` is used at the absolute TOP of the
-// request handler so every downstream await (middleware, filling
-// loader, SSR render) inherits the active span via AsyncLocalStorage.
-import type { Tracer } from "../observability/tracing";
-import {
-  createTracerFromConfig,
-  runWithSpan,
-  setTracer,
-} from "../observability/tracing";
 import {
   type MiddlewareFn,
   type MiddlewareConfig,
   loadMiddlewareSync,
 } from "./middleware";
-// Phase 18.ε — canonical request-level middleware composition API.
-// See `packages/core/src/middleware/{define,compose,bridge}.ts`.
 import {
-  compose as composeMiddleware,
+  buildRequestMiddlewareChain,
+  runRequestMiddleware,
   type ComposedHandler,
-} from "../middleware/compose";
+} from "./request-middleware";
 import type { Middleware } from "../middleware/define";
 // Phase 18.λ — scheduler wiring (statically imported so `startServer` stays
 // synchronous; the cost of unused code is trivial — `defineCron` is a thin
@@ -107,7 +86,15 @@ import { setActiveSchedulerRegistration } from "../middleware/scheduler-cron";
 import { createFetchHandler } from "./handler";
 import { wrapBunWebSocket, type WSHandlers, type WSUpgradeData } from "../filling/ws";
 import { handleImageRequest } from "./image-handler";
+import {
+  serveStaticFile,
+  computeStrongEtag,
+  computeStaticCacheControl,
+  matchesEtag,
+} from "./static-files";
+export { __clearStaticEtagCacheForTests } from "./static-files";
 import { extractShellHtml, createPPRResponse } from "./ppr";
+import { renderPageResponse } from "./page-render-response";
 import { isRedirectResponse } from "./redirect";
 import { isNotFoundResponse } from "./not-found";
 import { newId } from "../id";
@@ -326,57 +313,6 @@ function createRateLimitResponse(decision: RateLimitDecision, options: Normalize
   );
 
   return appendRateLimitHeaders(response, decision, options);
-}
-
-// ========== MIME Types ==========
-const MIME_TYPES: Record<string, string> = {
-  // JavaScript
-  ".js": "application/javascript",
-  ".mjs": "application/javascript",
-  ".ts": "application/typescript",
-  // CSS
-  ".css": "text/css",
-  // HTML
-  ".html": "text/html",
-  ".htm": "text/html",
-  // JSON
-  ".json": "application/json",
-  // Images
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  // Fonts
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".otf": "font/otf",
-  ".eot": "application/vnd.ms-fontobject",
-  // Documents
-  ".pdf": "application/pdf",
-  ".txt": "text/plain",
-  ".xml": "application/xml",
-  // Media
-  ".mp3": "audio/mpeg",
-  ".mp4": "video/mp4",
-  ".webm": "video/webm",
-  ".ogg": "audio/ogg",
-  // Archives
-  ".zip": "application/zip",
-  ".gz": "application/gzip",
-  // WebAssembly
-  ".wasm": "application/wasm",
-  // Source maps
-  ".map": "application/json",
-};
-
-function getMimeType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  return MIME_TYPES[ext] || "application/octet-stream";
 }
 
 // ========== Server Options ==========
@@ -668,6 +604,8 @@ export interface ManduServer {
   router: Router;
   /** 이 서버 인스턴스의 레지스트리 */
   registry: ServerRegistry;
+  /** Replace the live dispatch table after FS routes change in dev mode. */
+  updateManifest: (nextManifest: RoutesManifest) => void;
   stop: () => void;
 }
 
@@ -808,22 +746,8 @@ export interface ServerRegistrySettings {
    * in-head `<script>` and the 500-response HTML overlay. No-op in prod.
    */
   errorOverlay?: boolean;
-  /**
-   * Phase 17 — `/_mandu/heap` JSON exposure. `undefined` uses the
-   * default for the current mode (dev → on, prod → MANDU_DEBUG_HEAP).
-   */
-  heapEndpoint?: boolean;
-  /**
-   * Phase 17 — `/_mandu/metrics` Prometheus exposure. Same defaulting
-   * as `heapEndpoint`.
-   */
-  metricsEndpoint?: boolean;
-  /**
-   * Phase 18.θ — resolved request-tracing state. `undefined` means
-   * tracing is disabled (the hot path is branch-free). When set, every
-   * request opens a root span via `tracer.startSpanFromRequest()`.
-   */
-  tracer?: Tracer;
+  /** Runtime observability lifecycle: endpoints, tracing, perf, counters. */
+  observability?: RuntimeObservabilityLifecycle;
   /**
    * Production OpenAPI endpoint — resolved from `ServerOptions.openapi`.
    * `undefined` means the endpoint is disabled (hot path branch-free).
@@ -908,8 +832,10 @@ export class ServerRegistry {
    * to the framework's built-in 404 JSON error.
    */
   notFoundHandler: PageHandler | null = null;
-  /** Kitchen dev dashboard handler (dev mode only) */
-  kitchen: KitchenHandler | null = null;
+  /** Runtime devtools adapter (dev mode only) */
+  devtoolsAdapter: RuntimeDevtoolsAdapter | null = null;
+  /** Kitchen dev dashboard handler (dev mode only, kept for compatibility) */
+  kitchen: RuntimeKitchenHandler | null = null;
   /** 라우트별 캐시 옵션 (filling.loader()의 cacheOptions에서 등록) */
   readonly cacheOptions: Map<string, { revalidate?: number; staleWhileRevalidate?: number; tags?: string[] }> = new Map();
   /** 라우트별 렌더 모드 */
@@ -1346,474 +1272,7 @@ function createDefaultAppFactory(registry: ServerRegistry) {
   };
 }
 
-// ========== Static File Serving ==========
-
-interface StaticFileResult {
-  handled: boolean;
-  response?: Response;
-}
-
 const INTERNAL_CACHE_ENDPOINT = "/_mandu/cache";
-const INTERNAL_EVENTS_ENDPOINT = "/__mandu/events";
-
-function handleEventsStreamRequest(req: Request): Response {
-  const url = new URL(req.url);
-  const filterType = url.searchParams.get("type") || undefined;
-  const filterSeverity = url.searchParams.get("severity") || undefined;
-  const filterSource = url.searchParams.get("source") || undefined;
-  const filterTrace = url.searchParams.get("trace") || undefined;
-
-  const matches = (e: ObservabilityEvent): boolean => {
-    if (filterType && e.type !== filterType) return false;
-    if (filterSeverity && e.severity !== filterSeverity) return false;
-    if (filterSource && e.source !== filterSource) return false;
-    if (filterTrace && e.correlationId !== filterTrace) return false;
-    return true;
-  };
-
-  let unsubscribe: (() => void) | null = null;
-  let heartbeat: ReturnType<typeof setInterval> | null = null;
-
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const encoder = new TextEncoder();
-      const send = (data: string, eventName?: string) => {
-        try {
-          const prefix = eventName ? `event: ${eventName}\n` : "";
-          controller.enqueue(encoder.encode(`${prefix}data: ${data}\n\n`));
-        } catch {
-          // Stream closed
-        }
-      };
-
-      // Replay recent events that match filters
-      const recent = eventBus.getRecent();
-      for (const e of recent) {
-        if (matches(e)) send(JSON.stringify(e));
-      }
-
-      // Subscribe to live events
-      unsubscribe = eventBus.on("*", (event) => {
-        if (matches(event)) send(JSON.stringify(event));
-      });
-
-      // Heartbeat (comment line) every 15s to keep connection alive
-      heartbeat = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(`: heartbeat\n\n`));
-        } catch {
-          // ignore
-        }
-      }, 15000);
-
-      // Tear down when client disconnects
-      const signal = req.signal;
-      if (signal) {
-        signal.addEventListener("abort", () => {
-          if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-          if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
-          try { controller.close(); } catch { /* noop */ }
-        });
-      }
-    },
-    cancel() {
-      if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-      if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
-    },
-  });
-
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-store, must-revalidate",
-      "Connection": "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
-  });
-}
-
-function handleEventsRecentRequest(req: Request): Response {
-  const url = new URL(req.url);
-  const count = url.searchParams.get("count");
-  const type = url.searchParams.get("type") || undefined;
-  const severity = url.searchParams.get("severity") || undefined;
-  const windowParam = url.searchParams.get("windowMs");
-  const windowMs = windowParam ? Number(windowParam) : undefined;
-
-  const events = eventBus.getRecent(
-    count ? Number(count) : undefined,
-    {
-      type: type as EventType | undefined,
-      severity: severity as ObservabilitySeverity | undefined,
-    },
-  );
-  const stats = eventBus.getStats(windowMs);
-  return Response.json({ events, stats });
-}
-
-function createStaticErrorResponse(status: 400 | 403 | 404 | 500): Response {
-  const body = {
-    400: "Bad Request",
-    403: "Forbidden",
-    404: "Not Found",
-    500: "Internal Server Error",
-  }[status];
-
-  return new Response(body, { status });
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Static asset cache policy — Issue #218
-//
-// The `immutable` Cache-Control directive is a *contract* with browsers:
-// "the bytes at this URL will never change." Violating it (by overwriting a
-// stable-name file between builds) means users keep stale CSS/JS until they
-// hard-refresh. Mandu historically emitted `/.mandu/client/globals.css`
-// and `/.mandu/client/runtime*.js` with fixed URLs but stamped the response
-// with `immutable`, which is the exact failure mode.
-//
-// Policy:
-//   - Hashed URL  (e.g. `.../chunk.a1b2c3d4.js`) → `immutable` is safe,
-//     1-year max-age.
-//   - Stable URL  (no hash in filename) → `max-age=0, must-revalidate`.
-//     The client revalidates on every request; a matching `If-None-Match`
-//     short-circuits to 304 with no body, so the cost is one HEAD-sized
-//     round-trip, not a full re-download.
-//
-// Strong ETag (content-hash) is emitted for every `/.mandu/client/*`
-// response so conditional GETs are cheap. We use `Bun.hash` (wyhash, ~5GB/s)
-// for the digest and cache results keyed by `path + size + mtime` to avoid
-// re-hashing on every hit.
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Heuristic: does the filename look like it carries a content hash?
- *
- * Matches:
- *   - `name.<hash>.ext`      where hash is >=8 hex chars (e.g. `chunk.a1b2c3d4.js`)
- *   - `name-<hash>.ext`      (e.g. `vendor-8f3a2b9c.js`)
- *   - `name.<hash>.chunk.ext` common bundler shape
- *
- * A hash segment is 8+ lowercase hex chars. Longer digests (16, 20, 32) also
- * match. We deliberately avoid matching ALL-hex short names like `abc.js`
- * (requires min length 8).
- */
-function hasContentHashInFilename(filename: string): boolean {
-  // `.` or `-` separator, 8+ hex chars, then `.` before extension
-  // Examples that match: chunk.a1b2c3d4.js, vendor-8f3a2b9c.js, app.1234567890abcdef.css
-  // Examples that DON'T match: globals.css, runtime.js, chunk.js
-  return /[.\-][a-f0-9]{8,}\.[a-z0-9]+$/i.test(filename);
-}
-
-/**
- * Compute Cache-Control for a static asset.
- *
- * - Dev: no caching (always refetch).
- * - Prod, hashed filename: `public, max-age=31536000, immutable` (1 year).
- * - Prod, stable filename: `public, max-age=0, must-revalidate` (force
- *   revalidation; 304 via `If-None-Match` keeps it cheap).
- */
-function computeStaticCacheControl(filename: string, isDev: boolean): string {
-  if (isDev) return "no-cache, no-store, must-revalidate";
-  if (hasContentHashInFilename(filename)) {
-    return "public, max-age=31536000, immutable";
-  }
-  return "public, max-age=0, must-revalidate";
-}
-
-/**
- * In-process ETag cache keyed by absolute filePath. Entry is invalidated
- * when `size` or `mtime` changes. Avoids re-hashing hot files on every
- * request. The hot path is a single lookup + two scalar compares.
- */
-interface EtagCacheEntry {
-  size: number;
-  mtime: number;
-  etag: string;
-}
-const etagCache = new Map<string, EtagCacheEntry>();
-const ETAG_CACHE_MAX = 2048;
-
-/** Cheap LRU eviction: drop oldest insert when over cap. */
-function evictEtagCacheIfNeeded(): void {
-  if (etagCache.size <= ETAG_CACHE_MAX) return;
-  const oldestKey = etagCache.keys().next().value;
-  if (oldestKey !== undefined) etagCache.delete(oldestKey);
-}
-
-/**
- * Compute a strong ETag from file bytes (Bun.hash / wyhash). Cached by
- * `path + size + mtime` so we only re-hash when the file changes.
- *
- * Strong (not weak `W/`) because we actually hashed the payload — this
- * preserves byte-range / delta semantics per RFC 7232.
- */
-async function computeStrongEtag(
-  filePath: string,
-  file: BunFile,
-): Promise<string> {
-  const size = file.size;
-  const mtime = file.lastModified;
-
-  const cached = etagCache.get(filePath);
-  if (cached && cached.size === size && cached.mtime === mtime) {
-    return cached.etag;
-  }
-
-  // Bun.hash returns a number/bigint; stringify in base36 for compact ETag.
-  // Fall back to size+mtime-derived ETag if hashing ever throws (edge-runtime
-  // polyfills etc. — `Bun.hash` is a Bun-native primitive).
-  let digest: string;
-  try {
-    const bytes = await file.arrayBuffer();
-    const h = Bun.hash(bytes);
-    digest = typeof h === "bigint" ? h.toString(36) : Number(h).toString(36);
-  } catch {
-    digest = `${size.toString(36)}-${mtime.toString(36)}`;
-  }
-
-  const etag = `"${digest}"`;
-  etagCache.set(filePath, { size, mtime, etag });
-  evictEtagCacheIfNeeded();
-  return etag;
-}
-
-/** Exposed for tests — allows clearing the ETag cache between cases. */
-export function __clearStaticEtagCacheForTests(): void {
-  etagCache.clear();
-}
-
-/**
- * RFC 7232 §3.2 — `If-None-Match` comparison.
- *
- * Accepts:
- *   - `*` wildcard (matches any current representation)
- *   - a single ETag (`"abc"` or `W/"abc"`)
- *   - a comma-separated list
- *
- * Uses weak-comparison semantics (strip leading `W/`) because that is the
- * RFC-prescribed form for `If-None-Match`; a strong server-side ETag still
- * matches a weak client token if the opaque-string portion is equal.
- */
-function matchesEtag(ifNoneMatch: string, currentEtag: string): boolean {
-  const trimmed = ifNoneMatch.trim();
-  if (trimmed === "*") return true;
-
-  const normalize = (tag: string): string => {
-    const t = tag.trim();
-    return t.startsWith("W/") ? t.slice(2) : t;
-  };
-
-  const currentNormalized = normalize(currentEtag);
-  for (const part of trimmed.split(",")) {
-    if (normalize(part) === currentNormalized) return true;
-  }
-  return false;
-}
-
-/**
- * 경로가 허용된 디렉토리 내에 있는지 검증
- * Path traversal 공격 방지
- */
-async function isPathSafe(filePath: string, allowedDir: string): Promise<boolean> {
-  try {
-    const resolvedPath = path.resolve(filePath);
-    const resolvedAllowedDir = path.resolve(allowedDir);
-
-    if (!resolvedPath.startsWith(resolvedAllowedDir + path.sep) &&
-        resolvedPath !== resolvedAllowedDir) {
-      return false;
-    }
-
-    // 파일이 없으면 안전 (존재하지 않는 경로)
-    try {
-      await fs.access(resolvedPath);
-    } catch {
-      return true;
-    }
-
-    // Symlink 해결 후 재검증
-    const realPath = await fs.realpath(resolvedPath);
-    const realAllowedDir = await fs.realpath(resolvedAllowedDir);
-
-    return realPath.startsWith(realAllowedDir + path.sep) ||
-           realPath === realAllowedDir;
-  } catch (error) {
-    console.warn(`[Mandu Security] Path validation failed: ${filePath}`, error);
-    return false;
-  }
-}
-
-/**
- * Issue #251 — public 폴더의 자산을 root URL로도 서빙하기 위한 화이트리스트.
- *
- * `mandu build --static` 은 `public/*` 을 dist 루트로 평탄화하므로 prod 에서는
- * `/images/foo.webp` 가 동작한다. dev 에서는 평탄화가 없어서 같은 URL 이 404
- * 였다 — 작성자는 `/public/...` (dev OK, prod 도 vercel rewrite 로 OK) 또는
- * `/...` (dev 깨짐, prod OK) 중 하나를 골라야 했다. 이제 dev 도 자산 확장자가
- * 있는 경로에 한해 `public/<path>` 를 fallback 으로 시도한다.
- *
- * 자산 확장자만 fallback 하므로 `/api/foo` 같은 라우트가 가려질 위험은 없다.
- * 파일이 없으면 `{ handled: false }` 를 반환해 라우터가 정상 매칭하도록 한다.
- */
-const PUBLIC_FLAT_ASSET_EXTENSIONS = new Set<string>([
-  ".webp", ".avif", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
-  ".pdf", ".zip", ".mp4", ".webm", ".mp3", ".wav",
-  ".woff", ".woff2", ".ttf", ".otf", ".eot",
-  ".css", ".js", ".map",
-]);
-
-/**
- * 정적 파일 서빙
- * - /.mandu/client/* : 클라이언트 번들 (Island hydration)
- * - /public/* : 정적 에셋 (이미지, CSS 등)
- * - /favicon.ico : 파비콘
- * - /<asset>.<ext> : public/<asset>.<ext> fallback (issue #251)
- *
- * 보안: Path traversal 공격 방지를 위해 모든 경로를 검증합니다.
- */
-async function serveStaticFile(pathname: string, settings: ServerRegistrySettings, request?: Request): Promise<StaticFileResult> {
-  let filePath: string | null = null;
-  let isBundleFile = false;
-  let isPublicFlatFallback = false;
-  let allowedBaseDir: string;
-  let relativePath: string;
-
-  // 1. 클라이언트 번들 파일 (/.mandu/client/*)
-  if (pathname.startsWith("/.mandu/client/")) {
-    // pathname에서 prefix 제거 후 안전하게 조합
-    relativePath = pathname.slice("/.mandu/client/".length);
-    allowedBaseDir = path.join(settings.rootDir, ".mandu", "client");
-    isBundleFile = true;
-  }
-  // 2. Public 폴더 파일 (/public/*)
-  else if (pathname.startsWith("/public/")) {
-    relativePath = pathname.slice("/public/".length);
-    allowedBaseDir = path.join(settings.rootDir, settings.publicDir);
-  }
-  // 3. .well-known/ 디렉토리 (#178: RFC 8615 표준 — Chrome DevTools, ACME, etc.)
-  else if (pathname.startsWith("/.well-known/")) {
-    relativePath = pathname.slice(1); // ".well-known/..."
-    allowedBaseDir = path.join(settings.rootDir, settings.publicDir);
-  }
-  // 4. Public 폴더의 루트 파일 (favicon.ico, robots.txt 등)
-  else if (
-    pathname === "/favicon.ico" ||
-    pathname === "/robots.txt" ||
-    pathname === "/sitemap.xml" ||
-    pathname === "/manifest.json"
-  ) {
-    relativePath = path.basename(pathname);
-    allowedBaseDir = path.join(settings.rootDir, settings.publicDir);
-  }
-  // 5. Public flat fallback (#251) — `mandu build --static` 의 평탄화와 dev 패리티
-  else if (PUBLIC_FLAT_ASSET_EXTENSIONS.has(path.extname(pathname).toLowerCase())) {
-    relativePath = pathname.slice(1);
-    allowedBaseDir = path.join(settings.rootDir, settings.publicDir);
-    isPublicFlatFallback = true;
-  } else {
-    return { handled: false }; // 정적 파일이 아님
-  }
-
-  // URL 디코딩 (실패 시 차단)
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(relativePath);
-  } catch {
-    return { handled: true, response: createStaticErrorResponse(400) };
-  }
-
-  // 정규화 + Null byte 방지
-  const normalizedPath = path.posix.normalize(decodedPath);
-  if (normalizedPath.includes("\0")) {
-    console.warn(`[Mandu Security] Null byte attack detected: ${pathname}`);
-    return { handled: true, response: createStaticErrorResponse(400) };
-  }
-
-  const normalizedSegments = normalizedPath.split("/");
-  if (normalizedSegments.some((segment) => segment === "..")) {
-    return { handled: true, response: createStaticErrorResponse(403) };
-  }
-
-  // 선행 슬래시 제거 → path.join이 base를 무시하지 않도록 보장
-  const safeRelativePath = normalizedPath.replace(/^\/+/, "");
-  filePath = path.join(allowedBaseDir, safeRelativePath);
-
-  // 최종 경로 검증: 허용된 디렉토리 내에 있는지 확인
-  if (!(await isPathSafe(filePath, allowedBaseDir!))) {
-    console.warn(`[Mandu Security] Path traversal attempt blocked: ${pathname}`);
-    return { handled: true, response: createStaticErrorResponse(403) };
-  }
-
-  try {
-    const file = Bun.file(filePath);
-    const exists = await file.exists();
-
-    if (!exists) {
-      // #251 — flat fallback 은 라우트와 path 충돌이 가능하므로 미존재 시
-      // 404 대신 라우터로 흘려보낸다 (e.g. `/foo.json` 라우트가 가려지지 않도록).
-      if (isPublicFlatFallback) return { handled: false };
-      return { handled: true, response: createStaticErrorResponse(404) };
-    }
-
-    const mimeType = getMimeType(filePath);
-    const filename = path.basename(filePath);
-
-    // Cache-Control — Issue #218: `immutable` is only safe when the URL
-    // contains a content hash. Stable-name bundles (globals.css, runtime.js)
-    // must use `max-age=0, must-revalidate` or clients will serve stale
-    // bytes until a hard refresh.
-    //
-    // Bundle files go through the hash-aware policy; non-bundle assets
-    // (public/*, favicon, etc.) keep the conservative 1-day cache they had
-    // before — they're user-controlled and unlikely to change per deploy.
-    let cacheControl: string;
-    if (settings.isDev) {
-      cacheControl = "no-cache, no-store, must-revalidate";
-    } else if (isBundleFile) {
-      cacheControl = computeStaticCacheControl(filename, /* isDev */ false);
-    } else {
-      cacheControl = "public, max-age=86400";
-    }
-
-    // Strong ETag from content hash for bundle files — enables cheap 304
-    // round-trips when the client revalidates (`If-None-Match`).
-    // Non-bundle static files keep a weak size+mtime validator (same as
-    // pre-#218 behaviour) — we don't pay the hash cost for user-owned
-    // `public/*` content the framework doesn't control.
-    const etag = isBundleFile
-      ? await computeStrongEtag(filePath, file)
-      : `W/"${file.size.toString(36)}-${file.lastModified.toString(36)}"`;
-
-    // 304 Not Modified — unnecessary transfer avoidance. We compare the
-    // full `If-None-Match` string; RFC 7232 also allows a comma-separated
-    // list and `*`, so handle those two forms explicitly.
-    const ifNoneMatch = request?.headers.get("If-None-Match");
-    if (ifNoneMatch && matchesEtag(ifNoneMatch, etag)) {
-      return {
-        handled: true,
-        response: new Response(null, {
-          status: 304,
-          headers: { "ETag": etag, "Cache-Control": cacheControl },
-        }),
-      };
-    }
-
-    return {
-      handled: true,
-      response: new Response(file, {
-        headers: {
-          "Content-Type": mimeType,
-          "Cache-Control": cacheControl,
-          "ETag": etag,
-        },
-      }),
-    };
-  } catch {
-    return { handled: true, response: createStaticErrorResponse(500) };
-  }
-}
 
 // ========== Request Handler ==========
 
@@ -1908,66 +1367,24 @@ async function handleRequest(req: Request, router: Router, registry: ServerRegis
   // Phase 1-4: Correlation ID — 한 요청에서 발생하는 모든 이벤트를 추적
   const correlationId = req.headers.get("x-mandu-request-id") ?? newId();
 
-  // ─── Phase 18.θ — TRACING wrap (absolute TOP of request handler) ─────────
-  // Opens a root server span BEFORE γ's prerendered check, BEFORE ζ's
-  // cache check, BEFORE any other Phase 18 logic. The span is bound to
-  // AsyncLocalStorage so every downstream `await` (middleware chain,
-  // filling loader, SSR render, sandbox exec) inherits it transparently
-  // via `getActiveSpan()` / `ctx.span`.
-  //
-  // Parent context: honours an incoming W3C `traceparent` header so
-  // upstream gateways / load balancers can correlate traces across
-  // service boundaries. Missing / malformed header → a new root trace-id.
-  //
-  // Zero overhead when tracing is disabled: `settings.tracer` is
-  // `undefined`, the `if` falls through, and we call the uninstrumented
-  // path exactly as before.
-  const tracer = registry.settings.tracer;
-  if (tracer && tracer.enabled) {
-    const url = new URL(req.url);
-    const rootSpan = tracer.startSpanFromRequest("http.request", req, {
-      kind: "server",
-      attributes: {
-        "http.method": req.method,
-        "http.url": req.url,
-        "http.target": url.pathname,
-        "http.scheme": url.protocol.replace(":", ""),
-        "http.host": url.host,
-        "mandu.correlation_id": correlationId,
-      },
-    });
-    try {
-      const response = await runWithSpan(rootSpan, () =>
-        handleRequestWithTracing(req, router, registry, requestStart, correlationId)
-      );
-      rootSpan.setAttribute("http.status_code", response.status);
-      if (response.status >= 500) {
-        rootSpan.setStatus("error", `HTTP ${response.status}`);
-      } else if (rootSpan.status === "unset") {
-        rootSpan.setStatus("ok");
-      }
-      return response;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      rootSpan.setStatus("error", msg);
-      throw err;
-    } finally {
-      rootSpan.end();
-    }
+  const observability = registry.settings.observability;
+  if (observability) {
+    return await observability.runRequest(
+      req,
+      requestStart,
+      correlationId,
+      () => handleRequestObserved(req, router, registry, requestStart, correlationId)
+    );
   }
-  // ─── End Phase 18.θ ──────────────────────────────────────────────────────
-
-  return await handleRequestWithTracing(req, router, registry, requestStart, correlationId);
+  return await handleRequestObserved(req, router, registry, requestStart, correlationId);
 }
 
 /**
- * Phase 18.θ — inner request handler. Extracted from {@link handleRequest}
- * so the tracing wrap at the top can run the body inside a
- * `runWithSpan()` scope without a giant indent level. Preserves the
- * exact pre-tracing semantics (correlation-id logging, Cache-Control
- * stamping, eventBus emission).
+ * Inner request handler. Observability lifecycle wrapping happens at
+ * {@link handleRequest}; this function keeps response post-processing in one
+ * place without owning tracing or metrics wiring directly.
  */
-async function handleRequestWithTracing(
+async function handleRequestObserved(
   req: Request,
   router: Router,
   registry: ServerRegistry,
@@ -1985,19 +1402,16 @@ async function handleRequestWithTracing(
       }
       const url = new URL(req.url);
       const p = url.pathname;
-      if (!p.startsWith("/.mandu/") && !p.startsWith("/__kitchen") && !p.startsWith("/__mandu/")) {
+      if (shouldRecordRuntimeRequest(p)) {
         const elapsed = Date.now() - requestStart;
-        console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${p} ${errorResponse.status} ${elapsed}ms`);
-        recordRequest({ id: correlationId, method: req.method, path: p, status: errorResponse.status, duration: elapsed, timestamp: Date.now() });
-        // Phase 1-2: HTTP 요청 → EventBus
-        eventBus.emit({
-          type: "http",
-          severity: errorResponse.status >= 500 ? "error" : errorResponse.status >= 400 ? "warn" : "info",
-          source: "server",
-          correlationId,
-          message: `${req.method} ${p} ${errorResponse.status}`,
+        registry.settings.observability?.recordDevRequest({
+          req,
+          path: p,
+          status: errorResponse.status,
           duration: elapsed,
-          data: { method: req.method, path: p, status: errorResponse.status, error: true },
+          correlationId,
+          error: true,
+          recordRequest: recordRuntimeRequest,
         });
       }
     }
@@ -2023,22 +1437,18 @@ async function handleRequestWithTracing(
       result.value.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
     }
 
-    if (!p.startsWith("/.mandu/") && !p.startsWith("/__kitchen") && !p.startsWith("/__mandu/")) {
+    if (shouldRecordRuntimeRequest(p)) {
       const elapsed = Date.now() - requestStart;
       const status = result.value.status;
       const cacheHdr = result.value.headers.get("X-Mandu-Cache") ?? "";
-      const cacheTag = cacheHdr ? ` ${cacheHdr}` : "";
-      console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${p} ${status} ${elapsed}ms${cacheTag}`);
-      recordRequest({ id: correlationId, method: req.method, path: p, status, duration: elapsed, timestamp: Date.now(), cacheStatus: cacheHdr || undefined });
-      // Phase 1-2: HTTP 요청 → EventBus
-      eventBus.emit({
-        type: "http",
-        severity: status >= 500 ? "error" : status >= 400 ? "warn" : "info",
-        source: "server",
-        correlationId,
-        message: `${req.method} ${p} ${status}${cacheTag}`,
+      registry.settings.observability?.recordDevRequest({
+        req,
+        path: p,
+        status,
         duration: elapsed,
-        data: { method: req.method, path: p, status, cache: cacheHdr || undefined },
+        correlationId,
+        cacheStatus: cacheHdr || undefined,
+        recordRequest: recordRuntimeRequest,
       });
     }
   }
@@ -2822,10 +2232,11 @@ async function renderPageSSR(
 
     // Island 래핑: 레이아웃 적용 전에 페이지 콘텐츠만 island div로 감쌈
     // 이렇게 하면 레이아웃은 island 바깥에 위치하여 하이드레이션 시 레이아웃이 유지됨
-    const needsIslandWrap =
+    const needsIslandWrap = !!(
       route.hydration &&
       route.hydration.strategy !== "none" &&
-      settings.bundleManifest;
+      settings.bundleManifest
+    );
 
     if (needsIslandWrap) {
       const bundle = settings.bundleManifest?.bundles[route.id];
@@ -2844,10 +2255,6 @@ async function renderPageSSR(
       app = await wrapWithLayouts(app, route.layoutChain, registry, params, layoutData);
     }
 
-    const serverData = loaderData
-      ? { [route.id]: { serverData: loaderData } }
-      : undefined;
-
     // #186: layout chain + page metadata 병합
     const builtMeta = await buildSSRMetadata(route, params, url, registry);
 
@@ -2856,92 +2263,28 @@ async function renderPageSSR(
       ? route.streaming
       : settings.streaming;
 
-    // Issue #198 / Phase 18.ξ — Async server component resolution policy.
-    //
-    // Non-streaming path (`renderToString`) cannot handle async components,
-    // so we MUST pre-resolve the tree up-front.
-    //
-    // Streaming path (`renderToReadableStream`, React 19) supports async
-    // components natively and is designed around progressive flushing. If
-    // we pre-resolve here, the caller blocks until every async component
-    // settles before the shell can be emitted — defeating the entire point
-    // of streaming (`TTFB` regresses from shell-ready to slowest-component).
-    // So in streaming mode we hand React the raw async tree. Head tags
-    // pushed from async components are captured by `renderToStream`'s
-    // `buildHtmlTail` (late-head injection) via `use-head`. The streaming
-    // shell-gen's `collectStreamingHeadTags` pre-pass uses `renderToString`
-    // internally and will throw on async trees — its try/catch already
-    // handles that case and returns an empty string, so the early shell
-    // emission is still correct; the late-head script fills in any
-    // metadata emitted during the async render.
-    if (!useStreaming) {
-      app = (await resolveAsyncElement(app)) as React.ReactElement;
-    }
-
-    if (useStreaming) {
-      const streamingResponse = await renderStreamingResponse(app, {
-        title: builtMeta.title,
-        headTags: builtMeta.headTags,
-        isDev: settings.isDev,
-        hmrPort: settings.hmrPort,
-        routeId: route.id,
-        routePattern: route.pattern,
-        // Issue #233 — emit data-mandu-layout so SPA nav can detect
-        // cross-layout transitions and hard-nav instead of half-swapping.
-        layoutChain: route.layoutChain,
-        hydration: route.hydration,
-        bundleManifest: settings.bundleManifest,
-        criticalData: loaderData as Record<string, unknown> | undefined,
-        enableClientRouter: true,
-        cssPath: settings.cssPath,
-        transitions: settings.transitions,
-        prefetch: settings.prefetch,
-        spa: settings.spa,
-        devtools: settings.devtools,
-        onShellReady: () => {
-          if (settings.isDev) {
-            console.log(`[Mandu Streaming] Shell ready: ${route.id}`);
-          }
-        },
-        onMetrics: (metrics) => {
-          if (settings.isDev) {
-            console.log(`[Mandu Streaming] Metrics for ${route.id}:`, {
-              shellReadyTime: `${metrics.shellReadyTime}ms`,
-              allReadyTime: `${metrics.allReadyTime}ms`,
-              hasError: metrics.hasError,
-            });
-          }
-        },
-      });
-      return ok(cookies ? cookies.applyToResponse(streamingResponse) : streamingResponse);
-    }
-
-    // 기존 renderToString 방식
-    // Note: hydration 래핑은 위에서 React 엘리먼트 레벨로 이미 처리됨
-    // renderToHTML에서 중복 래핑하지 않도록 hydration을 전달하되 strategy를 "none"으로 설정
-    // 단, hydration 스크립트(importmap, runtime 등)는 여전히 필요하므로 bundleManifest는 유지
-    const ssrResponse = renderSSR(app, {
+    const pageResponse = await renderPageResponse({
+      app,
+      useStreaming,
       title: builtMeta.title,
       headTags: builtMeta.headTags,
       isDev: settings.isDev,
       hmrPort: settings.hmrPort,
       routeId: route.id,
+      routePattern: route.pattern,
+      layoutChain: route.layoutChain,
       hydration: route.hydration,
       bundleManifest: settings.bundleManifest,
-      serverData,
-      enableClientRouter: true,
-      routePattern: route.pattern,
+      loaderData,
       cssPath: settings.cssPath,
-      islandPreWrapped: !!needsIslandWrap,
+      islandPreWrapped: needsIslandWrap,
       transitions: settings.transitions,
       prefetch: settings.prefetch,
       spa: settings.spa,
       devtools: settings.devtools,
-      // Issue #233 — SPA nav uses this to detect cross-layout transitions
-      // and fall back to a hard navigation.
-      layoutChain: route.layoutChain,
+      cookies,
     });
-    return ok(cookies ? cookies.applyToResponse(ssrResponse) : ssrResponse);
+    return ok(pageResponse);
   } catch (error) {
     const renderError = error instanceof Error ? error : new Error(String(error));
 
@@ -4026,50 +3369,11 @@ async function handleRequestInternal(
     return ok(await handleInternalCacheControlRequest(req, settings));
   }
 
-  // 1.7. Internal observability EventBus stream + recent snapshot
-  if (pathname === INTERNAL_EVENTS_ENDPOINT) {
-    return ok(handleEventsStreamRequest(req));
-  }
-  if (pathname === `${INTERNAL_EVENTS_ENDPOINT}/recent`) {
-    return ok(handleEventsRecentRequest(req));
-  }
-
-  // Phase 17 — heap snapshot + Prometheus metrics endpoints.
-  //
-  // Gating: dev mode exposes by default so the DX is zero-friction. Prod
-  // requires either `MANDU_DEBUG_HEAP=1` or explicit `observability.heapEndpoint:
-  // true` in `ServerOptions`. Operators can opt-out of even the dev exposure by
-  // passing `observability.heapEndpoint: false` (useful in tests that count
-  // listeners / assert route shape).
-  //
-  // Missing endpoints return 404 via the normal route-not-found path —
-  // scrapers can't distinguish "disabled" from "never existed". See
-  // `docs/ops/metrics.md` for the operator-facing guide.
-  if (pathname === HEAP_ENDPOINT) {
-    if (isObservabilityExposed(settings.isDev, settings.heapEndpoint)) {
-      // Phase 18.ψ — augment the Phase 17 payload with user-perf data.
-      // We append (never restructure) the `perf` key so consumers that
-      // rely on `.process`, `.caches`, `.bun` continue to parse. Keeping
-      // the composition here (not in metrics.ts) avoids a metrics→perf
-      // module dep — metrics stays a pure exposition layer.
-      const base = collectHeapSnapshot();
-      const perf = collectPerfSnapshot();
-      const body = { ...base, perf };
-      return ok(
-        new Response(JSON.stringify(body, null, 2), {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Cache-Control": "no-store",
-          },
-        }),
-      );
-    }
-  }
-  if (pathname === METRICS_ENDPOINT) {
-    if (isObservabilityExposed(settings.isDev, settings.metricsEndpoint)) {
-      return ok(buildMetricsResponse());
-    }
+  // 1.7. Internal observability endpoints: EventBus stream/recent, heap,
+  // Prometheus metrics, and user perf snapshot composition.
+  const observabilityResponse = settings.observability?.handleEndpoint(req, pathname);
+  if (observabilityResponse) {
+    return ok(observabilityResponse);
   }
 
   // Production OpenAPI endpoint — `/__mandu/openapi.json` + `.yaml`.
@@ -4092,10 +3396,10 @@ async function handleRequestInternal(
     if (openapiResponse) return ok(openapiResponse);
   }
 
-  // 2. Kitchen dev dashboard (dev mode only)
-  if (settings.isDev && pathname.startsWith(KITCHEN_PREFIX) && registry.kitchen) {
-    const kitchenResponse = await registry.kitchen.handle(req, pathname);
-    if (kitchenResponse) return ok(kitchenResponse);
+  // 2. Runtime devtools / Kitchen dashboard (dev mode only)
+  if (registry.devtoolsAdapter) {
+    const devtoolsResponse = await registry.devtoolsAdapter.handleRequest(req, pathname);
+    if (devtoolsResponse) return ok(devtoolsResponse);
   }
 
   // ─── Phase 18.ε — canonical request-level middleware chain ───────────────
@@ -4104,31 +3408,21 @@ async function handleRequestInternal(
   // Kitchen). Each composed layer can short-circuit with its own Response
   // or wrap the downstream Response after `next()` returns. Zero overhead
   // when no middleware is configured (settings.middlewareChain === undefined).
-  //
-  // Errors inside middleware propagate to the outer `handleRequest` catch,
-  // which converts them to 5xx via `errorToResponse`. Middleware authors
-  // don't need their own top-level try/catch.
-  //
-  // Re-entry: the chain's `finalHandler` recurses into this same function
-  // with `skipMiddleware=true` so the chain is not executed twice. The
-  // `next(rewrittenReq)` rewrite pattern flows through transparently —
-  // `finalReq` is whatever the innermost middleware asked us to dispatch.
-  //
-  // NOTE: intentionally contained. Does NOT alter route dispatch semantics.
-  // Coexists with α's 500-path, β's dispatch, γ's prerendered check,
-  // δ's island section. See `docs/architect/middleware-composition.md`.
-  if (!skipMiddleware && settings.middlewareChain) {
-    const composed = settings.middlewareChain;
-    const dispatchRoute = async (finalReq: Request): Promise<Response> => {
+  const middlewareResponse = await runRequestMiddleware({
+    req,
+    middlewareChain: settings.middlewareChain,
+    skipMiddleware,
+    finalHandler: async (finalReq) => {
       const result = await handleRequestInternal(finalReq, router, registry, true);
       if (result.ok) return result.value;
       // Surface error-path responses to the chain so logging / metrics
       // layers see the final status. The outer `handleRequest` still owns
-      // dev-mode Cache-Control stamping + eventBus emission.
+      // dev-mode Cache-Control stamping + observability lifecycle emission.
       return errorToResponse(result.error, settings.isDev);
-    };
-    const composedResponse = await composed(req, dispatchRoute);
-    return ok(composedResponse);
+    },
+  });
+  if (middlewareResponse) {
+    return ok(middlewareResponse);
   }
   // ─── End Phase 18.ε ──────────────────────────────────────────────────────
 
@@ -4454,7 +3748,7 @@ export function formatServerAddresses(
 
 export function startServer(manifest: RoutesManifest, options: ServerOptions = {}): ManduServer {
   const {
-    port = 3000,
+    port = 3333,
     // Default to `"::"` (IPv6 wildcard, dual-stack). Bun leaves IPV6_V6ONLY
     // off, so this single socket accepts both IPv4 (as IPv4-mapped IPv6)
     // and IPv6 clients — covering `127.0.0.1`, `[::1]`, and LAN addresses
@@ -4537,9 +3831,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   void pluginsOption;
   void configHooksOption;
   const middlewareChain: ComposedHandler | undefined =
-    middlewareOption && middlewareOption.length > 0
-      ? composeMiddleware(...middlewareOption)
-      : undefined;
+    buildRequestMiddlewareChain(middlewareOption);
 
   // Phase 18 — normalize prerender pass-through settings. `undefined`
   // defaults to enabled (Next.js parity); explicit `false` opts out.
@@ -4580,17 +3872,12 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     console.warn("   cors: { origin: ['https://yourdomain.com'] }");
   }
 
-  // Phase 18.θ — build a tracer once at boot. Honours
-  // `observability.tracing` in options AND `MANDU_OTEL_ENDPOINT` env var.
-  // When both are absent, `createTracerFromConfig({})` returns a disabled
-  // tracer (no allocations, no per-request overhead).
-  const tracerInstance: Tracer = createTracerFromConfig(
-    observabilityOption?.tracing
-  );
-  // Install as process-global so `@mandujs/core/observability`
-  // `getTracer()` returns the same instance user code sees through
-  // `ctx.startSpan(...)`.
-  setTracer(tracerInstance);
+  const observabilityLifecycle = createRuntimeObservabilityLifecycle({
+    isDev,
+    heapEndpoint: observabilityOption?.heapEndpoint,
+    metricsEndpoint: observabilityOption?.metricsEndpoint,
+    tracing: observabilityOption?.tracing,
+  });
 
   // Registry settings 저장 (초기값)
   registry.settings = {
@@ -4608,9 +3895,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     prefetch,
     spa,
     devtools,
-    heapEndpoint: observabilityOption?.heapEndpoint,
-    metricsEndpoint: observabilityOption?.metricsEndpoint,
-    tracer: tracerInstance.enabled ? tracerInstance : undefined,
+    observability: observabilityLifecycle,
     // Production OpenAPI endpoint — default OFF so an internet-facing
     // deployment does not leak its API surface without explicit opt-in.
     // `MANDU_OPENAPI_ENABLED=1` in the environment forces-on without a
@@ -4682,12 +3967,16 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   }
   // ─── End Phase 18.ζ ────────────────────────────────────────────────────
 
-  // Kitchen dev dashboard (dev mode only)
-  if (isDev) {
-    const kitchen = new KitchenHandler({ rootDir, manifest, guardConfig });
-    void kitchen.start();
-    registry.kitchen = kitchen;
-  }
+  // Runtime devtools / Kitchen dashboard (dev mode only)
+  const devtoolsAdapter = createRuntimeDevtoolsAdapter({
+    isDev,
+    rootDir,
+    manifest,
+    guardConfig,
+  });
+  devtoolsAdapter.start();
+  registry.devtoolsAdapter = devtoolsAdapter;
+  registry.kitchen = devtoolsAdapter.kitchen;
 
   const router = new Router(manifest.routes);
 
@@ -4736,19 +4025,8 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     },
   } : undefined;
 
-  // Phase 17 — bump the Prometheus request counter once per Response we
-  // actually produce. WebSocket upgrades (return `undefined`) are
-  // deliberately skipped so the counter only reflects plain HTTP traffic.
-  // Errors from `recordHttpRequest` are impossible to surface here — the
-  // Map update is synchronous and self-contained — but we still try/catch
-  // as defence-in-depth.
   const bumpCounter = (req: Request, res: Response | undefined): void => {
-    if (!res) return;
-    try {
-      recordHttpRequest(req.method, res.status);
-    } catch {
-      // Never let an observability hiccup break a request.
-    }
+    registry.settings.observability?.recordHttpResponse(req, res);
   };
 
   // fetch handler: WS upgrade 감지 추가
@@ -4849,8 +4127,8 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
       if (streaming) {
         console.log(`🌊 Streaming SSR enabled`);
       }
-      if (registry.kitchen) {
-        console.log(`🍳 Kitchen dashboard at ${addresses.primary}/__kitchen`);
+      if (registry.devtoolsAdapter?.dashboardPath) {
+        console.log(`🍳 Kitchen dashboard at ${addresses.primary}${registry.devtoolsAdapter.dashboardPath}`);
       }
     } else {
       console.log(`🥟 Mandu server listening at ${addresses.primary}`);
@@ -4905,8 +4183,14 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     server,
     router,
     registry,
+    updateManifest: (nextManifest: RoutesManifest) => {
+      router.setRoutes(nextManifest.routes);
+      registry.devtoolsAdapter?.updateManifest(nextManifest);
+    },
     stop: () => {
-      registry.kitchen?.stop();
+      registry.devtoolsAdapter?.stop();
+      registry.devtoolsAdapter = null;
+      registry.kitchen = null;
       // Fire-and-forget the async scheduler drain so `stop()` stays
       // synchronous for backwards compatibility with existing consumers.
       // Tests that need to await drain can reach for `registration.stop()`

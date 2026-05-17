@@ -117,6 +117,36 @@ describe("renderToHTML — title escaping", () => {
     });
     expect(html).toContain("<title>A &amp; B</title>");
   });
+
+  it("hoists JSX title from the body when no explicit metadata title exists", () => {
+    const html = renderToHTML(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement("title", null, "JSX A & B"),
+        React.createElement("main", null, "body"),
+      ),
+    );
+    expect(html).toContain("<title>JSX A &amp; B</title>");
+    expect(html).toContain("<main>body</main>");
+    expect((html.match(/<title/g) ?? []).length).toBe(1);
+    expect(html).not.toContain('<div id="root"><title>');
+  });
+
+  it("keeps an explicit metadata title ahead of a JSX body title", () => {
+    const html = renderToHTML(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement("title", null, "Body Title"),
+        React.createElement("main", null, "body"),
+      ),
+      { title: "Metadata Title" },
+    );
+    expect(html).toContain("<title>Metadata Title</title>");
+    expect((html.match(/<title/g) ?? []).length).toBe(1);
+    expect(html).not.toContain("Body Title");
+  });
 });
 
 // ---------------------------------------------------------------------------

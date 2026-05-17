@@ -19,7 +19,7 @@ export function generateResourceSlot(definition: ResourceDefinition): string {
   const endpoints = getEnabledEndpoints(definition);
 
   // Generate endpoint handlers
-  const handlers = generateHandlers(definition, endpoints, pascalName);
+  const handlers = generateHandlers(definition, endpoints, pascalName, pluralName);
 
   return `// 🥟 Mandu Filling - ${resourceName} Resource
 // Pattern: /api/${pluralName}
@@ -49,28 +49,29 @@ ${handlers}
 function generateHandlers(
   definition: ResourceDefinition,
   endpoints: string[],
-  pascalName: string
+  pascalName: string,
+  pluralName: string
 ): string {
   const handlers: string[] = [];
 
   if (endpoints.includes("list")) {
-    handlers.push(generateListHandler(definition, pascalName));
+    handlers.push(generateListHandler(pascalName, pluralName));
   }
 
   if (endpoints.includes("get")) {
-    handlers.push(generateGetHandler(definition, pascalName));
+    handlers.push(generateGetHandler(pascalName, pluralName));
   }
 
   if (endpoints.includes("create")) {
-    handlers.push(generateCreateHandler(definition, pascalName));
+    handlers.push(generateCreateHandler(pascalName, pluralName));
   }
 
   if (endpoints.includes("update")) {
-    handlers.push(generateUpdateHandler(definition, pascalName));
+    handlers.push(generateUpdateHandler(pascalName, pluralName));
   }
 
   if (endpoints.includes("delete")) {
-    handlers.push(generateDeleteHandler(definition, pascalName));
+    handlers.push(generateDeleteHandler(pascalName, pluralName));
   }
 
   return handlers.join("\n\n");
@@ -79,7 +80,7 @@ function generateHandlers(
 /**
  * Generate LIST handler (GET /api/resources)
  */
-function generateListHandler(definition: ResourceDefinition, pascalName: string): string {
+function generateListHandler(pascalName: string, pluralName: string): string {
   return `  // 📋 List ${pascalName}s
   .get(async (ctx) => {
     const input = await ctx.input(contract, "GET", ctx.params);
@@ -87,8 +88,8 @@ function generateListHandler(definition: ResourceDefinition, pascalName: string)
 
     // TODO: Implement database query
     // const offset = (page - 1) * limit;
-    // const items = await db.select().from(${definition.name}s).limit(limit).offset(offset);
-    // const total = await db.select({ count: count() }).from(${definition.name}s);
+    // const items = await db.select().from(${pluralName}).limit(limit).offset(offset);
+    // const total = await db.select({ count: count() }).from(${pluralName});
 
     const mockData = {
       data: [], // Replace with actual data
@@ -106,13 +107,13 @@ function generateListHandler(definition: ResourceDefinition, pascalName: string)
 /**
  * Generate GET handler (GET /api/resources/:id)
  */
-function generateGetHandler(definition: ResourceDefinition, pascalName: string): string {
+function generateGetHandler(pascalName: string, pluralName: string): string {
   return `  // 📄 Get Single ${pascalName}
   .get(async (ctx) => {
     const { id } = ctx.params;
 
     // TODO: Implement database query
-    // const item = await db.select().from(${definition.name}s).where(eq(${definition.name}s.id, id)).limit(1);
+    // const item = await db.select().from(${pluralName}).where(eq(${pluralName}.id, id)).limit(1);
     // if (!item) return ctx.notFound("${pascalName} not found");
 
     const mockData = {
@@ -126,13 +127,13 @@ function generateGetHandler(definition: ResourceDefinition, pascalName: string):
 /**
  * Generate CREATE handler (POST /api/resources)
  */
-function generateCreateHandler(definition: ResourceDefinition, pascalName: string): string {
+function generateCreateHandler(pascalName: string, pluralName: string): string {
   return `  // ➕ Create ${pascalName}
   .post(async (ctx) => {
     const input = await ctx.input(contract, "POST", ctx.params);
 
     // TODO: Implement database insertion
-    // const [created] = await db.insert(${definition.name}s).values(input).returning();
+    // const [created] = await db.insert(${pluralName}).values(input).returning();
 
     const mockData = {
       data: { id: "new-id", ...input }, // Replace with actual created data
@@ -145,16 +146,16 @@ function generateCreateHandler(definition: ResourceDefinition, pascalName: strin
 /**
  * Generate UPDATE handler (PUT /api/resources/:id)
  */
-function generateUpdateHandler(definition: ResourceDefinition, pascalName: string): string {
+function generateUpdateHandler(pascalName: string, pluralName: string): string {
   return `  // ✏️ Update ${pascalName}
   .put(async (ctx) => {
     const { id } = ctx.params;
     const input = await ctx.input(contract, "PUT", ctx.params);
 
     // TODO: Implement database update
-    // const [updated] = await db.update(${definition.name}s)
+    // const [updated] = await db.update(${pluralName})
     //   .set(input)
-    //   .where(eq(${definition.name}s.id, id))
+    //   .where(eq(${pluralName}.id, id))
     //   .returning();
     // if (!updated) return ctx.notFound("${pascalName} not found");
 
@@ -169,13 +170,13 @@ function generateUpdateHandler(definition: ResourceDefinition, pascalName: strin
 /**
  * Generate DELETE handler (DELETE /api/resources/:id)
  */
-function generateDeleteHandler(definition: ResourceDefinition, pascalName: string): string {
+function generateDeleteHandler(pascalName: string, pluralName: string): string {
   return `  // 🗑️ Delete ${pascalName}
   .delete(async (ctx) => {
     const { id } = ctx.params;
 
     // TODO: Implement database deletion
-    // const deleted = await db.delete(${definition.name}s).where(eq(${definition.name}s.id, id));
+    // const deleted = await db.delete(${pluralName}).where(eq(${pluralName}.id, id));
     // if (!deleted) return ctx.notFound("${pascalName} not found");
 
     return ctx.output(contract, 200, { data: { message: "${pascalName} deleted" } });

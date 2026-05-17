@@ -113,6 +113,11 @@ describe("getPluralName", () => {
     expect(result).toBe("users");
   });
 
+  test("should use conservative English pluralization for common resource names", () => {
+    expect(getPluralName({ ...minimalResourceFixture, name: "party" })).toBe("parties");
+    expect(getPluralName({ ...minimalResourceFixture, name: "box" })).toBe("boxes");
+  });
+
   test("should use custom plural name if provided", () => {
     const result = getPluralName(productResourceFixture);
     expect(result).toBe("inventory");

@@ -49,8 +49,8 @@ export default island<{ users: User[] }>({
 - **MUST** import from `@mandujs/core/client` (NOT `@mandujs/core`).
   The main barrel pulls in server-only dependencies.
 - Alternative declarative syntax:
-  `island("visible", Component)` — hydrates when the element enters
-  the viewport.
+  `wrapComponent(Component)` or `island({ setup, render })` from
+  `@mandujs/core/client`; set route hydration priority on the page/manifest.
 
 ## 3. Contracts (Typed request/response schemas)
 

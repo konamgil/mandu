@@ -83,6 +83,51 @@ function toReconnectDelayMs(attempt: number, options: ReconnectOptions): number 
   return Math.max(0, Math.min(options.maxDelayMs, Math.round(exponentialDelay + jitter)));
 }
 
+function addEventSourceListener(
+  source: EventSource,
+  type: "open",
+  listener: (event: Event) => void,
+): void;
+function addEventSourceListener(
+  source: EventSource,
+  type: "message",
+  listener: (event: MessageEvent) => void,
+): void;
+function addEventSourceListener(
+  source: EventSource,
+  type: "error",
+  listener: (event: Event) => void,
+): void;
+function addEventSourceListener(
+  source: EventSource,
+  type: "open" | "message" | "error",
+  listener: (event: Event | MessageEvent) => void,
+): void {
+  const maybeSource = source as EventSource & {
+    addEventListener?: EventSource["addEventListener"];
+  };
+  if (typeof maybeSource.addEventListener === "function") {
+    maybeSource.addEventListener(type, listener as EventListener);
+    return;
+  }
+
+  // Some test and embedded runtimes expose the older EventSource callback
+  // properties without addEventListener. Keep the production path standard,
+  // but accept that shape so reconnect/resume behavior remains testable.
+  const legacySource = source as unknown as {
+    onopen: ((event: Event) => void) | null;
+    onmessage: ((event: MessageEvent) => void) | null;
+    onerror: ((event: Event) => void) | null;
+  };
+  if (type === "open") {
+    legacySource["onopen"] = listener as (event: Event) => void;
+  } else if (type === "message") {
+    legacySource["onmessage"] = listener as (event: MessageEvent) => void;
+  } else {
+    legacySource["onerror"] = listener as (event: Event) => void;
+  }
+}
+
 export function openChatStream(
   onEvent: (event: ChatStreamEvent) => void,
   streamOptions: ChatStreamOptions = {},
@@ -158,7 +203,7 @@ export function openChatStream(
     const currentSource = createSource(toStreamUrl());
     source = currentSource;
 
-    currentSource.addEventListener("open", () => {
+    addEventSourceListener(currentSource, "open", () => {
       if (source !== currentSource || isDisposed) {
         return;
       }
@@ -167,7 +212,7 @@ export function openChatStream(
       setConnectionState("connected");
     });
 
-    currentSource.addEventListener("message", (event) => {
+    addEventSourceListener(currentSource, "message", (event) => {
       if (source !== currentSource || isDisposed) {
         return;
       }
@@ -185,7 +230,7 @@ export function openChatStream(
       }
     });
 
-    currentSource.addEventListener("error", () => {
+    addEventSourceListener(currentSource, "error", () => {
       if (source !== currentSource || isDisposed) {
         return;
       }

@@ -1,8 +1,9 @@
 # Mandu 구현 상태
 
-> 최종 업데이트: 2026-04-11
+> 최종 업데이트: 2026-05-18
 
-모든 패키지가 **기능 구현 100% 완료** 상태입니다. 테스트: **1,397개 통과, 0개 실패**. core, cli, mcp, ate 전체 타입체크 통과.
+모든 주요 패키지가 **기능 구현 완료** 상태이며, 현재 P0 품질 게이트가 green입니다.
+검증: `bun run typecheck`, `bun run lint`, `bun run test:packages` 통과.
 
 ---
 
@@ -13,8 +14,11 @@
 | **Core** (`@mandujs/core`) | 28 | 28 | 100% |
 | **CLI** (`@mandujs/cli`) | 26 | 26 | 100% |
 | **MCP** (`@mandujs/mcp`) | 23 | 23 | 100% |
+| **ATE** (`@mandujs/ate`) | - | - | Green |
+| **Edge** (`@mandujs/edge`) | - | - | Green |
 | **Skills** | 9 | 9 | 100% |
-| **합계** | **86** | **86** | **100%** |
+| **Playground Runner** | - | - | Green |
+| **합계** | **86+** | **86+** | **Green** |
 
 ---
 
@@ -130,7 +134,16 @@
 
 | 지표 | 값 |
 |------|-----|
-| 테스트 | 1,397개 통과, 0개 실패 |
-| 타입체크 | core, cli, mcp, ate -- 전체 통과 |
+| 패키지 테스트 게이트 | `bun run test:packages` 통과 |
+| 테스트 스냅샷 | 6,044 pass, 178 skip, 0 fail |
+| Core | 4,057 pass + gated bundler 7 pass, 176 skip, 0 fail |
+| CLI | 806 pass, 2 skip, 0 fail |
+| MCP | 288 pass, 0 fail |
+| ATE | 587 pass, 0 fail |
+| Edge | 107 pass, 0 fail |
+| Skills | 106 pass, 0 fail |
+| Playground Runner | 86 pass, 0 fail |
+| 타입체크 | `bun run typecheck` -- 전체 통과 |
+| 린트 | `bun run lint` -- 0 warnings, 0 errors |
 | 라이선스 | MPL-2.0 |
 | 런타임 | Bun 네이티브 |

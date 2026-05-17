@@ -9,6 +9,8 @@ import * as fs from "fs/promises";
 import { Glob } from "bun";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
+import { checkPublicApiBoundary } from "./check-public-api-boundary";
+import { checkTargetBoundaries } from "./check-target-boundaries";
 
 interface PackageJson {
   name: string;
@@ -452,8 +454,62 @@ for (const pkgDir of PUBLISHABLE_PACKAGE_DIRS) {
 
 console.log();
 
-// 5. Cross-package subpath audit (#260 회귀 방지)
-console.log("🔗 Step 5: Cross-package subpath audit (#260)...\n");
+// 5. Core public API boundary classification
+console.log("🧭 Step 5: Core public API boundary classification...\n");
+
+try {
+  const boundary = checkPublicApiBoundary(process.cwd());
+  if (boundary.issues.length > 0) {
+    hasIssues = true;
+    boundary.issues.forEach((issue) => console.log(`  ${issue}`));
+    console.log();
+    console.log("  💡 Classify the export in scripts/check-public-api-boundary.ts before release.");
+  } else {
+    console.log(
+      `  ✅ classified exports: stable=${boundary.classified.stable.length}, experimental=${boundary.classified.experimental.length}, internal=${boundary.classified.internal.length}`
+    );
+  }
+} catch (err) {
+  hasIssues = true;
+  console.error(
+    "  ❌ public API boundary check failed:",
+    err instanceof Error ? err.message : String(err)
+  );
+}
+
+console.log();
+
+// 6. Target-safe import boundary check
+console.log("🧱 Step 6: Target-safe import boundary check...\n");
+
+try {
+  const targetBoundaryIssues = await checkTargetBoundaries(process.cwd());
+  if (targetBoundaryIssues.length > 0) {
+    hasIssues = true;
+    targetBoundaryIssues.forEach((issue) => {
+      console.log(
+        `  ❌ ${issue.file}: ${issue.kind} import of ${issue.specifier} violates "${issue.policy}" (${issue.reason})`
+      );
+    });
+    console.log();
+    console.log(
+      "  💡 Keep optional peers lazy and keep edge/browser source free of static Node/Bun imports."
+    );
+  } else {
+    console.log("  ✅ Optional peer and target import boundaries are clean");
+  }
+} catch (err) {
+  hasIssues = true;
+  console.error(
+    "  ❌ target boundary check failed:",
+    err instanceof Error ? err.message : String(err)
+  );
+}
+
+console.log();
+
+// 7. Cross-package subpath audit (#260 회귀 방지)
+console.log("🔗 Step 7: Cross-package subpath audit (#260)...\n");
 
 try {
   const auditIssues = await auditCrossPackageSubpaths(versions);
@@ -478,13 +534,13 @@ try {
 
 console.log();
 
-// 6. Template tsconfig integrity (#267/#272 회귀 방지)
+// 8. Template tsconfig integrity (#267/#272 회귀 방지)
 //
 // Issue #267 introduced layer-specific paths to replace an invalid `*`
 // pattern, but the new paths were non-relative and lacked `baseUrl`,
 // triggering #272 with three new warnings on every mandu command. This
 // step asserts every CLI template's tsconfig is internally consistent.
-console.log("🧩 Step 6: Template tsconfig integrity (#267/#272)...\n");
+console.log("🧩 Step 8: Template tsconfig integrity (#267/#272)...\n");
 
 const TEMPLATE_DIRS = [
   "packages/cli/templates/default",

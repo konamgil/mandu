@@ -6,7 +6,7 @@ import type { BundleManifest } from "../bundler/types";
 import { isSafeManduUrl } from "../bundler/manifest-schema";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 import { PORTS, TIMEOUTS } from "../constants";
-import { escapeHtmlAttr, escapeHtmlText, escapeJsonForInlineScript } from "./escape";
+import { decodeHtmlText, escapeHtmlAttr, escapeHtmlText, escapeJsonForInlineScript } from "./escape";
 import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
 import { generateFastRefreshPreamble } from "../bundler/dev";
 import { PREFETCH_HELPER_SCRIPT } from "../client/prefetch-helper";
@@ -613,6 +613,7 @@ export async function resolveAsyncElement(node: ReactNode): Promise<ReactNode> {
 }
 
 export function renderToHTML(element: ReactElement, options: SSROptions = {}): string {
+  const hasExplicitTitle = options.title !== undefined;
   const {
     title = "Mandu App",
     lang = "ko",
@@ -804,6 +805,18 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   });
   const hoistedLinkTags = hoistedLinks.join("\n  ");
 
+  // #273 F15 — React 19 renders document metadata such as <title> from a
+  // page component into the body string in this SSR path. Hoist the first
+  // body title into <head> when no metadata/generateMetadata title was
+  // provided, and always strip body titles to avoid duplicate/invalid HTML.
+  let effectiveTitle = title;
+  const titleTagPattern = /<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i;
+  const bodyTitleMatch = bodyContent.match(titleTagPattern);
+  const bodyWithoutTitle = bodyContent.replace(/<title(?:\s[^>]*)?>[\s\S]*?<\/title>/gi, "");
+  if (!hasExplicitTitle && bodyTitleMatch) {
+    effectiveTitle = decodeHtmlText(bodyTitleMatch[1] ?? title);
+  }
+
   // Phase 18.α — Dev Error Overlay injection.
   // Only emitted when `isDev` AND the user has not opted out (via
   // `ManduConfig.dev.errorOverlay: false` → `devErrorOverlay: false`).
@@ -820,7 +833,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtmlText(title)}</title>
+  <title>${escapeHtmlText(effectiveTitle)}</title>
   ${cssLinkTag}
   ${viewTransitionTag}
   ${prefetchScriptTag}
@@ -832,7 +845,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   ${devErrorOverlayTag}
 </head>
 <body>
-  <div id="root"${rootAttrs}>${bodyContent}</div>
+  <div id="root"${rootAttrs}>${bodyWithoutTitle}</div>
   ${dataScript}
   ${routeScript}
   ${hydrationScripts}

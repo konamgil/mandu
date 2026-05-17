@@ -139,7 +139,7 @@ Mandu 의 client island 에서 Realtime 구독:
 
 ```tsx
 // app/messages/MessagesIsland.client.tsx
-import { island } from "@mandujs/core/client";
+import { wrapComponent } from "@mandujs/core/client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -174,7 +174,7 @@ function Messages() {
   );
 }
 
-export default island("visible", <Messages />);
+export default wrapComponent(Messages);
 ```
 
 ### 3.3 Storage

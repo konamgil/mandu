@@ -92,6 +92,37 @@ describe("Issue #251 — public flat-fallback", () => {
     expect(res.status).toBe(404);
   });
 
+  it("falls through to dotted FS routes like /robots.txt when public file is missing", async () => {
+    const manifest: RoutesManifest = {
+      version: 1,
+      routes: [
+        {
+          id: "robots.txt",
+          pattern: "/robots.txt",
+          kind: "api",
+          module: "app/robots.txt/route.ts",
+          methods: ["GET"],
+        },
+      ],
+    };
+    registry.registerApiHandler(
+      "robots.txt",
+      async () => new Response("User-agent: *\nAllow: /\n", {
+        headers: { "Content-Type": "text/plain" },
+      }),
+    );
+    server = startServer(manifest, {
+      port: 0,
+      rootDir: TEST_DIR,
+      registry,
+      isDev: true,
+    });
+
+    const res = await fetch(`http://localhost:${server.server.port}/robots.txt`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("User-agent");
+  });
+
   it("flat-fallback also works in production mode", async () => {
     server = startServer(emptyManifest, {
       port: 0,

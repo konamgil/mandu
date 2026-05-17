@@ -48,7 +48,7 @@
     },
     "demo/auth-starter": {
       "name": "mandu-auth-starter",
-      "version": "0.1.52",
+      "version": "0.1.54",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -67,7 +67,7 @@
     },
     "demo/desktop-starter": {
       "name": "mandu-desktop-starter",
-      "version": "0.1.51",
+      "version": "0.1.53",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -83,7 +83,7 @@
     },
     "demo/edge-workers-starter": {
       "name": "mandu-edge-workers-starter",
-      "version": "0.1.52",
+      "version": "0.1.54",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "@mandujs/edge": "workspace:*",
@@ -135,20 +135,20 @@
     },
     "packages/ate": {
       "name": "@mandujs/ate",
-      "version": "0.25.2",
+      "version": "0.26.1",
       "dependencies": {
-        "fast-glob": "catalog:",
+        "fast-glob": "^3.3.2",
         "ts-morph": "^26.0.0",
       },
       "peerDependencies": {
-        "@mandujs/core": "^0.53.0",
+        "@mandujs/core": "^0.54.0",
         "@playwright/test": ">=1.40.0",
         "playwright": ">=1.40.0",
       },
     },
     "packages/cli": {
       "name": "@mandujs/cli",
-      "version": "0.44.1",
+      "version": "0.44.6",
       "bin": {
         "mandu": "src/main.ts",
       },
@@ -163,10 +163,10 @@
     },
     "packages/core": {
       "name": "@mandujs/core",
-      "version": "0.53.3",
+      "version": "0.54.2",
       "dependencies": {
         "chokidar": "^5.0.0",
-        "fast-glob": "catalog:",
+        "fast-glob": "^3.3.2",
         "glob": "^13.0.0",
         "minimatch": "^10.1.1",
         "zod": "^3.23.8",
@@ -203,7 +203,7 @@
     },
     "packages/edge": {
       "name": "@mandujs/edge",
-      "version": "0.4.48",
+      "version": "0.4.51",
       "dependencies": {
         "@mandujs/core": "workspace:*",
       },
@@ -218,7 +218,7 @@
     },
     "packages/mcp": {
       "name": "@mandujs/mcp",
-      "version": "0.36.3",
+      "version": "0.37.2",
       "bin": {
         "mandu-mcp": "./src/index.ts",
         "mandujs-mcp": "./src/index.ts",
@@ -233,7 +233,7 @@
     },
     "packages/playground-runner": {
       "name": "@mandujs/playground-runner",
-      "version": "24.0.3",
+      "version": "25.0.1",
       "devDependencies": {
         "@cloudflare/sandbox": "^0.1.0",
         "@cloudflare/workers-types": "^4.20250101.0",
@@ -245,7 +245,7 @@
     },
     "packages/skills": {
       "name": "@mandujs/skills",
-      "version": "0.19.1",
+      "version": "0.20.1",
       "bin": {
         "mandu-skills": "./src/cli.ts",
       },

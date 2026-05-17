@@ -50,6 +50,8 @@
     "lint:type-aware:debt": "oxlint --type-aware packages/core/src packages/cli/src packages/mcp/src packages/ate/src packages/edge/src packages/skills/src packages/playground-runner/src --ignore-pattern \"**/__tests__/**\" --ignore-pattern \"**/*.test.ts\" --ignore-pattern \"**/*.test.tsx\"",
     "lint:type-aware:full": "oxlint --type-aware packages/",
     "lint:fix": "oxlint --fix packages/",
+    "check:public-api": "bun run scripts/check-public-api-boundary.ts",
+    "check:target-boundaries": "bun run scripts/check-target-boundaries.ts",
     "check:publish": "bun run scripts/pre-publish-check.ts",
     "prepare": "lefthook install"
   },

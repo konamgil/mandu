@@ -232,6 +232,9 @@ export class FileAPI {
       const statusCode = line.substring(0, 2);
       const gitFilePath = line.substring(3).trim();
       const filePath = this.getProjectRelativePath(gitFilePath, gitRoot);
+      if (!filePath || filePath === ".") {
+        continue;
+      }
 
       changes.push({
         filePath,

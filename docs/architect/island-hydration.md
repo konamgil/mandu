@@ -22,24 +22,38 @@ still delivering a rich client experience.
 Unknown strategies degrade to `load` with a `console.warn` — islands never
 stay silently dead.
 
-## Declarative API
+## Island API
 
 ```ts
-import { island } from "@mandujs/core";
+import { island, wrapComponent } from "@mandujs/core/client";
 
-// 1. Short form — strategy + component
-export default island("visible", function CommentBox({ postId }) {
-  // ...
+// 1. Simple component wrapper
+export default wrapComponent(CommentBox);
+
+// 2. Setup/render object for server-data mapping
+export default island({
+  setup(serverData) {
+    return { comments: serverData.comments };
+  },
+  render({ comments }) {
+    return <CommentList comments={comments} />;
+  },
 });
+```
 
-// 2. Options form — media queries + extras
-export default island(
-  { hydrate: "media", media: "(max-width: 768px)" },
-  MobileNavDrawer,
-);
+`island()` takes one definition object. The older-looking
+`island("visible", Component)` form is invalid and will throw because the first
+argument is not a setup/render definition.
 
-// 3. Default (load) — no strategy attached
-export default island("load", Analytics);
+Hydration priority is route-level for page islands:
+
+```ts
+// app/blog/[slug]/page.tsx
+export const hydration = {
+  strategy: "island",
+  priority: "visible",
+  preload: false,
+};
 ```
 
 The `island()` metadata survives bundler round-trips and is emitted by SSR
@@ -58,6 +72,27 @@ onto the wrapper element:
 
 The client runtime reads `data-hydrate` and dispatches via
 `scheduleHydration()`.
+
+## Island vs partial
+
+An island is a page-level client bundle. Do not render a compiled island as
+inline JSX inside a server page; the runtime intentionally throws a diagnostic
+for that case. For embedded interactive regions, use `partial()`:
+
+```tsx
+"use client";
+
+import { partial } from "@mandujs/core/client";
+
+const SearchPartial = partial({
+  component: SearchBox,
+  priority: "interaction",
+});
+
+export function Header() {
+  return <SearchPartial.Render />;
+}
+```
 
 ## Runtime API (advanced)
 
@@ -133,11 +168,11 @@ Mix freely — a page can combine all five.
 
 | Feature                      | Astro                | Mandu                      |
 |------------------------------|----------------------|----------------------------|
-| `load`                       | `client:load`        | `island('load', Comp)`     |
-| `idle`                       | `client:idle`        | `island('idle', Comp)`     |
-| `visible`                    | `client:visible`     | `island('visible', Comp)`  |
-| `media(query)`               | `client:media="..."` | `island({hydrate:'media', media:'...'}, Comp)` |
-| first interaction            | *(not built-in)*     | `island('interaction', Comp)` |
+| `load`                       | `client:load`        | `export const hydration = { priority: "immediate" }` |
+| `idle`                       | `client:idle`        | `partial({ priority: "idle" })` for inline regions |
+| `visible`                    | `client:visible`     | `export const hydration = { priority: "visible" }` |
+| `media(query)`               | `client:media="..."` | scheduler-level `parseHydrateStrategy("media(...)")` |
+| first interaction            | *(not built-in)*     | `partial({ priority: "interaction" })` |
 | `IntersectionObserver` margin | 0px (default)       | **200px** (prefetch window)|
 | Disposer / cleanup contract  | internal             | **public `Disposer` return**|
 | SSR attribute                | `client:visible`     | `data-hydrate="visible"`   |

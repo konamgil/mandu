@@ -50,7 +50,7 @@ Follow these steps using Mandu MCP tools:
 3. Negotiate the feature spec: Tool mandu.negotiate
 4. Generate scaffold: Tool mandu.negotiate.scaffold
 5. If client interactivity needed, create island: Tool mandu_create_island
-   Use the declarative pattern: island('visible', Component)
+   Use @mandujs/core/client with wrapComponent(Component) or island({ setup, render })
 6. If data requirements exist, create slot: Tool mandu_create_slot
    Slots are server-side data loaders that run before render
 7. If API is exposed, define contract: Tool mandu_create_contract

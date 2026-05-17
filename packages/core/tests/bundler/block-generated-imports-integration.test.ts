@@ -72,7 +72,7 @@ describe.skipIf(SKIP_BUNDLER)(
       const log = collected.join("\n");
       // Single authoritative error surface — must match what the static
       // Guard rule emits, via the shared message helper.
-      expect(log).toMatch(/Direct __generated__\/ imports are forbidden/);
+      expect(log).toMatch(/Direct generated artifact imports are forbidden/);
       expect(log).toContain(GENERATED_IMPORT_DOCS_URL);
       // Actionable remediation hint reaches the user.
       expect(log).toContain("getGenerated");

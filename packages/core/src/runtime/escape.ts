@@ -11,6 +11,34 @@ export function escapeHtmlText(value: string): string {
 }
 
 /**
+ * Decode the small HTML entity set React can emit inside text metadata.
+ * Callers should still escape the returned string before writing HTML.
+ */
+export function decodeHtmlText(value: string): string {
+  return value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|#39);/gi, (match, entity: string) => {
+    const normalized = entity.toLowerCase();
+    if (normalized === "amp") return "&";
+    if (normalized === "lt") return "<";
+    if (normalized === "gt") return ">";
+    if (normalized === "quot") return '"';
+    if (normalized === "apos" || normalized === "#39") return "'";
+    if (normalized.startsWith("#x")) {
+      const codePoint = Number.parseInt(normalized.slice(2), 16);
+      return isValidCodePoint(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    if (normalized.startsWith("#")) {
+      const codePoint = Number.parseInt(normalized.slice(1), 10);
+      return isValidCodePoint(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    return match;
+  });
+}
+
+function isValidCodePoint(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= 0x10ffff;
+}
+
+/**
  * HTML 속성값 이스케이프
  * XSS 방지를 위해 HTML 속성값에 들어갈 문자열을 안전하게 처리
  */

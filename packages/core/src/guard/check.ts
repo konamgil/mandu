@@ -30,9 +30,9 @@ export const GENERATED_IMPORT_DOCS_URL =
   "https://mandujs.com/docs/architect/generated-access";
 
 /**
- * Build the user-facing message for a detected direct `__generated__/`
- * import. `specifier` is the literal import string that tripped the
- * guard (not the resolved path).
+ * Build the user-facing message for a detected direct generated-artifact
+ * import. `specifier` is the literal import string that tripped the guard
+ * (not the resolved path).
  *
  * This helper is the single source of truth for the message text — both
  * the static Guard pass (`checkInvalidGeneratedImport`) and the bundler
@@ -41,7 +41,7 @@ export const GENERATED_IMPORT_DOCS_URL =
  */
 export function buildForbiddenGeneratedImportMessage(specifier: string): string {
   return (
-    `Direct __generated__/ imports are forbidden: ${specifier}. ` +
+    `Direct generated artifact imports are forbidden: ${specifier}. ` +
     `Use the runtime registry: see ${GENERATED_IMPORT_DOCS_URL}`
   );
 }

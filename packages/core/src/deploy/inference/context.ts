@@ -79,7 +79,7 @@ export async function buildDeployInferenceContext(
   }
 
   const imports = extractImports(source);
-  const dependencyClasses = classifyImports(imports);
+  const dependencyClasses = classifySourceDependencies(source, imports);
   // Mandu's manifest patterns use `:param` / `*` (path-pattern style),
   // not bracket-form. Detect both shapes so the heuristic doesn't
   // misclassify dynamic routes as prerenderable. Examples:
@@ -149,6 +149,70 @@ export function classifyImports(imports: string[]): ReadonlySet<DependencyClass>
   return classes;
 }
 
+/**
+ * Classify dependency signals that do not always appear as bare imports.
+ *
+ * Dogfooding surfaced Mandu API routes importing project-local
+ * `src/server/infra/db` helpers and using `db` tagged templates. Those
+ * are server-only even when the bare imports look edge-safe.
+ */
+export function classifySourceDependencies(
+  source: string,
+  imports: string[] = extractImports(source),
+): ReadonlySet<DependencyClass> {
+  const classes = new Set<DependencyClass>(classifyImports(imports));
+  if (classes.size === 1 && classes.has("fetch-only")) {
+    classes.delete("fetch-only");
+  }
+
+  const allImports = extractAllImportSpecifiers(source);
+  if (allImports.some(isServerInfraImport)) {
+    classes.add("db");
+  }
+
+  if (/\bBun\.SQL\b|\bBun\.sqlite\b/i.test(source)) {
+    classes.add("bun-native");
+  }
+
+  if (
+    /(?:^|[^\w$])db\s*`/.test(source) ||
+    /\bctx\.deps\.db\b/.test(source) ||
+    /\bdb\.(?:query|execute|select|insert|update|delete)\b/.test(source)
+  ) {
+    classes.add("db");
+  }
+
+  if (classes.size === 0) {
+    classes.add("fetch-only");
+  }
+  return classes;
+}
+
+function extractAllImportSpecifiers(source: string): string[] {
+  const out = new Set<string>();
+  const staticImport = /^\s*import\b[^"']*?["']([^"']+)["']/gm;
+  const dynamicImport = /\bimport\(\s*["']([^"']+)["']\s*\)/g;
+  for (const re of [staticImport, dynamicImport]) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(source)) !== null) {
+      out.add(m[1]!);
+    }
+  }
+  return [...out].sort();
+}
+
+function isServerInfraImport(specifier: string): boolean {
+  const s = specifier.replace(/\\/g, "/").toLowerCase();
+  return (
+    s === "@/server/infra" ||
+    s.startsWith("@/server/infra/") ||
+    s === "src/server/infra" ||
+    s.startsWith("src/server/infra/") ||
+    s.endsWith("/server/infra") ||
+    s.includes("/server/infra/")
+  );
+}
+
 function classifyOne(spec: string): DependencyClass | null {
   const s = spec.toLowerCase();
   if (
@@ -170,6 +234,9 @@ function classifyOne(spec: string): DependencyClass | null {
   if (
     /^(postgres|pg|mysql2?|drizzle-orm(\/.*)?|@prisma\/client|prisma|mongodb|mongoose|@neondatabase\/.+|kysely|sqlite3|better-sqlite3|@planetscale\/.+)$/.test(s)
   ) {
+    return "db";
+  }
+  if (s === "@mandujs/core/db" || s.startsWith("@mandujs/core/db/")) {
     return "db";
   }
   if (/^(@anthropic-ai\/sdk|openai|ai|@ai-sdk\/.+|@google\/generative-ai|cohere-ai)$/.test(s)) {

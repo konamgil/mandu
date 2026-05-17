@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { kitchenTools, kitchenToolDefinitions } from "../../src/tools/kitchen";
@@ -40,6 +40,7 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  rmSync(join(root, ".mandu"), { recursive: true, force: true });
 });
 
 describe("mandu.devtools.context — definition", () => {
@@ -57,7 +58,7 @@ describe("mandu.devtools.context — definition", () => {
     const schema = (def as { inputSchema: { properties?: Record<string, unknown> } }).inputSchema;
     const props = schema.properties ?? {};
     expect(Object.keys(props)).toEqual(
-      expect.arrayContaining(["includeBundle", "includeDiagnose", "includeDiff"]),
+      expect.arrayContaining(["includeBundle", "includeDiagnose", "includeDiff", "baseURL", "port"]),
     );
   });
 });
@@ -117,6 +118,38 @@ describe("mandu.devtools.context — handler", () => {
     expect(url).toContain("bundle=0");
     expect(url).toContain("diagnose=0");
     expect(url).toContain("diff=0");
+  });
+
+  it("prefers runtime-control baseUrl when no explicit baseURL is supplied", async () => {
+    mkdirSync(join(root, ".mandu"), { recursive: true });
+    writeFileSync(
+      join(root, ".mandu", "runtime-control.json"),
+      JSON.stringify({
+        mode: "dev",
+        port: 3335,
+        token: "test-token",
+        baseUrl: "http://localhost:3335",
+        startedAt: new Date().toISOString(),
+      }),
+    );
+    nextResponse = () => new Response("{}", { status: 200 });
+
+    const handlers = kitchenTools(root);
+    await handlers["mandu.devtools.context"]({});
+
+    expect(fetchCalls[0].url).toStartWith("http://localhost:3335/");
+  });
+
+  it("uses explicit port for kitchen errors", async () => {
+    nextResponse = () => new Response(JSON.stringify({ errors: [], count: 0 }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const handlers = kitchenTools(root);
+    await handlers["mandu.kitchen.errors"]({ port: 4444 });
+
+    expect(fetchCalls[0].url).toStartWith("http://localhost:4444/");
   });
 
   it("propagates non-200 dev-server responses as success: false", async () => {

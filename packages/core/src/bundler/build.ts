@@ -1650,7 +1650,7 @@ async function buildVendorShims(
         return {
           key: shim.key,
           cacheId: shim.cacheId,
-          error: `Vendor shim '${shim.name}' build failed (source: ${srcPath}):\n${grouped}\n  Hint: Check the import paths and ensure the vendor package is installed.`,
+          error: `Vendor shim '${shim.name}' build failed (source: ${srcPath}):\n${grouped}\n  ${vendorShimFailureHint(shim.name)}`,
         };
       }
 
@@ -1665,7 +1665,7 @@ async function buildVendorShims(
       return {
         key: shim.key,
         cacheId: shim.cacheId,
-        error: `[${shim.name}] ${String(error)}`,
+        error: `[${shim.name}] ${String(error)}\n  ${vendorShimFailureHint(shim.name)}`,
       };
     }
   };
@@ -1711,6 +1711,13 @@ async function buildVendorShims(
     fastRefreshRuntime: results.fastRefreshRuntime,
     errors,
   };
+}
+
+function vendorShimFailureHint(shimName: string): string {
+  if (shimName.includes("react-refresh")) {
+    return "Hint: install the optional dev peer dependency with `bun add -d react-refresh`.";
+  }
+  return "Hint: check the import paths and ensure the vendor package is installed.";
 }
 
 /**

@@ -628,9 +628,22 @@ export class ManduContext {
     return this.withCookies(new Response(null, { status: 204 }));
   }
 
-  /** 400 Bad Request */
-  error(message: string, details?: unknown): Response {
-    return this.json({ status: "error", message, details }, 400);
+  /** 400 Bad Request, or custom 4xx/5xx error with ctx.error(status, message). */
+  error(message: string, details?: unknown): Response;
+  error(status: number, message: string, details?: unknown): Response;
+  error(
+    statusOrMessage: number | string,
+    messageOrDetails?: string | unknown,
+    maybeDetails?: unknown
+  ): Response {
+    if (typeof statusOrMessage === "number") {
+      const status = Number.isInteger(statusOrMessage) && statusOrMessage >= 400 && statusOrMessage <= 599
+        ? statusOrMessage
+        : 400;
+      const message = typeof messageOrDetails === "string" ? messageOrDetails : "Error";
+      return this.json({ status: "error", message, details: maybeDetails }, status);
+    }
+    return this.json({ status: "error", message: statusOrMessage, details: messageOrDetails }, 400);
   }
 
   /** 401 Unauthorized */

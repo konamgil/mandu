@@ -63,7 +63,7 @@ export const compositeToolDefinitions: Tool[] = [
     name: "mandu.island.add",
     description:
       "Create an island component with correct @mandujs/core/client imports and hydration strategy. " +
-      "Generates a .island.tsx file in app/{route}/ with the island() wrapper.",
+      "Generates a .island.tsx file in app/{route}/ with the wrapComponent() island definition.",
     annotations: {
       destructiveHint: true,
       readOnlyHint: false,
@@ -476,7 +476,7 @@ function generateMiddlewareSource(preset: string, options: Record<string, string
 
 function generateIslandSource(name: string, strategy: string): string {
   return `"use client";
-import { island } from "@mandujs/core/client";
+import { wrapComponent } from "@mandujs/core/client";
 import { useState } from "react";
 
 interface ${name}Props {
@@ -493,6 +493,8 @@ function ${name}Inner(props: ${name}Props) {
   );
 }
 
-export default island("${strategy}", ${name}Inner);
+// Route hydration priority should be set on the page/manifest route.
+// Suggested priority for this island: "${strategy}".
+export default wrapComponent(${name}Inner);
 `;
 }

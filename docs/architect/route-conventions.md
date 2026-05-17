@@ -132,6 +132,45 @@ tree at SSR time is:
   `registerNotFoundHandler()`. The scanner resolved the nearest ancestor
   at scan time; runtime just imports it.
 
+## Page-Level Server Data
+
+`app/**/page.tsx` is a render component. It should not import from
+`@/server/**` or `src/server/**`; Guard treats that as a layer violation so
+server-only database and infra code cannot leak into page or island bundles.
+
+Use a page slot when SSR data is required:
+
+```
+app/
+  page.tsx
+spec/
+  slots/
+    index.slot.ts
+```
+
+```ts
+// spec/slots/index.slot.ts
+import { Mandu } from "@mandujs/core";
+import { listPosts } from "../../src/server/infra/posts";
+
+export default Mandu.filling().get(async (ctx) => {
+  const posts = await listPosts();
+  return ctx.ok({ posts });
+});
+```
+
+```tsx
+// app/page.tsx
+export default function Page({ loaderData }: { loaderData: { posts: Post[] } }) {
+  return <PostList posts={loaderData.posts} />;
+}
+```
+
+The scanner auto-links `spec/slots/{route.id}.slot.ts` to the matching route.
+For `/` the route id is `index`; for `/dashboard` it is normally `dashboard`.
+Client islands can read the same SSR payload through `useServerData()` from
+`@mandujs/core/client`.
+
 ## Next.js App Router parity
 
 | Convention                  | Next.js App Router | Mandu (Phase 18.β) |

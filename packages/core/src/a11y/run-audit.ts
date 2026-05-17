@@ -71,6 +71,9 @@ interface DomProvider {
 
 const DEFAULT_MAX_FILES = 500;
 const DEFAULT_MIN_IMPACT: AuditImpact = "minor";
+const AXE_CORE_MODULE = "axe-core";
+const JSDOM_MODULE = "jsdom";
+const HAPPY_DOM_MODULE = "happy-dom";
 
 /**
  * Zero every entry in an impact-count record. Returned by value so
@@ -102,8 +105,7 @@ async function resolveAxe(options: RunAuditOptions): Promise<AxeLike | null> {
   };
 
   if (options.axeLoader) return tryLoad(options.axeLoader);
-  // @ts-ignore -- optional peer dependency, may not be resolvable at typecheck time
-  return tryLoad(() => import("axe-core"));
+  return tryLoad(() => import(AXE_CORE_MODULE));
 }
 
 /**
@@ -128,8 +130,7 @@ async function resolveDomProvider(options: RunAuditOptions): Promise<DomProvider
 
   // Preferred path — jsdom.
   try {
-    // @ts-ignore -- optional peer dependency, may not be resolvable at typecheck time
-    const jsdom = await import("jsdom");
+    const jsdom = await import(JSDOM_MODULE);
     const JSDOMCtor = (jsdom as { JSDOM?: new (html: string, opts?: unknown) => unknown }).JSDOM;
     if (JSDOMCtor) {
       return {
@@ -155,8 +156,7 @@ async function resolveDomProvider(options: RunAuditOptions): Promise<DomProvider
 
   // Fallback path — HappyDOM.
   try {
-    // @ts-ignore -- optional peer dependency, may not be resolvable at typecheck time
-    const happy = await import("happy-dom");
+    const happy = await import(HAPPY_DOM_MODULE);
     const WindowCtor = (happy as { Window?: new (opts?: { url?: string; innerWidth?: number }) => unknown }).Window;
     if (WindowCtor) {
       return {

@@ -1210,8 +1210,7 @@ Mandu는 AI 에이전트가 프레임워크와 직접 상호작용할 수 있는
 
 | 도구 | 설명 |
 |------|------|
-| `mandu_validate_slot` | 슬롯 제약 조건 검증 |
-| `mandu_validate_slots` | 여러 슬롯 일괄 검증 |
+| `mandu_get_slot_constraints` | 추천 슬롯 제약 조건 프리셋 조회 |
 
 #### Architecture Negotiation (RFC-001) 🆕
 

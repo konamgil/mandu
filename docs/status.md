@@ -1,8 +1,9 @@
 # Mandu Implementation Status
 
-> Last updated: 2026-04-11
+> Last updated: 2026-05-18
 
-All packages have reached **100% feature completion**. Test suite: **1,397 pass, 0 fail**. Typecheck passes across core, cli, mcp, and ate.
+All major packages remain **feature-complete**, and the current P0 quality gate is green.
+Verified: `bun run typecheck`, `bun run lint`, and `bun run test:packages` pass.
 
 ---
 
@@ -13,8 +14,11 @@ All packages have reached **100% feature completion**. Test suite: **1,397 pass,
 | **Core** (`@mandujs/core`) | 28 | 28 | 100% |
 | **CLI** (`@mandujs/cli`) | 26 | 26 | 100% |
 | **MCP** (`@mandujs/mcp`) | 23 | 23 | 100% |
+| **ATE** (`@mandujs/ate`) | - | - | Green |
+| **Edge** (`@mandujs/edge`) | - | - | Green |
 | **Skills** | 9 | 9 | 100% |
-| **Total** | **86** | **86** | **100%** |
+| **Playground Runner** | - | - | Green |
+| **Total** | **86+** | **86+** | **Green** |
 
 ---
 
@@ -130,7 +134,16 @@ All packages have reached **100% feature completion**. Test suite: **1,397 pass,
 
 | Metric | Value |
 |--------|-------|
-| Tests | 1,397 pass, 0 fail |
-| Typecheck | core, cli, mcp, ate -- all pass |
+| Package test gate | `bun run test:packages` passes |
+| Test snapshot | 6,044 pass, 178 skip, 0 fail |
+| Core | 4,057 pass + gated bundler 7 pass, 176 skip, 0 fail |
+| CLI | 806 pass, 2 skip, 0 fail |
+| MCP | 288 pass, 0 fail |
+| ATE | 587 pass, 0 fail |
+| Edge | 107 pass, 0 fail |
+| Skills | 106 pass, 0 fail |
+| Playground Runner | 86 pass, 0 fail |
+| Typecheck | `bun run typecheck` -- all packages pass |
+| Lint | `bun run lint` -- 0 warnings, 0 errors |
 | License | MPL-2.0 |
 | Runtime | Bun-native |

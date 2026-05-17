@@ -35,13 +35,16 @@ All island files MUST have `"use client"` directive at the very top.
 
 ## island() API
 
-### Declarative Style (simple)
+`island()` takes a single definition object. Do not call
+`island("visible", Component)`; that is not a supported runtime API.
+
+### Simple component wrapper
 
 ```tsx
 // app/counter.island.tsx
 "use client";
 
-import { island } from "@mandujs/core/client";
+import { wrapComponent } from "@mandujs/core/client";
 import { useState } from "react";
 
 function Counter() {
@@ -49,7 +52,7 @@ function Counter() {
   return <button onClick={() => setCount(c => c + 1)}>{count}</button>;
 }
 
-export default island("visible", Counter);
+export default wrapComponent(Counter);
 ```
 
 ### Client Island with Setup (advanced)
@@ -72,6 +75,26 @@ export default island<ServerData>({
 });
 ```
 
+Islands are page-level client bundles. They are discovered from route/client
+modules and rendered by the framework wrapper, not embedded as inline JSX. If
+you need an interactive region inside a server page, use `partial()` and render
+its `.Render` component.
+
+```tsx
+"use client";
+
+import { partial } from "@mandujs/core/client";
+
+const CounterPartial = partial({
+  component: Counter,
+  priority: "visible",
+});
+
+export function Header() {
+  return <CounterPartial.Render initialCount={0} />;
+}
+```
+
 ## Hydration Priorities
 
 | Priority | When loaded | Use case |
@@ -82,10 +105,15 @@ export default island<ServerData>({
 | `"interaction"` | User interacts | Heavy widgets (editor, map) |
 
 ```tsx
-island("immediate", NavigationIsland);   // Load right away
-island("visible", CommentSection);       // Load when scrolled into view
-island("idle", AnalyticsDashboard);      // Load when browser is idle
-island("interaction", RichTextEditor);   // Load on first click/focus
+// app/page.tsx or manifest route config
+export const hydration = {
+  strategy: "island",
+  priority: "visible",
+  preload: false,
+};
+
+// Inline client regions use partial({ priority }).
+partial({ component: CommentSection, priority: "visible" });
 ```
 
 ## Client Hooks
@@ -129,6 +157,8 @@ export default function UserProfile() {
 
 - Importing from `@mandujs/core` instead of `@mandujs/core/client` in Islands
 - Forgetting `"use client"` directive in island files
+- Calling `island("visible", Component)` instead of `island({ setup, render })` or `wrapComponent(Component)`
+- Rendering a page-level island as `<MyIsland />`; use `partial()` for inline client regions
 - Using `useState`/`useEffect` in server components (non-island files)
 - Setting all Islands to `"immediate"` priority (defeats partial hydration)
 - Putting heavy server imports in `.island.tsx` files (increases bundle size)

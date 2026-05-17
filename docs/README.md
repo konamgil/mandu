@@ -30,15 +30,18 @@ Your app is running at `http://localhost:3333`.
 Every interactive component is an island. You choose when it hydrates.
 
 ```tsx
-import { island } from "@mandujs/core";
+import { wrapComponent } from "@mandujs/core/client";
+import { useState } from "react";
 
-export default island("visible", ({ name }) => {
+function Counter({ name }: { name: string }) {
   const [count, setCount] = useState(0);
   return <button onClick={() => setCount((c) => c + 1)}>{name}: {count}</button>;
-});
+}
+
+export default wrapComponent(Counter);
 ```
 
-Five hydration strategies: `load` (immediate), `idle` (requestIdleCallback), `visible` (IntersectionObserver), `media` (media query match), `never` (SSR-only, zero JS).
+Set page-level hydration priority with `export const hydration = { strategy: "island", priority: "visible" }`.
 
 ### Filling API
 

@@ -106,6 +106,10 @@ export const ateToolDefinitions: Tool[] = [
           description: "Dev server URL (default: http://localhost:3333). Must match the running mandu dev server.",
         },
         ci: { type: "boolean", description: "CI mode: stricter timeouts, no interactive prompts" },
+        timeoutMs: {
+          type: "number",
+          description: "Hard timeout for the whole Playwright process in milliseconds (default: 600000).",
+        },
         headless: { type: "boolean", description: "Run browsers headlessly (default: true)" },
         browsers: {
           type: "array",
@@ -261,6 +265,10 @@ export const ateToolDefinitions: Tool[] = [
           description: "Assertion depth: L0=smoke, L1=HTTP status, L2=contract schema, L3=full behavioral",
         },
         ci: { type: "boolean", description: "CI mode: stricter timeouts" },
+        timeoutMs: {
+          type: "number",
+          description: "Hard timeout for the whole Playwright process in milliseconds (default: 600000).",
+        },
         useImpactAnalysis: {
           type: "boolean",
           description: "Run impact analysis first and only test changed routes (faster in CI)",
@@ -378,7 +386,7 @@ export function ateTools(projectRoot: string, server?: Server) {
       return await ateRun(input);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const isTimeout = /timed out/i.test(message);
+      const isTimeout = /timeout|timed out|타임아웃/i.test(message);
       const snap = tracker.snapshot();
       const partial: PartialRunResults = {
         runId: snap.runId ?? `unknown-${Date.now()}`,
@@ -440,6 +448,7 @@ export function ateTools(projectRoot: string, server?: Server) {
         onlyFiles,
         onlyRoutes,
         grep,
+        timeoutMs,
         progressToken,
       } = args as {
         repoRoot: string;
@@ -450,6 +459,7 @@ export function ateTools(projectRoot: string, server?: Server) {
         onlyFiles?: string[];
         onlyRoutes?: string[];
         grep?: string;
+        timeoutMs?: number;
         progressToken?: string | number;
       };
       return await runWithObservability(
@@ -462,6 +472,7 @@ export function ateTools(projectRoot: string, server?: Server) {
           onlyFiles,
           onlyRoutes,
           grep,
+          timeoutMs,
         },
         { progressToken },
       );
@@ -520,6 +531,7 @@ export function ateTools(projectRoot: string, server?: Server) {
       const {
         repoRoot, baseURL, oracleLevel, ci, useImpactAnalysis,
         base, head, autoHeal, tsconfigPath, routeGlobs, buildSalt,
+        timeoutMs,
       } = args as {
         repoRoot: string;
         baseURL?: string;
@@ -532,10 +544,11 @@ export function ateTools(projectRoot: string, server?: Server) {
         tsconfigPath?: string;
         routeGlobs?: string[];
         buildSalt?: string;
+        timeoutMs?: number;
       };
       return await runFullPipeline({
         repoRoot, baseURL, oracleLevel, ci, useImpactAnalysis,
-        base, head, autoHeal, tsconfigPath, routeGlobs, buildSalt,
+        base, head, autoHeal, tsconfigPath, routeGlobs, buildSalt, timeoutMs,
       });
     },
     "mandu.ate.feedback": async (args: Record<string, unknown>) => {
