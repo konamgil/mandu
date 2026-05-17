@@ -10,7 +10,9 @@
     "types": ["bun-types"],
     "paths": {
       "@/*": ["./src/*"],
-      "*/__generated__/*": ["./__MANDU_BLOCKED__/no-direct-generated-import"]
+      "client/__generated__/*": ["./__MANDU_BLOCKED__/no-direct-generated-import/*"],
+      "server/__generated__/*": ["./__MANDU_BLOCKED__/no-direct-generated-import/*"],
+      "shared/__generated__/*": ["./__MANDU_BLOCKED__/no-direct-generated-import/*"]
     }
   },
   "include": [

@@ -135,8 +135,12 @@ describe("CLI - Schema File Formatting", () => {
 
     // Verify structure
     expect(schemaFile).toContain('import { defineResource } from "@mandujs/core"');
-    expect(schemaFile).toContain("export const UserResource = defineResource({");
+    // Issue #265 — must be `export default`, parser reads `module.default`.
+    expect(schemaFile).toContain("export default defineResource({");
     expect(schemaFile).toContain('name: "user"');
+    // Issue #266 — generator must emit persistence so db plan picks it up.
+    expect(schemaFile).toContain("persistence:");
+    expect(schemaFile).toContain('primaryKey: "id"');
 
     // Verify fields
     expect(schemaFile).toContain('id: { type: "uuid", required: true }');
@@ -166,7 +170,7 @@ describe("CLI - Schema File Formatting", () => {
     expect(schemaFile).toContain('id: { type: "uuid", required: true }');
   });
 
-  test("should capitalize resource name in export", () => {
+  test("should emit JSDoc with capitalized resource name", () => {
     const definition: ResourceDefinition = {
       name: "product",
       fields: {
@@ -176,7 +180,9 @@ describe("CLI - Schema File Formatting", () => {
 
     const schemaFile = formatSchemaFile(definition);
 
-    expect(schemaFile).toContain("export const ProductResource = defineResource({");
+    expect(schemaFile).toContain("export default defineResource({");
+    expect(schemaFile).toContain("* Product Resource");
+    expect(schemaFile).toContain('name: "product"');
   });
 });
 
