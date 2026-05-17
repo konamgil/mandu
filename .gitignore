@@ -50,5 +50,8 @@ packages/cli/chokidar-test.ts
 mandu-report.json
 packages/cli/spec/architecture.json
 
+# Round-trip integration test fixtures (cleaned up by afterAll, ignored as safety net)
+**/__fixtures-roundtrip/
+
 # Playwright test results
 **/test-results/

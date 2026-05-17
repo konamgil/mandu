@@ -186,6 +186,79 @@ describe("CLI - Schema File Formatting", () => {
   });
 });
 
+// =====================================================================
+// Generator ↔ Parser round-trip (#263/#265/#266 regression guard)
+//
+// Issues #263/#265 broke this contract: the generator's output (file path,
+// filename, export shape, fields) must satisfy parseResourceSchema's input
+// assumptions. Function-unit tests above pass even when round-trip fails
+// because they stop at the string level. This block writes the generator
+// output to a temp dir and feeds it BACK through the real parser so any
+// future divergence between the two modules fails CI immediately.
+// =====================================================================
+
+describe("CLI - Generator/Parser round-trip", () => {
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    const { mkdtemp } = await import("node:fs/promises");
+    const { join, resolve } = await import("node:path");
+    // Stay INSIDE the workspace so `import { defineResource } from "@mandujs/core"`
+    // can resolve via the workspace's node_modules. A /tmp/... dir would have no
+    // way to find @mandujs/core. The dir is created under packages/cli so it
+    // inherits the project's resolver root.
+    const workspaceFixtures = resolve(import.meta.dir, "__fixtures-roundtrip");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(workspaceFixtures, { recursive: true });
+    tmpDir = await mkdtemp(join(workspaceFixtures, "mandu-roundtrip-"));
+  });
+
+  afterAll(async () => {
+    if (tmpDir) {
+      const { rm } = await import("node:fs/promises");
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test("formatSchemaFile output must parse via parseResourceSchema", async () => {
+    const { join } = await import("node:path");
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { parseResourceSchema } = await import("@mandujs/core/resource");
+
+    const definition: ResourceDefinition = {
+      name: "roundtripuser",
+      fields: {
+        id: { type: "uuid", required: true },
+        email: { type: "email", required: true },
+        nickname: { type: "string", required: false },
+      },
+      options: {
+        endpoints: { list: true, get: true, create: true, update: true, delete: true },
+      },
+    };
+
+    // Mirror the exact directory shape the CLI writes to.
+    const resourcesDir = join(tmpDir, "spec", "resources");
+    await mkdir(resourcesDir, { recursive: true });
+    const filePath = join(resourcesDir, `${definition.name}.resource.ts`);
+    await writeFile(filePath, formatSchemaFile(definition), "utf-8");
+
+    // Parser must accept the output without throwing (#263: filename,
+    // #265: default export, #266: persistence presence are all checked
+    // inside parseResourceSchema / snapshotFromResources downstream).
+    const parsed = await parseResourceSchema(filePath);
+    expect(parsed.resourceName).toBe("roundtripuser");
+    expect(parsed.definition.fields.id?.type).toBe("uuid");
+    expect(parsed.definition.fields.email?.type).toBe("email");
+
+    // #266 — persistence must be present so snapshotFromResources doesn't
+    // silently drop the resource. Read it via the same `unknown` cast the
+    // DDL layer uses.
+    const persistence = (parsed.definition.options as Record<string, unknown> | undefined)?.persistence;
+    expect(persistence).toBeDefined();
+  });
+});
+
 describe("CLI - Error Messages", () => {
   test("should provide helpful error for invalid field format", () => {
     try {

@@ -478,6 +478,92 @@ try {
 
 console.log();
 
+// 6. Template tsconfig integrity (#267/#272 회귀 방지)
+//
+// Issue #267 introduced layer-specific paths to replace an invalid `*`
+// pattern, but the new paths were non-relative and lacked `baseUrl`,
+// triggering #272 with three new warnings on every mandu command. This
+// step asserts every CLI template's tsconfig is internally consistent.
+console.log("🧩 Step 6: Template tsconfig integrity (#267/#272)...\n");
+
+const TEMPLATE_DIRS = [
+  "packages/cli/templates/default",
+  "packages/cli/templates/auth-starter",
+  "packages/cli/templates/realtime-chat",
+];
+
+interface TsconfigShape {
+  compilerOptions?: {
+    paths?: Record<string, string[]>;
+    baseUrl?: string;
+  };
+}
+
+function flattenPathTargets(paths: Record<string, string[]> | undefined): string[] {
+  if (!paths) return [];
+  return Object.values(paths).flat();
+}
+
+function isRelative(target: string): boolean {
+  return target.startsWith("./") || target.startsWith("../");
+}
+
+function validateTsconfigPaths(cfg: TsconfigShape, file: string): string[] {
+  const issues: string[] = [];
+  const opts = cfg.compilerOptions ?? {};
+  const targets = flattenPathTargets(opts.paths);
+  if (targets.length === 0) return issues;
+
+  // Rule 1 — TS spec: `paths` targets must be relative OR baseUrl must be set.
+  // (#272 root cause.)
+  const hasNonRelative = targets.some((t) => !isRelative(t));
+  if (hasNonRelative && opts.baseUrl === undefined) {
+    issues.push(
+      `❌ ${file}: paths contain non-relative targets but baseUrl is not set (#272)`
+    );
+  }
+
+  // Rule 2 — TS spec: each `paths` pattern key may contain at most one `*`.
+  // (#267 root cause.)
+  for (const pattern of Object.keys(opts.paths ?? {})) {
+    const stars = (pattern.match(/\*/g) ?? []).length;
+    if (stars > 1) {
+      issues.push(
+        `❌ ${file}: paths pattern ${JSON.stringify(pattern)} has ${stars} \`*\` wildcards — TS allows at most one (#267)`
+      );
+    }
+  }
+
+  return issues;
+}
+
+for (const templateDir of TEMPLATE_DIRS) {
+  const file = resolve(process.cwd(), templateDir, "tsconfig.json");
+  if (!existsSync(file)) {
+    console.log(`  ⏭️  ${templateDir}/tsconfig.json — not present, skipping`);
+    continue;
+  }
+  let cfg: TsconfigShape;
+  try {
+    cfg = JSON.parse(readFileSync(file, "utf-8"));
+  } catch (err) {
+    hasIssues = true;
+    console.log(
+      `  ❌ ${templateDir}/tsconfig.json — JSON parse failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    continue;
+  }
+  const issues = validateTsconfigPaths(cfg, `${templateDir}/tsconfig.json`);
+  if (issues.length > 0) {
+    hasIssues = true;
+    issues.forEach((line) => console.log(`  ${line}`));
+  } else {
+    console.log(`  ✅ ${templateDir}/tsconfig.json: paths/baseUrl consistent`);
+  }
+}
+
+console.log();
+
 // 최종 결과
 if (hasIssues) {
   console.error("❌ Pre-publish check FAILED!");

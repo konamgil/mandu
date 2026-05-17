@@ -1,0 +1,114 @@
+name: smoke-cli
+
+# Why this workflow exists:
+#   8 issues (#263-#270) and 2 follow-ups (#271/#272) all reproduced
+#   inside the first 5 minutes of a fresh `mandu create demo` session.
+#   This job rehearses that exact path on every PR so a regression in
+#   the newbie experience fails CI before merge — replacing user-filed
+#   bug reports with green/red CI checks.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  newbie-path:
+    name: First-5-minutes CLI rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2
+        with:
+          bun-version: latest
+
+      - name: Install workspace deps
+        run: bun install --frozen-lockfile
+
+      - name: Smoke — global help works
+        run: bun packages/cli/src/main.ts --help | grep -q "mandu"
+
+      - name: Smoke — subcommand help (#269)
+        run: |
+          set -e
+          CLI="bun packages/cli/src/main.ts"
+          $CLI create --help | grep -q "create"
+          $CLI db --help | grep -q "plan"
+          $CLI db plan --help | grep -q "plan"
+          $CLI generate --help | grep -q "resource"
+          $CLI generate resource --help | grep -q "generate"
+
+      - name: Smoke — create a fresh project (#267 — must not emit tsconfig warnings)
+        run: |
+          set -e
+          mkdir -p /tmp/mandu-smoke
+          cd /tmp/mandu-smoke
+          CLI="bun $GITHUB_WORKSPACE/packages/cli/src/main.ts"
+          # --no-install keeps the test fast; --yes accepts every default.
+          $CLI create demo --yes --no-install --minimal 2>./create.stderr
+          test -d demo
+          # #267/#272 — first stderr line should NOT be a tsconfig warning
+          if grep -E "Invalid pattern|Non-relative path|baseUrl is not set" ./create.stderr; then
+            echo "❌ tsconfig warning leaked through #267/#272 fix"
+            cat ./create.stderr
+            exit 1
+          fi
+
+      - name: Smoke — generate resource lands at the right path (#263/#264)
+        run: |
+          set -e
+          cd /tmp/mandu-smoke/demo
+          CLI="bun $GITHUB_WORKSPACE/packages/cli/src/main.ts"
+          $CLI generate resource party --fields="name:string!,color:string!" --ci || true
+          # #263 — must NOT be `schema.ts`
+          if [ -f spec/resources/party/schema.ts ]; then
+            echo "❌ #263 regression: generated schema.ts in subfolder"
+            exit 1
+          fi
+          # #264 — must be flat at spec/resources/<name>.resource.ts
+          test -f spec/resources/party.resource.ts
+
+      - name: Smoke — generated file is `export default` (#265)
+        run: |
+          cd /tmp/mandu-smoke/demo
+          grep -q "export default defineResource" spec/resources/party.resource.ts
+
+      - name: Smoke — generated file declares persistence (#266)
+        run: |
+          cd /tmp/mandu-smoke/demo
+          grep -q "persistence:" spec/resources/party.resource.ts
+          grep -q 'primaryKey: "id"' spec/resources/party.resource.ts
+
+      - name: Smoke — DATABASE_URL scheme drives provider (#270)
+        run: |
+          set -e
+          cd /tmp/mandu-smoke/demo
+          CLI="bun $GITHUB_WORKSPACE/packages/cli/src/main.ts"
+          OUT=$(DATABASE_URL="sqlite://./test.db" $CLI db plan --ci --json 2>&1 || true)
+          echo "$OUT"
+          # #270 — provider field must reflect URL scheme (sqlite), not hardcoded postgres
+          echo "$OUT" | grep -q '"provider": *"sqlite"' || {
+            echo "❌ #270 regression: provider not derived from DATABASE_URL"
+            exit 1
+          }
+
+  npm-drift:
+    name: npm registry drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Pre-publish guard: catches local-vs-npm drift that previously bit us
+    # (ate@1.0.0 / skills@1.0.0 in local package.json while npm sat at
+    # 0.25.2 / 0.19.1). Soft-fail on PR so contributors aren't blocked,
+    # hard-fail on main push so release prep can rely on it.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Compare local vs npm
+        run: bun run scripts/check-npm-drift.ts

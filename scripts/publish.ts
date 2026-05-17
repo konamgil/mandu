@@ -57,6 +57,8 @@ interface PackageJson {
   version: string;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
 }
 
 async function getPublishedVersion(name: string): Promise<string | null> {
@@ -151,12 +153,23 @@ async function resolveWorkspaceDeps(
   }
 
   // Final leak guard — publish-time safety net (이슈 #271 회귀 방지).
-  for (const deps of [pkgJson.dependencies, pkgJson.devDependencies]) {
+  // npm registry는 이런 spec prefix들을 resolve 못 함:
+  //   workspace: — Bun/pnpm workspace ref
+  //   catalog:   — Bun/pnpm workspace catalog ref
+  //   link:      — symlink to sibling
+  //   portal:    — Yarn berry portal (workspace-like)
+  //   file:      — local path (works in install but bad UX for npm users)
+  //   github:    — github shorthand (works but unreliable for prod)
+  //   git+...:   — git protocol (slow + unreliable)
+  // 새 type이 생길 수 있으니 화이트리스트 방식: ^, ~, 절대버전, version range만 통과.
+  const SAFE_SPEC_RE = /^(\^|~|<|>|=|\d)|^(latest|next|beta|alpha|canary|\*)$/;
+  for (const deps of [pkgJson.dependencies, pkgJson.devDependencies, pkgJson.peerDependencies, pkgJson.optionalDependencies]) {
     if (!deps) continue;
     for (const [name, version] of Object.entries(deps)) {
-      if (version.startsWith("workspace:") || version.startsWith("catalog:")) {
+      if (!SAFE_SPEC_RE.test(version)) {
         throw new Error(
-          `Leaked workspace/catalog spec in ${filePath} after resolution: ${name}=${version}. Aborting publish.`
+          `Unpublishable dep spec in ${filePath} after resolution: ${name}=${version}. ` +
+            `npm registry cannot install this. Aborting publish.`
         );
       }
     }
