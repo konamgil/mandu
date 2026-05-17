@@ -84,12 +84,40 @@ async function buildVersionMap(): Promise<Map<string, string>> {
 }
 
 /**
- * package.json의 workspace:* 참조를 실제 버전으로 치환
- * 원본 내용을 반환하여 복원에 사용
+ * Root package.json의 `catalog` 사전 로드 (Bun/pnpm workspace catalog).
+ * 패키지 deps에 "catalog:" literal이 있으면 이 사전을 lookup해서 실버전 치환.
+ *
+ * 이슈 #271: 이 resolve 단계가 누락되어 `fast-glob: catalog:`가 그대로 npm에
+ * publish되었고, 모든 신규 install이 실패했음. publish.ts가 root catalog를
+ * 인지하고 자동 치환하도록 추가.
+ */
+async function loadRootCatalog(): Promise<Record<string, string>> {
+  const rootPkg: Record<string, unknown> = JSON.parse(
+    await readFile(join(ROOT, "package.json"), "utf-8")
+  );
+  const ws = rootPkg.workspaces;
+  if (ws && typeof ws === "object" && !Array.isArray(ws)) {
+    const catalog = (ws as Record<string, unknown>).catalog;
+    if (catalog && typeof catalog === "object" && !Array.isArray(catalog)) {
+      return catalog as Record<string, string>;
+    }
+  }
+  const topLevel = rootPkg.catalog;
+  if (topLevel && typeof topLevel === "object" && !Array.isArray(topLevel)) {
+    return topLevel as Record<string, string>;
+  }
+  return {};
+}
+
+/**
+ * package.json의 workspace:* / catalog: 참조를 실제 버전으로 치환.
+ * 원본 내용을 반환하여 복원에 사용. 마지막에 잔여 workspace:/catalog:가
+ * 남아있으면 throw — leak을 publish 전에 차단 (이슈 #271).
  */
 async function resolveWorkspaceDeps(
   pkgPath: string,
-  versionMap: Map<string, string>
+  versionMap: Map<string, string>,
+  catalog: Record<string, string>
 ): Promise<{ original: string; resolved: boolean }> {
   const filePath = join(pkgPath, "package.json");
   const original = await readFile(filePath, "utf-8");
@@ -105,6 +133,31 @@ async function resolveWorkspaceDeps(
           deps[name] = `^${actualVersion}`;
           resolved = true;
         }
+      } else if (version === "catalog:" || version.startsWith("catalog:")) {
+        const tag = version === "catalog:" ? "" : version.slice("catalog:".length);
+        const lookup = tag ? `${name}@${tag}` : name;
+        const actualVersion = catalog[lookup] ?? catalog[name];
+        if (actualVersion) {
+          deps[name] = actualVersion;
+          resolved = true;
+        } else {
+          throw new Error(
+            `Cannot resolve "catalog:" ref for ${name} in ${filePath} — ` +
+              `not found in root package.json catalog. Add it to "workspaces.catalog" or use an explicit version.`
+          );
+        }
+      }
+    }
+  }
+
+  // Final leak guard — publish-time safety net (이슈 #271 회귀 방지).
+  for (const deps of [pkgJson.dependencies, pkgJson.devDependencies]) {
+    if (!deps) continue;
+    for (const [name, version] of Object.entries(deps)) {
+      if (version.startsWith("workspace:") || version.startsWith("catalog:")) {
+        throw new Error(
+          `Leaked workspace/catalog spec in ${filePath} after resolution: ${name}=${version}. Aborting publish.`
+        );
       }
     }
   }
@@ -165,10 +218,17 @@ async function main() {
 
   const versionMap = buildVersionMap();
   const versions = await versionMap;
+  const catalog = await loadRootCatalog();
 
   console.log("📋 Workspace versions:");
   for (const [name, version] of versions) {
     console.log(`   ${name}@${version}`);
+  }
+  if (Object.keys(catalog).length > 0) {
+    console.log("📚 Root catalog entries (will replace `catalog:` refs):");
+    for (const [name, version] of Object.entries(catalog)) {
+      console.log(`   ${name}@${version}`);
+    }
   }
   console.log();
 
@@ -196,10 +256,10 @@ async function main() {
 
     console.log(`📦 ${pkgJson.name}@${pkgJson.version} (npm: ${published ?? "not found"})`);
 
-    // workspace:* → 실제 버전으로 치환
-    const { original, resolved } = await resolveWorkspaceDeps(pkgPath, versions);
+    // workspace:* + catalog: → 실제 버전으로 치환 (이슈 #271 catalog leak 차단)
+    const { original, resolved } = await resolveWorkspaceDeps(pkgPath, versions, catalog);
     if (resolved) {
-      console.log(`   🔗 workspace:* → resolved to actual versions`);
+      console.log(`   🔗 workspace:* / catalog: → resolved to actual versions`);
     }
 
     try {

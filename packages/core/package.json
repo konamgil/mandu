@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/core",
-  "version": "0.54.0",
+  "version": "0.54.1",
   "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
   "main": "./src/index.ts",
@@ -189,7 +189,7 @@
   },
   "dependencies": {
     "chokidar": "^5.0.0",
-    "fast-glob": "catalog:",
+    "fast-glob": "^3.3.2",
     "glob": "^13.0.0",
     "minimatch": "^10.1.1",
     "zod": "^3.23.8"
