@@ -36,6 +36,9 @@ const GPR_REGISTRY = "https://npm.pkg.github.com";
 // 명시적 npm registry — ~/.npmrc의 registry= 라인이 verdaccio 등으로 설정돼 있어도
 // public npmjs.org로 보내기 위함. NPM_REGISTRY 환경변수로 override 가능.
 const NPM_REGISTRY = process.env.NPM_REGISTRY ?? "https://registry.npmjs.org/";
+// 2FA가 켜진 계정 대응 — NPM_OTP env var이 있으면 모든 bun publish 호출에 전달.
+// OTP는 30초 유효하므로 publish 6개가 한 윈도우 안에 끝나야 한다.
+const NPM_OTP = process.env.NPM_OTP;
 
 // Pre-publish check
 if (!skipCheck) {
@@ -210,7 +213,12 @@ async function main() {
       } else if (alreadyOnNpm) {
         console.log(`   ⏭️  npm: already published, skipping`);
       } else {
-        const result = await $`cd ${pkgPath} && bun publish --access public --registry=${NPM_REGISTRY}`.text();
+        // --tag latest 명시: orphan/squatted 상위 버전이 npm에 있을 때 (skills 16.0.0
+        // 등 외부 점유) npm은 implicit latest tagging을 거부함. 명시하면 강제 적용.
+        // --otp는 NPM_OTP 있을 때만 추가.
+        const result = NPM_OTP
+          ? await $`cd ${pkgPath} && npm publish --access public --tag latest --registry=${NPM_REGISTRY} --otp=${NPM_OTP}`.text()
+          : await $`cd ${pkgPath} && npm publish --access public --tag latest --registry=${NPM_REGISTRY}`.text();
         console.log(`   ✅ Published to npm`);
         console.log(result);
         publishedPackages.push({ name: pkgJson.name, version: pkgJson.version });
