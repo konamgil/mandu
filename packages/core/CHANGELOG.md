@@ -1,5 +1,19 @@
 # @mandujs/core
 
+## 0.54.0
+
+### Minor Changes
+
+- [`b96f439`](https://github.com/konamgil/mandu/commit/b96f439a246a26edaf50104522cacb4d49a533e8) Thanks [@konamgil](https://github.com/konamgil)! - Agent DevTools P0 cycle (plan 18): expose `mandu.devtools.context` MCP tool, expand the Agent Supervisor context pack with build/diagnose/diff signals, and align Kitchen UI tokens to the mandujs.com Stitch system.
+
+  - `@mandujs/core`: `AgentContextPack` now classifies `build-broken` (missing/stale `.mandu/manifest.json`, `manifest_freshness` diagnose error) and `boot-breaking` (`nested_internal_core`, `package_export_gaps`, `manifest_validation`) ahead of hydration/runtime errors. New optional inputs: `bundleManifest`, `diagnoseReport`, `changedFiles`. The `/__kitchen/api/agent-context` handler collects all three with fail-safe collectors and supports `?bundle=0&diagnose=0&diff=0` skip toggles for latency control. Kitchen UI CSS tokens swap to the Stitch palette (Peach `#FF8C66` / Dark Brown `#4A3222` / Cream `#FFFDF5`) with Pretendard + Nunito + Consolas, hard shadow on primary buttons.
+  - `@mandujs/mcp`: new `mandu.devtools.context` tool returns the full Agent Supervisor context pack in a single call so agents can self-orient without opening Kitchen. Three boolean toggles (`includeBundle`, `includeDiagnose`, `includeDiff`) mirror the HTTP query params. Backward-compatible underscore alias `mandu_devtools_context`. Requires `mandu dev` to be running.
+
+- [`48743ed`](https://github.com/konamgil/mandu/commit/48743edec9708e16e73a57e0b11061fe452f04eb) Thanks [@konamgil](https://github.com/konamgil)! - Agent DevTools P1 cycle (plan 18): expose previously invisible eventBus categories and add a dedicated Errors panel with stack-signature grouping.
+
+  - New `/__kitchen/api/events` endpoint with `?type=` (one of `http|mcp|guard|build|cache|ws|ate|error`), `?severity=`, `?limit=` and `?stats=1` query params. The Activity panel now has filter chips for every category — `build` / `cache` / `ws` / `ate` events that the bus emits but the legacy panel never showed are surfaced with one click.
+  - New `/__kitchen/api/errors/grouped` endpoint plus a new "Errors" tab. Identical browser error signatures collapse into one row (`x5` count, first/last seen, affected sources, expandable stack frame). Grouping key is sha1 of `type | source | normalize(message)` where `normalize` strips numbers, UUIDs, and hex addresses so retry counts and request IDs don't fragment the same bug.
+
 ## 0.53.3
 
 ### Patch Changes

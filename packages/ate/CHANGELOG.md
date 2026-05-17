@@ -1,5 +1,12 @@
 # @mandujs/ate
 
+## 1.0.0
+
+### Patch Changes
+
+- Updated dependencies [[`b96f439`](https://github.com/konamgil/mandu/commit/b96f439a246a26edaf50104522cacb4d49a533e8), [`48743ed`](https://github.com/konamgil/mandu/commit/48743edec9708e16e73a57e0b11061fe452f04eb)]:
+  - @mandujs/core@0.54.0
+
 ## 0.25.2
 
 ### Patch Changes

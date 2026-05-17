@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/ate",
-  "version": "0.25.2",
+  "version": "1.0.0",
   "description": "Mandu ATE (Automation Test Engine) - extract/generate/run/report/heal/impact in one package",
   "type": "module",
   "sideEffects": false,
@@ -69,7 +69,7 @@
     "ts-morph": "^26.0.0"
   },
   "peerDependencies": {
-    "@mandujs/core": "^0.53.0",
+    "@mandujs/core": "^0.54.0",
     "@playwright/test": ">=1.40.0",
     "playwright": ">=1.40.0"
   },
