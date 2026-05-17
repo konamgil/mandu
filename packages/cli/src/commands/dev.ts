@@ -465,12 +465,10 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     serverConfig.port ??
     3333;
 
-  // Port is explicitly configured if it came from CLI flag, env var, or config file
-  const isExplicitPort = !!(
-    options.port ||
-    (envPort && Number.isFinite(envPort)) ||
-    serverConfig.port
-  );
+  // Strict (fail on conflict) only when port came from CLI flag or mandu.config.
+  // PORT env var leaks across unrelated projects (e.g. Next.js / CRA defaults),
+  // so we treat it as a "preferred" port and auto-fall back if taken. Issue #268.
+  const isExplicitPort = !!(options.port || serverConfig.port);
 
   const hasIslands = manifest.routes.some(
     (r) => r.kind === "page" && r.clientModule && needsHydration(r)

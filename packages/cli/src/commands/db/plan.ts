@@ -64,6 +64,20 @@ import type {
 import { applyRenames } from "./rename-prompt";
 import { theme } from "../../terminal/theme";
 
+/**
+ * Detect SQL provider from a DATABASE_URL-style scheme.
+ * Returns undefined when no DATABASE_URL is set so callers can fall back
+ * to per-resource `persistence.provider`. Issue #270.
+ */
+function detectProviderFromDatabaseUrl(): SqlProvider | undefined {
+  const url = process.env.DATABASE_URL;
+  if (!url) return undefined;
+  if (url.startsWith("postgres://") || url.startsWith("postgresql://")) return "postgres";
+  if (url.startsWith("mysql://") || url.startsWith("mysql2://")) return "mysql";
+  if (url.startsWith("sqlite://") || url.startsWith("sqlite:")) return "sqlite";
+  return undefined;
+}
+
 export interface DbPlanOptions {
   /** CI mode: skip rename prompt, always emit drop+add. */
   ci?: boolean;
@@ -100,6 +114,11 @@ export async function dbPlan(options: DbPlanOptions = {}): Promise<number> {
   const schemaDir = path.join(cwd, ".mandu", "schema");
   const appliedPath = path.join(schemaDir, "applied.json");
 
+  // Issue #270 — derive provider from DATABASE_URL so SQLite/MySQL projects
+  // are reported correctly (was hardcoded "postgres" everywhere below).
+  const urlProvider = detectProviderFromDatabaseUrl();
+  const defaultProvider: SqlProvider = urlProvider ?? "postgres";
+
   let parsed: ParsedResource[];
   try {
     const files = await discoverResourceFiles(resourcesDir);
@@ -107,8 +126,8 @@ export async function dbPlan(options: DbPlanOptions = {}): Promise<number> {
       emit(options, {
         changes: [],
         migrationPath: null,
-        snapshot: emptySnapshot("postgres"),
-        provider: "postgres",
+        snapshot: emptySnapshot(defaultProvider),
+        provider: defaultProvider,
       }, "no resources found — nothing to plan");
       return EXIT_OK;
     }
@@ -126,6 +145,31 @@ export async function dbPlan(options: DbPlanOptions = {}): Promise<number> {
   } catch (err) {
     printError("Snapshot build failed", err);
     return EXIT_IO;
+  }
+
+  // Issue #266 — diagnose silent drops: snapshotFromResources skips any
+  // resource missing `options.persistence`. Previously this surfaced only
+  // as "no schema changes" with no hint as to why. Now we count parsed
+  // resources vs. snapshot resources and explain what's missing.
+  if (parsed.length > 0 && nextSnapshot.resources.length === 0) {
+    const dropped = parsed.map((r) => r.resourceName).join(", ");
+    process.stderr.write(
+      `${theme.warn("warning:")} ${parsed.length} resource(s) parsed but none reached the snapshot — ` +
+        `each one is missing \`options.persistence\` and was silently dropped: ${dropped}\n` +
+        `  Fix: add \`persistence: { provider: "${defaultProvider}", primaryKey: "id" }\` ` +
+        `to each resource's \`options\`. See docs/guides/db-resources.md.\n`,
+    );
+  }
+
+  // Issue #270 — when DATABASE_URL declares one provider but resources
+  // declare another, the snapshot is meaningless against the live DB.
+  if (urlProvider && nextSnapshot.resources.length > 0 && nextSnapshot.provider !== urlProvider) {
+    printError(
+      `Provider mismatch: DATABASE_URL is "${urlProvider}" but resources declare ` +
+        `"${nextSnapshot.provider}". Align \`options.persistence.provider\` with the live DB.`,
+      null,
+    );
+    return EXIT_USAGE;
   }
 
   // Load the applied snapshot (if any).

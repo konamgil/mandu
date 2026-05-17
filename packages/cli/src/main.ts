@@ -8,9 +8,46 @@
  * - Lazy loading for optimized startup time
  */
 
-import { getCommand, getAllCommandRegistrations, type CommandContext } from "./commands/registry";
+import {
+  getCommand,
+  getAllCommandRegistrations,
+  type CommandContext,
+  type CommandRegistration,
+} from "./commands/registry";
 import { CLI_ERROR_CODES, handleCLIError, printCLIError } from "./errors";
 import { shouldShowBanner, renderHeroBanner, renderHelp, MANDU_HELP } from "./terminal";
+
+/**
+ * Render a minimal help block for a command that didn't define its own
+ * `help` field. Issue #269 — better than falling through to the global
+ * help, which forced the user to scan a 30-item list to find the command
+ * they just asked about.
+ */
+function renderFallbackHelp(registration: CommandRegistration): string {
+  const lines: string[] = [
+    "",
+    `  mandu ${registration.id} — ${registration.description}`,
+    "",
+  ];
+  if (registration.aliases && registration.aliases.length > 0) {
+    lines.push(`  Aliases: ${registration.aliases.join(", ")}`, "");
+  }
+  if (registration.subcommands && registration.subcommands.length > 0) {
+    lines.push(
+      "  Subcommands:",
+      ...registration.subcommands.map((s) => `    ${s}`),
+      "",
+    );
+    if (registration.defaultSubcommand) {
+      lines.push(`  Default subcommand: ${registration.defaultSubcommand}`, "");
+    }
+    lines.push(
+      `  Tip: run \`mandu ${registration.id} <subcommand> --help\` for subcommand details.`,
+      "",
+    );
+  }
+  return lines.join("\n");
+}
 
 // Phase 9b B — static JSON import so the CLI version survives `bun --compile`.
 // The previous `require("../package.json")` form used CommonJS path resolution
@@ -108,39 +145,28 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     process.exit(1);
   }
 
-  // Per-subcommand --help routing (Wave R3 follow-up).
+  // Per-command --help routing.
   //
-  // Prior behaviour: `mandu <cmd> --help` fell through to the global help
-  // surface, masking per-command flag docs. Now:
-  //   - `mandu <cmd> --help`             → per-command help (if defined)
-  //   - `mandu <cmd> <sub> --help`       → fall through so the sub-dispatch
-  //                                         can render its own help (e.g.
-  //                                         `mandu ai chat --help` → chat's
-  //                                         CHAT_HELP, not AI_HELP).
-  //   - Any other case falls back to global help.
+  // Issue #269 — every `mandu <cmd> ... --help` invocation prints the
+  // command's own help (or a synthesized summary), not the global help
+  // surface that hid which command was being asked about. Subcommand-
+  // specific help (e.g. `mandu ai chat --help` → chat's help) is a
+  // follow-up: today every command falls back to the parent's help block
+  // when --help is set anywhere in the argv.
   if (options.help) {
-    const argvSub = args[1];
-    const hasKnownSub = !!(
-      registration.subcommands &&
-      argvSub &&
-      !argvSub.startsWith("-") &&
-      registration.subcommands.includes(argvSub)
-    );
-    if (!hasKnownSub) {
-      const helpCtx: CommandContext = { args, options };
-      const help = registration.help;
-      if (typeof help === "string") {
-        process.stdout.write(help.endsWith("\n") ? help : help + "\n");
-      } else if (typeof help === "function") {
-        await help(helpCtx);
-      } else {
-        console.log(getHelpText());
-      }
-      process.exit(0);
+    const helpCtx: CommandContext = { args, options };
+    const help = registration.help;
+    if (typeof help === "string") {
+      process.stdout.write(help.endsWith("\n") ? help : help + "\n");
+    } else if (typeof help === "function") {
+      await help(helpCtx);
+    } else {
+      // No rich help defined — synthesize one from the registration
+      // metadata so the user at least learns the description, the
+      // available subcommands, and the aliases.
+      process.stdout.write(renderFallbackHelp(registration));
     }
-    // Subcommand-level --help: fall through to registration.run() which
-    // will dispatch to the subcommand's own help renderer (e.g. ai/chat,
-    // ai/eval, db/*, etc.).
+    process.exit(0);
   }
 
   // Show hero banner (after help routing so `--help` never prints it).
