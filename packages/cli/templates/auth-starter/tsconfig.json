@@ -8,6 +8,7 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "types": ["bun-types"],
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "client/__generated__/*": ["./__MANDU_BLOCKED__/no-direct-generated-import/*"],
