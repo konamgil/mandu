@@ -1,14 +1,10 @@
 /**
- * DNA-017: Hero Banner with cfonts + gradient
+ * DNA-017: Hero Banner with a bundled ASCII fallback + gradient
  *
- * Sexy ASCII art banner for CLI startup
- * Inspired by Claude Code, Vite, Astro CLI screens
- *
- * @see https://github.com/dominikwilkowski/cfonts
+ * ASCII art banner for CLI startup.
  */
 
 import { theme, isRich, stripAnsi } from "./theme.js";
-import { MANDU_PALETTE } from "./palette.js";
 
 /**
  * Check if banner should be displayed
@@ -77,7 +73,12 @@ function applyGradient(text: string): string {
 }
 
 /**
- * Render hero banner with cfonts (if available) or fallback
+ * Render hero banner without reading external font files.
+ *
+ * Bun standalone binaries embed JavaScript modules, but libraries such as
+ * cfonts load their font definitions from package files at runtime. Those
+ * files are not available from the compiled binary, so the banner must stay
+ * self-contained.
  */
 export async function renderHeroBanner(version: string): Promise<void> {
   const cols = process.stdout.columns ?? 80;
@@ -88,23 +89,8 @@ export async function renderHeroBanner(version: string): Promise<void> {
     return;
   }
 
-  // Try cfonts first
-  try {
-    const cfonts = await import("cfonts");
-
-    cfonts.say("MANDU", {
-      font: "block",
-      gradient: [MANDU_PALETTE.accent, MANDU_PALETTE.accentBright],
-      transitionGradient: true,
-      align: "center",
-      space: true,
-      maxLength: Math.min(cols - 4, 80),
-    });
-  } catch {
-    // cfonts not available, use fallback
-    const ascii = cols >= 60 ? MANDU_ASCII_LARGE : MANDU_ASCII_SMALL;
-    console.log(applyGradient(ascii));
-  }
+  const ascii = cols >= 60 ? MANDU_ASCII_LARGE : MANDU_ASCII_SMALL;
+  console.log(applyGradient(ascii));
 
   // Tagline
   const tagline = `Agent-Native Web Framework v${version}`;
