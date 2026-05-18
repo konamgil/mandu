@@ -148,7 +148,7 @@
     },
     "packages/cli": {
       "name": "@mandujs/cli",
-      "version": "0.44.9",
+      "version": "0.44.10",
       "bin": {
         "mandu": "src/main.ts",
       },

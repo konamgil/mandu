@@ -1,5 +1,11 @@
 # @mandujs/cli
 
+## 0.44.10
+
+### Patch Changes
+
+- Fix standalone Windows SSR prerender imports by writing each generated SSR bundle to its own cache directory.
+
 ## 0.44.9
 
 ### Patch Changes

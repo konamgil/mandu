@@ -53,7 +53,7 @@
  */
 
 import path from "path";
-import { mkdir, readdir, unlink, readFile } from "fs/promises";
+import { mkdir, readdir, unlink, readFile, rm } from "fs/promises";
 import { statSync } from "fs";
 import type { BunPlugin } from "bun";
 import { safeBuild } from "@mandujs/core/bundler/safe-build";
@@ -110,13 +110,20 @@ async function readPackageDepNames(rootDir: string): Promise<string[]> {
  * Always-external defaults are included even if the user's package.json is
  * missing or unreadable, so the framework's own runtime never gets bundled.
  */
-const FRAMEWORK_EXTERNAL = [
+const REACT_AND_PLATFORM_EXTERNAL = [
   "react",
   "react/*",
   "react-dom",
   "react-dom/*",
   "react-dom/server",
   "react-dom/client",
+  "bun",
+  "bun:*",
+  "node:*",
+];
+
+const FRAMEWORK_EXTERNAL = [
+  ...REACT_AND_PLATFORM_EXTERNAL,
   "@mandujs/core",
   "@mandujs/core/*",
   "@mandujs/cli",
@@ -127,13 +134,10 @@ const FRAMEWORK_EXTERNAL = [
   "@mandujs/ate/*",
   "@mandujs/skills",
   "@mandujs/skills/*",
-  "bun",
-  "bun:*",
-  "node:*",
 ];
 
-function buildFrameworkExternalList(): string[] {
-  return [...FRAMEWORK_EXTERNAL];
+function buildStandaloneExternalList(): string[] {
+  return [...REACT_AND_PLATFORM_EXTERNAL];
 }
 
 function buildExternalList(depNames: string[]): string[] {
@@ -527,7 +531,7 @@ export function createBundledImporter(
         const entries = await readdir(cacheDir);
         await Promise.all(
           entries.map((entry) =>
-            unlink(path.join(cacheDir, entry)).catch(() => {}),
+            rm(path.join(cacheDir, entry), { recursive: true, force: true }).catch(() => {}),
           ),
         );
       } catch {
@@ -536,6 +540,23 @@ export function createBundledImporter(
       await mkdir(cacheDir, { recursive: true });
     })();
     return cleanupPromise;
+  };
+
+  const removeBundlePath = async (bundlePath: string): Promise<void> => {
+    const bundleDir = path.dirname(bundlePath);
+    const relativeDir = path.relative(cacheDir, bundleDir);
+    const isNestedBundleDir =
+      relativeDir !== "" &&
+      relativeDir !== "." &&
+      !relativeDir.startsWith("..") &&
+      !path.isAbsolute(relativeDir);
+
+    if (isNestedBundleDir) {
+      await rm(bundleDir, { recursive: true, force: true });
+      return;
+    }
+
+    await unlink(bundlePath).catch(() => {});
   };
 
   /**
@@ -553,9 +574,19 @@ export function createBundledImporter(
     const seq = ++counter;
     const ts = Date.now();
     const stem = path.basename(rootPathAbs).replace(/[^a-zA-Z0-9._-]/g, "_");
-    const naming = `${stem}-${ts}-${seq}.mjs`;
+    const standaloneRuntime = !isBunExecutable(process.execPath);
+    // Bun standalone caches directory lookups during dynamic import. Put each
+    // child-built SSR bundle in a fresh directory so newly-created files are
+    // visible after the first import in the process.
+    const outputDir = standaloneRuntime
+      ? path.join(cacheDir, `${ts}-${seq}`)
+      : cacheDir;
+    const naming = standaloneRuntime
+      ? `${stem}.mjs`
+      : `${stem}-${ts}-${seq}.mjs`;
 
     const externalList = await ensureExternalList();
+    await mkdir(outputDir, { recursive: true });
 
     let result: SSRBuildOutputLike;
     try {
@@ -580,7 +611,7 @@ export function createBundledImporter(
       if (isBunExecutable(process.execPath)) {
         result = await safeBuild({
           entrypoints: [rootPathAbs],
-          outdir: cacheDir,
+          outdir: outputDir,
           naming,
           target: "bun",
           format: "esm",
@@ -603,9 +634,9 @@ export function createBundledImporter(
         result = await runExternalBunBuild({
           rootDir,
           rootPathAbs,
-          cacheDir,
+          cacheDir: outputDir,
           naming,
-          externalList: buildFrameworkExternalList(),
+          externalList: buildStandaloneExternalList(),
         });
       }
     } catch (err) {
@@ -662,7 +693,7 @@ export function createBundledImporter(
     // still resolving — file deletion only removes the on-disk artifact.
     const previous = cacheByRoot.get(rootPathAbs);
     if (previous && previous.bundlePath !== output.path) {
-      unlink(previous.bundlePath).catch(() => {});
+      removeBundlePath(previous.bundlePath).catch(() => {});
     }
 
     await Bun.write(output.path, bundleContents);
@@ -670,7 +701,15 @@ export function createBundledImporter(
     const fileUrl = Bun.pathToFileURL(output.path);
     fileUrl.searchParams.set("t", `${ts}-${seq}`);
     debugSSRImport(`importing SSR bundle ${fileUrl.href}`);
-    const imported = (await import(fileUrl.href)) as T;
+    let imported: T;
+    try {
+      imported = (await import(fileUrl.href)) as T;
+    } catch (error) {
+      debugSSRImport(
+        `import failed; exists=${await Bun.file(output.path).exists()}; path=${output.path}`,
+      );
+      throw error;
+    }
 
     cacheByRoot.set(rootPathAbs, {
       bundlePath: output.path,
@@ -727,7 +766,7 @@ export function createBundledImporter(
     for (const rootAbs of affected) {
       const cached = cacheByRoot.get(rootAbs);
       if (cached) {
-        unlink(cached.bundlePath).catch(() => {});
+        removeBundlePath(cached.bundlePath).catch(() => {});
         cacheByRoot.delete(rootAbs);
       }
       graph.remove(rootAbs);
@@ -745,7 +784,7 @@ export function createBundledImporter(
     // start from a clean directory.
     const pending: Array<Promise<unknown>> = [];
     for (const [, cached] of cacheByRoot) {
-      pending.push(unlink(cached.bundlePath).catch(() => {}));
+      pending.push(removeBundlePath(cached.bundlePath).catch(() => {}));
     }
     await Promise.all(pending);
     cacheByRoot.clear();
@@ -758,7 +797,7 @@ export function createBundledImporter(
       const entries = await readdir(cacheDir);
       await Promise.all(
         entries.map((entry) =>
-          unlink(path.join(cacheDir, entry)).catch(() => {}),
+          rm(path.join(cacheDir, entry), { recursive: true, force: true }).catch(() => {}),
         ),
       );
     } catch {
