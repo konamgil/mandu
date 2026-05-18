@@ -1,5 +1,11 @@
 # @mandujs/cli
 
+## 0.44.9
+
+### Patch Changes
+
+- Keep the external Bun SSR fallback from externalizing app dependencies while preserving Mandu and React runtime externals.
+
 ## 0.44.8
 
 ### Patch Changes

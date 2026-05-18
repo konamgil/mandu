@@ -110,35 +110,40 @@ async function readPackageDepNames(rootDir: string): Promise<string[]> {
  * Always-external defaults are included even if the user's package.json is
  * missing or unreadable, so the framework's own runtime never gets bundled.
  */
+const FRAMEWORK_EXTERNAL = [
+  "react",
+  "react/*",
+  "react-dom",
+  "react-dom/*",
+  "react-dom/server",
+  "react-dom/client",
+  "@mandujs/core",
+  "@mandujs/core/*",
+  "@mandujs/cli",
+  "@mandujs/cli/*",
+  "@mandujs/mcp",
+  "@mandujs/mcp/*",
+  "@mandujs/ate",
+  "@mandujs/ate/*",
+  "@mandujs/skills",
+  "@mandujs/skills/*",
+  "bun",
+  "bun:*",
+  "node:*",
+];
+
+function buildFrameworkExternalList(): string[] {
+  return [...FRAMEWORK_EXTERNAL];
+}
+
 function buildExternalList(depNames: string[]): string[] {
-  const ALWAYS_EXTERNAL = [
-    "react",
-    "react/*",
-    "react-dom",
-    "react-dom/*",
-    "react-dom/server",
-    "react-dom/client",
-    "@mandujs/core",
-    "@mandujs/core/*",
-    "@mandujs/cli",
-    "@mandujs/cli/*",
-    "@mandujs/mcp",
-    "@mandujs/mcp/*",
-    "@mandujs/ate",
-    "@mandujs/ate/*",
-    "@mandujs/skills",
-    "@mandujs/skills/*",
-    "bun",
-    "bun:*",
-    "node:*",
-  ];
   const fromPkg: string[] = [];
   for (const name of depNames) {
     fromPkg.push(name);
     fromPkg.push(`${name}/*`);
   }
   // Dedupe (Set preserves insertion order)
-  return Array.from(new Set([...ALWAYS_EXTERNAL, ...fromPkg]));
+  return Array.from(new Set([...FRAMEWORK_EXTERNAL, ...fromPkg]));
 }
 
 interface TsconfigPathAlias {
@@ -600,7 +605,7 @@ export function createBundledImporter(
           rootPathAbs,
           cacheDir,
           naming,
-          externalList,
+          externalList: buildFrameworkExternalList(),
         });
       }
     } catch (err) {
