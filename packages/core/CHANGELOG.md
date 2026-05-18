@@ -1,5 +1,15 @@
 # @mandujs/core
 
+## 0.54.3
+
+### Patch Changes
+
+- [`8dbdc20`](https://github.com/konamgil/mandu/commit/8dbdc20ac04f5ace48eb579f9f50619d1e6a67fc) Thanks [@konamgil](https://github.com/konamgil)! - Refresh an existing `.mandu/guard.lock` during package updates so Mandu version bumps do not leave guard checks blocked by stale config hashes.
+
+- [`9ecb049`](https://github.com/konamgil/mandu/commit/9ecb049add40f51c0113b4acb866d7806b82f717) Thanks [@konamgil](https://github.com/konamgil)! - Support the official SSR page plus inline partial hydration pattern by emitting partial DOM markers, building `*.partial.tsx` client bundles, and preserving loader data shape during hydration serialization.
+
+- [`23502f8`](https://github.com/konamgil/mandu/commit/23502f89d7036e032ea129058dfbcd569d56a806) Thanks [@konamgil](https://github.com/konamgil)! - Align guard policy between CLI and MCP, make one-shot guard/check commands exit cleanly, generate init lockfiles from validated config, and keep lefthook templates Windows-portable.
+
 ## 0.54.2
 
 ### Patch Changes

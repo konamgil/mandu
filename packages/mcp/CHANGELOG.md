@@ -1,5 +1,18 @@
 # @mandujs/mcp
 
+## 0.37.3
+
+### Patch Changes
+
+- [`fbfbf36`](https://github.com/konamgil/mandu/commit/fbfbf36c404edb2831dd1080427d8071cfe1690d) Thanks [@konamgil](https://github.com/konamgil)! - Clarify hydration skill guidance so islands use the supported object API and inline interactive regions use partials.
+
+- [`9ecb049`](https://github.com/konamgil/mandu/commit/9ecb049add40f51c0113b4acb866d7806b82f717) Thanks [@konamgil](https://github.com/konamgil)! - Support the official SSR page plus inline partial hydration pattern by emitting partial DOM markers, building `*.partial.tsx` client bundles, and preserving loader data shape during hydration serialization.
+
+- [`23502f8`](https://github.com/konamgil/mandu/commit/23502f89d7036e032ea129058dfbcd569d56a806) Thanks [@konamgil](https://github.com/konamgil)! - Align guard policy between CLI and MCP, make one-shot guard/check commands exit cleanly, generate init lockfiles from validated config, and keep lefthook templates Windows-portable.
+
+- Updated dependencies [[`8dbdc20`](https://github.com/konamgil/mandu/commit/8dbdc20ac04f5ace48eb579f9f50619d1e6a67fc), [`9ecb049`](https://github.com/konamgil/mandu/commit/9ecb049add40f51c0113b4acb866d7806b82f717), [`23502f8`](https://github.com/konamgil/mandu/commit/23502f89d7036e032ea129058dfbcd569d56a806)]:
+  - @mandujs/core@0.54.3
+
 ## 0.37.2
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @mandujs/cli
 
+## 0.44.7
+
+### Patch Changes
+
+- [`23502f8`](https://github.com/konamgil/mandu/commit/23502f89d7036e032ea129058dfbcd569d56a806) Thanks [@konamgil](https://github.com/konamgil)! - Align guard policy between CLI and MCP, make one-shot guard/check commands exit cleanly, generate init lockfiles from validated config, and keep lefthook templates Windows-portable.
+
+- Updated dependencies [[`8dbdc20`](https://github.com/konamgil/mandu/commit/8dbdc20ac04f5ace48eb579f9f50619d1e6a67fc), [`fbfbf36`](https://github.com/konamgil/mandu/commit/fbfbf36c404edb2831dd1080427d8071cfe1690d), [`9ecb049`](https://github.com/konamgil/mandu/commit/9ecb049add40f51c0113b4acb866d7806b82f717), [`23502f8`](https://github.com/konamgil/mandu/commit/23502f89d7036e032ea129058dfbcd569d56a806)]:
+  - @mandujs/core@0.54.3
+  - @mandujs/mcp@0.37.3
+  - @mandujs/edge@0.4.52
+
 ## 0.44.6
 
 ### Patch Changes
