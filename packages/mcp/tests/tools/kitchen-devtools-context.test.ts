@@ -140,6 +140,29 @@ describe("mandu.devtools.context — handler", () => {
     expect(fetchCalls[0].url).toStartWith("http://localhost:3335/");
   });
 
+  it("prefers runtime-control baseUrl for kitchen errors", async () => {
+    mkdirSync(join(root, ".mandu"), { recursive: true });
+    writeFileSync(
+      join(root, ".mandu", "runtime-control.json"),
+      JSON.stringify({
+        mode: "dev",
+        port: 3337,
+        token: "test-token",
+        baseUrl: "http://localhost:3337",
+        startedAt: new Date().toISOString(),
+      }),
+    );
+    nextResponse = () => new Response(JSON.stringify({ errors: [], count: 0 }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const handlers = kitchenTools(root);
+    await handlers["mandu.kitchen.errors"]({});
+
+    expect(fetchCalls[0].url).toStartWith("http://localhost:3337/");
+  });
+
   it("uses explicit port for kitchen errors", async () => {
     nextResponse = () => new Response(JSON.stringify({ errors: [], count: 0 }), {
       status: 200,
