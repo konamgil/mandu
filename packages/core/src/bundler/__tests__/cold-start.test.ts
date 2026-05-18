@@ -31,6 +31,7 @@ import path from "path";
 import type { RouteSpec } from "../../spec/schema";
 import {
   _testOnly_scanIslandFiles,
+  _testOnly_scanPartialFiles,
   _testOnly_getHydratedRoutes,
 } from "../build";
 import { HMR_PERF } from "../../perf/hmr-markers";
@@ -500,5 +501,32 @@ describe("Phase 7.1 R1 Agent C — per-island scan skips non-hydrated routes", (
     ];
     const result = await _testOnly_scanIslandFiles(routes, project.rootDir);
     expect(result).toEqual([]);
+  });
+});
+
+describe("partial bundle scan", () => {
+  let project: ReturnType<typeof createProject>;
+
+  beforeEach(() => {
+    project = createProject();
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(project.rootDir, { recursive: true, force: true });
+    } catch {
+      /* Windows lock tolerance */
+    }
+  });
+
+  it("discovers *.partial.tsx files outside .mandu and node_modules", async () => {
+    project.writeIslandFile("app", "Home.partial.tsx");
+    project.writeIslandFile(".mandu/client", "Stale.partial.tsx");
+    project.writeIslandFile("node_modules/pkg", "Ignored.partial.tsx");
+
+    const result = await _testOnly_scanPartialFiles(project.rootDir);
+
+    expect(result.map((entry) => entry.name)).toEqual(["Home"]);
+    expect(result[0].priority).toBe("visible");
   });
 });

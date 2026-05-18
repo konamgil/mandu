@@ -222,17 +222,18 @@ export default route()
   .handle(...);
 
 // 인라인 interactive 영역:
-// app/components/Chart.client.tsx
+// app/components/Chart.partial.tsx
 import { partial } from "@mandujs/core/client";
 
-export const ChartPartial = partial({ component: Chart, priority: "idle" });
-export const PopoverPartial = partial({ component: Popover, priority: "interaction" });
+export default partial({ id: "Chart", component: Chart, priority: "idle" });
 ```
 
 - **visible**: IntersectionObserver 로 viewport 진입 시.
 - **idle**: `requestIdleCallback` (없으면 setTimeout fallback).
 - **interaction**: pointerdown / focus / keydown 중 처음.
 - **media(query)**: matchMedia 일치 시.
+- SSR 페이지에서 쓰려면 `export const hydration = { strategy: "island" }`
+  를 페이지에 두고 `<ChartPartial.Render ... />` 를 렌더링합니다.
 
 ---
 

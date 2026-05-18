@@ -614,11 +614,14 @@ function generateHTMLShell(options: StreamingSSROptions): string {
 </style>`;
 
   let islandOpenTag = "";
+  const hasRouteBundle = !!(needsHydration && bundleManifest.bundles[routeId]?.js);
   if (needsHydration) {
     const bundle = bundleManifest.bundles[routeId];
     const bundleSrc = bundle?.js ? `${bundle.js}?t=${Date.now()}` : "";
     const priority = hydration.priority || "visible";
-    islandOpenTag = `<div data-mandu-island="${escapeHtmlAttr(routeId)}" data-mandu-src="${escapeHtmlAttr(bundleSrc)}" data-mandu-priority="${escapeHtmlAttr(priority)}" style="display:contents">`;
+    if (hasRouteBundle) {
+      islandOpenTag = `<div data-mandu-island="${escapeHtmlAttr(routeId)}" data-mandu-src="${escapeHtmlAttr(bundleSrc)}" data-mandu-priority="${escapeHtmlAttr(priority)}" style="display:contents">`;
+    }
   }
 
   // Phase 7.1 R2 Agent D: Fast Refresh preamble. Must land in <head>
@@ -697,7 +700,7 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
   // 1~8: hydration이 필요한 경우에만 클라이언트 JS 관련 스크립트 삽입
   if (needsHydration) {
     // 1. Critical 데이터 스크립트 (즉시 사용 가능)
-    if (criticalData && routeId) {
+    if (criticalData !== undefined && routeId) {
       const wrappedData = {
         [routeId]: {
           serverData: criticalData,
@@ -750,6 +753,12 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
       const cacheBust = `${bundle.js}${bundle.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
       scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
     }
+    if (bundleManifest.partials) {
+      for (const partial of Object.values(bundleManifest.partials)) {
+        const cacheBust = `${partial.js}${partial.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
+        scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
+      }
+    }
 
     // 7. Runtime 로드
     if (bundleManifest.shared.runtime) {
@@ -783,7 +792,7 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
   }
 
   // Island wrapper 닫기 (hydration이 필요한 경우)
-  const islandCloseTag = needsHydration ? "</div>" : "";
+  const islandCloseTag = needsHydration && bundleManifest.bundles[routeId]?.js ? "</div>" : "";
 
   return `${islandCloseTag}</div>
   ${scripts.join("\n  ")}`;

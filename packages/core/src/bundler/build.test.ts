@@ -176,4 +176,11 @@ describe("buildClientBundles vendor shims", () => {
     expect(runtimeSource).toContain("data-mandu-recoverable-error");
     expect(runtimeSource).toContain("pointerdown");
   });
+
+  test("runtime parses SSR data script before island setup", async () => {
+    const runtimeSource = await readFile(path.join(rootDir, ".mandu", "client", "_runtime.js"), "utf-8");
+    expect(runtimeSource).toContain("function readManduData");
+    expect(runtimeSource).toContain("document.getElementById(\"__MANDU_DATA__\")");
+    expect(runtimeSource).toContain("JSON.parse");
+  });
 });

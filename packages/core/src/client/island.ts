@@ -4,6 +4,7 @@
  */
 
 import type { ReactNode } from "react";
+import { serializeProps } from "./serialize";
 import { getServerData as getGlobalServerData } from "./window-state";
 
 /**
@@ -336,12 +337,20 @@ export interface PartialConfig {
  * Partial Island 정의 타입
  */
 export interface PartialDefinition<TProps> {
+  /** Partial 고유 ID. 기본값은 component displayName/name 입니다. */
+  id?: string;
   /** Partial 컴포넌트 */
   component: React.ComponentType<TProps>;
   /** 초기 props (SSR에서 전달) */
   initialProps?: TProps;
   /** 하이드레이션 우선순위 */
   priority?: "immediate" | "visible" | "idle" | "interaction";
+  /** 명시적 번들 URL. 기본값은 `/.mandu/client/{id}.partial.js` 입니다. */
+  src?: string;
+  /** 에러 시 표시할 UI */
+  errorBoundary?: (error: Error, reset: () => void) => ReactNode;
+  /** 로딩 중 표시할 UI */
+  loading?: () => ReactNode;
 }
 
 /**
@@ -354,6 +363,17 @@ export interface CompiledPartial<TProps> {
   __mandu_partial: true;
   /** Partial ID */
   __mandu_partial_id?: string;
+}
+
+function normalizePartialId(id: string): string {
+  return id
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, "-")
+    .replace(/^-+|-+$/g, "") || "partial";
+}
+
+function priorityToHydrate(priority: NonNullable<PartialDefinition<unknown>["priority"]>): string {
+  return priority === "immediate" ? "load" : priority;
 }
 
 /**
@@ -388,16 +408,46 @@ export function partial<TProps extends Record<string, unknown>>(
     throw new Error("[Mandu Partial] component is required");
   }
 
+  const partialId = normalizePartialId(
+    definition.id ||
+    definition.component.displayName ||
+    definition.component.name ||
+    "partial",
+  );
+  const normalizedDefinition: PartialDefinition<TProps> = {
+    ...definition,
+    id: partialId,
+  };
+
   const compiled: CompiledPartial<TProps> = {
-    definition,
+    definition: normalizedDefinition,
     __mandu_partial: true,
+    __mandu_partial_id: partialId,
   };
 
   // Render 컴포넌트 생성
   const React = require("react");
 
   const RenderComponent: React.FC<TProps> = (props) => {
-    return React.createElement(definition.component, props);
+    const renderProps = Object.keys(props).length > 0
+      ? props
+      : (normalizedDefinition.initialProps ?? props);
+    const priority = normalizedDefinition.priority ?? "visible";
+    const bundleSrc = normalizedDefinition.src ?? `/.mandu/client/${partialId}.partial.js`;
+
+    return React.createElement(
+      "div",
+      {
+        "data-mandu-island": partialId,
+        "data-mandu-partial": partialId,
+        "data-mandu-src": bundleSrc,
+        "data-mandu-priority": priority,
+        "data-hydrate": priorityToHydrate(priority),
+        "data-props": serializeProps(renderProps),
+        style: { display: "contents" },
+      },
+      React.createElement(normalizedDefinition.component, renderProps),
+    );
   };
 
   return Object.assign(compiled, { Render: RenderComponent });

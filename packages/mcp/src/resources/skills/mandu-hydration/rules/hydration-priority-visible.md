@@ -20,8 +20,10 @@ Set hydration priority based on when the component needs to be interactive.
 
 ## Examples
 
-Inline client regions use `partial({ component, priority })`, then render the
-returned `.Render` component from the server page.
+Inline client regions live in `*.partial.tsx` files and use
+`partial({ id, component, priority })`, then render the returned `.Render`
+component from the server page. The page must export a non-`none` hydration
+config.
 
 ### Immediate: Always-visible interactions
 
@@ -30,6 +32,7 @@ returned `.Render` component from the server page.
 import { partial } from "@mandujs/core/client";
 
 const HeaderNavPartial = partial({
+  id: "HeaderNav",
   component: HeaderNav,
   priority: "immediate",
 });
@@ -42,6 +45,7 @@ const HeaderNavPartial = partial({
 ```tsx
 // Comments section - load when scrolled into view
 const CommentsPartial = partial({
+  id: "Comments",
   component: CommentsSection,
   priority: "visible",
 });
@@ -54,6 +58,7 @@ const CommentsPartial = partial({
 ```tsx
 // Chat widget - can wait until browser is idle
 const ChatPartial = partial({
+  id: "Chat",
   component: ChatWidget,
   priority: "idle",
 });
@@ -66,6 +71,7 @@ const ChatPartial = partial({
 ```tsx
 // Video player - only hydrate when user clicks play
 const VideoPartial = partial({
+  id: "Video",
   component: VideoPlayer,
   priority: "interaction",
 });

@@ -67,6 +67,16 @@ export interface BundleManifest {
       priority: "immediate" | "visible" | "idle" | "interaction";
     }
   >;
+  /** Inline partial bundles (from *.partial.tsx / *.partial.ts files) */
+  partials?: Record<
+    string,
+    {
+      /** JavaScript bundle path */
+      js: string;
+      /** Hydration priority */
+      priority: "immediate" | "visible" | "idle" | "interaction";
+    }
+  >;
   /** 공유 청크 */
   shared: {
     /** Hydration 런타임 */
@@ -117,6 +127,13 @@ export interface IslandFileEntry {
   name: string;
   filePath: string;
   routeId: string;
+  priority: "immediate" | "visible" | "idle" | "interaction";
+}
+
+/** Inline partial bundle entry (used by scanPartialFiles) */
+export interface PartialFileEntry {
+  name: string;
+  filePath: string;
   priority: "immediate" | "visible" | "idle" | "interaction";
 }
 

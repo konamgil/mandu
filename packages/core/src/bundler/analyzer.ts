@@ -353,6 +353,14 @@ export async function analyzeBundle(
       deps: [],
     });
   }
+  for (const [partialName, entry] of Object.entries(manifest.partials ?? {})) {
+    islandSources.push({
+      name: `partial:${partialName}`,
+      url: entry.js,
+      priority: entry.priority,
+      deps: [],
+    });
+  }
 
   const islands: AnalyzeIsland[] = [];
   for (const src of islandSources) {

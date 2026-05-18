@@ -28,7 +28,8 @@
  *
  * URL safety model (applies to `shared.runtime`, `shared.vendor`,
  * `shared.router`, `shared.fastRefresh.glue`, `shared.fastRefresh.runtime`,
- * `bundles[].js`, `bundles[].css`, `islands[].js`, `importMap.imports[*]`):
+ * `bundles[].js`, `bundles[].css`, `islands[].js`, `partials[].js`,
+ * `importMap.imports[*]`):
  *
  *   ALLOW:  absolute paths rooted at `/.mandu/client/` ending in `.js` or `.css`.
  *           The bundler itself only ever emits this shape.
@@ -167,6 +168,11 @@ const IslandEntrySchema = z.object({
   priority: PrioritySchema,
 });
 
+const PartialEntrySchema = z.object({
+  js: safeManduUrl("partials[].js"),
+  priority: PrioritySchema,
+});
+
 const FastRefreshSchema = z.object({
   runtime: safeManduUrl("shared.fastRefresh.runtime"),
   glue: safeManduUrl("shared.fastRefresh.glue"),
@@ -222,6 +228,7 @@ export const BundleManifestSchema = z
     env: z.enum(["development", "production"]),
     bundles: z.record(z.string(), BundleEntrySchema),
     islands: z.record(z.string(), IslandEntrySchema).optional(),
+    partials: z.record(z.string(), PartialEntrySchema).optional(),
     shared: SharedSchema,
     importMap: ImportMapSchema.optional(),
   })

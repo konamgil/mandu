@@ -80,19 +80,55 @@ inline JSX inside a server page; the runtime intentionally throws a diagnostic
 for that case. For embedded interactive regions, use `partial()`:
 
 ```tsx
+// app/HeaderSearch.partial.tsx
 "use client";
 
 import { partial } from "@mandujs/core/client";
 
-const SearchPartial = partial({
-  component: SearchBox,
+function HeaderSearch(props: { query: string }) {
+  return <SearchBox initialQuery={props.query} />;
+}
+
+export default partial({
+  id: "HeaderSearch",
+  component: HeaderSearch,
   priority: "interaction",
 });
+```
 
-export function Header() {
-  return <SearchPartial.Render />;
+```tsx
+// app/page.tsx
+import HeaderSearchPartial from "./HeaderSearch.partial";
+
+export const hydration = {
+  strategy: "island",
+  priority: "visible",
+  preload: false,
+};
+
+export default async function Page() {
+  const products = await fetchProducts();
+
+  return (
+    <main>
+      <ProductList products={products} />
+      <HeaderSearchPartial.Render query="" />
+    </main>
+  );
 }
 ```
+
+The filename stem and the partial `id` should match (`HeaderSearch.partial.tsx`
+→ `id: "HeaderSearch"`) unless you provide an explicit `src`. The server
+render emits SSR HTML plus `data-mandu-partial`, `data-mandu-island`,
+`data-mandu-src`, and `data-props` markers; the bundler emits
+`/.mandu/client/HeaderSearch.partial.js`.
+
+Do not place a `.client.tsx` component under `src/client/` and expect route
+auto-discovery. Route-level bundles are discovered from the route manifest
+(`app/*.island.tsx`, `"use client"` pages, or `spec/slots/{routeId}.client.tsx`).
+Inline server-page interactivity uses `*.partial.tsx` files plus
+`partial().Render`.
 
 ## Runtime API (advanced)
 

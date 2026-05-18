@@ -13,6 +13,7 @@ import type {
   BundleStats,
   BundlerOptions,
   IslandFileEntry,
+  PartialFileEntry,
 } from "./types";
 import { HYDRATION } from "../constants";
 import { safeBuild } from "./safe-build";
@@ -188,6 +189,45 @@ async function scanIslandFiles(routes: RouteSpec[], rootDir: string): Promise<Is
  */
 export const _testOnly_scanIslandFiles = scanIslandFiles;
 
+function normalizeClientEntryName(name: string): string {
+  return name
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, "-")
+    .replace(/^-+|-+$/g, "") || "partial";
+}
+
+async function scanPartialFiles(rootDir: string): Promise<PartialFileEntry[]> {
+  const entries: PartialFileEntry[] = [];
+  const seen = new Set<string>();
+
+  try {
+    const glob = new Bun.Glob("**/*.partial.{ts,tsx}");
+    for await (const rel of glob.scan({ cwd: rootDir, absolute: true })) {
+      if (rel.includes(`${path.sep}node_modules${path.sep}`)) continue;
+      if (rel.includes(`${path.sep}.mandu${path.sep}`)) continue;
+
+      const filePath = path.resolve(rel);
+      if (seen.has(filePath)) continue;
+      seen.add(filePath);
+
+      const base = path.basename(filePath).replace(/\.partial\.tsx?$/, "");
+      entries.push({
+        name: normalizeClientEntryName(base),
+        filePath,
+        priority: HYDRATION.DEFAULT_PRIORITY,
+      });
+    }
+  } catch {
+    // Bun.Glob unavailable or scan failed — a missing partial bundle should
+    // not prevent route-level islands from building.
+  }
+
+  return entries.sort((a, b) => a.filePath.localeCompare(b.filePath));
+}
+
+/** @internal test helper */
+export const _testOnly_scanPartialFiles = scanPartialFiles;
+
 /**
  * Test-only accessor for the hydrated-routes filter. Mirrors the rationale
  * above — lets tests verify that `getHydratedRoutes` really does drop
@@ -219,35 +259,28 @@ export async function collectCompilerLintTargets(
   rootDir: string,
 ): Promise<string[]> {
   const hydratedRoutes = getHydratedRoutes(manifest);
-  if (hydratedRoutes.length === 0) return [];
 
   const out = new Set<string>();
 
   // 1) Islands (reuses the bundler's canonical scanner).
-  const islandFiles = await scanIslandFiles(hydratedRoutes, rootDir);
-  for (const entry of islandFiles) {
-    out.add(path.resolve(entry.filePath));
-  }
+  if (hydratedRoutes.length > 0) {
+    const islandFiles = await scanIslandFiles(hydratedRoutes, rootDir);
+    for (const entry of islandFiles) {
+      out.add(path.resolve(entry.filePath));
+    }
 
-  // 2) `"use client"` page modules — the hydrated-route filter
-  //    already asserted `clientModule` exists.
-  for (const route of hydratedRoutes) {
-    const rel = route.clientModule ?? route.module;
-    if (rel) out.add(path.resolve(rootDir, rel));
+    // 2) `"use client"` page modules — the hydrated-route filter
+    //    already asserted `clientModule` exists.
+    for (const route of hydratedRoutes) {
+      const rel = route.clientModule ?? route.module;
+      if (rel) out.add(path.resolve(rootDir, rel));
+    }
   }
 
   // 3) Partials — glob the whole project once. Partials live anywhere
   //    the user chooses, they're not sibling-scoped like islands.
-  try {
-    const glob = new Bun.Glob("**/*.partial.{ts,tsx}");
-    for await (const rel of glob.scan({ cwd: rootDir, absolute: true })) {
-      if (rel.includes(`${path.sep}node_modules${path.sep}`)) continue;
-      if (rel.includes(`${path.sep}.mandu${path.sep}`)) continue;
-      out.add(path.resolve(rel));
-    }
-  } catch {
-    // Bun.Glob unavailable or scan failed — skip partials rather than
-    // aborting the whole diagnostic run.
+  for (const entry of await scanPartialFiles(rootDir)) {
+    out.add(path.resolve(entry.filePath));
   }
 
   return Array.from(out).sort();
@@ -283,6 +316,63 @@ async function buildPerIslandBundle(
       throw new Error(`Island build failed for '${entry.name}' (source: ${entry.filePath}):\n${grouped}\n  Hint: Check the import paths and TypeScript types in this island file.`);
     }
     return { name: entry.name, js: `/.mandu/client/${outputName}`, route: entry.routeId, priority: entry.priority };
+  } catch (error) {
+    await fs.unlink(entryPath).catch(() => {});
+    throw error;
+  }
+}
+
+interface PartialBundleBuild {
+  name: string;
+  js: string;
+  priority: PartialFileEntry["priority"];
+  size: number;
+  gzipSize: number;
+}
+
+/** Build a single inline partial bundle. */
+async function buildPartialBundle(
+  entry: PartialFileEntry,
+  outDir: string,
+  options: BundlerOptions,
+): Promise<PartialBundleBuild> {
+  const entryPath = path.join(outDir, `_entry_partial_${entry.name}.js`);
+  const outputName = `${entry.name}.partial.js`;
+  const isDev = isDevelopmentBuild(options);
+
+  try {
+    await Bun.write(entryPath, generatePartialEntry(entry.name, entry.filePath));
+    const result = await safeBuild({
+      entrypoints: [entryPath],
+      outdir: outDir,
+      naming: outputName,
+      minify: shouldMinify(options),
+      sourcemap: options.sourcemap ? "external" : "none",
+      target: "browser",
+      ...(isDev ? { reactFastRefresh: true } : {}),
+      plugins: [...manduClientPlugins(options), ...(isDev ? [fastRefreshPlugin()] : [])],
+      external: ["react", "react-dom", "react-dom/client", ...(options.external || [])],
+      define: { "process.env.NODE_ENV": nodeEnvDefine(options), ...options.define },
+    });
+    await fs.unlink(entryPath).catch(() => {});
+
+    if (!result.success) {
+      const grouped = result.logs.map((l) => `  - ${l.message}`).join("\n");
+      throw new Error(`Partial build failed for '${entry.name}' (source: ${entry.filePath}):\n${grouped}\n  Hint: Export a Mandu partial from this file with \`partial({ component })\`.`);
+    }
+
+    const outputPath = path.join(outDir, outputName);
+    const outputFile = Bun.file(outputPath);
+    const content = await outputFile.text();
+    const gzipped = Bun.gzipSync(Buffer.from(content));
+
+    return {
+      name: entry.name,
+      js: `/.mandu/client/${outputName}`,
+      priority: entry.priority,
+      size: outputFile.size,
+      gzipSize: gzipped.length,
+    };
   } catch (error) {
     await fs.unlink(entryPath).catch(() => {});
     throw error;
@@ -418,7 +508,26 @@ window.__MANDU_ROOTS__ = window.__MANDU_ROOTS__ || new Map();
 const hydratedRoots = window.__MANDU_ROOTS__;
 
 // 서버 데이터
-const getServerData = (id) => (window.__MANDU_DATA__ || {})[id]?.serverData || {};
+function readManduData() {
+  if (window.__MANDU_DATA__) return window.__MANDU_DATA__;
+
+  const raw = window.__MANDU_DATA_RAW__ || document.getElementById('__MANDU_DATA__')?.textContent;
+  if (!raw) {
+    window.__MANDU_DATA__ = {};
+    return window.__MANDU_DATA__;
+  }
+
+  try {
+    window.__MANDU_DATA__ = JSON.parse(raw);
+  } catch (error) {
+    console.warn('[Mandu] Failed to parse server data:', error);
+    window.__MANDU_DATA__ = {};
+  }
+
+  return window.__MANDU_DATA__;
+}
+
+const getServerData = (id) => readManduData()[id]?.serverData || {};
 
 /**
  * Error Boundary 컴포넌트 (Class Component)
@@ -632,9 +741,13 @@ async function loadAndHydrate(element, src) {
     const island = module.default;
     let data = getServerData(id);
 
-    // Fallback: read data-props from child element if __MANDU_DATA__ is empty
+    // Fallback: read data-props from the island root or a child element if
+    // __MANDU_DATA__ is empty. Inline partials put their serialized props on
+    // the root marker itself.
     if (!data || Object.keys(data).length === 0) {
-      const propsEl = element.querySelector('[data-props]');
+      const propsEl = element.hasAttribute('data-props')
+        ? element
+        : element.querySelector('[data-props]');
       if (propsEl) {
         try {
           data = JSON.parse(propsEl.getAttribute('data-props'));
@@ -1324,6 +1437,47 @@ export default island;
 `;
 }
 
+function generatePartialEntry(partialId: string, partialModulePath: string): string {
+  const normalizedPath = partialModulePath.replace(/\\/g, "/");
+  return `
+/**
+ * Mandu Partial: ${partialId} (Generated)
+ * Exports a runtime-compatible island wrapper around a compiled partial.
+ */
+import React from "react";
+import * as partialModule from "${normalizedPath}";
+
+function findPartial(mod) {
+  if (mod.default && mod.default.__mandu_partial === true) return mod.default;
+  for (const value of Object.values(mod)) {
+    if (value && value.__mandu_partial === true) return value;
+  }
+  throw new Error("[Mandu Partial] ${partialId} must export a value returned by partial({ component })");
+}
+
+const partial = findPartial(partialModule);
+const definition = partial.definition;
+const component = definition.component;
+
+export default {
+  __mandu_island: true,
+  definition: {
+    setup(serverData) {
+      if (serverData && typeof serverData === "object" && Object.keys(serverData).length > 0) {
+        return serverData;
+      }
+      return definition.initialProps || {};
+    },
+    render(props) {
+      return React.createElement(component, props);
+    },
+    errorBoundary: definition.errorBoundary,
+    loading: definition.loading,
+  },
+};
+`;
+}
+
 /**
  * Runtime 번들 빌드
  */
@@ -1817,7 +1971,8 @@ function createBundleManifest(
   vendorResult: VendorBuildResult,
   routerPath: string,
   env: "development" | "production",
-  islandBundles?: Array<{ name: string; js: string; route: string; priority: IslandFileEntry["priority"] }>
+  islandBundles?: Array<{ name: string; js: string; route: string; priority: IslandFileEntry["priority"] }>,
+  partialBundles?: Array<{ name: string; js: string; priority: PartialFileEntry["priority"] }>,
 ): BundleManifest {
   const bundles: BundleManifest["bundles"] = {};
 
@@ -1845,6 +2000,17 @@ function createBundleManifest(
     }
   }
 
+  let partials: BundleManifest["partials"];
+  if (partialBundles && partialBundles.length > 0) {
+    partials = {};
+    for (const partial of partialBundles) {
+      partials[partial.name] = {
+        js: partial.js,
+        priority: partial.priority,
+      };
+    }
+  }
+
   // Phase 7.1 B-2: expose Fast Refresh dev bundles so the HTML
   // preamble can inject a dynamic import pointing at them. Only
   // populated when buildVendorShims ran in dev mode.
@@ -1862,6 +2028,7 @@ function createBundleManifest(
     env,
     bundles,
     ...(islands ? { islands } : {}),
+    ...(partials ? { partials } : {}),
     shared: {
       runtime: runtimePath,
       vendor: vendorResult.react, // primary vendor for backwards compatibility
@@ -1883,12 +2050,16 @@ function createBundleManifest(
 /**
  * 번들 통계 계산
  */
-function calculateStats(outputs: BundleOutput[], startTime: number): BundleStats {
+function calculateStats(
+  outputs: BundleOutput[],
+  startTime: number,
+  extraOutputs: Array<{ routeId: string; size: number; gzipSize: number }> = [],
+): BundleStats {
   let totalSize = 0;
   let totalGzipSize = 0;
   let largestBundle = { routeId: "", size: 0 };
 
-  for (const output of outputs) {
+  for (const output of [...outputs, ...extraOutputs]) {
     totalSize += output.size;
     totalGzipSize += output.gzipSize;
 
@@ -1902,7 +2073,7 @@ function calculateStats(outputs: BundleOutput[], startTime: number): BundleStats
     totalGzipSize,
     largestBundle,
     buildTime: performance.now() - startTime,
-    bundleCount: outputs.length,
+    bundleCount: outputs.length + extraOutputs.length,
   };
 }
 
@@ -1952,6 +2123,8 @@ export async function buildClientBundles(
 
   // 1. Hydration이 필요한 라우트 필터링
   const hydratedRoutes = getHydratedRoutes(manifest);
+  const runtimeRoutes = manifest.routes.filter((route) => route.kind === "page" && needsHydration(route));
+  const partialFiles = runtimeRoutes.length > 0 ? await scanPartialFiles(rootDir) : [];
 
   // 2. 출력 디렉토리 생성 (항상 필요 - 매니페스트 저장용)
   const outDir = resolveClientOutDir(rootDir, options.outDir);
@@ -1959,7 +2132,7 @@ export async function buildClientBundles(
 
   // Hydration 라우트가 없어도 빈 매니페스트를 저장해야 함
   // (이전 빌드의 stale 매니페스트 참조 방지)
-  if (hydratedRoutes.length === 0) {
+  if (hydratedRoutes.length === 0 && partialFiles.length === 0) {
     // #185: skipFrameworkBundles 모드에서는 기존 manifest를 그대로 유지 (devtools 재빌드도 스킵)
     if (options.skipFrameworkBundles) {
       const manifestPath = path.join(rootDir, ".mandu/manifest.json");
@@ -2189,12 +2362,49 @@ export async function buildClientBundles(
       }
     }
 
+    const partialBundles: PartialBundleBuild[] = [];
+    if (partialFiles.length > 0) {
+      const partialResults = await Promise.all(
+        partialFiles.map(async (entry) => {
+          try {
+            return await buildPartialBundle(entry, outDir, options);
+          } catch (error) {
+            errors.push(`[partial:${entry.name}] ${String(error)}`);
+            return null;
+          }
+        }),
+      );
+      for (const result of partialResults) {
+        if (result) partialBundles.push(result);
+      }
+    }
+    if (partialFiles.length > 0 || existingManifest.partials) {
+      existingManifest.partials = {};
+      for (const partial of partialBundles) {
+        existingManifest.partials[partial.name] = {
+          js: partial.js,
+          priority: partial.priority,
+        };
+      }
+      if (Object.keys(existingManifest.partials).length === 0) {
+        delete existingManifest.partials;
+      }
+    }
+
     await fs.writeFile(
       path.join(rootDir, ".mandu/manifest.json"),
       JSON.stringify(existingManifest, null, 2),
     );
 
-    const stats = calculateStats(outputs, startTime);
+    const stats = calculateStats(
+      outputs,
+      startTime,
+      partialBundles.map((partial) => ({
+        routeId: `partial:${partial.name}`,
+        size: partial.size,
+        gzipSize: partial.gzipSize,
+      })),
+    );
     return { success: errors.length === 0, outputs, errors, manifest: existingManifest, stats };
   }
 
@@ -2298,6 +2508,23 @@ export async function buildClientBundles(
     }
   }
 
+  const partialBundles: PartialBundleBuild[] = [];
+  if (partialFiles.length > 0) {
+    const partialResults = await Promise.all(
+      partialFiles.map(async (entry) => {
+        try {
+          return await buildPartialBundle(entry, outDir, options);
+        } catch (error) {
+          errors.push(`[partial:${entry.name}] ${String(error)}`);
+          return null;
+        }
+      }),
+    );
+    for (const result of partialResults) {
+      if (result) partialBundles.push(result);
+    }
+  }
+
   // 6. 번들 매니페스트 생성
   const bundleManifest = createBundleManifest(
     outputs,
@@ -2306,7 +2533,8 @@ export async function buildClientBundles(
     vendorResult,
     routerResult.outputPath,
     env,
-    islandBundles
+    islandBundles,
+    partialBundles,
   );
 
   await fs.writeFile(
@@ -2315,7 +2543,15 @@ export async function buildClientBundles(
   );
 
   // 7. 통계 계산
-  const stats = calculateStats(outputs, startTime);
+  const stats = calculateStats(
+    outputs,
+    startTime,
+    partialBundles.map((partial) => ({
+      routeId: `partial:${partial.name}`,
+      size: partial.size,
+      gzipSize: partial.gzipSize,
+    })),
+  );
 
   // Phase 18.τ — fire onBundleComplete(stats) before return.
   await fireOnBundleComplete(stats);
@@ -2346,8 +2582,9 @@ export function printBundleStats(result: BundleResult): void {
   console.log("\n📦 Mandu Client Bundles");
   console.log("=".repeat(50));
 
-  if (result.outputs.length === 0) {
-    console.log("No islands to bundle (hydration: none or no clientModule)");
+  const partialCount = Object.keys(result.manifest.partials ?? {}).length;
+  if (result.outputs.length === 0 && partialCount === 0) {
+    console.log("No islands or partials to bundle (hydration: none or no client entry)");
     return;
   }
 
@@ -2363,6 +2600,9 @@ export function printBundleStats(result: BundleResult): void {
     console.log(
       `  ${output.routeId}: ${formatSize(output.size)} (gzip: ${formatSize(output.gzipSize)})`
     );
+  }
+  if (partialCount > 0) {
+    console.log(`  Partials: ${partialCount}`);
   }
 
   if (result.errors.length > 0) {

@@ -46,7 +46,7 @@ export interface SSROptions {
   title?: string;
   lang?: string;
   /** 서버에서 로드한 데이터 (클라이언트로 전달) */
-  serverData?: Record<string, unknown>;
+  serverData?: unknown;
   /** Hydration 설정 */
   hydration?: HydrationConfig;
   /** 번들 매니페스트 */
@@ -265,6 +265,13 @@ function generateHydrationScripts(
     const bundle = manifest.bundles[routeId];
     if (bundle) {
       const cacheBust = `${bundle.js}${bundle.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
+    }
+  }
+
+  if (manifest.partials) {
+    for (const partial of Object.values(manifest.partials)) {
+      const cacheBust = `${partial.js}${partial.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
       scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
     }
   }
@@ -710,7 +717,9 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     // v0.8.0: bundleSrc를 data-mandu-src 속성으로 전달 (Runtime이 dynamic import로 로드)
     const bundle = bundleManifest.bundles[routeId];
     const bundleSrc = bundle?.js;
-    content = wrapWithIsland(content, routeId, hydration.priority, bundleSrc);
+    if (bundleSrc) {
+      content = wrapWithIsland(content, routeId, hydration.priority, bundleSrc);
+    }
   }
 
   // Zero-JS 모드: island이 없는 페이지에서는 클라이언트 JS 번들을 전송하지 않음
@@ -722,7 +731,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
 
   if (needsHydration) {
     // 서버 데이터 스크립트 (클라이언트 hydration에서 사용)
-    if (serverData && routeId) {
+    if (serverData !== undefined && routeId) {
       const wrappedData = {
         [routeId]: {
           serverData,
@@ -865,7 +874,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
 function generateRouteScript(
   routeId: string,
   pattern: string,
-  _serverData?: Record<string, unknown>
+  _serverData?: unknown
 ): string {
   const routeInfo = {
     id: routeId,
@@ -1169,7 +1178,7 @@ export async function renderWithHydration(
   element: ReactElement,
   options: SSROptions & {
     routeId: string;
-    serverData: Record<string, unknown>;
+    serverData: unknown;
     hydration: HydrationConfig;
     bundleManifest: BundleManifest;
   }

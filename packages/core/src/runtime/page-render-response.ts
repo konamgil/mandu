@@ -84,10 +84,6 @@ function renderNonStreamingPageResponse(
   app: React.ReactElement,
   options: PageRenderResponseOptions
 ): Response {
-  const serverData = options.loaderData
-    ? { [options.routeId]: { serverData: options.loaderData } }
-    : undefined;
-
   return renderSSR(app, {
     title: options.title,
     headTags: options.headTags,
@@ -96,7 +92,7 @@ function renderNonStreamingPageResponse(
     routeId: options.routeId,
     hydration: options.hydration,
     bundleManifest: options.bundleManifest,
-    serverData,
+    serverData: options.loaderData,
     enableClientRouter: true,
     routePattern: options.routePattern,
     cssPath: options.cssPath,

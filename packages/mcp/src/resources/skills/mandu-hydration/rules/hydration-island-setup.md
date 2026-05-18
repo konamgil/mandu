@@ -30,13 +30,26 @@ export default wrapComponent(Counter);
 
 ```tsx
 // Inline client region inside a server-rendered page
+// app/Counter.partial.tsx
 import { partial } from "@mandujs/core/client";
 import { Counter } from "./counter.client";
 
-const CounterPartial = partial({
+export default partial({
+  id: "Counter",
   component: Counter,
   priority: "visible",
 });
+```
+
+```tsx
+// app/page.tsx
+import CounterPartial from "./Counter.partial";
+
+export const hydration = {
+  strategy: "island",
+  priority: "visible",
+  preload: false,
+};
 
 export default function Page() {
   return <CounterPartial.Render initial={0} />;
