@@ -244,8 +244,24 @@ jobs:
           artifact="dist/mandu-${RUNNER_TARGET}${EXT}"
           if [[ "${EXT}" == ".exe" ]]; then
             archive="${artifact}.zip"
-            powershell -NoProfile -Command \
-              "Compress-Archive -LiteralPath '${artifact}' -DestinationPath '${archive}' -Force"
+            MANDU_ARCHIVE_SOURCE="${artifact}" MANDU_ARCHIVE_DEST="${archive}" \
+              powershell -NoProfile -Command '
+                $ErrorActionPreference = "Stop"
+                $source = $env:MANDU_ARCHIVE_SOURCE
+                $destination = $env:MANDU_ARCHIVE_DEST
+                for ($attempt = 1; $attempt -le 10; $attempt++) {
+                  try {
+                    Compress-Archive -LiteralPath $source -DestinationPath $destination -Force
+                    exit 0
+                  } catch {
+                    if ($attempt -eq 10) {
+                      throw
+                    }
+                    Write-Host "Compress-Archive retry $attempt/10: $($_.Exception.Message)"
+                    Start-Sleep -Seconds 2
+                  }
+                }
+              '
           else
             archive="${artifact}.gz"
             gzip -9 -c "${artifact}" > "${archive}"
