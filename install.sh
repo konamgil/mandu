@@ -278,6 +278,14 @@ fi
 
 BIN_URL="${BASE_URL}/${BINARY_NAME}"
 SHA_URL="${BIN_URL}.sha256"
+ARCHIVE_NAME="${BINARY_NAME}.gz"
+ARCHIVE_URL="${BIN_URL}.gz"
+ARCHIVE_SHA_URL="${ARCHIVE_URL}.sha256"
+
+DOWNLOAD_URL_FOR_PLAN="${ARCHIVE_URL}"
+if ! command -v gzip >/dev/null 2>&1; then
+  DOWNLOAD_URL_FOR_PLAN="${BIN_URL}"
+fi
 
 # ---------------------------------------------------------------------------
 # Plan
@@ -290,6 +298,7 @@ log "  ${DIM}platform${RST}    ${OS}/${ARCH}${LIBC_SUFFIX:+ (libc: musl)}"
 log "  ${DIM}target${RST}      ${RUNNER_TARGET}"
 log "  ${DIM}install dir${RST} ${MANDU_INSTALL_DIR}"
 log "  ${DIM}binary url${RST}  ${BIN_URL}"
+log "  ${DIM}download url${RST} ${DOWNLOAD_URL_FOR_PLAN}"
 log ""
 
 if [ "${DRY_RUN}" = "1" ]; then
@@ -321,13 +330,32 @@ TMPDIR="$(mktemp -d 2>/dev/null || mktemp -d -t 'mandu-install')"
 trap 'rm -rf "${TMPDIR}"' EXIT INT TERM
 
 # ---------------------------------------------------------------------------
-# Download binary + checksum
+# Download artifact + checksum
 # ---------------------------------------------------------------------------
-log "Downloading ${BINARY_NAME}..."
-if ! download "${BIN_URL}" "${TMPDIR}/${BINARY_NAME}"; then
-  err "download failed: ${BIN_URL}"
-  note "verify the release tag exists and that ${RUNNER_TARGET} is a published artifact"
-  exit 3
+DOWNLOAD_PATH="${TMPDIR}/${BINARY_NAME}"
+DOWNLOAD_SHA_URL="${SHA_URL}"
+DOWNLOAD_COMPRESSED=0
+
+if command -v gzip >/dev/null 2>&1; then
+  log "Downloading ${ARCHIVE_NAME}..."
+  if download "${ARCHIVE_URL}" "${TMPDIR}/${ARCHIVE_NAME}"; then
+    DOWNLOAD_PATH="${TMPDIR}/${ARCHIVE_NAME}"
+    DOWNLOAD_SHA_URL="${ARCHIVE_SHA_URL}"
+    DOWNLOAD_COMPRESSED=1
+  else
+    log "${YEL}warning${RST}: compressed artifact not found; falling back to uncompressed binary"
+  fi
+else
+  log "${YEL}warning${RST}: gzip not available; falling back to uncompressed binary"
+fi
+
+if [ "${DOWNLOAD_COMPRESSED}" != "1" ]; then
+  log "Downloading ${BINARY_NAME}..."
+  if ! download "${BIN_URL}" "${TMPDIR}/${BINARY_NAME}"; then
+    err "download failed: ${BIN_URL}"
+    note "verify the release tag exists and that ${RUNNER_TARGET} is a published artifact"
+    exit 3
+  fi
 fi
 
 # Checksum is best-effort. If the sidecar is missing we warn loudly but
@@ -335,12 +363,12 @@ fi
 # checksum-emitting workflow.
 if [ -n "${HASH}" ]; then
   log "Downloading checksum..."
-  if download "${SHA_URL}" "${TMPDIR}/${BINARY_NAME}.sha256" 2>/dev/null; then
+  if download "${DOWNLOAD_SHA_URL}" "${DOWNLOAD_PATH}.sha256" 2>/dev/null; then
     log "Verifying checksum..."
     # The .sha256 file is `<digest>  <filename>` in POSIX format. We only
     # compare the digest column to avoid path-mismatch false negatives.
-    expected="$(awk '{print $1}' < "${TMPDIR}/${BINARY_NAME}.sha256")"
-    actual="$(${HASH} "${TMPDIR}/${BINARY_NAME}" | awk '{print $1}')"
+    expected="$(awk '{print $1}' < "${DOWNLOAD_PATH}.sha256")"
+    actual="$(${HASH} "${DOWNLOAD_PATH}" | awk '{print $1}')"
     if [ "${expected}" != "${actual}" ]; then
       err "checksum mismatch"
       note "expected: ${expected}"
@@ -353,6 +381,14 @@ if [ -n "${HASH}" ]; then
   fi
 else
   log "${YEL}warning${RST}: sha256 tool not available; skipping verification"
+fi
+
+if [ "${DOWNLOAD_COMPRESSED}" = "1" ]; then
+  log "Extracting ${BINARY_NAME}..."
+  if ! gzip -cd "${TMPDIR}/${ARCHIVE_NAME}" > "${TMPDIR}/${BINARY_NAME}"; then
+    err "failed to extract ${ARCHIVE_NAME}"
+    exit 3
+  fi
 fi
 
 # ---------------------------------------------------------------------------

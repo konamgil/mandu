@@ -19,6 +19,8 @@ name: Release Binaries
 # Outputs (per target):
 #   mandu-<runner_target>[<ext>]   e.g. mandu-bun-linux-x64, mandu-bun-windows-x64.exe
 #   mandu-<runner_target>[<ext>].sha256  SHA-256 checksum (used by install.sh)
+#   mandu-<runner_target>[<ext>].gz       Compressed installer download (Unix)
+#   mandu-<runner_target>.exe.zip         Compressed installer download (Windows)
 #
 # NOTE: Binaries are UNSIGNED in this workflow. Windows SmartScreen / macOS
 # Gatekeeper warnings are expected for end-users until Phase 9.1 follow-up
@@ -232,6 +234,37 @@ jobs:
           fi
           cat "${artifact}.sha256"
 
+      - name: Compress installer artifact
+        shell: bash
+        env:
+          RUNNER_TARGET: ${{ matrix.target.runner_target }}
+          EXT: ${{ matrix.target.ext }}
+        run: |
+          set -euo pipefail
+          artifact="dist/mandu-${RUNNER_TARGET}${EXT}"
+          if [[ "${EXT}" == ".exe" ]]; then
+            archive="${artifact}.zip"
+            powershell -NoProfile -Command \
+              "Compress-Archive -LiteralPath '${artifact}' -DestinationPath '${archive}' -Force"
+          else
+            archive="${artifact}.gz"
+            gzip -9 -c "${artifact}" > "${archive}"
+          fi
+          size=$(wc -c < "${archive}")
+          echo "Compressed artifact: ${archive} (${size} bytes)"
+
+          cd dist
+          archive_name="$(basename "${archive}")"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${archive_name}" > "${archive_name}.sha256"
+          elif command -v shasum >/dev/null 2>&1; then
+            shasum -a 256 "${archive_name}" > "${archive_name}.sha256"
+          else
+            digest=$(certutil -hashfile "${archive_name}" SHA256 | sed -n '2p' | tr -d '[:space:]')
+            printf '%s  %s\n' "${digest}" "${archive_name}" > "${archive_name}.sha256"
+          fi
+          cat "${archive_name}.sha256"
+
       # Phase 11.A — SLSA Build Level 2 attestation (M-01 first cut).
       #
       # `actions/attest-build-provenance` produces a Sigstore-signed
@@ -252,7 +285,7 @@ jobs:
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: |
-            dist/mandu-${{ matrix.target.runner_target }}${{ matrix.target.ext }}
+            dist/mandu-${{ matrix.target.runner_target }}${{ matrix.target.ext }}*
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -260,7 +293,7 @@ jobs:
           name: mandu-${{ matrix.target.runner_target }}
           path: |
             dist/mandu-${{ matrix.target.runner_target }}${{ matrix.target.ext }}
-            dist/mandu-${{ matrix.target.runner_target }}${{ matrix.target.ext }}.sha256
+            dist/mandu-${{ matrix.target.runner_target }}${{ matrix.target.ext }}.*
           if-no-files-found: error
           retention-days: 14
 
@@ -370,6 +403,7 @@ jobs:
             | `mandu-bun-darwin-arm64` | macOS Apple Silicon |
             | `mandu-bun-darwin-x64` | macOS Intel |
             | `mandu-bun-windows-x64.exe` | Windows x86_64 |
+            | `*.gz` / `*.zip` | Compressed installer downloads |
             | `SHA256SUMS.txt` | Aggregate checksums |
 
             ### Verification (SLSA Build Level 2)

@@ -207,6 +207,13 @@ if ($Version -eq "latest") {
 }
 $binUrl = "$baseUrl/$binaryName"
 $shaUrl = "$binUrl.sha256"
+$archiveName = "$binaryName.zip"
+$archiveUrl = "$binUrl.zip"
+$archiveShaUrl = "$archiveUrl.sha256"
+$downloadUrlForPlan = $archiveUrl
+if (-not (Get-Command Expand-Archive -ErrorAction SilentlyContinue)) {
+  $downloadUrlForPlan = $binUrl
+}
 
 # ---------------------------------------------------------------------------
 # Plan
@@ -219,6 +226,7 @@ Write-Plain "platform"    "windows/$($arch.ToLower())"
 Write-Plain "target"      $runnerTarget
 Write-Plain "install dir" $InstallDir
 Write-Plain "binary url"  $binUrl
+Write-Plain "download url" $downloadUrlForPlan
 Write-Host ""
 
 if ($DryRun) {
@@ -245,17 +253,36 @@ New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
 try {
   $tmpBin = Join-Path $tmpDir $binaryName
-  $tmpSha = "$tmpBin.sha256"
+  $tmpDownload = $tmpBin
+  $downloadShaUrl = $shaUrl
+  $downloadCompressed = $false
 
   # -----------------------------------------------------------------------
-  # Download binary
+  # Download artifact
   # -----------------------------------------------------------------------
-  Write-Host "Downloading $binaryName..."
-  try {
-    Invoke-WebRequest -Uri $binUrl -OutFile $tmpBin -UseBasicParsing
-  } catch {
-    Write-Error "download failed: $binUrl`n$($_.Exception.Message)"
-    exit 3
+  if (Get-Command Expand-Archive -ErrorAction SilentlyContinue) {
+    $tmpArchive = Join-Path $tmpDir $archiveName
+    Write-Host "Downloading $archiveName..."
+    try {
+      Invoke-WebRequest -Uri $archiveUrl -OutFile $tmpArchive -UseBasicParsing
+      $tmpDownload = $tmpArchive
+      $downloadShaUrl = $archiveShaUrl
+      $downloadCompressed = $true
+    } catch {
+      Write-Note "  warning: compressed artifact not found; falling back to uncompressed binary" "Yellow"
+    }
+  } else {
+    Write-Note "  warning: Expand-Archive not available; falling back to uncompressed binary" "Yellow"
+  }
+
+  if (-not $downloadCompressed) {
+    Write-Host "Downloading $binaryName..."
+    try {
+      Invoke-WebRequest -Uri $binUrl -OutFile $tmpBin -UseBasicParsing
+    } catch {
+      Write-Error "download failed: $binUrl`n$($_.Exception.Message)"
+      exit 3
+    }
   }
 
   # -----------------------------------------------------------------------
@@ -264,9 +291,10 @@ try {
   Write-Host "Downloading checksum..."
   $checksumVerified = $false
   try {
-    Invoke-WebRequest -Uri $shaUrl -OutFile $tmpSha -UseBasicParsing -ErrorAction Stop
+    $tmpSha = "$tmpDownload.sha256"
+    Invoke-WebRequest -Uri $downloadShaUrl -OutFile $tmpSha -UseBasicParsing -ErrorAction Stop
     $expected = (Get-Content $tmpSha -First 1).Split()[0].ToLower()
-    $actual = (Get-FileHash -Path $tmpBin -Algorithm SHA256).Hash.ToLower()
+    $actual = (Get-FileHash -Path $tmpDownload -Algorithm SHA256).Hash.ToLower()
     if ($expected -ne $actual) {
       Write-Error "checksum mismatch`n  expected: $expected`n  actual:   $actual"
       exit 4
@@ -275,6 +303,20 @@ try {
     $checksumVerified = $true
   } catch {
     Write-Note "  warning: checksum sidecar not found; skipping verification" "Yellow"
+  }
+
+  if ($downloadCompressed) {
+    Write-Host "Extracting $archiveName..."
+    try {
+      Expand-Archive -LiteralPath $tmpDownload -DestinationPath $tmpDir -Force
+    } catch {
+      Write-Error "failed to extract $archiveName`n$($_.Exception.Message)"
+      exit 3
+    }
+    if (-not (Test-Path -Path $tmpBin)) {
+      Write-Error "archive did not contain expected binary: $binaryName"
+      exit 3
+    }
   }
 
   # -----------------------------------------------------------------------
