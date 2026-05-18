@@ -21,10 +21,34 @@ import { withPerf } from "../perf";
 /**
  * Tailwind CLI 실행 명령어를 결정한다.
  * Windows에서 Bun.spawn은 PATH 기반 명령어 해석이 불안정하므로 (#152)
- * process.execPath (절대 경로)를 사용해 안정적으로 실행한다.
+ * `bun run mandu` 환경에서는 process.execPath (bun 절대 경로)를 사용한다.
+ * Standalone Mandu binary에서는 process.execPath가 mandu.exe를 가리키므로
+ * `mandu x @tailwindcss/cli`로 오해석된다. 이 경우 PATH에서 Bun을 찾는다.
  */
-function getTailwindCommand(args: string[]): string[] {
-  return [process.execPath, "x", ...args];
+function isBunExecutable(executablePath: string | undefined): boolean {
+  if (!executablePath) return false;
+  const base = path.basename(executablePath).toLowerCase();
+  return base === "bun" || base === "bun.exe";
+}
+
+type WhichExecutable = (command: string) => string | null | undefined;
+
+function resolveBunExecutable(
+  execPath = process.execPath,
+  which: WhichExecutable = (command) => Bun.which(command),
+): string {
+  if (isBunExecutable(execPath)) return execPath;
+  const fromPath = which("bun");
+  if (fromPath) return fromPath;
+  return process.platform === "win32" ? "bun.exe" : "bun";
+}
+
+function getTailwindCommand(
+  args: string[],
+  execPath = process.execPath,
+  which?: WhichExecutable,
+): string[] {
+  return [resolveBunExecutable(execPath, which), "x", ...args];
 }
 
 // ========== Types ==========
@@ -324,3 +348,9 @@ export function generateCSSLinkTag(isDev: boolean = false): string {
   const cacheBust = isDev ? `?t=${Date.now()}` : "";
   return `<link rel="stylesheet" href="${SERVER_CSS_PATH}${cacheBust}">`;
 }
+
+export const __private = {
+  getTailwindCommand,
+  isBunExecutable,
+  resolveBunExecutable,
+};
