@@ -193,6 +193,12 @@ export function formatConfigGuardResult(result: ConfigGuardResult): string {
     for (const error of result.errors) {
       lines.push(`   🔴 ${error.message}`);
     }
+
+    lines.push("");
+    lines.push("   다음 단계:");
+    lines.push("   ↳ 변경 확인: mandu lock --diff");
+    lines.push("   ↳ 의도한 변경이면: mandu lock");
+    lines.push("   ↳ 패키지 업데이트 직후라면 새 Mandu 기본값으로 lockfile을 갱신하세요.");
   }
 
   if (result.warnings.length > 0 && result.lockfileExists) {

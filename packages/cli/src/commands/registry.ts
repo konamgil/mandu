@@ -515,6 +515,7 @@ registerCommand({
 registerCommand({
   id: "check",
   description: "Integrated FS Routes + Guard check",
+  exitOnSuccess: true,
   async run() {
     const { check } = await import("./check");
     return check();
@@ -567,6 +568,7 @@ registerCommand({
   description: "Architecture violation check",
   subcommands: ["arch", "legacy", "spec", "manifest"],
   defaultSubcommand: "arch",
+  exitOnSuccess: true,
   async run(ctx) {
     const subCommand = ctx.args[1];
     const hasSubCommand = subCommand && !subCommand.startsWith("--");

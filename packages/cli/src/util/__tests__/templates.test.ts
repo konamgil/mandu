@@ -140,6 +140,16 @@ describe("templates.ts — embedded template access", () => {
     expect(dotSlash).toBe(posixHit);
   });
 
+  it("lefthook templates avoid curl-based local smoke hooks", async () => {
+    for (const name of ["default", "realtime-chat", "auth-starter"]) {
+      const content = await readTemplateFile(name, "lefthook.yml");
+      expect(content).not.toBeNull();
+      expect(content!).toContain("bun run check");
+      expect(content!).not.toContain("curl");
+      expect(content!).not.toContain("/dev/null");
+    }
+  });
+
   it("all embedded paths resolve to readable Bun files", async () => {
     const files = loadTemplate("default");
     expect(files).not.toBeNull();

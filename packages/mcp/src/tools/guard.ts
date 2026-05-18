@@ -1,6 +1,9 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { type ManduError } from "@mandujs/core/error";
 import {
+  checkDirectory,
+  getDefaultFsRoutesGuardPolicy,
+  validateAndReport,
   loadManifest,
   runGuardCheck,
   runAutoCorrect,
@@ -14,14 +17,17 @@ import {
   type GuardConfig,
   type ViolationType,
   type GuardPreset,
+  type Violation,
 } from "@mandujs/core";
 import { getProjectPaths, readJsonFile, readConfig } from "../utils/project.js";
+import fs from "fs/promises";
+import path from "path";
 
 export const guardToolDefinitions: Tool[] = [
   {
     name: "mandu.guard.check",
     description:
-      "Run guard checks to validate spec integrity, generated files, and slot files. Set typeAware=true to additionally run `oxlint --type-aware` (tsgolint) and merge its results.",
+      "Run the same architecture guard used by `mandu guard`, plus legacy spec/generated/slot checks. Set typeAware=true to additionally run `oxlint --type-aware` (tsgolint) and merge its results.",
     annotations: {
       readOnlyHint: true,
     },
@@ -123,6 +129,35 @@ export const guardToolDefinitions: Tool[] = [
 export function guardTools(projectRoot: string) {
   const paths = getProjectPaths(projectRoot);
 
+  const pathExists = async (candidate: string): Promise<boolean> => {
+    try {
+      await fs.access(candidate);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const summarizeArchitectureViolation = (violation: Violation) => ({
+    ruleId: violation.ruleName,
+    type: violation.type,
+    file: path.relative(projectRoot, violation.filePath).replace(/\\/g, "/") || violation.filePath,
+    line: violation.line,
+    column: violation.column,
+    message: violation.ruleDescription,
+    suggestion: violation.suggestions[0],
+    fromLayer: violation.fromLayer,
+    toLayer: violation.toLayer,
+    importStatement: violation.importStatement,
+  });
+
+  const summarizeLegacyViolation = (v: Awaited<ReturnType<typeof runGuardCheck>>["violations"][number]) => ({
+    ruleId: v.ruleId,
+    file: v.file,
+    message: v.message,
+    suggestion: v.suggestion,
+  });
+
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
     "mandu.guard.check": async (args: Record<string, unknown>) => {
       const { autoCorrect = false, typeAware: typeAwareArg } = args as {
@@ -139,20 +174,39 @@ export function guardTools(projectRoot: string) {
         };
       }
 
+      const projectConfig = await validateAndReport(projectRoot);
+      const guardConfigFromFile = (projectConfig?.guard ?? {}) as GuardConfig;
+      const preset = guardConfigFromFile.preset ?? "mandu";
+      const enableFsRoutes = await pathExists(paths.appDir);
+
+      const architectureReport = await checkDirectory(
+        {
+          preset,
+          srcDir: guardConfigFromFile.srcDir ?? "src",
+          exclude: guardConfigFromFile.exclude,
+          fsRoutes: getDefaultFsRoutesGuardPolicy(enableFsRoutes),
+        },
+        projectRoot
+      );
+      const architecturePassed = architectureReport.bySeverity.error === 0;
+      const architectureViolations = architectureReport.violations.map(
+        summarizeArchitectureViolation
+      );
+
       // Run guard check
       const checkResult = await runGuardCheck(manifestResult.data, projectRoot);
 
       // Follow-up E — resolve type-aware defaulting from config, then
       // run the bridge when enabled. Result envelope is always included
       // in the tool response so MCP clients have a single stable shape.
-      let projectConfig: Awaited<ReturnType<typeof readConfig>> | undefined;
+      let rawProjectConfig: Awaited<ReturnType<typeof readConfig>> | undefined;
       try {
-        projectConfig = await readConfig(projectRoot);
+        rawProjectConfig = projectConfig ?? await readConfig(projectRoot);
       } catch {
-        projectConfig = undefined;
+        rawProjectConfig = projectConfig ?? undefined;
       }
       const typeAwareCfg = (
-        projectConfig?.guard as
+        rawProjectConfig?.guard as
           | { typeAware?: Record<string, unknown> }
           | undefined
       )?.typeAware;
@@ -178,15 +232,34 @@ export function guardTools(projectRoot: string) {
         };
       }
 
-      if (checkResult.passed) {
+      const typeAwareViolations = typeAwareResponse
+        ? typeAwareResponse.violations as Array<{ severity: string }>
+        : [];
+      const typeAwareErrorCount = typeAwareViolations.filter(
+        (v) => v.severity === "error",
+      ).length;
+      const legacyViolations = checkResult.violations.map(summarizeLegacyViolation);
+      const combinedViolations = [
+        ...architectureViolations,
+        ...legacyViolations,
+      ];
+      const allPassed = checkResult.passed && architecturePassed && typeAwareErrorCount === 0;
+      const blockingViolationCount = combinedViolations.length + typeAwareErrorCount;
+
+      if (allPassed) {
         return {
-          passed: typeAwareResponse
-            ? (typeAwareResponse.violations as Array<{ severity: string }>).filter(
-                (v) => v.severity === "error",
-              ).length === 0
-            : true,
+          passed: true,
           violations: [],
           message: "All guard checks passed",
+          architecture: {
+            passed: true,
+            totalViolations: architectureReport.totalViolations,
+            bySeverity: architectureReport.bySeverity,
+          },
+          legacy: {
+            passed: true,
+            violations: 0,
+          },
           relatedSkills: ["mandu-guard-guide", "mandu-debug"],
           ...(typeAwareResponse ? { typeAware: typeAwareResponse } : {}),
         };
@@ -201,8 +274,14 @@ export function guardTools(projectRoot: string) {
         );
 
         return {
-          passed: autoCorrectResult.fixed,
-          violations: autoCorrectResult.remainingViolations,
+          passed:
+            autoCorrectResult.fixed &&
+            architecturePassed &&
+            typeAwareErrorCount === 0,
+          violations: [
+            ...architectureViolations,
+            ...autoCorrectResult.remainingViolations.map(summarizeLegacyViolation),
+          ],
           autoCorrect: {
             attempted: true,
             fixed: autoCorrectResult.fixed,
@@ -211,19 +290,34 @@ export function guardTools(projectRoot: string) {
             rolledBack: autoCorrectResult.rolledBack,
             changeId: autoCorrectResult.changeId,
           },
+          architecture: {
+            passed: architecturePassed,
+            totalViolations: architectureReport.totalViolations,
+            bySeverity: architectureReport.bySeverity,
+            violations: architectureViolations,
+          },
+          legacy: {
+            passed: autoCorrectResult.fixed,
+            violations: autoCorrectResult.remainingViolations.length,
+          },
           ...(typeAwareResponse ? { typeAware: typeAwareResponse } : {}),
         };
       }
 
       return {
         passed: false,
-        violations: checkResult.violations.map((v) => ({
-          ruleId: v.ruleId,
-          file: v.file,
-          message: v.message,
-          suggestion: v.suggestion,
-        })),
-        message: `Found ${checkResult.violations.length} violation(s)`,
+        violations: combinedViolations,
+        message: `Found ${blockingViolationCount} violation(s)`,
+        architecture: {
+          passed: architecturePassed,
+          totalViolations: architectureReport.totalViolations,
+          bySeverity: architectureReport.bySeverity,
+          violations: architectureViolations,
+        },
+        legacy: {
+          passed: checkResult.passed,
+          violations: legacyViolations.length,
+        },
         tip: "Use autoCorrect: true to attempt automatic fixes",
         relatedSkills: ["mandu-guard-guide", "mandu-debug"],
         ...(typeAwareResponse ? { typeAware: typeAwareResponse } : {}),

@@ -23,6 +23,8 @@ import {
 import { CLI_UX_TEMPLATES } from "../../generated/cli-ux-manifest.js";
 import {
   generateLockfile,
+  readMcpConfig,
+  validateAndReport,
   writeLockfile,
   LOCKFILE_PATH,
 } from "@mandujs/core";
@@ -1016,6 +1018,7 @@ interface SetupMcpConfigOptions {
 
 export const __test__ = {
   setupMcpConfig,
+  setupLockfile,
 };
 
 async function setupMcpConfig(
@@ -1134,17 +1137,25 @@ interface LockfileResult {
  */
 async function setupLockfile(targetDir: string): Promise<LockfileResult> {
   try {
-    // Initial config (defaults)
-    const initialConfig = {
-      name: path.basename(targetDir),
-      version: "0.1.0",
-      createdAt: new Date().toISOString(),
-    };
+    const initialConfig = await validateAndReport(targetDir);
+    if (!initialConfig) {
+      return {
+        success: false,
+        error: "Failed to load generated mandu.config",
+      };
+    }
+
+    let mcpConfig: Record<string, unknown> | null = null;
+    try {
+      mcpConfig = await readMcpConfig(targetDir);
+    } catch {
+      mcpConfig = null;
+    }
 
     const lockfile = generateLockfile(initialConfig, {
       includeSnapshot: true,
-      includeMcpServerHashes: false,
-    });
+      includeMcpServerHashes: true,
+    }, mcpConfig);
 
     await writeLockfile(targetDir, lockfile);
 

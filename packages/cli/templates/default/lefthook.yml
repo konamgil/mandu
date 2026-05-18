@@ -1,4 +1,6 @@
 pre-push:
+  # Keep local hooks shell-free for Windows lefthook compatibility.
+  # Dev-server smoke checks belong in CI where the server lifecycle is controlled.
   parallel: true
   commands:
     typecheck:

@@ -67,6 +67,11 @@ describe("CommandRegistration.aliases", () => {
     expect(guard.aliases).toEqual(["g"]);
   });
 
+  test("one-shot guardrail commands exit after successful completion", () => {
+    expect(getCommand("guard")?.exitOnSuccess).toBe(true);
+    expect(getCommand("check")?.exitOnSuccess).toBe(true);
+  });
+
   test("registerCommand throws when an alias collides with an existing command", () => {
     // Pick an alias that already exists as a canonical id.
     const collidingRegistration: CommandRegistration = {

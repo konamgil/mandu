@@ -3,6 +3,12 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import { __test__, init, isAllowedTemplate } from "../../src/commands/init";
+import {
+  readLockfile,
+  readMcpConfig,
+  validateAndReport,
+  validateLockfile,
+} from "@mandujs/core";
 
 describe("init command template validation", () => {
   const cwd = process.cwd();
@@ -85,5 +91,30 @@ describe("init command mcp backup naming", () => {
     const content = JSON.parse(await fs.readFile(geminiPath, "utf-8"));
     expect(content.mcpServers.mandu.command).toBe("bunx");
     expect(content.mcpServers.mandu.args).toEqual(["mandu-mcp"]);
+  });
+
+  it("generates a lockfile that matches the validated project config", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mandu-lock-test-"));
+    tempDirs.push(dir);
+
+    await fs.writeFile(
+      path.join(dir, "mandu.config.json"),
+      JSON.stringify({ server: { port: 3333 }, guard: { preset: "mandu" } }, null, 2),
+    );
+    await __test__.setupMcpConfig(dir);
+
+    const result = await __test__.setupLockfile(dir);
+    expect(result.success).toBe(true);
+
+    const [config, lockfile, mcpConfig] = await Promise.all([
+      validateAndReport(dir),
+      readLockfile(dir),
+      readMcpConfig(dir),
+    ]);
+
+    expect(config).not.toBeNull();
+    expect(lockfile).not.toBeNull();
+    const validation = validateLockfile(config!, lockfile!, mcpConfig);
+    expect(validation.valid).toBe(true);
   });
 });

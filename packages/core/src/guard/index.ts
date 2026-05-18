@@ -127,6 +127,11 @@ export {
   clearAnalysisCache,
 } from "./watcher";
 
+export {
+  DEFAULT_FS_ROUTES_GUARD_POLICY,
+  getDefaultFsRoutesGuardPolicy,
+} from "./fs-routes-policy";
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Architecture Guard - Presets
 // ═══════════════════════════════════════════════════════════════════════════
