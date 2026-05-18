@@ -27,6 +27,7 @@ import { resolveManifest } from "../util/manifest";
 import { registerManifestHandlers } from "@mandujs/core";
 import { createBuildSummaryRows, renderBuildSummaryTable } from "../util/build-summary";
 import { emitStaticExport } from "../util/static-export";
+import { createBundledImporter } from "../util/bun";
 
 export interface BuildOptions {
   /** Build mode for client bundles */
@@ -427,9 +428,21 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     console.log("\n📄 Prerendering static pages...");
 
     try {
+      const bundledImport = createBundledImporter({ rootDir: cwd });
+      const prerenderImportCache = new Map<string, Promise<unknown>>();
+      const importForPrerender = <T = unknown>(modulePath: string): Promise<T> => {
+        const absolute = path.resolve(modulePath);
+        let pending = prerenderImportCache.get(absolute);
+        if (!pending) {
+          pending = bundledImport(absolute);
+          prerenderImportCache.set(absolute, pending);
+        }
+        return pending as Promise<T>;
+      };
+
       // 임시 서버 시작 (SSR 렌더링용 — 외부 접근 불가하도록 port 0)
       await registerManifestHandlers(manifest, cwd, {
-        importFn: (p: string) => import(p),
+        importFn: importForPrerender,
         registeredLayouts: new Set(),
       });
       const tempServer = startServer(manifest, {
@@ -486,11 +499,13 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
           // Issue #216 — surface aggregate errors unless the user opted
           // out via `--prerender-skip-errors`.
           skipErrors: options.prerenderSkipErrors === true,
+          importModule: importForPrerender,
         });
       } catch (err) {
         prerenderFatal = err;
       } finally {
         tempServer.stop();
+        await bundledImport.dispose();
       }
 
       if (prerenderFatal) {
