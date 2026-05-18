@@ -110,9 +110,11 @@
     "./components/Image": "./src/components/Image.tsx"
   },
   "files": [
-    "src/**/*"
+    "src/**/*",
+    "scripts/postinstall-lock.ts"
   ],
   "scripts": {
+    "postinstall": "bun ./scripts/postinstall-lock.ts",
     "test": "bun test tests/streaming-ssr && bun test tests/hydration tests/typing src",
     "test:hydration": "bun test tests/hydration",
     "test:streaming": "bun test tests/streaming-ssr",

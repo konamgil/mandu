@@ -30,6 +30,7 @@ import {
 import { writeFile, mkdir } from "fs/promises";
 import { isDirectory, resolveFromCwd } from "../util/fs";
 import { getFsRoutesGuardPolicy } from "../util/guard-policy";
+import { refreshStaleRuntimeLockfile, LOCKFILE_COMMANDS } from "../util/lockfile";
 import { resolveOutputFormat, type OutputFormat } from "../util/output";
 import path from "path";
 
@@ -123,6 +124,9 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
   const fileConfig = await validateAndReport(rootDir);
   if (!fileConfig) return false;
   const guardConfigFromFile = fileConfig.guard ?? {};
+  const lockRefresh = await refreshStaleRuntimeLockfile(fileConfig, rootDir, {
+    mode: ci ? "ci" : "development",
+  });
 
   const preset = options.preset ?? guardConfigFromFile.preset ?? "mandu";
   const srcDir = options.srcDir ?? guardConfigFromFile.srcDir ?? "src";
@@ -134,6 +138,11 @@ export async function guardArch(options: GuardArchOptions = {}): Promise<boolean
     console.log(`📋 Preset: ${preset}`);
     console.log(`📂 Source: ${srcDir}/`);
     console.log(`🔧 Mode: ${watch ? "Watch" : "Check"}`);
+    if (lockRefresh.refreshed) {
+      console.log(`🔒 Refreshed .mandu/guard.lock (${lockRefresh.hash?.slice(0, 8)})`);
+    } else if (lockRefresh.reason === "policy-blocked" && !quiet) {
+      console.log(`🔒 Guard lock is stale. Run \`${LOCKFILE_COMMANDS.update}\` to refresh it.`);
+    }
     console.log("");
   }
 

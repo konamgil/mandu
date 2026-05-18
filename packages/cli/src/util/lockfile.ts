@@ -1,11 +1,14 @@
 import {
+  generateLockfile,
   readLockfile,
   readMcpConfig,
+  writeLockfile,
   validateWithPolicy,
   detectMode,
   formatPolicyAction,
   formatValidationResult,
   type LockfileValidationResult,
+  type LockfileMode,
 } from "@mandujs/core";
 
 /**
@@ -76,6 +79,106 @@ export async function validateRuntimeLockfile(config: Record<string, unknown>, r
   );
 
   return { lockfile, lockResult, action, bypassed };
+}
+
+export type RuntimeLockfileRefreshReason =
+  | "refreshed"
+  | "missing-lockfile"
+  | "invalid-lockfile"
+  | "valid-lockfile"
+  | "policy-blocked"
+  | "bypassed"
+  | "invalid-mcp-config"
+  | "write-failed";
+
+export interface RuntimeLockfileRefreshResult {
+  refreshed: boolean;
+  reason: RuntimeLockfileRefreshReason;
+  hash?: string;
+  previousHash?: string;
+  error?: string;
+}
+
+/**
+ * Refreshes an existing lockfile when a local one-shot guard run sees drift.
+ *
+ * This is deliberately scoped to development policy (`warn`) so CI/build/prod
+ * still fail closed. It also never creates a new lockfile; users opt into the
+ * integrity workflow with `mandu lock`, and package/framework updates can keep
+ * that existing lock current.
+ */
+export async function refreshStaleRuntimeLockfile(
+  config: Record<string, unknown>,
+  rootDir: string,
+  options: { mode?: LockfileMode } = {}
+): Promise<RuntimeLockfileRefreshResult> {
+  let lockfile: Awaited<ReturnType<typeof readLockfile>>;
+  try {
+    lockfile = await readLockfile(rootDir);
+  } catch (error) {
+    return {
+      refreshed: false,
+      reason: "invalid-lockfile",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+  if (!lockfile) {
+    return { refreshed: false, reason: "missing-lockfile" };
+  }
+
+  let mcpConfig: Record<string, unknown> | null = null;
+  try {
+    mcpConfig = await readMcpConfig(rootDir);
+  } catch (error) {
+    return {
+      refreshed: false,
+      reason: "invalid-mcp-config",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const { result, action, bypassed } = validateWithPolicy(
+    config,
+    lockfile,
+    options.mode ?? detectMode(),
+    mcpConfig
+  );
+
+  if (bypassed) {
+    return { refreshed: false, reason: "bypassed" };
+  }
+
+  if (!result || result.valid) {
+    return { refreshed: false, reason: "valid-lockfile" };
+  }
+
+  if (action !== "warn") {
+    return { refreshed: false, reason: "policy-blocked" };
+  }
+
+  try {
+    const nextLockfile = generateLockfile(
+      config,
+      {
+        includeSnapshot: lockfile.snapshot !== undefined,
+        includeMcpServerHashes: true,
+      },
+      mcpConfig
+    );
+    await writeLockfile(rootDir, nextLockfile);
+    return {
+      refreshed: true,
+      reason: "refreshed",
+      hash: nextLockfile.configHash,
+      previousHash: lockfile.configHash,
+    };
+  } catch (error) {
+    return {
+      refreshed: false,
+      reason: "write-failed",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 /**
