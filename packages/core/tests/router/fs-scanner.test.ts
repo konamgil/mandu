@@ -382,4 +382,31 @@ describe("FSScanner", () => {
       await rm(useClientDir, { recursive: true, force: true });
     }
   });
+
+  it("should not preserve stale page.tsx clientModule after page becomes server-only", async () => {
+    const staleDir = join(import.meta.dir, "__test_stale_client_module__");
+
+    await mkdir(join(staleDir, "app"), { recursive: true });
+    await writeFile(
+      join(staleDir, "app/page.tsx"),
+      '"use client";\nexport default function Home() { return <button>Open</button>; }'
+    );
+
+    try {
+      const first = await generateManifest(staleDir, {});
+      const firstRoute = first.manifest.routes.find((r) => r.pattern === "/");
+      expect(firstRoute?.clientModule?.replace(/\\/g, "/")).toBe("app/page.tsx");
+
+      await writeFile(
+        join(staleDir, "app/page.tsx"),
+        'export default async function Home() { return <main>Server data</main>; }'
+      );
+
+      const second = await generateManifest(staleDir, {});
+      const secondRoute = second.manifest.routes.find((r) => r.pattern === "/");
+      expect(secondRoute?.clientModule).toBeUndefined();
+    } finally {
+      await rm(staleDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -30,6 +30,7 @@ import {
 } from "./fs-patterns";
 import { mark, measure } from "../perf";
 import { METADATA_ROUTES } from "../routes/types";
+import { hasUseClientDirective } from "./client-entry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Scanner Class
@@ -390,7 +391,7 @@ export class FSScanner {
         }
       } else if (file.type === "page" && pageFileContent) {
         // page 파일 자체에서 "use client" 확인
-        const hasUseClient = /^\s*["']use client["']/m.test(pageFileContent);
+        const hasUseClient = hasUseClientDirective(pageFileContent);
         if (hasUseClient) {
           clientModule = modulePath;
         }

@@ -14,6 +14,46 @@ metadata:
 
 Mandu 애플리케이션의 보안 모범 사례 가이드. slot guard를 통한 인증/인가, 입력 검증, CSRF/XSS 방어, 환경 변수 관리를 다룹니다.
 
+## Agent Workflow Contract
+
+This skill is a Domain addendum. It must not replace `mandu-agent-workflow`.
+Use it only after `mandu.agent.plan` selects security, auth, slot, API, or runtime domains.
+
+Canonical workflow step: `plan -> verify -> repair`.
+
+Preferred MCP tools:
+
+| Step | Tools |
+|------|-------|
+| plan | `mandu.agent.plan`, `mandu.docs.search` |
+| apply | `mandu.agent.apply` |
+| verify | `mandu.agent.verify`, `mandu.guard.check`, `mandu.contract.validate` |
+| repair | `mandu.agent.repair`, `mandu.guard.explain` |
+
+Allowed file edits:
+
+- Auth/session slot logic named in the plan
+- Server-only validation and security header configuration
+- Environment templates, never secret values
+
+Verification command:
+
+```bash
+mandu agent verify --changed --json --write
+```
+
+Common failures:
+
+- Exposing secrets through client bundles or sync artifacts
+- Changing auth behavior without route/API/slot verification
+- Treating guard findings as policy problems before checking source boundaries
+
+Repair path:
+
+```bash
+mandu agent repair --from .mandu/agent-verify.json --json
+```
+
 ## When to Apply
 
 Reference these guidelines when:

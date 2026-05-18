@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "organization": "Mandu Framework",
+  "date": "May 2026",
+  "abstract": "Canonical Mandu agent workflow for Codex, Claude Code, Gemini CLI, and other coding agents. Establishes context -> plan -> apply -> verify -> repair as the default loop and routes domain work through focused Mandu skills and MCP tools.",
+  "tags": ["agent", "workflow", "mcp", "skills", "mandu"]
+}

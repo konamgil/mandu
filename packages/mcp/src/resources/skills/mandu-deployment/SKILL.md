@@ -16,6 +16,46 @@ globs:
 
 Mandu 앱을 프로덕션 환경에 안전하고 효율적으로 배포하기 위한 가이드입니다.
 
+## Agent Workflow Contract
+
+This skill is a Domain addendum. It must not replace `mandu-agent-workflow`.
+Use it only after `mandu.agent.plan` selects the deploy domain.
+
+Canonical workflow step: `plan -> apply -> verify`.
+
+Preferred MCP tools:
+
+| Step | Tools |
+|------|-------|
+| plan | `mandu.agent.plan`, `mandu.deploy.plan` |
+| apply | `mandu.agent.apply`, `mandu.deploy.compile` |
+| verify | `mandu.agent.verify`, `mandu.deploy.preview` |
+| repair | `mandu.agent.repair` |
+
+Allowed file edits:
+
+- `.mandu/deploy.intent.json`
+- Provider artifacts named in the plan, such as `render.yaml`, `Dockerfile`, `docker-compose.yml`, `fly.toml`, `vercel.json`, or `netlify.toml`
+- CI workflow files only when deploy automation is explicitly requested
+
+Verification command:
+
+```bash
+mandu agent verify --changed --json --write
+```
+
+Common failures:
+
+- Executing a provider deploy before a dry-run or preview step
+- Writing secrets into tracked config
+- Changing provider artifacts without route/deploy intent verification
+
+Repair path:
+
+```bash
+mandu agent repair --from .mandu/agent-verify.json --json
+```
+
 ## 핵심 원칙
 
 1. **Bun 네이티브**: Bun 런타임과 번들러를 최대한 활용
@@ -23,7 +63,10 @@ Mandu 앱을 프로덕션 환경에 안전하고 효율적으로 배포하기 �
 3. **자동화**: CI/CD를 통한 일관된 배포 프로세스
 4. **보안 우선**: 민감 정보는 환경 변수로 관리
 
-## 빠른 시작
+## Provider Artifact Examples
+
+Use these examples only after `mandu.agent.plan` selects the deploy domain and
+`mandu.agent.apply` has produced the intended action order.
 
 ### Render 배포 (권장)
 

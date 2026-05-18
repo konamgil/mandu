@@ -171,6 +171,13 @@ For `/` the route id is `index`; for `/dashboard` it is normally `dashboard`.
 Client islands can read the same SSR payload through `useServerData()` from
 `@mandujs/core/client`.
 
+Server `page.tsx` files are never valid `clientModule` entries. If a page is
+changed from `"use client"` back to a server component, Mandu drops the stale
+manifest client entry instead of bundling the page's server import graph into
+`/.mandu/client/*.island.js`. For embedded interactivity inside an async server
+page, use a `*.partial.tsx` entry and render its `.Render` component with SSR
+props.
+
 ## Next.js App Router parity
 
 | Convention                  | Next.js App Router | Mandu (Phase 18.β) |

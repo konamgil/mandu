@@ -89,6 +89,7 @@ export {
   PROFILE_CATEGORIES,
   getProfileCategories,
   isValidProfile,
+  resolveMcpProfile,
 } from "./profiles.js";
 
 // CLI entry point

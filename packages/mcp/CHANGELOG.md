@@ -1,5 +1,15 @@
 # @mandujs/mcp
 
+## 0.37.4
+
+### Patch Changes
+
+- Add the official `mandu.agent.*` MCP surface (`context`, `plan`, `apply`, `verify`, `repair`, `sync`), make `agent-core` the reduced default profile, and preserve legacy profile names through compatibility mapping.
+- Add `mandu-agent-workflow` as the root skill and align all domain skills behind the canonical `context -> plan -> apply -> verify -> repair` loop.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.5
+
 ## 0.37.3
 
 ### Patch Changes

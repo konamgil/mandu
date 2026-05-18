@@ -52,7 +52,7 @@ import { resourceHandlers, resourceDefinitions } from "./resources/handlers.js";
 import { findProjectRoot } from "./utils/project.js";
 
 import { ActivityMonitor } from "./activity-monitor.js";
-import { type McpProfile, isValidProfile } from "./profiles.js";
+import { type McpProfile, resolveMcpProfile } from "./profiles.js";
 
 /**
  * MCP 서버 버전
@@ -130,9 +130,8 @@ export class ManduMcpServer {
     this.projectRoot = projectRoot;
     this.monitor = new ActivityMonitor(projectRoot);
 
-    // Resolve profile from environment variable (default: "full")
-    const envProfile = process.env.MANDU_MCP_PROFILE ?? "full";
-    this.profile = isValidProfile(envProfile) ? envProfile : "full";
+    // Resolve profile from environment variable (default: "agent-core")
+    this.profile = resolveMcpProfile(process.env.MANDU_MCP_PROFILE);
 
     // MCP Server 초기화
     this.server = new Server(

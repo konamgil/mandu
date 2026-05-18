@@ -457,6 +457,98 @@ registerCommand({
 type DesignAction = "init" | "import" | "validate" | "sync" | "lint" | "link";
 
 registerCommand({
+  id: "agent",
+  description:
+    "Canonical agent workflow: context, plan, apply, verify, repair, sync",
+  subcommands: ["context", "manifest", "plan", "apply", "verify", "repair", "sync"],
+  exitOnSuccess: true,
+  async help(_ctx) {
+    const { AGENT_HELP } = await import("./agent");
+    process.stdout.write(AGENT_HELP);
+  },
+  async run(ctx) {
+    const { agent } = await import("./agent");
+    const sub = ctx.args[1] as
+      | "context"
+      | "manifest"
+      | "plan"
+      | "apply"
+      | "verify"
+      | "repair"
+      | "sync"
+      | undefined;
+    const intentFromFlag =
+      typeof ctx.options.intent === "string" && ctx.options.intent !== "true"
+        ? ctx.options.intent
+        : undefined;
+    const intentFromArgs =
+      sub === "plan"
+        ? ctx.args
+            .slice(2)
+            .filter((arg) => !arg.startsWith("--"))
+            .join(" ")
+            .trim()
+        : undefined;
+    return agent({
+      action: sub,
+      json: ctx.options.json === "true" || ctx.options.json === "",
+      write: ctx.options.write === "true" || ctx.options.write === "",
+      changed:
+        ctx.options.changed === "true" || ctx.options.changed === ""
+          ? true
+          : undefined,
+      staged:
+        ctx.options.staged === "true" || ctx.options.staged === ""
+          ? true
+          : undefined,
+      base:
+        ctx.options.base && ctx.options.base !== "true"
+          ? ctx.options.base
+          : undefined,
+      from:
+        ctx.options.from && ctx.options.from !== "true"
+          ? ctx.options.from
+          : undefined,
+      intent: intentFromFlag ?? intentFromArgs,
+      dryRun:
+        ctx.options["dry-run"] === "true" || ctx.options["dry-run"] === ""
+          ? true
+          : ctx.options["no-dry-run"] === "true" || ctx.options["no-dry-run"] === ""
+            ? false
+            : undefined,
+      target:
+        ctx.options.target === "codex" ||
+        ctx.options.target === "claude" ||
+        ctx.options.target === "gemini" ||
+        ctx.options.target === "all"
+          ? ctx.options.target
+          : undefined,
+      apply: ctx.options.apply === "true" || ctx.options.apply === "",
+      cwd:
+        ctx.options.cwd && ctx.options.cwd !== "true"
+          ? ctx.options.cwd
+          : undefined,
+      includeDiagnose:
+        ctx.options["no-diagnose"] === "true" || ctx.options["no-diagnose"] === ""
+          ? false
+          : undefined,
+      includeGit:
+        ctx.options["no-git"] === "true" || ctx.options["no-git"] === ""
+          ? false
+          : undefined,
+      includeGuard:
+        ctx.options["no-guard"] === "true" || ctx.options["no-guard"] === ""
+          ? false
+          : undefined,
+      includeContract:
+        ctx.options["no-contract"] === "true" || ctx.options["no-contract"] === ""
+          ? false
+          : undefined,
+    });
+  },
+});
+
+registerCommand({
   id: "info",
   description:
     "Print environment + config + health summary (agent-friendly debug dump)",

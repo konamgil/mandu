@@ -23,6 +23,7 @@ import type { BunPlugin } from "bun";
 import { mark, measure } from "../perf";
 import { HMR_PERF } from "../perf/hmr-markers";
 import { runOnBundleComplete } from "../plugins/runner";
+import { validateClientModuleForBrowserBundle } from "../router/client-entry";
 import {
   readVendorCache,
   writeVendorCache,
@@ -2122,7 +2123,21 @@ export async function buildClientBundles(
   const env = resolveBundlerMode(options);
 
   // 1. Hydration이 필요한 라우트 필터링
-  const hydratedRoutes = getHydratedRoutes(manifest);
+  const invalidClientRouteIds = new Set<string>();
+  let hydratedRoutes = getHydratedRoutes(manifest);
+  if (hydratedRoutes.length > 0) {
+    const validRoutes: RouteSpec[] = [];
+    for (const route of hydratedRoutes) {
+      const validationError = await validateClientModuleForBrowserBundle(route, rootDir);
+      if (validationError) {
+        invalidClientRouteIds.add(route.id);
+        errors.push(validationError);
+        continue;
+      }
+      validRoutes.push(route);
+    }
+    hydratedRoutes = validRoutes;
+  }
   const runtimeRoutes = manifest.routes.filter((route) => route.kind === "page" && needsHydration(route));
   const partialFiles = runtimeRoutes.length > 0 ? await scanPartialFiles(rootDir) : [];
 
@@ -2134,7 +2149,7 @@ export async function buildClientBundles(
   // (이전 빌드의 stale 매니페스트 참조 방지)
   if (hydratedRoutes.length === 0 && partialFiles.length === 0) {
     // #185: skipFrameworkBundles 모드에서는 기존 manifest를 그대로 유지 (devtools 재빌드도 스킵)
-    if (options.skipFrameworkBundles) {
+    if (options.skipFrameworkBundles && errors.length === 0) {
       const manifestPath = path.join(rootDir, ".mandu/manifest.json");
       try {
         const manifestRaw = await fs.readFile(manifestPath, "utf-8");
@@ -2186,9 +2201,9 @@ export async function buildClientBundles(
       JSON.stringify(emptyManifest, null, 2)
     );
     return {
-      success: true,
+      success: errors.length === 0,
       outputs: [],
-      errors: [],
+      errors,
       manifest: emptyManifest,
       stats: {
         totalSize: 0,
@@ -2229,7 +2244,10 @@ export async function buildClientBundles(
     }
 
     // Only update manifest with successfully built outputs (#10: preserve previous good manifest on failure)
-    if (outputs.length > 0) {
+    for (const routeId of invalidClientRouteIds) {
+      delete existingManifest.bundles[routeId];
+    }
+    if (outputs.length > 0 || invalidClientRouteIds.size > 0) {
       for (const output of outputs) {
         if (existingManifest.bundles[output.routeId]) {
           existingManifest.bundles[output.routeId].js = output.outputPath;
@@ -2284,6 +2302,10 @@ export async function buildClientBundles(
         "[Mandu] Existing manifest missing required fields (shared/bundles), falling back to full build",
       );
       return buildClientBundles(manifest, rootDir, { ...options, skipFrameworkBundles: false });
+    }
+
+    for (const routeId of invalidClientRouteIds) {
+      delete existingManifest.bundles[routeId];
     }
 
     // Pre-build validation + 병렬 island 빌드 (framework 번들은 스킵)

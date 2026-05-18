@@ -45,6 +45,7 @@ const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
     stability: "experimental",
     exact: [
       "./a11y",
+      "./agent",
       "./deploy",
       "./design",
       "./desktop",

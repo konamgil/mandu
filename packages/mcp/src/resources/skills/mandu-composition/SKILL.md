@@ -15,6 +15,46 @@ metadata:
 
 Mandu 애플리케이션을 위한 React 컴포지션 패턴 가이드. Island 컴파운드 컴포넌트, 상태 관리 인터페이스, Provider 패턴, slot-client 분리를 다룹니다. Vercel의 Composition Patterns를 Mandu 컨텍스트로 변환하여 적용합니다.
 
+## Agent Workflow Contract
+
+This skill is a Domain addendum. It must not replace `mandu-agent-workflow`.
+Use it only after `mandu.agent.plan` selects composition, UI, hydration, slot, or component domains.
+
+Canonical workflow step: `plan -> apply -> verify`.
+
+Preferred MCP tools:
+
+| Step | Tools |
+|------|-------|
+| plan | `mandu.agent.plan`, `mandu.design.get`, `mandu.island.list` |
+| apply | `mandu.agent.apply` |
+| verify | `mandu.agent.verify`, `mandu.design.check`, `mandu.slot.validate` |
+| repair | `mandu.agent.repair` |
+
+Allowed file edits:
+
+- Island/client component files named in the plan
+- Provider/state modules scoped to the target feature
+- Slot-client boundaries only when the plan includes slot or hydration domains
+
+Verification command:
+
+```bash
+mandu agent verify --changed --json --write
+```
+
+Common failures:
+
+- Refactoring component APIs without checking island/client boundaries
+- Adding shared state providers broader than the planned feature
+- Mixing slot server logic into client composition files
+
+Repair path:
+
+```bash
+mandu agent repair --from .mandu/agent-verify.json --json
+```
+
 ## When to Apply
 
 Reference these guidelines when:

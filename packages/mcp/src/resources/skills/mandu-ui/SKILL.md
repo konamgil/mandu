@@ -13,6 +13,46 @@ globs:
 
 Mandu Island 아키텍처에 UI 컴포넌트 라이브러리를 통합하는 가이드입니다.
 
+## Agent Workflow Contract
+
+This skill is a Domain addendum. It must not replace `mandu-agent-workflow`.
+Use it only after `mandu.agent.plan` selects UI, design, styling, component, or hydration domains.
+
+Canonical workflow step: `plan -> apply -> verify`.
+
+Preferred MCP tools:
+
+| Step | Tools |
+|------|-------|
+| plan | `mandu.agent.plan`, `mandu.design.get`, `mandu.component.list` |
+| apply | `mandu.agent.apply`, `mandu.component.add` |
+| verify | `mandu.agent.verify`, `mandu.design.check`, `mandu.lint` |
+| repair | `mandu.agent.repair` |
+
+Allowed file edits:
+
+- `components/ui/**/*.tsx`
+- Route-local island/client components named in the plan
+- Styling utilities only when they are required by the selected component
+
+Verification command:
+
+```bash
+mandu agent verify --changed --json --write
+```
+
+Common failures:
+
+- Adding UI libraries before reading the existing design/component inventory
+- Mixing server components and island-only UI imports
+- Skipping accessibility or design checks for interactive components
+
+Repair path:
+
+```bash
+mandu agent repair --from .mandu/agent-verify.json --json
+```
+
 ## 핵심 원칙
 
 1. **Headless First**: Radix UI 기반으로 동작과 스타일 분리
@@ -29,7 +69,9 @@ Icons:       Lucide React
 Utilities:   clsx, tailwind-merge, cva
 ```
 
-## 빠른 시작
+## Setup Examples
+
+Use these examples only after `mandu.agent.plan` selects UI library setup.
 
 ### shadcn/ui 초기화
 

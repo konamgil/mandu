@@ -24,7 +24,7 @@ async function importBuiltModule(relativePath: string): Promise<Record<string, u
  * See `__tests__/build-runner.ts` for the subprocess entrypoint and more
  * background.
  */
-async function runBuildInSubprocess(root: string): Promise<{
+async function runBuildInSubprocess(root: string, mode?: string): Promise<{
   success: boolean;
   errors: string[];
 }> {
@@ -34,7 +34,9 @@ async function runBuildInSubprocess(root: string): Promise<{
     "build-runner.ts",
   );
   try {
-    const proc = Bun.spawn([process.execPath, "run", runner, root], {
+    const args = [process.execPath, "run", runner, root];
+    if (mode) args.push(mode);
+    const proc = Bun.spawn(args, {
       cwd: path.resolve(import.meta.dir, "..", ".."),
       stdin: "ignore",
       stdout: "pipe",
@@ -182,5 +184,38 @@ describe("buildClientBundles vendor shims", () => {
     expect(runtimeSource).toContain("function readManduData");
     expect(runtimeSource).toContain("document.getElementById(\"__MANDU_DATA__\")");
     expect(runtimeSource).toContain("JSON.parse");
+  });
+
+  test("does not bundle a server page when stale manifest marks page.tsx as clientModule", async () => {
+    const staleRoot = await mkdtemp(path.join(import.meta.dir, ".tmp-stale-client-module-"));
+    try {
+      await mkdir(path.join(staleRoot, "app"), { recursive: true });
+      await mkdir(path.join(staleRoot, "src", "shared", "contracts"), { recursive: true });
+      await writeFile(
+        path.join(staleRoot, "package.json"),
+        JSON.stringify({ name: "mandu-stale-client-module-test", type: "module" }, null, 2),
+        "utf-8",
+      );
+      await writeFile(
+        path.join(staleRoot, "src", "shared", "contracts", "api.ts"),
+        'export const INTERNAL_BASE = process.env.MANDU_INTERNAL_URL ?? "http://localhost:3333";\n',
+        "utf-8",
+      );
+      await writeFile(
+        path.join(staleRoot, "app", "page.tsx"),
+        'import { INTERNAL_BASE } from "../src/shared/contracts/api";\n' +
+          "export default async function HomePage() {\n" +
+          "  return <main>{INTERNAL_BASE}</main>;\n" +
+          "}\n",
+        "utf-8",
+      );
+
+      const staleResult = await runBuildInSubprocess(staleRoot, "server-page-client-module");
+      expect(staleResult.success).toBe(false);
+      expect(staleResult.errors.join("\n")).toContain("missing \"use client\"");
+      expect(await Bun.file(path.join(staleRoot, ".mandu", "client", "index.island.js")).exists()).toBe(false);
+    } finally {
+      await rm(staleRoot, { recursive: true, force: true });
+    }
   });
 });

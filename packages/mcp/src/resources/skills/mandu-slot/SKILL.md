@@ -16,6 +16,46 @@ metadata:
 Slot은 비즈니스 로직을 작성하는 파일입니다. `Mandu.filling()` API를 사용하여
 API 핸들러, 인증 가드, 라이프사이클 훅을 구현합니다.
 
+## Agent Workflow Contract
+
+This skill is a Domain addendum. It must not replace `mandu-agent-workflow`.
+Use it only after `mandu.agent.plan` selects the slot, API, or security domain.
+
+Canonical workflow step: `plan -> apply -> verify -> repair`.
+
+Preferred MCP tools:
+
+| Step | Tools |
+|------|-------|
+| plan | `mandu.agent.plan`, `mandu.slot.read`, `mandu.slot.constraints` |
+| apply | `mandu.agent.apply`, `mandu.generate` |
+| verify | `mandu.agent.verify`, `mandu.slot.validate`, `mandu.contract.validate` |
+| repair | `mandu.agent.repair` |
+
+Allowed file edits:
+
+- `spec/slots/**/*.slot.ts`
+- Route handlers that bind to the planned slot
+- Contract files only when the plan includes contract work
+
+Verification command:
+
+```bash
+mandu agent verify --changed --json --write
+```
+
+Common failures:
+
+- Creating slot logic without checking `mandu.slot.constraints`
+- Mixing auth/security changes into slot edits without security verification
+- Returning untyped responses that drift from the linked contract
+
+Repair path:
+
+```bash
+mandu agent repair --from .mandu/agent-verify.json --json
+```
+
 ## When to Apply
 
 Reference these guidelines when:

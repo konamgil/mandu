@@ -59,8 +59,28 @@ if (!rootDir) {
   console.error("usage: build-runner.ts <rootDir>");
   process.exit(2);
 }
+const mode = process.argv[3] ?? "default";
 
-const manifest: RoutesManifest = {
+const manifest: RoutesManifest = mode === "server-page-client-module"
+  ? {
+      version: 1,
+      routes: [
+        {
+          id: "index",
+          kind: "page",
+          pattern: "/",
+          module: "app/page.tsx",
+          componentModule: "app/page.tsx",
+          clientModule: "app/page.tsx",
+          hydration: {
+            strategy: "island",
+            priority: "visible",
+            preload: false,
+          },
+        },
+      ],
+    }
+  : {
   version: 1,
   routes: [
     {

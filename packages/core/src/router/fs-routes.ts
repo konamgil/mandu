@@ -18,6 +18,7 @@ import {
   runOnRouteRegistered,
   runOnManifestBuilt,
 } from "../plugins/runner";
+import { shouldPreserveExistingClientModule } from "./client-entry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -308,8 +309,15 @@ export async function generateManifest(
       for (const route of manifest.routes) {
         const prev = existingMap.get(route.id);
         if (!prev) continue;
-        // 사용자가 설정한 clientModule/hydration 보존
-        if (prev.clientModule && !route.clientModule) {
+        // 사용자가 설정한 clientModule/hydration 보존.
+        // If app/page.tsx used to be a client page and later becomes a server
+        // page, preserving the old clientModule would leak the server graph into
+        // the browser bundle.
+        if (
+          prev.clientModule &&
+          !route.clientModule &&
+          await shouldPreserveExistingClientModule(route, prev.clientModule, rootDir)
+        ) {
           route.clientModule = prev.clientModule;
         }
         if (prev.hydration && !route.hydration) {

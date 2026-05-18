@@ -1,5 +1,15 @@
 # @mandujs/cli
 
+## 0.44.8
+
+### Patch Changes
+
+- Add `mandu agent context|manifest|plan|apply|verify|repair|sync` as the canonical agent-native CLI workflow and wire it to the shared core agent reports.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.5
+  - @mandujs/mcp@0.37.4
+
 ## 0.44.7
 
 ### Patch Changes

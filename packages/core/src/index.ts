@@ -22,6 +22,7 @@ export const __MANDU_CORE_VERSION__: string = (() => {
 })();
 
 export * from "./spec";
+export * from "./agent";
 export * from "./runtime";
 export * from "./generator";
 export * from "./guard";

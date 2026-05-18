@@ -1,5 +1,17 @@
 # @mandujs/core
 
+## 0.54.5
+
+### Patch Changes
+
+- Add the experimental `@mandujs/core/agent` API for the official agent-native loop: context/manifest, plan/apply, verify/repair, and sync reports.
+
+## 0.54.4
+
+### Patch Changes
+
+- Prevent stale server `page.tsx` entries from being preserved or bundled as client islands, avoiding server-only import graphs leaking into browser bundles.
+
 ## 0.54.3
 
 ### Patch Changes

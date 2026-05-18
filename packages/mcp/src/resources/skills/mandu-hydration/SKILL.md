@@ -15,6 +15,46 @@ metadata:
 Island Hydration은 페이지의 일부분만 클라이언트에서 인터랙티브하게 만드는 기술입니다.
 대부분의 페이지는 정적 HTML로 유지하고, 필요한 부분만 JavaScript를 로드합니다.
 
+## Agent Workflow Contract
+
+This skill is a Domain addendum. It must not replace `mandu-agent-workflow`.
+Use it only after `mandu.agent.plan` selects the hydration, island, partial, or route domain.
+
+Canonical workflow step: `plan -> apply -> verify -> repair`.
+
+Preferred MCP tools:
+
+| Step | Tools |
+|------|-------|
+| plan | `mandu.agent.plan`, `mandu.island.list` |
+| apply | `mandu.agent.apply`, `mandu.hydration.set`, `mandu.hydration.addClientSlot` |
+| verify | `mandu.agent.verify`, `mandu.build`, `mandu.build.status` |
+| repair | `mandu.agent.repair` |
+
+Allowed file edits:
+
+- `app/**/*.partial.tsx`, `app/**/*.island.tsx`, route-local client components
+- Page hydration metadata only when the plan names the route
+- Shared client utilities only after inspecting existing client boundaries
+
+Verification command:
+
+```bash
+mandu agent verify --changed --json --write
+```
+
+Common failures:
+
+- Rendering page-level islands inline instead of using `partial().Render`
+- Forgetting route hydration metadata when a server page renders partials
+- Moving server-only imports into client bundles
+
+Repair path:
+
+```bash
+mandu agent repair --from .mandu/agent-verify.json --json
+```
+
 ## When to Apply
 
 Reference these guidelines when:

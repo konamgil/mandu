@@ -14,6 +14,46 @@ metadata:
 
 Mandu 애플리케이션의 성능 최적화 가이드. 워터폴 제거, 번들 최적화, 캐싱 패턴, Bun 런타임 활용법을 다룹니다. Vercel의 React Best Practices를 Mandu 컨텍스트로 변환하여 적용합니다.
 
+## Agent Workflow Contract
+
+This skill is a Domain addendum. It must not replace `mandu-agent-workflow`.
+Use it only after `mandu.agent.plan` selects performance, hydration, route, API, or runtime domains.
+
+Canonical workflow step: `plan -> verify -> repair`.
+
+Preferred MCP tools:
+
+| Step | Tools |
+|------|-------|
+| plan | `mandu.agent.plan`, `mandu.agent.context` |
+| apply | `mandu.agent.apply` |
+| verify | `mandu.agent.verify`, `mandu.build`, `mandu.run.tests` |
+| repair | `mandu.agent.repair` |
+
+Allowed file edits:
+
+- Route, slot, island, or cache code named in the plan
+- Import boundaries that reduce bundle/runtime cost
+- Benchmark/test files scoped to the performance claim
+
+Verification command:
+
+```bash
+mandu agent verify --changed --json --write
+```
+
+Common failures:
+
+- Optimizing without a measurable route, bundle, or runtime target
+- Moving server-only code into client islands for convenience
+- Skipping typecheck or targeted tests after cache/import rewrites
+
+Repair path:
+
+```bash
+mandu agent repair --from .mandu/agent-verify.json --json
+```
+
 ## When to Apply
 
 Reference these guidelines when:

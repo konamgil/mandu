@@ -14,6 +14,46 @@ metadata:
 
 FS Routes는 파일 시스템 기반 라우팅입니다. `app/` 폴더의 파일 구조가 URL이 됩니다.
 
+## Agent Workflow Contract
+
+This skill is a Domain addendum. It must not replace `mandu-agent-workflow`.
+Use it only after `mandu.agent.plan` selects the route or API domain.
+
+Canonical workflow step: `plan -> apply -> verify`.
+
+Preferred MCP tools:
+
+| Step | Tools |
+|------|-------|
+| plan | `mandu.agent.plan`, `mandu.route.list` |
+| apply | `mandu.agent.apply`, `mandu.generate`, `mandu.route.add` |
+| verify | `mandu.agent.verify`, `mandu.manifest.validate` |
+| repair | `mandu.agent.repair` |
+
+Allowed file edits:
+
+- `app/**/page.tsx`, `app/**/layout.tsx`, `app/**/route.ts`
+- Route-local metadata files and co-located helpers
+- Related contract/slot files only when the plan includes those domains
+
+Verification command:
+
+```bash
+mandu agent verify --changed --json --write
+```
+
+Common failures:
+
+- Creating a page or API route before reading the local `app/` pattern
+- Editing generated route manifests by hand
+- Adding API files without contract verification when the plan includes API work
+
+Repair path:
+
+```bash
+mandu agent repair --from .mandu/agent-verify.json --json
+```
+
 ## When to Apply
 
 Reference these guidelines when:

@@ -28,6 +28,7 @@ export interface RuleMeta {
 
 // Available skills
 const SKILL_IDS = [
+  "mandu-agent-workflow",
   "mandu-slot",
   "mandu-fs-routes",
   "mandu-hydration",
@@ -95,6 +96,7 @@ export function listSkills(): SkillMeta[] {
 
 function getSkillDescription(id: string): string {
   const descriptions: Record<string, string> = {
+    "mandu-agent-workflow": "Canonical context -> plan -> apply -> verify -> repair workflow for Mandu agents",
     "mandu-slot": "Business logic with Mandu.filling() API",
     "mandu-fs-routes": "File-system based routing patterns",
     "mandu-hydration": "Island hydration and client components",

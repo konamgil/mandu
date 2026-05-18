@@ -6,47 +6,61 @@ import {
   getProfileCategories,
   isValidProfile,
   PROFILE_CATEGORIES,
+  resolveMcpProfile,
 } from "../src/profiles";
 
 describe("getProfileCategories", () => {
-  it("minimal returns 4 categories", () => {
-    const cats = getProfileCategories("minimal");
+  it("agent-core returns only official agent categories", () => {
+    const cats = getProfileCategories("agent-core");
     expect(Array.isArray(cats)).toBe(true);
-    expect(cats).toHaveLength(4);
-    expect(cats).toContain("spec");
-    expect(cats).toContain("guard");
+    expect(cats).toEqual(["agent", "docs"]);
   });
 
-  it("standard returns 11 categories", () => {
-    const cats = getProfileCategories("standard");
+  it("agent-full returns official and domain categories", () => {
+    const cats = getProfileCategories("agent-full");
     expect(Array.isArray(cats)).toBe(true);
     expect(cats).toHaveLength(11);
-    expect(cats).toContain("composite");
-    expect(cats).toContain("kitchen");
+    expect(cats).toContain("agent");
+    expect(cats).toContain("spec");
+    expect(cats).toContain("guard");
+    expect(cats).toContain("contract");
   });
 
-  it("full returns null (no filtering)", () => {
-    expect(getProfileCategories("full")).toBeNull();
+  it("internal returns null (no filtering)", () => {
+    expect(getProfileCategories("internal")).toBeNull();
   });
 
-  it("minimal is a strict subset of standard", () => {
-    const min = getProfileCategories("minimal")!;
-    const std = getProfileCategories("standard")!;
-    for (const cat of min) expect(std).toContain(cat);
+  it("agent-core is a strict subset of agent-full", () => {
+    const core = getProfileCategories("agent-core")!;
+    const full = getProfileCategories("agent-full")!;
+    for (const cat of core) expect(full).toContain(cat);
   });
 });
 
 describe("isValidProfile", () => {
-  it("accepts minimal, standard, full", () => {
-    expect(isValidProfile("minimal")).toBe(true);
-    expect(isValidProfile("standard")).toBe(true);
-    expect(isValidProfile("full")).toBe(true);
+  it("accepts agent-core, agent-full, internal", () => {
+    expect(isValidProfile("agent-core")).toBe(true);
+    expect(isValidProfile("agent-full")).toBe(true);
+    expect(isValidProfile("internal")).toBe(true);
   });
 
   it("rejects unknown strings", () => {
     expect(isValidProfile("invalid")).toBe(false);
     expect(isValidProfile("")).toBe(false);
-    expect(isValidProfile("FULL")).toBe(false);
+    expect(isValidProfile("full")).toBe(false);
+  });
+});
+
+describe("resolveMcpProfile", () => {
+  it("defaults to agent-core", () => {
+    expect(resolveMcpProfile(undefined)).toBe("agent-core");
+    expect(resolveMcpProfile("invalid")).toBe("agent-core");
+  });
+
+  it("maps legacy profile names to the consolidated profiles", () => {
+    expect(resolveMcpProfile("minimal")).toBe("agent-core");
+    expect(resolveMcpProfile("standard")).toBe("agent-full");
+    expect(resolveMcpProfile("full")).toBe("internal");
   });
 });
 

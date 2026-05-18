@@ -14,6 +14,45 @@ metadata:
 
 Mandu 애플리케이션의 테스트 패턴 가이드. Bun test를 활용한 단위 테스트, slot 테스트, Island 컴포넌트 테스트, Playwright E2E 테스트를 다룹니다.
 
+## Agent Workflow Contract
+
+This skill is a Domain addendum. It must not replace `mandu-agent-workflow`.
+Use it only after `mandu.agent.plan` selects testing or `mandu.agent.verify` asks for targeted test coverage.
+
+Canonical workflow step: `verify -> repair`.
+
+Preferred MCP tools:
+
+| Step | Tools |
+|------|-------|
+| plan | `mandu.agent.plan` |
+| verify | `mandu.agent.verify`, `mandu.run.tests`, `mandu.ate.generate`, `mandu.ate.run` |
+| repair | `mandu.agent.repair`, `mandu.ate.heal` |
+
+Allowed file edits:
+
+- Co-located `*.test.ts` / `*.test.tsx` files
+- `tests/e2e/**/*.spec.ts`
+- Test fixtures and mocks scoped to the planned domain
+
+Verification command:
+
+```bash
+mandu agent verify --changed --json --write
+```
+
+Common failures:
+
+- Running broad watch-mode tests as an agent default
+- Adding tests that bypass the route/slot/contract path under change
+- Applying ATE healing before reading the verify report
+
+Repair path:
+
+```bash
+mandu agent repair --from .mandu/agent-verify.json --json
+```
+
 ## When to Apply
 
 Reference these guidelines when:
@@ -57,19 +96,13 @@ Reference these guidelines when:
 - `test-mock-fetch` - Mock fetch requests
 - `test-mock-database` - Mock database operations
 
-## Bun Test Quick Start
+## Low-Level Test Commands
+
+Use these only after `agent plan` or `agent verify` identifies the target:
 
 ```bash
-# Run all tests
-bun test
-
-# Run specific test file
+mandu agent verify --changed --json --write
 bun test src/slots/user.test.ts
-
-# Watch mode
-bun test --watch
-
-# Coverage
 bun test --coverage
 ```
 

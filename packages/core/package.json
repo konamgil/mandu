@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/core",
-  "version": "0.54.3",
+  "version": "0.54.5",
   "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
   "main": "./src/index.ts",
@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./a11y": "./src/a11y/index.ts",
+    "./agent": "./src/agent/index.ts",
     "./auth": "./src/auth/index.ts",
     "./auth/login": "./src/auth/login.ts",
     "./auth/password": "./src/auth/password.ts",

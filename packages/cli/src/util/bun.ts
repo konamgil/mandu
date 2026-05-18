@@ -53,8 +53,9 @@
  */
 
 import path from "path";
-import { pathToFileURL } from "url";
 import { mkdir, readdir, unlink, readFile } from "fs/promises";
+import { statSync } from "fs";
+import type { BunPlugin } from "bun";
 import { safeBuild } from "@mandujs/core/bundler/safe-build";
 import { defaultBundlerPlugins } from "@mandujs/core/bundler/plugins";
 import { HMR_PERF } from "@mandujs/core/perf/hmr-markers";
@@ -140,6 +141,273 @@ function buildExternalList(depNames: string[]): string[] {
   return Array.from(new Set([...ALWAYS_EXTERNAL, ...fromPkg]));
 }
 
+interface TsconfigPathAlias {
+  findPrefix: string;
+  findSuffix: string;
+  replacements: string[];
+}
+
+async function readTsconfigPathAliases(rootDir: string): Promise<TsconfigPathAlias[]> {
+  try {
+    const raw = await readFile(path.join(rootDir, "tsconfig.json"), "utf-8");
+    const parsed = JSON.parse(raw) as {
+      compilerOptions?: {
+        baseUrl?: string;
+        paths?: Record<string, string[]>;
+      };
+    };
+    const compilerOptions = parsed.compilerOptions ?? {};
+    const baseUrl = path.resolve(rootDir, compilerOptions.baseUrl ?? ".");
+    const paths = compilerOptions.paths ?? {};
+    const aliases: TsconfigPathAlias[] = [];
+
+    for (const [find, targets] of Object.entries(paths)) {
+      if (!Array.isArray(targets) || targets.length === 0) continue;
+      const starIndex = find.indexOf("*");
+      const findPrefix = starIndex === -1 ? find : find.slice(0, starIndex);
+      const findSuffix = starIndex === -1 ? "" : find.slice(starIndex + 1);
+      aliases.push({
+        findPrefix,
+        findSuffix,
+        replacements: targets.map((target) => path.resolve(baseUrl, target)),
+      });
+    }
+
+    aliases.sort((a, b) => b.findPrefix.length - a.findPrefix.length);
+    return aliases;
+  } catch {
+    return [];
+  }
+}
+
+function matchTsconfigAlias(specifier: string, alias: TsconfigPathAlias): string | null {
+  if (!specifier.startsWith(alias.findPrefix)) return null;
+  if (alias.findSuffix && !specifier.endsWith(alias.findSuffix)) return null;
+  return specifier.slice(
+    alias.findPrefix.length,
+    alias.findSuffix ? specifier.length - alias.findSuffix.length : specifier.length,
+  );
+}
+
+function resolveExistingModule(candidate: string): string | null {
+  const extensions = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json"];
+  for (const ext of extensions) {
+    const filePath = `${candidate}${ext}`;
+    try {
+      if (statSync(filePath).isFile()) return filePath;
+    } catch {
+      // Try the next extension.
+    }
+  }
+
+  for (const ext of extensions.slice(1)) {
+    const indexPath = path.join(candidate, `index${ext}`);
+    try {
+      if (statSync(indexPath).isFile()) return indexPath;
+    } catch {
+      // Try the next index extension.
+    }
+  }
+
+  return null;
+}
+
+interface BuildArtifactLike {
+  path: string;
+  text: () => Promise<string>;
+}
+
+interface SSRBuildOutputLike {
+  success: boolean;
+  logs: unknown[];
+  outputs: BuildArtifactLike[];
+}
+
+async function readBuildArtifactContents(output: BuildArtifactLike): Promise<string> {
+  try {
+    return await readFile(output.path, "utf-8");
+  } catch {
+    return output.text();
+  }
+}
+
+function isBunExecutable(executablePath: string | undefined): boolean {
+  if (!executablePath) return false;
+  const base = path.basename(executablePath).toLowerCase();
+  return base === "bun" || base === "bun.exe";
+}
+
+function resolveBunExecutable(): string {
+  if (isBunExecutable(process.execPath)) return process.execPath;
+  return Bun.which("bun") ?? (process.platform === "win32" ? "bun.exe" : "bun");
+}
+
+function isSSRImportDebugEnabled(): boolean {
+  return process.env.MANDU_DEBUG_SSR_IMPORT === "1";
+}
+
+function debugSSRImport(message: string): void {
+  if (isSSRImportDebugEnabled()) {
+    console.error(`[mandu:ssr-import] ${message}`);
+  }
+}
+
+async function runExternalBunBuild(options: {
+  rootDir: string;
+  rootPathAbs: string;
+  cacheDir: string;
+  naming: string;
+  externalList: string[];
+}): Promise<SSRBuildOutputLike> {
+  const outfile = path.join(options.cacheDir, options.naming);
+  const args = [
+    "build",
+    options.rootPathAbs,
+    "--target=bun",
+    "--format=esm",
+    "--sourcemap=inline",
+    "--outfile",
+    outfile,
+  ];
+  for (const external of options.externalList) {
+    args.push("--external", external);
+  }
+
+  const bunExecutable = resolveBunExecutable();
+  debugSSRImport(
+    `external build via ${bunExecutable}; entry=${options.rootPathAbs}; outfile=${outfile}`,
+  );
+
+  const proc = Bun.spawn([bunExecutable, ...args], {
+    cwd: options.rootDir,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+
+  if (exitCode !== 0) {
+    throw new Error(
+      [
+        `bun build exited with code ${exitCode}`,
+        stdout.trim(),
+        stderr.trim(),
+      ].filter(Boolean).join("\n"),
+    );
+  }
+
+  try {
+    const outputStat = statSync(outfile);
+    debugSSRImport(
+      `external build output exists: ${outfile} (${outputStat.size} bytes)`,
+    );
+  } catch {
+    throw new Error(
+      [
+        `bun build completed but did not write SSR bundle: ${outfile}`,
+        stdout.trim(),
+        stderr.trim(),
+      ].filter(Boolean).join("\n"),
+    );
+  }
+
+  return {
+    success: true,
+    logs: [],
+    outputs: [
+      {
+        path: outfile,
+        text: () => readFile(outfile, "utf-8"),
+      },
+    ],
+  };
+}
+
+function createTsconfigPathsPlugin(aliases: TsconfigPathAlias[]): BunPlugin | null {
+  if (aliases.length === 0) return null;
+
+  return {
+    name: "mandu:tsconfig-paths",
+    setup(build) {
+      build.onResolve({ filter: /.*/ }, (args) => {
+        for (const alias of aliases) {
+          const matched = matchTsconfigAlias(args.path, alias);
+          if (matched === null) continue;
+
+          for (const replacement of alias.replacements) {
+            const candidate = replacement.includes("*")
+              ? replacement.replace(/\*/g, matched)
+              : replacement;
+            const resolved = resolveExistingModule(candidate);
+            if (resolved) {
+              return { path: resolved };
+            }
+          }
+        }
+
+        return undefined;
+      });
+    },
+  };
+}
+
+const installedTsconfigPathPluginRoots = new Set<string>();
+
+export async function installTsconfigPathsPlugin(rootDir: string): Promise<void> {
+  const resolvedRoot = path.resolve(rootDir);
+  if (installedTsconfigPathPluginRoots.has(resolvedRoot)) return;
+
+  const plugin = createTsconfigPathsPlugin(
+    await readTsconfigPathAliases(resolvedRoot),
+  );
+  if (!plugin) {
+    installedTsconfigPathPluginRoots.add(resolvedRoot);
+    return;
+  }
+
+  Bun.plugin(plugin);
+  installedTsconfigPathPluginRoots.add(resolvedRoot);
+}
+
+function formatBuildDiagnostic(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Error) return value.message;
+  if (typeof value !== "object") return String(value);
+
+  const message = "message" in value ? String((value as { message?: unknown }).message ?? "") : "";
+  const name = "name" in value ? String((value as { name?: unknown }).name ?? "") : "";
+  const location =
+    "location" in value && (value as { location?: unknown }).location
+      ? ` ${JSON.stringify((value as { location?: unknown }).location)}`
+      : "";
+  const prefix = name && message && name !== "Error" ? `${name}: ` : "";
+  return message ? `${prefix}${message}${location}` : null;
+}
+
+function formatBuildFailure(error: unknown): string {
+  const messages: string[] = [];
+  const primary = formatBuildDiagnostic(error);
+  if (primary) messages.push(primary);
+
+  const maybeStructured = error as {
+    errors?: unknown[];
+    logs?: unknown[];
+    cause?: unknown;
+  };
+  for (const item of [...(maybeStructured.errors ?? []), ...(maybeStructured.logs ?? [])]) {
+    const message = formatBuildDiagnostic(item);
+    if (message) messages.push(message);
+  }
+  const cause = formatBuildDiagnostic(maybeStructured.cause);
+  if (cause) messages.push(`cause: ${cause}`);
+
+  return Array.from(new Set(messages)).join("\n") || String(error);
+}
+
 export interface BundledImporterOptions {
   /** Project root — bundles are written under `${rootDir}/${SSR_BUNDLE_DIR}`. */
   rootDir: string;
@@ -221,6 +489,7 @@ export function createBundledImporter(
   let counter = 0;
   let cleanupPromise: Promise<void> | null = null;
   let externalListPromise: Promise<string[]> | null = null;
+  let tsconfigPathAliasesPromise: Promise<TsconfigPathAlias[]> | null = null;
 
   // Per-source import state: the most recent bundle path (for GC) +
   // resolved module (for cache-hit fast path) for each entry.
@@ -235,6 +504,12 @@ export function createBundledImporter(
       return buildExternalList(depNames);
     })();
     return externalListPromise;
+  };
+
+  const ensureTsconfigPathAliases = async (): Promise<TsconfigPathAlias[]> => {
+    if (tsconfigPathAliasesPromise) return tsconfigPathAliasesPromise;
+    tsconfigPathAliasesPromise = readTsconfigPathAliases(rootDir);
+    return tsconfigPathAliasesPromise;
   };
 
   // Wipe stale bundles from prior dev sessions on first use.
@@ -277,7 +552,7 @@ export function createBundledImporter(
 
     const externalList = await ensureExternalList();
 
-    let result;
+    let result: SSRBuildOutputLike;
     try {
       // Issue #207 — install Mandu's default block-generated-imports plugin
       // on the SSR bundler path too, so pure-SSR pages/slots that never
@@ -287,31 +562,49 @@ export function createBundledImporter(
       // downstream project hits a regression on a newer Bun patch, the
       // `MANDU_DISABLE_BUNDLER_PLUGINS=1` env var provides an emergency
       // escape hatch without requiring a config change.
+      const tsconfigPathsPlugin = createTsconfigPathsPlugin(
+        await ensureTsconfigPathAliases(),
+      );
       const ssrPlugins =
         process.env.MANDU_DISABLE_BUNDLER_PLUGINS === "1"
           ? []
           : defaultBundlerPlugins();
-      result = await safeBuild({
-        entrypoints: [rootPathAbs],
-        outdir: cacheDir,
-        naming,
-        target: "bun",
-        format: "esm",
-        // Inline source so (a) error stacks point at the original sources
-        // and (b) we can parse the `sources[]` array for import-graph
-        // tracking without writing a separate .map file.
-        sourcemap: "inline",
-        // Explicit external list (built from package.json deps + framework
-        // defaults). User code — including TypeScript path aliases like `@/*`
-        // — is NOT here, so it gets inlined into the bundle. We deliberately
-        // avoid `packages: "external"` (treats `@/foo` as a scoped npm
-        // package). The bundler-plugin caveat that previously lived here
-        // was tied to Bun 1.3.10; see the plugin-install block above.
-        external: externalList,
-        plugins: ssrPlugins,
-      });
+      debugSSRImport(
+        `bundling entry=${rootPathAbs}; process.execPath=${process.execPath}; in-bun=${isBunExecutable(process.execPath)}`,
+      );
+      if (isBunExecutable(process.execPath)) {
+        result = await safeBuild({
+          entrypoints: [rootPathAbs],
+          outdir: cacheDir,
+          naming,
+          target: "bun",
+          format: "esm",
+          // Inline source so (a) error stacks point at the original sources
+          // and (b) we can parse the `sources[]` array for import-graph
+          // tracking without writing a separate .map file.
+          sourcemap: "inline",
+          // Explicit external list (built from package.json deps + framework
+          // defaults). User code — including TypeScript path aliases like `@/*`
+          // — is NOT here, so it gets inlined into the bundle. We deliberately
+          // avoid `packages: "external"` (treats `@/foo` as a scoped npm
+          // package). The bundler-plugin caveat that previously lived here
+          // was tied to Bun 1.3.10; see the plugin-install block above.
+          external: externalList,
+          plugins: tsconfigPathsPlugin
+            ? [tsconfigPathsPlugin, ...ssrPlugins]
+            : ssrPlugins,
+        });
+      } else {
+        result = await runExternalBunBuild({
+          rootDir,
+          rootPathAbs,
+          cacheDir,
+          naming,
+          externalList,
+        });
+      }
     } catch (err) {
-      const inner = err instanceof Error ? err.message : String(err);
+      const inner = formatBuildFailure(err);
       const error = new Error(`[Mandu] Failed to bundle ${rootPathAbs} for SSR: ${inner}`);
       if (onError) {
         onError(rootPathAbs, error);
@@ -343,8 +636,8 @@ export function createBundledImporter(
     // invalidate() has a consistent view even if a concurrent call lands
     // mid-rebuild.
     if (perfEnabled) mark(HMR_PERF.INCR_GRAPH_UPDATE);
+    const bundleContents = await readBuildArtifactContents(output as BuildArtifactLike);
     try {
-      const bundleContents = await readFile(output.path, "utf-8");
       const sources = extractSourcesFromInlineSourcemap(output.path, bundleContents);
       // Bun may report the entry under a relative-rewritten form that no
       // longer matches `rootPathAbs` exactly — `updateFromSources` always
@@ -367,8 +660,12 @@ export function createBundledImporter(
       unlink(previous.bundlePath).catch(() => {});
     }
 
-    const url = pathToFileURL(output.path).href;
-    const imported = (await import(url)) as T;
+    await Bun.write(output.path, bundleContents);
+
+    const fileUrl = Bun.pathToFileURL(output.path);
+    fileUrl.searchParams.set("t", `${ts}-${seq}`);
+    debugSSRImport(`importing SSR bundle ${fileUrl.href}`);
+    const imported = (await import(fileUrl.href)) as T;
 
     cacheByRoot.set(rootPathAbs, {
       bundlePath: output.path,
@@ -433,6 +730,11 @@ export function createBundledImporter(
   };
 
   const dispose = async (): Promise<void> => {
+    if (process.env.MANDU_KEEP_SSR_BUNDLES === "1") {
+      debugSSRImport(`keeping SSR bundles in ${cacheDir}`);
+      return;
+    }
+
     // Unlink every tracked bundle + drop graph state. `cleanupPromise`
     // is left non-null so any post-dispose `importBundled` calls still
     // start from a clean directory.

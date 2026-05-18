@@ -12,6 +12,7 @@ import { moduleToPlugins } from "../adapters/tool-adapter.js";
 import { type McpProfile, getProfileCategories } from "../profiles.js";
 
 // 도구 모듈 export
+export { agentTools, agentToolDefinitions } from "./agent.js";
 export { specTools, specToolDefinitions } from "./spec.js";
 export { generateTools, generateToolDefinitions } from "./generate.js";
 export { transactionTools, transactionToolDefinitions } from "./transaction.js";
@@ -86,6 +87,7 @@ export {
 } from "./extract-contract.js";
 
 // 도구 모듈 import (등록용)
+import { agentTools, agentToolDefinitions } from "./agent.js";
 import { specTools, specToolDefinitions } from "./spec.js";
 import { generateTools, generateToolDefinitions } from "./generate.js";
 import { transactionTools, transactionToolDefinitions } from "./transaction.js";
@@ -189,6 +191,7 @@ export interface ToolModule {
  * 빌트인 도구 모듈 목록
  */
 export const TOOL_MODULES: ToolModule[] = [
+  { category: "agent", definitions: agentToolDefinitions, handlers: agentTools },
   { category: "spec", definitions: specToolDefinitions, handlers: specTools },
   { category: "generate", definitions: generateToolDefinitions, handlers: generateTools },
   { category: "transaction", definitions: transactionToolDefinitions, handlers: transactionTools },

@@ -1,5 +1,12 @@
 # mandu-auth-starter
 
+## 0.1.56
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.4
+
 ## 0.1.55
 
 ### Patch Changes

@@ -15,6 +15,46 @@ globs:
 
 Mandu Island 아키텍처에 최적화된 Tailwind CSS v4 스타일링 가이드입니다.
 
+## Agent Workflow Contract
+
+This skill is a Domain addendum. It must not replace `mandu-agent-workflow`.
+Use it only after `mandu.agent.plan` selects styling, design, UI, hydration, or component domains.
+
+Canonical workflow step: `plan -> apply -> verify`.
+
+Preferred MCP tools:
+
+| Step | Tools |
+|------|-------|
+| plan | `mandu.agent.plan`, `mandu.design.get` |
+| apply | `mandu.agent.apply`, `mandu.design.patch` |
+| verify | `mandu.agent.verify`, `mandu.design.check`, `mandu.lint` |
+| repair | `mandu.agent.repair` |
+
+Allowed file edits:
+
+- CSS files named in the plan, especially `app/globals.css`
+- Component className changes scoped to the target UI
+- Theme tokens only after inspecting the project's design source
+
+Verification command:
+
+```bash
+mandu agent verify --changed --json --write
+```
+
+Common failures:
+
+- Installing or changing styling stacks before checking the existing project style
+- Editing broad theme tokens for a local component issue
+- Skipping design/lint verification after Tailwind v4 syntax changes
+
+Repair path:
+
+```bash
+mandu agent repair --from .mandu/agent-verify.json --json
+```
+
 ## 핵심 원칙
 
 1. **Zero-Runtime**: 빌드 타임 CSS 생성 (SSR 호환)
@@ -29,7 +69,9 @@ Primary:    Tailwind CSS v4 + clsx/tailwind-merge
 Alternative: CSS Modules (최소 의존성)
 ```
 
-## 빠른 시작
+## Setup Examples
+
+Use these examples only after `mandu.agent.plan` selects styling setup or migration.
 
 ### 1. 설치
 
