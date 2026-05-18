@@ -377,7 +377,7 @@ Island Hydration은 페이지의 일부분만 클라이언트에서 인터랙티
 | \`idle\` | 브라우저 유휴 시 | 비중요 기능 |
 | \`interaction\` | 사용자 상호작용 시 | 클릭해야 활성화 |
 
-## Island 만들기
+## Inline client region 만들기
 
 ### 1. 클라이언트 컴포넌트 작성
 
@@ -388,7 +388,7 @@ Island Hydration은 페이지의 일부분만 클라이언트에서 인터랙티
 
 import { useState } from "react";
 
-export default function Counter({ initial = 0 }: { initial?: number }) {
+export function Counter({ initial = 0 }: { initial?: number }) {
   const [count, setCount] = useState(initial);
 
   return (
@@ -401,12 +401,18 @@ export default function Counter({ initial = 0 }: { initial?: number }) {
 }
 \`\`\`
 
-### 2. 페이지에서 사용
+### 2. 서버 페이지에서 partial로 사용
 
 \`\`\`tsx
 // app/counter/page.tsx
 
-import Counter from "./client";
+import { partial } from "@mandujs/core/client";
+import { Counter } from "./client";
+
+const CounterPartial = partial({
+  component: Counter,
+  priority: "visible",
+});
 
 export default function CounterPage() {
   return (
@@ -415,7 +421,7 @@ export default function CounterPage() {
       <p>이 텍스트는 정적 HTML입니다.</p>
 
       {/* 이 부분만 hydration됩니다 */}
-      <Counter initial={10} />
+      <CounterPartial.Render initial={10} />
     </div>
   );
 }
@@ -423,7 +429,10 @@ export default function CounterPage() {
 
 ## Mandu.island() API
 
-고급 Island 패턴을 위한 API:
+고급 page-level Island 패턴을 위한 API입니다. \`Mandu.island()\`는 단일
+정의 객체만 받습니다. \`island("visible", Component)\` 형태는 지원하지
+않으며, 서버 페이지 안에 inline으로 렌더링할 영역은 \`partial()\`을
+사용하세요.
 
 \`\`\`typescript
 // spec/slots/todos.client.ts

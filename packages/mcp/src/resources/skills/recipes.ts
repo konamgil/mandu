@@ -469,12 +469,18 @@ export default function Counter({ initial = 0, step = 1 }: CounterProps) {
 }
 \`\`\`
 
-## Step 2: 페이지에서 사용
+## Step 2: 서버 페이지에서 partial로 사용
 
 \`\`\`tsx
 // app/counter/page.tsx
 
+import { partial } from "@mandujs/core/client";
 import Counter from "./client";
+
+const CounterPartial = partial({
+  component: Counter,
+  priority: "visible",
+});
 
 export default function CounterPage() {
   return (
@@ -482,8 +488,8 @@ export default function CounterPage() {
       <h1>Counter Demo</h1>
       <p>아래 카운터는 클라이언트에서 hydration됩니다.</p>
 
-      {/* Island 컴포넌트 */}
-      <Counter initial={10} step={5} />
+      {/* Inline client region */}
+      <CounterPartial.Render initial={10} step={5} />
 
       <p style={{ marginTop: "20px", color: "#666" }}>
         이 텍스트는 정적 HTML입니다.
@@ -618,7 +624,10 @@ export default function UserList() {
 
 ## Mandu.island() API (고급)
 
-서버 데이터와 클라이언트 상태를 분리하려면:
+서버 데이터와 클라이언트 상태를 분리하는 page-level Island가 필요하면
+\`Mandu.island({ setup, render })\`를 사용합니다. \`island("visible",
+Component)\`는 지원하지 않습니다. 서버 페이지 안에 inline으로 렌더링할
+영역은 \`partial()\`을 사용하세요.
 
 \`\`\`typescript
 // spec/slots/todos.client.ts

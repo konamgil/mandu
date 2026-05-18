@@ -65,6 +65,13 @@ Reference these guidelines when:
 | `island` | Partial hydration (default) | Static + interactive mix |
 | `full` | Full hydration | SPA-style pages |
 
+## Runtime API Constraints
+
+- `island()` / `Mandu.island()` takes one definition object: `island({ setup, render })`.
+- Do not call `island("visible", Component)`; use `wrapComponent(Component)` for a simple page-level island wrapper.
+- Islands are page-level client bundles. Do not render them as inline JSX like `<MyIsland />`.
+- For an embedded interactive region inside a server page, use `partial()` and render the returned `.Render` component.
+
 ## Client Hooks
 
 ```typescript

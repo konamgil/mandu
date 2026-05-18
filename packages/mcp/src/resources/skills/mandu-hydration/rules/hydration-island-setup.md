@@ -8,6 +8,40 @@ tags: hydration, island, setup
 ## Use Mandu.island() with Setup Function
 
 For complex Islands, use `Mandu.island()` API to separate state logic from rendering.
+`Mandu.island()` takes a single definition object. The shorthand
+`island("visible", Component)` is not a supported Mandu runtime API.
+
+Islands are page-level client bundles. They are discovered and rendered by
+the framework wrapper, not embedded directly as inline JSX. Use `partial()`
+when a server page needs an inline interactive region.
+
+```tsx
+// Simple page-level island wrapper
+"use client";
+
+import { wrapComponent } from "@mandujs/core/client";
+
+function Counter() {
+  return <button>Count</button>;
+}
+
+export default wrapComponent(Counter);
+```
+
+```tsx
+// Inline client region inside a server-rendered page
+import { partial } from "@mandujs/core/client";
+import { Counter } from "./counter.client";
+
+const CounterPartial = partial({
+  component: Counter,
+  priority: "visible",
+});
+
+export default function Page() {
+  return <CounterPartial.Render initial={0} />;
+}
+```
 
 **Incorrect (mixed concerns):**
 
