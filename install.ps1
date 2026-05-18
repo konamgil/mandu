@@ -178,10 +178,20 @@ $arch = $env:PROCESSOR_ARCHITECTURE
 # When running inside a 32-bit PowerShell host on 64-bit Windows, the real
 # architecture lives in PROCESSOR_ARCHITEW6432.
 if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }
+if ([string]::IsNullOrWhiteSpace($arch)) {
+  try {
+    $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+  } catch {
+    $arch = ""
+  }
+}
 
-switch ($arch) {
+$archKey = $arch.ToUpperInvariant()
+
+switch ($archKey) {
   "AMD64" { $runnerTarget = "bun-windows-x64" }
-  "x86"   {
+  "X64"   { $runnerTarget = "bun-windows-x64" }
+  "X86"   {
     Write-Error "32-bit Windows is not supported. Please use a 64-bit PowerShell host."
     exit 2
   }
