@@ -363,20 +363,16 @@ ${result.migrationSql}`;
 // ============================================
 
 /**
- * Wrap the sequence of `Change` → SQL emission with a transaction
- * header/footer. SQLite uses `BEGIN` / `COMMIT` (plain) because its
- * migration runner invokes each file via `db.transaction()` anyway —
- * but the explicit BEGIN/COMMIT is harmless inside an already-open tx
- * and makes the file runnable standalone via `sqlite3 foo.db < file.sql`.
+ * Compose the sequence of `Change` → SQL emission.
+ *
+ * Do not wrap with `BEGIN` / `COMMIT`: the migration runner already applies
+ * each file inside a transaction, and SQLite rejects nested BEGIN with
+ * "cannot start a transaction within a transaction".
  */
 function composeMigrationSql(changes: readonly Change[], provider: SqlProvider): string {
   const body = emitChanges(changes, provider);
   if (body.length === 0) return "";
-  return `BEGIN;
-
-${body}
-
-COMMIT;`;
+  return body;
 }
 
 // ============================================

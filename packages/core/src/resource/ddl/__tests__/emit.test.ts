@@ -502,6 +502,23 @@ describe("emitChange — add-column", () => {
     );
   });
 
+  test("sqlite refuses raw expression defaults on add-column", () => {
+    const rawExpression: Change = {
+      kind: "add-column",
+      resourceName: "votes",
+      field: field({
+        name: "score",
+        type: "number",
+        nullable: true,
+        default: { kind: "sql", expr: "(1+2)" },
+      }),
+    };
+
+    expect(() => emitChange(rawExpression, "sqlite")).toThrow(
+      /only accepts literal constant defaults/,
+    );
+  });
+
   test("indexed:true field emits ADD COLUMN plus auto CREATE INDEX", () => {
     const indexed: Change = {
       kind: "add-column",
@@ -567,12 +584,14 @@ describe("emitChange — alter-column-type stub", () => {
       expect(sql).toContain("Column type change detected: users.age");
       expect(sql).toContain("from: number");
       expect(sql).toContain("to:   string");
+      expect(sql).toContain("mandu_manual_migration_required");
     }
   });
 
-  test("includes SELECT 1 no-op statement", () => {
+  test("includes a deliberate failing manual-migration sentinel", () => {
     const sql = emitChange(change, "postgres");
-    expect(sql).toContain("SELECT 1;");
+    expect(sql).toContain("SELECT mandu_manual_migration_required");
+    expect(sql).not.toContain("SELECT 1;");
   });
 });
 
@@ -598,7 +617,7 @@ describe("emitChange — alter-column-nullable", () => {
       "sqlite",
     );
     expect(sql).toContain("TODO: SQLite cannot toggle NOT NULL in place");
-    expect(sql).toContain("SELECT 1;");
+    expect(sql).toContain("mandu_manual_migration_required");
   });
 
   test("mysql emits a stub (MODIFY COLUMN needs full type)", () => {
@@ -607,7 +626,7 @@ describe("emitChange — alter-column-nullable", () => {
       "mysql",
     );
     expect(sql).toContain("MySQL MODIFY COLUMN requires");
-    expect(sql).toContain("SELECT 1;");
+    expect(sql).toContain("mandu_manual_migration_required");
   });
 });
 
@@ -645,6 +664,21 @@ describe("emitChange — alter-column-default", () => {
         "mysql",
       ),
     ).toBe("ALTER TABLE `u` ALTER COLUMN `f` SET DEFAULT 1;");
+  });
+
+  test("sqlite emits a failing manual stub for default changes", () => {
+    const sql = emitChange(
+      {
+        kind: "alter-column-default",
+        resourceName: "users",
+        fieldName: "status",
+        default: { kind: "literal", value: "active" },
+      },
+      "sqlite",
+    );
+    expect(sql).toContain("TODO: SQLite cannot ALTER DEFAULT in place");
+    expect(sql).toContain("mandu_manual_migration_required");
+    expect(sql).not.toContain("SELECT 1;");
   });
 });
 

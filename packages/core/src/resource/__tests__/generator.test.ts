@@ -673,6 +673,8 @@ describe("generateSchemaArtifacts — diff + migration orchestration", () => {
       expect(result.changes.every((c) => c.kind === "create-table")).toBe(true);
       expect(result.migrationFilename).not.toBeNull();
       expect(result.migrationSql).toContain("CREATE TABLE");
+      expect(result.migrationSql).not.toMatch(/\bBEGIN\b/i);
+      expect(result.migrationSql).not.toMatch(/\bCOMMIT\b/i);
       expect(result.desiredSchema).toContain("CREATE TABLE");
       expect(Object.keys(result.desiredSchemaByTable).sort()).toEqual(["products", "users"]);
     } finally {

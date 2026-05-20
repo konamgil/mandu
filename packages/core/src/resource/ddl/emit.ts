@@ -15,10 +15,11 @@
  *   4. Value literals in `DEFAULT` clauses flow through `resolveDefault`
  *      which handles quote escaping. `kind: "sql"` is the explicit
  *      escape hatch — caller's responsibility.
- *   5. Unsupported changes (v1 scope — `alter-column-type`) emit a
- *      `-- TODO:` comment block + a no-op `SELECT 1;` so the generated
- *      migration still parses and Agent C's runner can record an
- *      "applied but manual" row.
+ *   5. Unsupported changes (v1 scope — `alter-column-type`, and some
+ *      dialect-specific ALTER gaps) emit a `-- TODO:` comment block plus
+ *      a deliberate failing sentinel statement. The generated migration
+ *      is reviewable/editable, but `mandu db apply` will not record it
+ *      until the operator replaces the TODO with real SQL.
  *
  * Determinism:
  *   - `emitCreateTable` emits columns in `DdlFieldDef` array order — the
@@ -413,11 +414,28 @@ function sqliteAddColumnDefaultIssue(field: DdlFieldDef): string | null {
   if (/\b[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(expr)) {
     return `SQLite rejects non-constant function defaults in ADD COLUMN.`;
   }
+  if (!isSqliteAddColumnConstantSqlDefault(expr)) {
+    return `SQLite ADD COLUMN only accepts literal constant defaults; raw SQL expression ${JSON.stringify(expr)} is not safe to emit automatically.`;
+  }
   return null;
 }
 
 function isSqliteNullDefault(def: NonNullable<DdlFieldDef["default"]>): boolean {
   return def.kind === "null" || (def.kind === "sql" && /^NULL$/i.test(def.expr.trim()));
+}
+
+function isSqliteAddColumnConstantSqlDefault(expr: string): boolean {
+  let value = expr.trim();
+  while (value.startsWith("(") && value.endsWith(")")) {
+    value = value.slice(1, -1).trim();
+  }
+  return (
+    /^NULL$/i.test(value) ||
+    /^(?:TRUE|FALSE)$/i.test(value) ||
+    /^[+-]?(?:\d+|\d+\.\d+|\.\d+)(?:e[+-]?\d+)?$/i.test(value) ||
+    /^'(?:''|[^'])*'$/.test(value) ||
+    /^X'(?:[0-9a-f]{2})*'$/i.test(value)
+  );
 }
 
 /**
@@ -444,8 +462,8 @@ function emitDropColumn(
  *
  * Output: a multi-line SQL comment block naming the resource + field +
  * fromType → toType, followed by the literal TODO message and a no-op
- * `SELECT 1;` so the migration runner (Agent C) parses and advances past
- * this statement.
+ * a deliberate failing sentinel so the migration runner refuses to mark
+ * this TODO as applied until the operator edits the migration manually.
  */
 function emitAlterColumnTypeStub(
   resourceName: string,
@@ -461,7 +479,9 @@ function emitAlterColumnTypeStub(
     `-- TODO: Mandu does not auto-generate ALTER COLUMN TYPE in v1.`,
     `-- Please write the migration manually, then re-run \`mandu db apply\`.`,
     `-- ================================================================`,
-    `SELECT 1;`,
+    manualMigrationRequiredStatement(
+      `Mandu cannot auto-generate ALTER COLUMN TYPE for ${resourceName}.${fieldName}`,
+    ),
   ].join("\n");
 }
 
@@ -481,14 +501,16 @@ function emitAlterColumnNullable(
   }
   if (provider === "sqlite") {
     // SQLite cannot toggle NOT NULL on an existing column without a full
-    // table recreate. Emit a stub so the user handles it manually.
+    // table recreate. Emit a failing stub so the user handles it manually.
     return [
       `-- ================================================================`,
       `-- Nullability change: ${resourceName}.${fieldName} → ${nullable ? "NULL" : "NOT NULL"}`,
       `-- TODO: SQLite cannot toggle NOT NULL in place. Recreate the table`,
       `-- manually (CREATE new, INSERT SELECT, DROP old, RENAME) and re-run.`,
       `-- ================================================================`,
-      `SELECT 1;`,
+      manualMigrationRequiredStatement(
+        `SQLite nullability change requires manual table rebuild for ${resourceName}.${fieldName}`,
+      ),
     ].join("\n");
   }
   // MySQL requires the full column spec; we cannot reconstruct it here.
@@ -501,7 +523,9 @@ function emitAlterColumnNullable(
     `-- cannot emit this automatically. Please edit this migration to use`,
     `-- \`ALTER TABLE ${resourceName} MODIFY COLUMN ${fieldName} <TYPE> ${nullable ? "NULL" : "NOT NULL"}\``,
     `-- ================================================================`,
-    `SELECT 1;`,
+    manualMigrationRequiredStatement(
+      `MySQL nullability change requires manual MODIFY COLUMN for ${resourceName}.${fieldName}`,
+    ),
   ].join("\n");
 }
 
@@ -525,7 +549,9 @@ function emitAlterColumnDefault(
       `-- Default change: ${resourceName}.${fieldName}`,
       `-- TODO: SQLite cannot ALTER DEFAULT in place. Recreate the table.`,
       `-- ================================================================`,
-      `SELECT 1;`,
+      manualMigrationRequiredStatement(
+        `SQLite default change requires manual table rebuild for ${resourceName}.${fieldName}`,
+      ),
     ].join("\n");
   }
   // MySQL — ALTER COLUMN ... SET DEFAULT / DROP DEFAULT is actually supported.
@@ -583,6 +609,14 @@ function emitRenameColumn(
   // All three dialects use `ALTER TABLE ... RENAME COLUMN ... TO ...` in
   // their modern versions (PG >=9.2, MySQL >=8.0.3, SQLite >=3.25).
   return `ALTER TABLE ${table} RENAME COLUMN ${from} TO ${to};`;
+}
+
+function manualMigrationRequiredStatement(message: string): string {
+  return `SELECT mandu_manual_migration_required(${sqlStringLiteral(message)});`;
+}
+
+function sqlStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 // =====================================================================

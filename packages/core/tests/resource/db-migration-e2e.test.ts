@@ -589,10 +589,10 @@ for (const c of cases) {
     });
 
     // ------------------------------------------------------------------
-    // 5. Stub for alter-column-type
+    // 5. Manual migration guard for alter-column-type
     // ------------------------------------------------------------------
 
-    test("5. type change emits stub migration that applies without error (no-op SELECT 1)", async () => {
+    test("5. type change emits a failing manual-migration stub until edited", async () => {
       const baseline = [makeParsed(nsTable(userResource(c.provider), f.ns))];
       const first = await planAndApply(f, baseline, null, "0001", "create_users");
 
@@ -603,14 +603,14 @@ for (const c of cases) {
 
       const sql = emitChanges(changes, c.provider);
       expect(sql).toContain("TODO"); // stub marker from emit.ts
+      expect(sql).toContain("mandu_manual_migration_required");
       writeMigration(f.migrationsDir, "0002", "type_change_stub", sql);
 
-      // apply should NOT throw — the stub is a `-- TODO` comment + SELECT 1 no-op per emit.ts.
       const runner = createFixtureMigrationRunner(f);
-      await runner.apply();
+      await expect(runner.apply()).rejects.toThrow(/type_change_stub/);
 
       const hist = await readAllHistory(f.db, historyTableName(f));
-      expect(hist.filter((h) => h.success === 1)).toHaveLength(2);
+      expect(hist.filter((h) => h.success === 1)).toHaveLength(1);
     });
 
     // ------------------------------------------------------------------
