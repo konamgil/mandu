@@ -5,7 +5,13 @@
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { getProjectPaths } from "../utils/project.js";
-import { loadManduConfig, loadManifest, needsHydration } from "@mandujs/core";
+import {
+  getRouteHydration,
+  loadManduConfig,
+  loadManifest,
+  needsHydration,
+  type BundleManifest,
+} from "@mandujs/core";
 import { getDevServerState } from "./project.js";
 import { readRuntimeControl } from "../utils/runtime-control.js";
 import path from "path";
@@ -65,6 +71,20 @@ export const runtimeToolDefinitions: Tool[] = [
           description: "Per-request timeout in milliseconds. Defaults to 3000.",
         },
       },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "mandu.runtime.status",
+    annotations: {
+      readOnlyHint: true,
+    },
+    description:
+      "Single source of truth for Mandu client runtime state. Separates page client mounts from nested islands and compares routes manifest, bundle manifest, and generated route artifacts.",
+    inputSchema: {
+      type: "object",
+      properties: {},
       required: [],
       additionalProperties: false,
     },
@@ -327,6 +347,67 @@ export default Mandu.contract({
         failures,
         routes: probes,
         skipped,
+      };
+    },
+
+    "mandu.runtime.status": async () => {
+      const result = await loadManifest(paths.manifestPath);
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.errors,
+        };
+      }
+
+      const bundleManifest = await readBundleManifest(projectRoot);
+      const pageRoutes = result.data.routes.filter((route) => route.kind === "page");
+      const pageClientMounts = await Promise.all(
+        pageRoutes.map(async (route) =>
+          describePageClientMount(projectRoot, route, bundleManifest),
+        ),
+      );
+      const nestedIslands = Object.entries(bundleManifest?.islands ?? {}).map(([id, island]) => ({
+        islandId: id,
+        routeId: island.route,
+        bundleUrl: island.js,
+        priority: island.priority,
+      }));
+      const partials = Object.entries(bundleManifest?.partials ?? {}).map(([id, partial]) => ({
+        partialId: id,
+        bundleUrl: partial.js,
+        priority: partial.priority,
+      }));
+      const consistencyChecks = buildRuntimeConsistencyChecks(pageClientMounts, bundleManifest);
+      const failedChecks = consistencyChecks.filter((check) => check.status === "fail");
+      const brokenMounts = pageClientMounts.filter((mount) => mount.status === "broken");
+
+      return {
+        success: failedChecks.length === 0 && brokenMounts.length === 0,
+        terminology: {
+          pageClientMount:
+            "A page route whose whole page is hydrated from a route-level clientModule and route bundle.",
+          island:
+            "A nested or route-local island bundle listed in .mandu/manifest.json islands, distinct from page client mounts.",
+          partial:
+            "An inline partial hydration boundary listed in .mandu/manifest.json partials.",
+        },
+        sources: {
+          routesManifest: ".mandu/routes.manifest.json",
+          bundleManifest: bundleManifest ? ".mandu/manifest.json" : null,
+          generatedRoutes: ".mandu/generated/web/routes/*.route.tsx",
+        },
+        summary: {
+          totalPages: pageRoutes.length,
+          pageClientMountCount: pageClientMounts.filter((mount) => mount.needsClientMount).length,
+          brokenPageClientMountCount: brokenMounts.length,
+          nestedIslandCount: nestedIslands.length,
+          partialCount: partials.length,
+          failedConsistencyCheckCount: failedChecks.length,
+        },
+        pageClientMounts,
+        islands: nestedIslands,
+        partials,
+        consistencyChecks,
       };
     },
 
@@ -636,8 +717,179 @@ export const appLogger = logger(${JSON.stringify(config, null, 2)});
   handlers["mandu_list_logger_options"] = handlers["mandu.runtime.loggerOptions"];
   handlers["mandu_generate_logger_config"] = handlers["mandu.runtime.loggerConfig"];
   handlers["mandu_runtime_probe"] = handlers["mandu.runtime.probe"];
+  handlers["mandu_runtime_status"] = handlers["mandu.runtime.status"];
 
   return handlers;
+}
+
+type PageRouteForStatus = Parameters<typeof needsHydration>[0] & {
+  id: string;
+  pattern: string;
+  clientModule?: string;
+};
+
+type PageClientMountStatus = {
+  routeId: string;
+  pattern: string;
+  needsClientMount: boolean;
+  hasClientModule: boolean;
+  clientModule: string | null;
+  hydration: ReturnType<typeof getRouteHydration>;
+  bundleUrl: string | null;
+  status: "static" | "pending" | "healthy" | "broken";
+  reasons: string[];
+  generatedRoute: GeneratedRouteInspection;
+};
+
+type GeneratedRouteInspection = {
+  path: string;
+  exists: boolean;
+  kind: "missing" | "client_mount" | "placeholder" | "custom";
+  referencesClientModule: boolean;
+  callsIslandRender: boolean;
+};
+
+type RuntimeConsistencyCheck = {
+  check: string;
+  status: "pass" | "fail" | "skip";
+  failingRoutes?: string[];
+  reason?: string;
+};
+
+async function readBundleManifest(projectRoot: string): Promise<BundleManifest | null> {
+  const filePath = path.join(projectRoot, ".mandu/manifest.json");
+  try {
+    const raw = await Bun.file(filePath).text();
+    return JSON.parse(raw) as BundleManifest;
+  } catch {
+    return null;
+  }
+}
+
+async function describePageClientMount(
+  projectRoot: string,
+  route: PageRouteForStatus,
+  bundleManifest: BundleManifest | null,
+): Promise<PageClientMountStatus> {
+  const hydration = getRouteHydration(route);
+  const needsClientMount = needsHydration(route);
+  const bundle = bundleManifest?.bundles?.[route.id] ?? null;
+  const generatedRoute = await inspectGeneratedRoute(projectRoot, route);
+  const reasons: string[] = [];
+
+  if (needsClientMount && !route.clientModule) {
+    reasons.push("missing_client_module");
+  }
+  if (needsClientMount && route.clientModule && bundleManifest && !bundle) {
+    reasons.push("missing_bundle");
+  }
+  if (needsClientMount && route.clientModule && generatedRoute.exists && !generatedRoute.referencesClientModule) {
+    reasons.push("generated_route_not_using_client_module");
+  }
+  if (needsClientMount && !route.clientModule && generatedRoute.kind === "placeholder") {
+    reasons.push("generated_placeholder_for_hydrating_route");
+  }
+
+  const status = !needsClientMount
+    ? "static"
+    : reasons.length > 0
+      ? "broken"
+      : bundleManifest
+        ? "healthy"
+        : "pending";
+
+  return {
+    routeId: route.id,
+    pattern: route.pattern,
+    needsClientMount,
+    hasClientModule: !!route.clientModule,
+    clientModule: route.clientModule ?? null,
+    hydration,
+    bundleUrl: bundle?.js ?? null,
+    status,
+    reasons,
+    generatedRoute,
+  };
+}
+
+async function inspectGeneratedRoute(
+  projectRoot: string,
+  route: PageRouteForStatus,
+): Promise<GeneratedRouteInspection> {
+  const relPath = `.mandu/generated/web/routes/${route.id}.route.tsx`;
+  const filePath = path.join(projectRoot, relPath);
+  let source: string;
+  try {
+    source = await Bun.file(filePath).text();
+  } catch {
+    return {
+      path: relPath,
+      exists: false,
+      kind: "missing",
+      referencesClientModule: false,
+      callsIslandRender: false,
+    };
+  }
+
+  const normalized = source.replace(/\\/g, "/");
+  const clientModule = route.clientModule?.replace(/\\/g, "/") ?? null;
+  const referencesClientModule = clientModule ? normalized.includes(`Client Module: ${clientModule}`) : false;
+  const callsIslandRender = normalized.includes("islandModule.definition.render");
+  const placeholder =
+    normalized.includes('React.createElement("h1", null') &&
+    normalized.includes(`Route ID: ${route.id}`);
+
+  return {
+    path: relPath,
+    exists: true,
+    kind: referencesClientModule && callsIslandRender
+      ? "client_mount"
+      : placeholder
+        ? "placeholder"
+        : "custom",
+    referencesClientModule,
+    callsIslandRender,
+  };
+}
+
+function buildRuntimeConsistencyChecks(
+  pageClientMounts: PageClientMountStatus[],
+  bundleManifest: BundleManifest | null,
+): RuntimeConsistencyCheck[] {
+  const activeMounts = pageClientMounts.filter((mount) => mount.needsClientMount);
+  const missingClientModule = activeMounts
+    .filter((mount) => !mount.hasClientModule)
+    .map((mount) => mount.routeId);
+  const missingBundle = activeMounts
+    .filter((mount) => mount.hasClientModule && bundleManifest && !mount.bundleUrl)
+    .map((mount) => mount.routeId);
+  const generatedMismatch = activeMounts
+    .filter((mount) => mount.generatedRoute.exists && mount.generatedRoute.kind !== "client_mount")
+    .map((mount) => mount.routeId);
+
+  return [
+    {
+      check: "hydrating-routes-have-client-module",
+      status: missingClientModule.length > 0 ? "fail" : "pass",
+      failingRoutes: missingClientModule,
+    },
+    {
+      check: "client-modules-have-route-bundles",
+      status: !bundleManifest ? "skip" : missingBundle.length > 0 ? "fail" : "pass",
+      failingRoutes: missingBundle,
+      reason: !bundleManifest ? "No .mandu/manifest.json found. Run mandu.build first." : undefined,
+    },
+    {
+      check: "generated-routes-match-client-modules",
+      status: generatedMismatch.length > 0 ? "fail" : "pass",
+      failingRoutes: generatedMismatch,
+    },
+    {
+      check: "terminology-separated",
+      status: "pass",
+      reason: "pageClientMounts, islands, and partials are reported as separate collections.",
+    },
+  ];
 }
 
 function insertAfter(content: string, search: string): boolean {

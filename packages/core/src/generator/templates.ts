@@ -1,4 +1,4 @@
-import type { RouteSpec } from "../spec/schema";
+import { needsHydration, type RouteSpec } from "../spec/schema";
 import { GENERATED_RELATIVE_PATHS } from "../paths";
 
 export function generateApiHandler(route: RouteSpec): string {
@@ -242,6 +242,13 @@ export function generatePageComponent(route: RouteSpec): string {
   // Island-First: clientModule이 있으면 Island render를 SSR에서 직접 사용
   if (route.clientModule) {
     return generatePageComponentWithIsland(route);
+  }
+
+  if (needsHydration(route)) {
+    throw new Error(
+      `[${route.id}] Route has hydration strategy "${route.hydration?.strategy}" but no clientModule. ` +
+      "Refusing to generate a placeholder page because it would disagree with runtime hydration state.",
+    );
   }
 
   // slotModule이 있으면 PageHandler 형식으로 생성 (filling 포함)

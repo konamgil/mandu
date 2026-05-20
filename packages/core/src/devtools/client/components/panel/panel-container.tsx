@@ -28,7 +28,7 @@ export interface PanelContainerProps {
 
 export const TABS: TabDefinition[] = [
   { id: 'errors', label: 'Issues', icon: 'ERR', testId: testIds.tabErrors },
-  { id: 'islands', label: 'Islands', icon: 'ISL', testId: testIds.tabIslands },
+  { id: 'islands', label: 'Client Mounts', icon: 'HYD', testId: testIds.tabIslands },
   { id: 'network', label: 'Network', icon: 'NET', testId: testIds.tabNetwork },
   { id: 'guard', label: 'Guard', icon: 'GRD', testId: testIds.tabGuard },
   { id: 'preview', label: 'Changes', icon: 'CHG', testId: testIds.tabPreview },

@@ -90,13 +90,59 @@ describe("hydration MCP tools", () => {
 
     const handlers = hydrationTools(root);
     const result = await handlers["mandu.island.list"]({}) as {
+      pageClientMounts?: Array<{ routeId: string; status: string; warning: string | null }>;
       islands?: Array<{ routeId: string; status: string; warning: string | null }>;
+      terminology?: { pageClientMount?: string; island?: string };
     };
 
-    expect(result.islands?.[0]).toMatchObject({
+    expect(result.pageClientMounts?.[0]).toMatchObject({
       routeId: "login",
       status: "broken",
     });
-    expect(result.islands?.[0]?.warning).toContain("no clientModule");
+    expect(result.pageClientMounts?.[0]?.warning).toContain("no clientModule");
+    expect(result.islands?.[0]).toMatchObject({ routeId: "login" });
+    expect(result.terminology?.pageClientMount).toContain("route-level clientModule");
+  });
+
+  it("exposes page client mount list as the preferred terminology", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "mandu-mcp-page-mount-list-"));
+    tempDirs.push(root);
+    await writeFile(
+      root,
+      ".mandu/routes.manifest.json",
+      JSON.stringify({
+        version: 1,
+        routes: [
+          {
+            id: "home",
+            kind: "page",
+            pattern: "/",
+            module: "app/page.tsx",
+            componentModule: "app/page.tsx",
+            clientModule: "app/page.client.tsx",
+            hydration: {
+              strategy: "island",
+              priority: "visible",
+              preload: false,
+            },
+          },
+        ],
+      }, null, 2),
+    );
+
+    const handlers = hydrationTools(root);
+    const result = await handlers["mandu.pageClientMount.list"]({}) as {
+      pageClientMountCount?: number;
+      pageClientMounts?: Array<{ routeId: string; status: string; isIsland: boolean }>;
+      islandCount?: number;
+    };
+
+    expect(result.pageClientMountCount).toBe(1);
+    expect(result.islandCount).toBe(1);
+    expect(result.pageClientMounts?.[0]).toMatchObject({
+      routeId: "home",
+      status: "ready",
+      isIsland: true,
+    });
   });
 });

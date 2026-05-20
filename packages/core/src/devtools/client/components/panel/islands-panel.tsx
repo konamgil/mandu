@@ -188,8 +188,8 @@ export function IslandsPanel({ islands }: IslandsPanelProps): React.ReactElement
       <div style={styles.container}>
         <div style={styles.emptyState}>
           <p>
-            아직 등록된 Island가 없습니다.<br />
-            Island 컴포넌트를 사용하면 여기에 상태가 표시됩니다.
+            아직 hydration 이벤트가 없습니다.<br />
+            정적 상태는 mandu.runtime.status에서 확인하세요.
           </p>
         </div>
       </div>
@@ -202,7 +202,7 @@ export function IslandsPanel({ islands }: IslandsPanelProps): React.ReactElement
       <div style={styles.header}>
         <div style={styles.stats}>
           <div style={styles.stat}>
-            <span>전체:</span>
+            <span>Mounts:</span>
             <span style={styles.statValue}>{stats.total}</span>
           </div>
           <div style={styles.stat}>

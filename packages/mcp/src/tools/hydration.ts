@@ -62,7 +62,21 @@ export const hydrationToolDefinitions: Tool[] = [
   {
     name: "mandu.island.list",
     description:
-      "List all routes that have client-side hydration (islands). Shows hydration strategy and priority for each.",
+      "Legacy alias for page client mount diagnostics. Prefer mandu.pageClientMount.list for terminology that separates page-level hydration from nested islands.",
+    annotations: {
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "mandu.pageClientMount.list",
+    description:
+      "List page-level client mounts: page routes that need a route-level clientModule and bundle. This is distinct from nested islands/partials.",
     annotations: {
       readOnlyHint: true,
     },
@@ -220,19 +234,19 @@ export function hydrationTools(projectRoot: string) {
       };
     },
 
-    "mandu.island.list": async () => {
+    "mandu.pageClientMount.list": async () => {
       // Load manifest
       const manifestResult = await loadManifest(paths.manifestPath);
       if (!manifestResult.success || !manifestResult.data) {
         return { error: manifestResult.errors };
       }
 
-      const islands = manifestResult.data.routes
+      const pageClientMounts = manifestResult.data.routes
         .filter((route) => route.kind === "page")
         .map((route) => {
           const hydration = getRouteHydration(route);
-          const isIsland = needsHydration(route);
-          const warning = isIsland && !route.clientModule
+          const needsClientMount = needsHydration(route);
+          const warning = needsClientMount && !route.clientModule
             ? `Route has hydration strategy '${hydration.strategy}' but no clientModule; build would emit no route bundle.`
             : null;
 
@@ -241,8 +255,10 @@ export function hydrationTools(projectRoot: string) {
             pattern: route.pattern,
             hasClientModule: !!route.clientModule,
             clientModule: route.clientModule || null,
-            isIsland,
-            status: isIsland ? (route.clientModule ? "ready" : "broken") : "static",
+            needsClientMount,
+            // Backward compatibility for older agents that read `isIsland`.
+            isIsland: needsClientMount,
+            status: needsClientMount ? (route.clientModule ? "ready" : "broken") : "static",
             warning,
             hydration: {
               strategy: hydration.strategy,
@@ -252,17 +268,30 @@ export function hydrationTools(projectRoot: string) {
           };
         });
 
-      const islandCount = islands.filter((i) => i.isIsland).length;
-      const staticCount = islands.filter((i) => !i.isIsland).length;
+      const pageClientMountCount = pageClientMounts.filter((i) => i.needsClientMount).length;
+      const staticCount = pageClientMounts.filter((i) => !i.needsClientMount).length;
+      const activeMounts = pageClientMounts.filter((i) => i.needsClientMount);
+      const staticPages = pageClientMounts.filter((i) => !i.needsClientMount);
 
       return {
-        totalPages: islands.length,
-        islandCount,
+        terminology: {
+          pageClientMount:
+            "A page route whose whole page is hydrated from a route-level clientModule and route bundle.",
+          island:
+            "A nested or route-local island bundle, distinct from page client mounts. Use mandu.runtime.status for both collections.",
+        },
+        totalPages: pageClientMounts.length,
+        pageClientMountCount,
         staticCount,
-        islands: islands.filter((i) => i.isIsland),
-        staticPages: islands.filter((i) => !i.isIsland),
+        pageClientMounts: activeMounts,
+        staticPages,
+        // Backward compatibility for older clients.
+        islandCount: pageClientMountCount,
+        islands: activeMounts,
       };
     },
+
+    "mandu.island.list": async () => handlers["mandu.pageClientMount.list"]({}),
 
     "mandu.hydration.set": async (args: Record<string, unknown>) => {
       const validationError = validateRouteIdArgs(
@@ -423,6 +452,7 @@ export function hydrationTools(projectRoot: string) {
   handlers["mandu_build"] = handlers["mandu.build"];
   handlers["mandu_build_status"] = handlers["mandu.build.status"];
   handlers["mandu_list_islands"] = handlers["mandu.island.list"];
+  handlers["mandu_page_client_mount_list"] = handlers["mandu.pageClientMount.list"];
   handlers["mandu_set_hydration"] = handlers["mandu.hydration.set"];
   handlers["mandu_hydration_set"] = handlers["mandu.hydration.set"];
   handlers["mandu_add_client_slot"] = handlers["mandu.hydration.addClientSlot"];
