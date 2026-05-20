@@ -1,5 +1,14 @@
 # @mandujs/cli
 
+## 0.44.14
+
+### Patch Changes
+
+- Refresh internal Mandu dependency metadata for the route-level hydration wrapper fix.
+
+- Updated dependencies []:
+  - @mandujs/mcp@0.38.3
+
 ## 0.44.13
 
 ### Patch Changes
