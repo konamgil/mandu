@@ -19,11 +19,50 @@ describe("getProfileCategories", () => {
   it("agent-full returns official and domain categories", () => {
     const cats = getProfileCategories("agent-full");
     expect(Array.isArray(cats)).toBe(true);
-    expect(cats).toHaveLength(11);
+    expect(cats).toHaveLength(20);
+    // Official agent loop
     expect(cats).toContain("agent");
+    expect(cats).toContain("docs");
+    // Generation / scaffolding
     expect(cats).toContain("spec");
-    expect(cats).toContain("guard");
+    expect(cats).toContain("generate");
+    expect(cats).toContain("composite");
+    // Domain primitives
+    expect(cats).toContain("slot");
+    expect(cats).toContain("slot-validation");
+    expect(cats).toContain("hydration");
     expect(cats).toContain("contract");
+    expect(cats).toContain("design");
+    expect(cats).toContain("seo");
+    // Quality / validation
+    expect(cats).toContain("guard");
+    expect(cats).toContain("lint");
+    expect(cats).toContain("run-tests");
+    expect(cats).toContain("ate");
+    // Deploy
+    expect(cats).toContain("deploy-plan");
+    expect(cats).toContain("deploy-preview");
+    // AI refactor
+    expect(cats).toContain("refactor-barrel");
+    expect(cats).toContain("refactor-routes");
+    expect(cats).toContain("refactor-contract");
+  });
+
+  it("agent-full excludes internal plumbing categories", () => {
+    const cats = getProfileCategories("agent-full")!;
+    // State/transaction internals should NOT leak into agent-full
+    expect(cats).not.toContain("transaction");
+    expect(cats).not.toContain("history");
+    expect(cats).not.toContain("decisions");
+    expect(cats).not.toContain("negotiate");
+    // Runtime/project introspection stays internal
+    expect(cats).not.toContain("brain");
+    expect(cats).not.toContain("runtime");
+    expect(cats).not.toContain("project");
+    // Specialized ATE phases stay internal (core "ate" is exposed)
+    expect(cats).not.toContain("ate-oracle-replay");
+    expect(cats).not.toContain("ate-mutate");
+    expect(cats).not.toContain("ate-mutation-report");
   });
 
   it("internal returns null (no filtering)", () => {

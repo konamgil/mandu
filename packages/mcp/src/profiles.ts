@@ -12,20 +12,82 @@ export type McpProfile = "agent-core" | "agent-full" | "internal";
 export const PROFILE_CATEGORIES: Record<McpProfile, string[] | null> = {
   "agent-core": ["agent", "docs"],
   "agent-full": [
+    // Official agent loop
     "agent",
     "docs",
+    // Code generation / scaffolding
     "spec",
     "generate",
+    "composite",
+    // Domain primitives
     "slot",
     "slot-validation",
     "hydration",
     "contract",
+    "design",
+    "seo",
+    // Quality / validation
     "guard",
-    "run-tests",
     "lint",
+    "run-tests",
+    "ate",
+    // Deploy
+    "deploy-plan",
+    "deploy-preview",
+    // AI refactor
+    "refactor-barrel",
+    "refactor-routes",
+    "refactor-contract",
   ],
   internal: null,
 };
+
+/**
+ * Categories intentionally hidden from every agent-facing profile.
+ *
+ * Every new tool category in `TOOL_MODULES` MUST be classified into one of:
+ *   - `PROFILE_CATEGORIES["agent-core"]` — canonical agent loop
+ *   - `PROFILE_CATEGORIES["agent-full"]` — domain work for agents
+ *   - `EXPERT_ONLY_CATEGORIES`           — internal plumbing
+ *
+ * `profile-coverage.test.ts` fails CI if a new category is left unclassified,
+ * preventing silent default-profile bloat over time.
+ */
+export const EXPERT_ONLY_CATEGORIES: ReadonlySet<string> = new Set([
+  // Transactional state / framework internals
+  "transaction",
+  "history",
+  "decisions",
+  "negotiate",
+  // Runtime / project introspection
+  "brain",
+  "runtime",
+  "project",
+  "resource",
+  // Devtools / kitchen
+  "kitchen",
+  "component",
+  // Agent loop internal helpers (used by mandu.agent.*, not by agents directly)
+  "ai-brief",
+  "loop-close",
+  // Specialized ATE phases (core "ate" is exposed in agent-full)
+  "ate-phase5",
+  "ate-context",
+  "ate-run",
+  "ate-flakes",
+  "ate-prompt",
+  "ate-exemplar",
+  "ate-save",
+  "ate-boundary-probe",
+  "ate-recall",
+  "ate-remember",
+  "ate-coverage",
+  "ate-mutate",
+  "ate-mutation-report",
+  "ate-oracle-pending",
+  "ate-oracle-verdict",
+  "ate-oracle-replay",
+]);
 
 /**
  * Returns allowed category names for a profile, or null if all categories are allowed.
