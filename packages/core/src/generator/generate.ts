@@ -107,6 +107,14 @@ async function ensureDir(dirPath: string): Promise<void> {
   }
 }
 
+function touchGenerateStamp(rootDir: string): void {
+  const stampDir = path.join(rootDir, ".mandu");
+  if (!fsSync.existsSync(stampDir)) {
+    fsSync.mkdirSync(stampDir, { recursive: true });
+  }
+  fsSync.writeFileSync(path.join(stampDir, "generate.stamp"), Date.now().toString());
+}
+
 async function getExistingFiles(dir: string): Promise<string[]> {
   try {
     const files = await fs.readdir(dir);
@@ -141,6 +149,7 @@ export async function generateRoutes(
   // Suppress watcher during generation to avoid false positives
   const watcher = getWatcher();
   watcher?.suppress();
+  touchGenerateStamp(rootDir);
 
   const generatedPaths = resolveGeneratedPaths(rootDir);
   const serverRoutesDir = generatedPaths.serverRoutesDir;
@@ -354,14 +363,10 @@ export async function generateRoutes(
   const mapPath = path.join(mapDir, "generated.map.json");
   await Bun.write(mapPath, JSON.stringify(generatedMap, null, 2));
 
-  // Resume watcher after generation
-  watcher?.resume();
   // Cross-process timestamp: watcher skips warnings if generate finished recently
-  const stampDir = path.join(rootDir, ".mandu");
-  if (!fsSync.existsSync(stampDir)) {
-    fsSync.mkdirSync(stampDir, { recursive: true });
-  }
-  fsSync.writeFileSync(path.join(stampDir, "generate.stamp"), Date.now().toString());
+  touchGenerateStamp(rootDir);
+  // Resume watcher after the stamp is visible.
+  watcher?.resume();
 
   return result;
 }

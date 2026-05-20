@@ -80,24 +80,42 @@ const manifest: RoutesManifest = mode === "server-page-client-module"
         },
       ],
     }
-  : {
-  version: 1,
-  routes: [
-    {
-      id: "demo",
-      kind: "page",
-      pattern: "/",
-      module: "app/page.tsx",
-      componentModule: "app/page.tsx",
-      clientModule: "app/demo.client.tsx",
-      hydration: {
-        strategy: "island",
-        priority: "visible",
-        preload: false,
-      },
-    },
-  ],
-};
+  : mode === "hydration-no-client-module"
+    ? {
+        version: 1,
+        routes: [
+          {
+            id: "login",
+            kind: "page",
+            pattern: "/login",
+            module: "app/login/page.tsx",
+            componentModule: "app/login/page.tsx",
+            hydration: {
+              strategy: "full",
+              priority: "immediate",
+              preload: false,
+            },
+          },
+        ],
+      }
+    : {
+        version: 1,
+        routes: [
+          {
+            id: "demo",
+            kind: "page",
+            pattern: "/",
+            module: "app/page.tsx",
+            componentModule: "app/page.tsx",
+            clientModule: "app/demo.client.tsx",
+            hydration: {
+              strategy: "island",
+              priority: "visible",
+              preload: false,
+            },
+          },
+        ],
+      };
 
 try {
   const result = await buildClientBundles(manifest, rootDir, {

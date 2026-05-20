@@ -2232,15 +2232,23 @@ async function renderPageSSR(
 
     // Island 래핑: 레이아웃 적용 전에 페이지 콘텐츠만 island div로 감쌈
     // 이렇게 하면 레이아웃은 island 바깥에 위치하여 하이드레이션 시 레이아웃이 유지됨
-    const needsIslandWrap = !!(
+    const needsIslandHydration = !!(
       route.hydration &&
       route.hydration.strategy !== "none" &&
       settings.bundleManifest
     );
+    const routeBundle = settings.bundleManifest?.bundles[route.id];
+    const bundleSrc = routeBundle?.js ? `${routeBundle.js}?t=${Date.now()}` : "";
+    const needsIslandWrap = needsIslandHydration && bundleSrc.length > 0;
+
+    if (needsIslandHydration && !needsIslandWrap && settings.isDev) {
+      console.warn(
+        `[Mandu] Hydration requested for route "${route.id}" but no client bundle was found. ` +
+        `Run mandu build/generate and ensure the route has a clientModule.`,
+      );
+    }
 
     if (needsIslandWrap) {
-      const bundle = settings.bundleManifest?.bundles[route.id];
-      const bundleSrc = bundle?.js ? `${bundle.js}?t=${Date.now()}` : "";
       const priority = route.hydration!.priority || "visible";
       app = React.createElement("div", {
         "data-mandu-island": route.id,

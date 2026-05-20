@@ -28,11 +28,12 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
-import type { RouteSpec } from "../../spec/schema";
+import type { RouteSpec, RoutesManifest } from "../../spec/schema";
 import {
   _testOnly_scanIslandFiles,
   _testOnly_scanPartialFiles,
   _testOnly_getHydratedRoutes,
+  _testOnly_getHydrationRoutesMissingClientModule,
 } from "../build";
 import { HMR_PERF } from "../../perf/hmr-markers";
 import {
@@ -501,6 +502,29 @@ describe("Phase 7.1 R1 Agent C — per-island scan skips non-hydrated routes", (
     ];
     const result = await _testOnly_scanIslandFiles(routes, project.rootDir);
     expect(result).toEqual([]);
+  });
+});
+
+describe("hydration route validation", () => {
+  it("finds pages that request hydration without a client module", () => {
+    const manifest = {
+      version: 1,
+      routes: [
+        {
+          id: "login",
+          pattern: "/login",
+          kind: "page",
+          module: "app/login/page.tsx",
+          componentModule: "app/login/page.tsx",
+          hydration: { strategy: "full", priority: "immediate", preload: false },
+        },
+        pureSsrRoute("about", "/about", "app/about"),
+        pageRoute("dashboard", "/dashboard", "app/dashboard"),
+      ],
+    } as RoutesManifest;
+
+    const missing = _testOnly_getHydrationRoutesMissingClientModule(manifest);
+    expect(missing.map((route) => route.id)).toEqual(["login"]);
   });
 });
 

@@ -23,7 +23,10 @@ import type { BunPlugin } from "bun";
 import { mark, measure } from "../perf";
 import { HMR_PERF } from "../perf/hmr-markers";
 import { runOnBundleComplete } from "../plugins/runner";
-import { validateClientModuleForBrowserBundle } from "../router/client-entry";
+import {
+  describeMissingHydrationClientModule,
+  validateClientModuleForBrowserBundle,
+} from "../router/client-entry";
 import {
   readVendorCache,
   writeVendorCache,
@@ -237,6 +240,8 @@ export const _testOnly_scanPartialFiles = scanPartialFiles;
  * @internal
  */
 export const _testOnly_getHydratedRoutes = getHydratedRoutes;
+export const _testOnly_getHydrationRoutesMissingClientModule =
+  getHydrationRoutesMissingClientModule;
 
 /**
  * Issue #240 Phase 2 — collect every file the React Compiler plugin
@@ -407,6 +412,15 @@ function getHydratedRoutes(manifest: RoutesManifest): RouteSpec[] {
     (route) =>
       route.kind === "page" &&
       route.clientModule &&
+      needsHydration(route)
+  );
+}
+
+function getHydrationRoutesMissingClientModule(manifest: RoutesManifest): RouteSpec[] {
+  return manifest.routes.filter(
+    (route) =>
+      route.kind === "page" &&
+      !route.clientModule &&
       needsHydration(route)
   );
 }
@@ -2124,6 +2138,20 @@ export async function buildClientBundles(
 
   // 1. Hydration이 필요한 라우트 필터링
   const invalidClientRouteIds = new Set<string>();
+  const runtimeRoutes = manifest.routes.filter((route) => route.kind === "page" && needsHydration(route));
+  const partialFiles = runtimeRoutes.length > 0 ? await scanPartialFiles(rootDir) : [];
+  const routesMissingClientModule = getHydrationRoutesMissingClientModule(manifest);
+  if (routesMissingClientModule.length > 0) {
+    const missingClientErrors = await Promise.all(
+      routesMissingClientModule.map((route) =>
+        describeMissingHydrationClientModule(route, rootDir, {
+          allowPartialOnly: partialFiles.length > 0,
+        })
+      )
+    );
+    errors.push(...missingClientErrors.filter((error): error is string => error !== null));
+  }
+
   let hydratedRoutes = getHydratedRoutes(manifest);
   if (hydratedRoutes.length > 0) {
     const validRoutes: RouteSpec[] = [];
@@ -2138,9 +2166,6 @@ export async function buildClientBundles(
     }
     hydratedRoutes = validRoutes;
   }
-  const runtimeRoutes = manifest.routes.filter((route) => route.kind === "page" && needsHydration(route));
-  const partialFiles = runtimeRoutes.length > 0 ? await scanPartialFiles(rootDir) : [];
-
   // 2. 출력 디렉토리 생성 (항상 필요 - 매니페스트 저장용)
   const outDir = resolveClientOutDir(rootDir, options.outDir);
   await fs.mkdir(outDir, { recursive: true });

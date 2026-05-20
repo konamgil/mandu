@@ -218,4 +218,39 @@ describe("buildClientBundles vendor shims", () => {
       await rm(staleRoot, { recursive: true, force: true });
     }
   });
+
+  test("fails when hydration is enabled but no clientModule can be resolved", async () => {
+    const missingRoot = await mkdtemp(path.join(import.meta.dir, ".tmp-hydration-no-client-"));
+    try {
+      await mkdir(path.join(missingRoot, "app", "login"), { recursive: true });
+      await mkdir(path.join(missingRoot, "src", "client", "widgets", "login-form"), { recursive: true });
+      await writeFile(
+        path.join(missingRoot, "package.json"),
+        JSON.stringify({ name: "mandu-hydration-no-client-test", type: "module" }, null, 2),
+        "utf-8",
+      );
+      await writeFile(
+        path.join(missingRoot, "app", "login", "page.tsx"),
+        'import { LoginForm } from "../../src/client/widgets/login-form/LoginForm.client";\n' +
+          "export default function LoginPage() {\n" +
+          "  return <main><LoginForm /></main>;\n" +
+          "}\n",
+        "utf-8",
+      );
+      await writeFile(
+        path.join(missingRoot, "src", "client", "widgets", "login-form", "LoginForm.client.tsx"),
+        "export function LoginForm() { return <form />; }\n",
+        "utf-8",
+      );
+
+      const noClientResult = await runBuildInSubprocess(missingRoot, "hydration-no-client-module");
+      const errors = noClientResult.errors.join("\n");
+      expect(noClientResult.success).toBe(false);
+      expect(errors).toContain("no clientModule could be resolved");
+      expect(errors).toContain("LoginForm.client");
+      expect(errors).toContain("partial({ component }).Render");
+    } finally {
+      await rm(missingRoot, { recursive: true, force: true });
+    }
+  });
 });

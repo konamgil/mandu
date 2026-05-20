@@ -67,6 +67,56 @@ const WINDOWS_RESERVED_NAMES = new Set([
   "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ]);
 
+const GENERATE_STAMP_SUPPRESS_MS = 10_000;
+
+function readGenerateStamp(stampFile: string): number | null {
+  try {
+    const stamp = Number.parseInt(fs.readFileSync(stampFile, "utf-8"), 10);
+    return Number.isFinite(stamp) ? stamp : null;
+  } catch {
+    return null;
+  }
+}
+
+function isManduGeneratedPath(rootDir: string, filePath: string): boolean {
+  const relativePath = path.relative(rootDir, filePath).replace(/\\/g, "/");
+  return relativePath === ".mandu/generated" || relativePath.startsWith(".mandu/generated/");
+}
+
+export function hasRecentGenerateStamp(
+  rootDir: string,
+  filePath: string,
+  now: number = Date.now()
+): boolean {
+  if (!isManduGeneratedPath(rootDir, filePath)) {
+    return false;
+  }
+
+  const candidates = new Set<string>([
+    path.join(rootDir, ".mandu", "generate.stamp"),
+  ]);
+  const resolvedRoot = path.resolve(rootDir);
+  let stampDir = path.dirname(path.resolve(filePath));
+
+  while (stampDir !== path.dirname(stampDir)) {
+    candidates.add(path.join(stampDir, ".mandu", "generate.stamp"));
+    if (stampDir === resolvedRoot) break;
+    stampDir = path.dirname(stampDir);
+  }
+
+  for (const stampFile of candidates) {
+    const stamp = readGenerateStamp(stampFile);
+    if (stamp === null) continue;
+
+    const ageMs = now - stamp;
+    if (ageMs >= 0 && ageMs < GENERATE_STAMP_SUPPRESS_MS) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export class FileWatcher {
   private config: WatcherConfig;
   private chokidarWatcher: FSWatcher | null = null;
@@ -311,19 +361,8 @@ export class FileWatcher {
 
     const { rootDir } = this.config;
 
-    // Cross-process: skip if generate finished within last 2 seconds
-    // Walk up from the changed file to find nearest .mandu/generate.stamp
-    let stampDir = path.dirname(filePath);
-    while (stampDir !== path.dirname(stampDir)) {
-      const stampFile = path.join(stampDir, ".mandu", "generate.stamp");
-      try {
-        const stamp = parseInt(fs.readFileSync(stampFile, "utf-8"), 10);
-        if (Date.now() - stamp < 2000) return;
-        break;
-      } catch {}
-      stampDir = path.dirname(stampDir);
-    }
-
+    // Cross-process: skip generated-file churn from a recent mandu generate.
+    if (hasRecentGenerateStamp(rootDir, filePath)) return;
 
     // Validate file against rules
     try {

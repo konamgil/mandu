@@ -42,6 +42,7 @@ export const hydrationToolDefinitions: Tool[] = [
         },
       },
       required: [],
+      additionalProperties: false,
     },
   },
   {
@@ -55,6 +56,7 @@ export const hydrationToolDefinitions: Tool[] = [
       type: "object",
       properties: {},
       required: [],
+      additionalProperties: false,
     },
   },
   {
@@ -68,6 +70,7 @@ export const hydrationToolDefinitions: Tool[] = [
       type: "object",
       properties: {},
       required: [],
+      additionalProperties: false,
     },
   },
   {
@@ -102,6 +105,7 @@ export const hydrationToolDefinitions: Tool[] = [
         },
       },
       required: ["routeId"],
+      additionalProperties: false,
     },
   },
   {
@@ -131,6 +135,7 @@ export const hydrationToolDefinitions: Tool[] = [
         },
       },
       required: ["routeId"],
+      additionalProperties: false,
     },
   },
 ];
@@ -227,6 +232,9 @@ export function hydrationTools(projectRoot: string) {
         .map((route) => {
           const hydration = getRouteHydration(route);
           const isIsland = needsHydration(route);
+          const warning = isIsland && !route.clientModule
+            ? `Route has hydration strategy '${hydration.strategy}' but no clientModule; build would emit no route bundle.`
+            : null;
 
           return {
             routeId: route.id,
@@ -234,6 +242,8 @@ export function hydrationTools(projectRoot: string) {
             hasClientModule: !!route.clientModule,
             clientModule: route.clientModule || null,
             isIsland,
+            status: isIsland ? (route.clientModule ? "ready" : "broken") : "static",
+            warning,
             hydration: {
               strategy: hydration.strategy,
               priority: hydration.priority,
@@ -255,6 +265,13 @@ export function hydrationTools(projectRoot: string) {
     },
 
     "mandu.hydration.set": async (args: Record<string, unknown>) => {
+      const validationError = validateRouteIdArgs(
+        args,
+        "mandu.hydration.set",
+        ["routeId", "strategy", "priority", "preload"],
+      );
+      if (validationError) return { error: validationError };
+
       const { routeId, strategy, priority, preload } = args as {
         routeId: string;
         strategy?: SpecHydrationStrategy;
@@ -314,6 +331,13 @@ export function hydrationTools(projectRoot: string) {
     },
 
     "mandu.hydration.addClientSlot": async (args: Record<string, unknown>) => {
+      const validationError = validateRouteIdArgs(
+        args,
+        "mandu.hydration.addClientSlot",
+        ["routeId", "strategy", "priority"],
+      );
+      if (validationError) return { error: validationError };
+
       const { routeId, strategy = "island", priority = "visible" } = args as {
         routeId: string;
         strategy?: SpecHydrationStrategy;
@@ -400,9 +424,25 @@ export function hydrationTools(projectRoot: string) {
   handlers["mandu_build_status"] = handlers["mandu.build.status"];
   handlers["mandu_list_islands"] = handlers["mandu.island.list"];
   handlers["mandu_set_hydration"] = handlers["mandu.hydration.set"];
+  handlers["mandu_hydration_set"] = handlers["mandu.hydration.set"];
   handlers["mandu_add_client_slot"] = handlers["mandu.hydration.addClientSlot"];
+  handlers["mandu_hydration_add_client_slot"] = handlers["mandu.hydration.addClientSlot"];
 
   return handlers;
+}
+
+function validateRouteIdArgs(
+  args: Record<string, unknown>,
+  toolName: string,
+  allowedKeys: readonly string[],
+): string | null {
+  if (typeof args.routeId !== "string" || args.routeId.trim().length === 0) {
+    const allowed = new Set(allowedKeys);
+    const unknownKeys = Object.keys(args).filter((key) => !allowed.has(key));
+    const got = unknownKeys.length > 0 ? ` (got unknown key${unknownKeys.length === 1 ? "" : "s"} '${unknownKeys.join("', '")}')` : "";
+    return `${toolName}: missing required parameter 'routeId'${got}`;
+  }
+  return null;
 }
 
 /**
