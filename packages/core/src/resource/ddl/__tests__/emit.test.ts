@@ -420,6 +420,88 @@ describe("emitChange — add-column", () => {
       .toBe('ALTER TABLE "users" ADD COLUMN "age" REAL;');
   });
 
+  test("sqlite refuses required add-column without a non-NULL constant default (#294)", () => {
+    const required: Change = {
+      kind: "add-column",
+      resourceName: "votes",
+      field: field({ name: "created_at", type: "date" }),
+    };
+
+    expect(() => emitChange(required, "sqlite")).toThrow(
+      /SQLite cannot add required column "created_at"/,
+    );
+  });
+
+  test("sqlite allows required add-column when a scalar literal default is present", () => {
+    const requiredWithDefault: Change = {
+      kind: "add-column",
+      resourceName: "votes",
+      field: field({
+        name: "created_at",
+        type: "date",
+        default: { kind: "literal", value: "1970-01-01T00:00:00.000Z" },
+      }),
+    };
+
+    expect(emitChange(requiredWithDefault, "sqlite")).toBe(
+      'ALTER TABLE "votes" ADD COLUMN "created_at" TEXT NOT NULL DEFAULT \'1970-01-01T00:00:00.000Z\';',
+    );
+  });
+
+  test("sqlite refuses default: now on add-column because SQLite requires a constant default", () => {
+    const nowDefault: Change = {
+      kind: "add-column",
+      resourceName: "votes",
+      field: field({
+        name: "created_at",
+        type: "date",
+        nullable: true,
+        default: { kind: "now" },
+      }),
+    };
+
+    expect(() => emitChange(nowDefault, "sqlite")).toThrow(
+      /CURRENT_TIMESTAMP, which SQLite rejects/,
+    );
+  });
+
+  test("sqlite refuses UNIQUE add-column because SQLite cannot add the constraint in place", () => {
+    const unique: Change = {
+      kind: "add-column",
+      resourceName: "votes",
+      field: field({ name: "slug", type: "string", nullable: true, unique: true }),
+    };
+
+    expect(() => emitChange(unique, "sqlite")).toThrow(/cannot add UNIQUE column/);
+  });
+
+  test("sqlite refuses PRIMARY KEY add-column because SQLite cannot add the constraint in place", () => {
+    const primary: Change = {
+      kind: "add-column",
+      resourceName: "votes",
+      field: field({ name: "other_id", type: "uuid", primary: true }),
+    };
+
+    expect(() => emitChange(primary, "sqlite")).toThrow(/cannot add PRIMARY KEY column/);
+  });
+
+  test("sqlite refuses raw function defaults on add-column", () => {
+    const rawFunction: Change = {
+      kind: "add-column",
+      resourceName: "votes",
+      field: field({
+        name: "created_at",
+        type: "date",
+        nullable: true,
+        default: { kind: "sql", expr: "datetime('now')" },
+      }),
+    };
+
+    expect(() => emitChange(rawFunction, "sqlite")).toThrow(
+      /non-constant function defaults/,
+    );
+  });
+
   test("indexed:true field emits ADD COLUMN plus auto CREATE INDEX", () => {
     const indexed: Change = {
       kind: "add-column",

@@ -220,7 +220,13 @@ export async function dbPlan(options: DbPlanOptions = {}): Promise<number> {
   }
 
   // Emit SQL + write.
-  const sql = emitChanges(changes, nextSnapshot.provider);
+  let sql: string;
+  try {
+    sql = emitChanges(changes, nextSnapshot.provider);
+  } catch (err) {
+    printError("Migration SQL emit failed", err);
+    return EXIT_USAGE;
+  }
   let migrationPath: string;
   try {
     await fs.mkdir(migrationsDir, { recursive: true });

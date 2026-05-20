@@ -28,7 +28,7 @@ import {
   formatPrompt,
 } from "../../src/commands/db/rename-prompt";
 import { resolveDb } from "../../src/commands/db/resolve-db";
-import type { Change, DdlFieldDef } from "@mandujs/core/resource/ddl/types";
+import type { Change, DdlFieldDef, Snapshot } from "@mandujs/core/resource/ddl/types";
 
 // ─── Bun.SQL gate (runner-backed tests only) ────────────────────────────────
 
@@ -112,6 +112,60 @@ function basicUserResource(): string {
       },
     });
   `;
+}
+
+function userResourceWithRequiredCreatedAt(): string {
+  const coreResourcePath = join(import.meta.dir, "..", "..", "..", "core", "src", "resource", "index.ts").replace(/\\/g, "/");
+  return `
+    import { defineResource } from "${coreResourcePath}";
+    export default defineResource({
+      name: "user",
+      fields: {
+        id: { type: "uuid", required: true, primary: true },
+        email: { type: "email", required: true, unique: true },
+        createdAt: { type: "date", required: true },
+      },
+      options: {
+        persistence: { provider: "sqlite" },
+      },
+    });
+  `;
+}
+
+function userResourceWithRequiredStatusDefault(): string {
+  const coreResourcePath = join(import.meta.dir, "..", "..", "..", "core", "src", "resource", "index.ts").replace(/\\/g, "/");
+  return `
+    import { defineResource } from "${coreResourcePath}";
+    export default defineResource({
+      name: "user",
+      fields: {
+        id: { type: "uuid", required: true, primary: true },
+        email: { type: "email", required: true, unique: true },
+        status: { type: "string", required: true, default: "new" },
+      },
+      options: {
+        persistence: { provider: "sqlite" },
+      },
+    });
+  `;
+}
+
+function appliedUserSnapshot(): Snapshot {
+  return {
+    version: 1,
+    provider: "sqlite",
+    resources: [
+      {
+        name: "users",
+        fields: [
+          { name: "id", type: "uuid", nullable: false, primary: true, unique: false, indexed: false },
+          { name: "email", type: "email", nullable: false, primary: false, unique: true, indexed: false },
+        ],
+        indexes: [],
+      },
+    ],
+    generatedAt: new Date("2026-05-20T00:00:00.000Z").toISOString(),
+  };
 }
 
 // ─── Env isolation helper ────────────────────────────────────────────────────
@@ -348,6 +402,65 @@ describeIfBunSql("dbPlan", () => {
     // Only the initial migration file should exist — no 0002.
     const files2 = (await fs.readdir(f.migrationsDir)).filter((n) => n.endsWith(".sql"));
     expect(files2.length).toBe(1);
+  });
+
+  it("TC-4b: SQLite required add-column without default fails before writing a migration (#294)", async () => {
+    const { serializeSnapshot } = await import("@mandujs/core/resource/ddl/snapshot");
+    await fs.writeFile(
+      f.appliedPath,
+      serializeSnapshot(appliedUserSnapshot()),
+      "utf8",
+    );
+    writeFileSync(
+      join(f.migrationsDir, "0001_init.sql"),
+      `CREATE TABLE "users" ("id" TEXT PRIMARY KEY, "email" TEXT NOT NULL UNIQUE);`,
+      "utf8",
+    );
+
+    writeResource(f, "user", userResourceWithRequiredCreatedAt());
+
+    const chunks: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    (process.stderr.write as unknown) = (s: string) => {
+      chunks.push(s);
+      return true;
+    };
+    let code: number;
+    try {
+      code = await dbPlan({ cwd: f.root, ci: true });
+    } finally {
+      (process.stderr.write as unknown) = originalWrite;
+    }
+
+    expect(code).toBe(2);
+    expect(chunks.join("")).toContain("SQLite cannot add required column");
+    const migrations = (await fs.readdir(f.migrationsDir)).filter((n) => n.endsWith(".sql"));
+    expect(migrations.length).toBe(1);
+  });
+
+  it("TC-4c: SQLite required add-column with scalar default emits an applyable migration", async () => {
+    const { serializeSnapshot } = await import("@mandujs/core/resource/ddl/snapshot");
+    await fs.writeFile(
+      f.appliedPath,
+      serializeSnapshot(appliedUserSnapshot()),
+      "utf8",
+    );
+    writeFileSync(
+      join(f.migrationsDir, "0001_init.sql"),
+      `CREATE TABLE "users" ("id" TEXT PRIMARY KEY, "email" TEXT NOT NULL UNIQUE);`,
+      "utf8",
+    );
+    writeResource(f, "user", userResourceWithRequiredStatusDefault());
+
+    const code = await dbPlan({ cwd: f.root, ci: true });
+
+    expect(code).toBe(0);
+    const migrations = (await fs.readdir(f.migrationsDir)).filter((n) => n.endsWith(".sql"));
+    expect(migrations.length).toBe(2);
+    const next = migrations.find((name) => name.startsWith("0002_"));
+    expect(next).toBeDefined();
+    const sql = await fs.readFile(join(f.migrationsDir, next!), "utf8");
+    expect(sql).toContain(`ALTER TABLE "users" ADD COLUMN "status" TEXT NOT NULL DEFAULT 'new';`);
   });
 });
 

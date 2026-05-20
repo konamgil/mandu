@@ -343,6 +343,7 @@ function emitAddColumn(
   field: DdlFieldDef,
   provider: SqlProvider,
 ): string {
+  validateAddColumn(resourceName, field, provider);
   const table = quoteIdent(resourceName, provider);
   const columnDef = emitColumnDef(field, provider);
   const addColumn = `ALTER TABLE ${table} ADD COLUMN ${columnDef};`;
@@ -357,6 +358,66 @@ function emitAddColumn(
       provider,
     ),
   ].join("\n");
+}
+
+function validateAddColumn(
+  resourceName: string,
+  field: DdlFieldDef,
+  provider: SqlProvider,
+): void {
+  if (provider !== "sqlite") return;
+
+  if (field.primary) {
+    throw new Error(
+      `SQLite cannot add PRIMARY KEY column "${field.name}" to existing table "${resourceName}" via ALTER TABLE. ` +
+        `Create a manual table-rebuild migration instead.`,
+    );
+  }
+
+  if (field.unique) {
+    throw new Error(
+      `SQLite cannot add UNIQUE column "${field.name}" to existing table "${resourceName}" via ALTER TABLE. ` +
+        `Add a nullable/non-unique column first, backfill it, then create a unique index manually.`,
+    );
+  }
+
+  const defaultIssue = sqliteAddColumnDefaultIssue(field);
+  if (defaultIssue) {
+    throw new Error(
+      `SQLite cannot add column "${field.name}" to existing table "${resourceName}" with this DEFAULT: ` +
+        `${defaultIssue} Use a scalar literal default or write a manual backfill migration.`,
+    );
+  }
+
+  if (field.nullable) return;
+  if (field.default !== undefined && !isSqliteNullDefault(field.default)) return;
+
+  throw new Error(
+    `SQLite cannot add required column "${field.name}" to existing table "${resourceName}" without a non-NULL constant DEFAULT. ` +
+      `Add a scalar default, set required:false, or write a manual backfill migration.`,
+  );
+}
+
+function sqliteAddColumnDefaultIssue(field: DdlFieldDef): string | null {
+  const def = field.default;
+  if (!def) return null;
+  if (def.kind === "now") {
+    return `default "now" maps to CURRENT_TIMESTAMP, which SQLite rejects in ADD COLUMN.`;
+  }
+  if (def.kind !== "sql") return null;
+
+  const expr = def.expr.trim();
+  if (/^CURRENT_(?:TIME|DATE|TIMESTAMP)\b/i.test(expr)) {
+    return `SQLite rejects CURRENT_TIME/CURRENT_DATE/CURRENT_TIMESTAMP in ADD COLUMN.`;
+  }
+  if (/\b[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(expr)) {
+    return `SQLite rejects non-constant function defaults in ADD COLUMN.`;
+  }
+  return null;
+}
+
+function isSqliteNullDefault(def: NonNullable<DdlFieldDef["default"]>): boolean {
+  return def.kind === "null" || (def.kind === "sql" && /^NULL$/i.test(def.expr.trim()));
 }
 
 /**
