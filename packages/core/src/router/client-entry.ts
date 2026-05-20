@@ -62,7 +62,8 @@ export function findClientComponentImports(source: string): ClientComponentImpor
       for (const rawName of namedMatch[1].split(",")) {
         const name = rawName.trim();
         if (!name) continue;
-        names.push(name.split(/\s+as\s+/i)[0].trim());
+        const parts = name.split(/\s+as\s+/i).map((part) => part.trim()).filter(Boolean);
+        names.push(parts[1] ?? parts[0]);
       }
     }
 
@@ -100,19 +101,18 @@ export function findClientComponentImports(source: string): ClientComponentImpor
 }
 
 export function findRouteLevelClientComponentImport(source: string): RouteLevelClientComponentImport | null {
-  const defaultImports = findClientComponentImports(source).filter((entry) => {
-    const localName = entry.names[0] ?? "";
-    return entry.kind === "default" && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(localName);
-  });
+  return findRouteLevelClientComponentImports(source)[0] ?? null;
+}
 
-  if (defaultImports.length !== 1) return null;
+export function findRouteLevelClientComponentImports(source: string): RouteLevelClientComponentImport[] {
+  const candidates = findClientComponentImports(source).flatMap((entry) =>
+    entry.names
+      .filter((localName) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(localName))
+      .map((localName) => ({ module: entry.module, localName }))
+  );
 
-  const entry = defaultImports[0];
-  const localName = entry.names[0];
-  if (!entry.module || !localName) return null;
-  if (!defaultExportReturnsOnlyClientComponent(source, localName)) return null;
-
-  return { module: entry.module, localName };
+  if (candidates.length === 0) return [];
+  return defaultExportRendersClientComponents(source, candidates);
 }
 
 export async function resolveClientImportModulePath(
@@ -168,15 +168,28 @@ function expandClientModuleCandidates(basePath: string): string[] {
   ];
 }
 
-function defaultExportReturnsOnlyClientComponent(source: string, localName: string): boolean {
+function defaultExportRendersClientComponents(
+  source: string,
+  candidates: RouteLevelClientComponentImport[],
+): RouteLevelClientComponentImport[] {
   const functionBody = extractDefaultExportFunctionBody(source);
   if (functionBody !== null) {
-    const returned = extractOnlyReturnExpression(functionBody);
-    return returned !== null && jsxExpressionRendersClientComponent(returned, localName);
+    const returned = extractTopLevelReturnExpression(functionBody);
+    return returned !== null ? jsxExpressionRendersClientComponents(returned, candidates) : [];
   }
 
   const arrowExpression = extractDefaultExportArrowExpression(source);
-  return arrowExpression !== null && jsxExpressionRendersClientComponent(arrowExpression, localName);
+  if (arrowExpression !== null) {
+    return jsxExpressionRendersClientComponents(arrowExpression, candidates);
+  }
+
+  const arrowBody = extractDefaultExportArrowFunctionBody(source);
+  if (arrowBody !== null) {
+    const returned = extractTopLevelReturnExpression(arrowBody);
+    return returned !== null ? jsxExpressionRendersClientComponents(returned, candidates) : [];
+  }
+
+  return [];
 }
 
 function extractDefaultExportFunctionBody(source: string): string | null {
@@ -201,44 +214,109 @@ function extractDefaultExportArrowExpression(source: string): string | null {
   return semicolon === -1 ? rest : rest.slice(0, semicolon);
 }
 
-function extractOnlyReturnExpression(body: string): string | null {
-  const match = /^\s*return\s+([\s\S]*?)\s*;?\s*$/.exec(body);
-  return match?.[1]?.trim() ?? null;
+function extractDefaultExportArrowFunctionBody(source: string): string | null {
+  const match = /export\s+default\s+(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][A-Za-z0-9_$]*)\s*=>\s*\{/m.exec(source);
+  if (!match) return null;
+
+  const openBrace = match.index + match[0].lastIndexOf("{");
+  const closeBrace = findMatchingBrace(source, openBrace);
+  if (closeBrace === -1) return null;
+  return source.slice(openBrace + 1, closeBrace);
 }
 
-function jsxExpressionRendersClientComponent(expression: string, localName: string): boolean {
-  const expr = stripWrappingParentheses(expression.trim());
-  return isBareClientElement(expr, localName) || isHeadOnlyFragmentWrapper(expr, localName);
+function extractTopLevelReturnExpression(body: string): string | null {
+  let quote: '"' | "'" | "`" | null = null;
+  let lineComment = false;
+  let blockComment = false;
+  let braceDepth = 0;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+
+  for (let i = 0; i < body.length; i++) {
+    const char = body[i];
+    const next = body[i + 1];
+    const prev = body[i - 1];
+
+    if (lineComment) {
+      if (char === "\n" || char === "\r") lineComment = false;
+      continue;
+    }
+
+    if (blockComment) {
+      if (char === "*" && next === "/") {
+        blockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote && prev !== "\\") quote = null;
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      lineComment = true;
+      i++;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      blockComment = true;
+      i++;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (braceDepth === 0 && parenDepth === 0 && bracketDepth === 0 && body.startsWith("return", i)) {
+      const before = body[i - 1] ?? "";
+      const after = body[i + "return".length] ?? "";
+      if (!isIdentifierChar(before) && !isIdentifierChar(after)) {
+        const expr = body.slice(i + "return".length).trim();
+        return trimTrailingSemicolon(expr);
+      }
+    }
+
+    if (char === "{") braceDepth++;
+    if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
+    if (char === "(") parenDepth++;
+    if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
+    if (char === "[") bracketDepth++;
+    if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
+  }
+
+  return null;
 }
 
-function isBareClientElement(expression: string, localName: string): boolean {
+function trimTrailingSemicolon(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.endsWith(";") ? trimmed.slice(0, -1).trim() : trimmed;
+}
+
+function jsxExpressionRendersClientComponents(
+  expression: string,
+  candidates: RouteLevelClientComponentImport[],
+): RouteLevelClientComponentImport[] {
   const expr = stripWrappingParentheses(expression.trim());
+  const seen = new Set<string>();
+  const rendered: RouteLevelClientComponentImport[] = [];
+
+  for (const candidate of candidates) {
+    const key = `${candidate.module}\0${candidate.localName}`;
+    if (seen.has(key)) continue;
+    if (!jsxExpressionContainsClientElement(expr, candidate.localName)) continue;
+    seen.add(key);
+    rendered.push(candidate);
+  }
+
+  return rendered;
+}
+
+function jsxExpressionContainsClientElement(expression: string, localName: string): boolean {
   const escaped = escapeRegExp(localName);
-  return new RegExp(`^<${escaped}\\s*/>$`).test(expr);
-}
-
-function isHeadOnlyFragmentWrapper(expression: string, localName: string): boolean {
-  const expr = stripWrappingParentheses(expression.trim());
-  const fragmentMatch = /^<>\s*([\s\S]*?)\s*<\/>$/.exec(expr);
-  if (!fragmentMatch) return false;
-
-  const escaped = escapeRegExp(localName);
-  const clientElementPattern = new RegExp(`<${escaped}(?:\\s[^>]*)?(?:/>|>)`, "g");
-  const matches = [...(fragmentMatch[1] ?? "").matchAll(clientElementPattern)];
-  if (matches.length !== 1) return false;
-  const clientElement = matches[0][0];
-  if (!isBareClientElement(clientElement, localName)) return false;
-
-  const rest = (fragmentMatch[1] ?? "")
-    .replace(clientElement, "")
-    .replace(/<meta\b[^>]*\/>/gi, "")
-    .replace(/<link\b[^>]*\/>/gi, "")
-    .replace(/<base\b[^>]*\/>/gi, "")
-    .replace(/<title\b[^>]*>[\s\S]*?<\/title>/gi, "")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
-    .trim();
-
-  return rest.length === 0;
+  return new RegExp(`<${escaped}(?:\\s|/|>)`).test(expression);
 }
 
 function stripWrappingParentheses(value: string): string {
@@ -317,6 +395,10 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function isIdentifierChar(value: string): boolean {
+  return /[A-Za-z0-9_$]/.test(value);
+}
+
 export async function validateClientModuleForBrowserBundle(
   route: RouteSpec,
   rootDir: string,
@@ -349,9 +431,13 @@ async function routeComponentHasResolvableClientEntry(
   routeModule: string,
   source: string,
 ): Promise<boolean> {
-  const routeLevelClientImport = findRouteLevelClientComponentImport(source);
-  if (!routeLevelClientImport) return false;
-  return (await resolveClientImportModulePath(rootDir, routeModule, routeLevelClientImport.module)) !== null;
+  const routeLevelClientImports = findRouteLevelClientComponentImports(source);
+  for (const routeLevelClientImport of routeLevelClientImports) {
+    if ((await resolveClientImportModulePath(rootDir, routeModule, routeLevelClientImport.module)) !== null) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export async function describeMissingHydrationClientModule(
@@ -393,8 +479,8 @@ export async function describeMissingHydrationClientModule(
 
   return (
     `${base}\n` +
-    `  The page imports client-looking modules, but inline .client.tsx imports are not route bundles:\n` +
+    `  The page imports client-looking modules, but none was linked into the route manifest:\n` +
     `${importList}\n` +
-    `  Fix: use partial({ component }).Render for embedded client regions, or expose a route-level client module.`
+    `  Fix: run mandu generate with the current source, or set an explicit route-level clientModule.`
   );
 }

@@ -1,5 +1,14 @@
 # @mandujs/mcp
 
+## 0.38.4
+
+### Patch Changes
+
+- Refresh internal dependency ranges for the core route client detection fix.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.10
+
 ## 0.38.3
 
 ### Patch Changes

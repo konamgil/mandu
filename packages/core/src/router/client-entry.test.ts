@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   findClientComponentImports,
   findRouteLevelClientComponentImport,
+  findRouteLevelClientComponentImports,
 } from "./client-entry";
 
 describe("findClientComponentImports", () => {
@@ -15,7 +16,7 @@ describe("findClientComponentImports", () => {
       {
         module: "@/client/widgets/login-form/LoginForm.client",
         kind: "named",
-        names: ["LoginForm", "SubmitButton"],
+        names: ["LoginForm", "Button"],
       },
       {
         module: "./Header.client.tsx",
@@ -60,7 +61,22 @@ describe("findClientComponentImports", () => {
     });
   });
 
-  it("does not promote embedded client imports inside a larger server page", () => {
+  it("detects a named-imported client component when the page returns only that component", () => {
+    const routeClient = findRouteLevelClientComponentImport(`
+      import { NotificationsPage } from "@/client/pages/notifications/NotificationsPage.client";
+
+      export default function Page() {
+        return <NotificationsPage />;
+      }
+    `);
+
+    expect(routeClient).toEqual({
+      module: "@/client/pages/notifications/NotificationsPage.client",
+      localName: "NotificationsPage",
+    });
+  });
+
+  it("promotes embedded client imports inside a larger server page", () => {
     const routeClient = findRouteLevelClientComponentImport(`
       import HomeApp from "@/client/pages/home/HomeApp.client";
 
@@ -72,10 +88,13 @@ describe("findClientComponentImports", () => {
       }
     `);
 
-    expect(routeClient).toBeNull();
+    expect(routeClient).toEqual({
+      module: "@/client/pages/home/HomeApp.client",
+      localName: "HomeApp",
+    });
   });
 
-  it("does not promote client imports when the page wrapper passes props", () => {
+  it("promotes client imports when the page wrapper passes props", () => {
     const routeClient = findRouteLevelClientComponentImport(`
       import PledgePage from "@/client/pages/pledges/PledgePage.client";
 
@@ -84,6 +103,38 @@ describe("findClientComponentImports", () => {
       }
     `);
 
-    expect(routeClient).toBeNull();
+    expect(routeClient).toEqual({
+      module: "@/client/pages/pledges/PledgePage.client",
+      localName: "PledgePage",
+    });
+  });
+
+  it("detects multiple rendered client imports in a server shell", () => {
+    const routeClients = findRouteLevelClientComponentImports(`
+      import { CommentsSection } from "@/client/widgets/comments-section/CommentsSection.client";
+      import { PledgeActions } from "@/client/widgets/pledge-actions/PledgeActions.client";
+
+      export default async function PledgePage({ params }) {
+        const pledge = await Promise.resolve(params.id);
+        return (
+          <main>
+            <article>{pledge}</article>
+            <PledgeActions pledgeId={params.id} />
+            <CommentsSection pledgeId={params.id} />
+          </main>
+        );
+      }
+    `);
+
+    expect(routeClients).toEqual([
+      {
+        module: "@/client/widgets/comments-section/CommentsSection.client",
+        localName: "CommentsSection",
+      },
+      {
+        module: "@/client/widgets/pledge-actions/PledgeActions.client",
+        localName: "PledgeActions",
+      },
+    ]);
   });
 });

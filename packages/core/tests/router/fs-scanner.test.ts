@@ -473,6 +473,58 @@ describe("FSScanner", () => {
     }
   });
 
+  it("links a server shell page that renders named .client imports", async () => {
+    const namedClientDir = join(import.meta.dir, "__test_named_client_import__");
+
+    await mkdir(join(namedClientDir, "app/notifications"), { recursive: true });
+    await mkdir(join(namedClientDir, "src/client/pages/notifications"), { recursive: true });
+    await mkdir(join(namedClientDir, "src/client/widgets/bell"), { recursive: true });
+
+    await writeFile(
+      join(namedClientDir, "app/notifications/page.tsx"),
+      `import { NotificationsPage } from "@/client/pages/notifications/NotificationsPage.client";
+       import { NotificationBell } from "@/client/widgets/bell/NotificationBell.client";
+
+       export default async function Page() {
+         const title = await Promise.resolve("Notifications");
+         return (
+           <main>
+             <h1>{title}</h1>
+             <NotificationBell count={2} />
+             <NotificationsPage />
+           </main>
+         );
+       }`
+    );
+
+    await writeFile(
+      join(namedClientDir, "src/client/pages/notifications/NotificationsPage.client.tsx"),
+      `"use client";
+       export function NotificationsPage() {
+         return <section>Notifications</section>;
+       }`
+    );
+
+    await writeFile(
+      join(namedClientDir, "src/client/widgets/bell/NotificationBell.client.tsx"),
+      `"use client";
+       export function NotificationBell({ count }: { count: number }) {
+         return <button>{count}</button>;
+       }`
+    );
+
+    try {
+      const result = await generateManifest(namedClientDir, {});
+      const notificationsRoute = result.manifest.routes.find((r) => r.pattern === "/notifications");
+
+      expect(notificationsRoute).toBeDefined();
+      expect(notificationsRoute?.clientModule).toBe("app/notifications/page.tsx");
+      expect(notificationsRoute?.hydration?.strategy).toBe("island");
+    } finally {
+      await rm(namedClientDir, { recursive: true, force: true });
+    }
+  });
+
   it("should not preserve stale page.tsx clientModule after page becomes server-only", async () => {
     const staleDir = join(import.meta.dir, "__test_stale_client_module__");
 

@@ -248,7 +248,7 @@ describe("buildClientBundles vendor shims", () => {
       expect(noClientResult.success).toBe(false);
       expect(errors).toContain("no clientModule could be resolved");
       expect(errors).toContain("LoginForm.client");
-      expect(errors).toContain("partial({ component }).Render");
+      expect(errors).toContain("run mandu generate");
     } finally {
       await rm(missingRoot, { recursive: true, force: true });
     }

@@ -31,7 +31,7 @@ import {
 import { mark, measure } from "../perf";
 import { METADATA_ROUTES } from "../routes/types";
 import {
-  findRouteLevelClientComponentImport,
+  findRouteLevelClientComponentImports,
   hasUseClientDirective,
   resolveClientImportModulePath,
 } from "./client-entry";
@@ -399,8 +399,8 @@ export class FSScanner {
         if (hasUseClient) {
           clientModule = modulePath;
         } else {
-          const routeLevelClientImport = findRouteLevelClientComponentImport(pageFileContent);
-          if (routeLevelClientImport) {
+          const routeLevelClientImports = findRouteLevelClientComponentImports(pageFileContent);
+          for (const routeLevelClientImport of routeLevelClientImports) {
             const resolvedClientImport = await resolveClientImportModulePath(
               rootDir,
               modulePath,
@@ -408,6 +408,7 @@ export class FSScanner {
             );
             if (resolvedClientImport) {
               clientModule = modulePath;
+              break;
             }
           }
         }

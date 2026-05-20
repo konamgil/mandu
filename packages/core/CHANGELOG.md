@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.10
+
+### Patch Changes
+
+- Fix route-level client import detection for named imports, multiple client components, and server-shell pages.
+
 ## 0.54.9
 
 ### Patch Changes

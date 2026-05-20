@@ -1,5 +1,16 @@
 # @mandujs/cli
 
+## 0.44.15
+
+### Patch Changes
+
+- Refresh internal dependency ranges for the core route client detection fix.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.10
+  - @mandujs/mcp@0.38.4
+  - @mandujs/edge@0.4.58
+
 ## 0.44.14
 
 ### Patch Changes
