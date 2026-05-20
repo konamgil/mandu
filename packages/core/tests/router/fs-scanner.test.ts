@@ -2,9 +2,10 @@
  * FS Scanner Tests
  */
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { mkdir, writeFile, rm } from "fs/promises";
+import { mkdir, writeFile, rm, readFile } from "fs/promises";
 import { join } from "path";
 import { scanRoutes, generateManifest } from "../../src/router";
+import { generateRoutes } from "../../src/generator/generate";
 
 // 테스트용 임시 디렉토리
 const TEST_DIR = join(import.meta.dir, "__test_app__");
@@ -413,10 +414,62 @@ describe("FSScanner", () => {
       const loginRoute = result.manifest.routes.find((r) => r.pattern === "/login");
 
       expect(loginRoute).toBeDefined();
-      expect(loginRoute?.clientModule).toBe("src/client/pages/login/LoginPage.client.tsx");
+      expect(loginRoute?.clientModule).toBe("app/login/page.tsx");
       expect(loginRoute?.hydration?.strategy).toBe("island");
+
+      const generated = await generateRoutes(result.manifest, defaultClientDir);
+      expect(generated.success).toBe(true);
+
+      const generatedRoute = await readFile(
+        join(defaultClientDir, ".mandu/generated/web/routes/login.route.tsx"),
+        "utf-8",
+      );
+      expect(generatedRoute).toContain("Page Module: app/login/page.tsx");
+      expect(generatedRoute).toContain("Client Module: app/login/page.tsx");
+      expect(generatedRoute).toContain("React.createElement(islandModule");
+      expect(generatedRoute).not.toContain("Login Page");
     } finally {
       await rm(defaultClientDir, { recursive: true, force: true });
+    }
+  });
+
+  it("links a page fragment wrapper that renders a default-imported .client component", async () => {
+    const fragmentDir = join(import.meta.dir, "__test_fragment_client_import__");
+
+    await mkdir(join(fragmentDir, "app"), { recursive: true });
+    await mkdir(join(fragmentDir, "src/client/pages/home"), { recursive: true });
+
+    await writeFile(
+      join(fragmentDir, "app/page.tsx"),
+      `import HomeApp from "@/client/pages/home/HomeApp.client";
+
+       export const metadata = { title: "Home" };
+
+       export default function HomePage() {
+         return <>
+           <meta name="x" content="y" />
+           <HomeApp />
+         </>;
+       }`
+    );
+
+    await writeFile(
+      join(fragmentDir, "src/client/pages/home/HomeApp.client.tsx"),
+      `"use client";
+       export default function HomeApp() {
+         return <main>Home</main>;
+       }`
+    );
+
+    try {
+      const result = await generateManifest(fragmentDir, {});
+      const homeRoute = result.manifest.routes.find((r) => r.pattern === "/");
+
+      expect(homeRoute).toBeDefined();
+      expect(homeRoute?.clientModule).toBe("app/page.tsx");
+      expect(homeRoute?.hydration?.strategy).toBe("island");
+    } finally {
+      await rm(fragmentDir, { recursive: true, force: true });
     }
   });
 

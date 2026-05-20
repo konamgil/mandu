@@ -141,7 +141,8 @@ export async function shouldPreserveExistingClientModule(
   if (source === null) return false;
   if (hasUseServerDirective(source)) return false;
   if (clientModuleIsRouteComponent(route, clientModule)) {
-    return hasUseClientDirective(source);
+    if (hasUseClientDirective(source)) return true;
+    return await routeComponentHasResolvableClientEntry(rootDir, clientModule, source);
   }
   return true;
 }
@@ -171,11 +172,11 @@ function defaultExportReturnsOnlyClientComponent(source: string, localName: stri
   const functionBody = extractDefaultExportFunctionBody(source);
   if (functionBody !== null) {
     const returned = extractOnlyReturnExpression(functionBody);
-    return returned !== null && isSelfClosingJsxElement(returned, localName);
+    return returned !== null && jsxExpressionRendersClientComponent(returned, localName);
   }
 
   const arrowExpression = extractDefaultExportArrowExpression(source);
-  return arrowExpression !== null && isSelfClosingJsxElement(arrowExpression, localName);
+  return arrowExpression !== null && jsxExpressionRendersClientComponent(arrowExpression, localName);
 }
 
 function extractDefaultExportFunctionBody(source: string): string | null {
@@ -205,10 +206,39 @@ function extractOnlyReturnExpression(body: string): string | null {
   return match?.[1]?.trim() ?? null;
 }
 
-function isSelfClosingJsxElement(expression: string, localName: string): boolean {
+function jsxExpressionRendersClientComponent(expression: string, localName: string): boolean {
+  const expr = stripWrappingParentheses(expression.trim());
+  return isBareClientElement(expr, localName) || isHeadOnlyFragmentWrapper(expr, localName);
+}
+
+function isBareClientElement(expression: string, localName: string): boolean {
   const expr = stripWrappingParentheses(expression.trim());
   const escaped = escapeRegExp(localName);
   return new RegExp(`^<${escaped}\\s*/>$`).test(expr);
+}
+
+function isHeadOnlyFragmentWrapper(expression: string, localName: string): boolean {
+  const expr = stripWrappingParentheses(expression.trim());
+  const fragmentMatch = /^<>\s*([\s\S]*?)\s*<\/>$/.exec(expr);
+  if (!fragmentMatch) return false;
+
+  const escaped = escapeRegExp(localName);
+  const clientElementPattern = new RegExp(`<${escaped}(?:\\s[^>]*)?(?:/>|>)`, "g");
+  const matches = [...(fragmentMatch[1] ?? "").matchAll(clientElementPattern)];
+  if (matches.length !== 1) return false;
+  const clientElement = matches[0][0];
+  if (!isBareClientElement(clientElement, localName)) return false;
+
+  const rest = (fragmentMatch[1] ?? "")
+    .replace(clientElement, "")
+    .replace(/<meta\b[^>]*\/>/gi, "")
+    .replace(/<link\b[^>]*\/>/gi, "")
+    .replace(/<base\b[^>]*\/>/gi, "")
+    .replace(/<title\b[^>]*>[\s\S]*?<\/title>/gi, "")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .trim();
+
+  return rest.length === 0;
 }
 
 function stripWrappingParentheses(value: string): string {
@@ -301,6 +331,9 @@ export async function validateClientModuleForBrowserBundle(
   }
 
   if (clientModuleIsRouteComponent(route) && !hasUseClientDirective(source)) {
+    if (await routeComponentHasResolvableClientEntry(rootDir, route.clientModule, source)) {
+      return null;
+    }
     return (
       `[${route.id}] Route component "${route.clientModule}" is configured as clientModule, ` +
       `but it is a server page (missing "use client"). Mandu will not bundle server pages into client islands. ` +
@@ -309,6 +342,16 @@ export async function validateClientModuleForBrowserBundle(
   }
 
   return null;
+}
+
+async function routeComponentHasResolvableClientEntry(
+  rootDir: string,
+  routeModule: string,
+  source: string,
+): Promise<boolean> {
+  const routeLevelClientImport = findRouteLevelClientComponentImport(source);
+  if (!routeLevelClientImport) return false;
+  return (await resolveClientImportModulePath(rootDir, routeModule, routeLevelClientImport.module)) !== null;
 }
 
 export async function describeMissingHydrationClientModule(

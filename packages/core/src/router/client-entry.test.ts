@@ -42,13 +42,31 @@ describe("findClientComponentImports", () => {
     });
   });
 
-  it("does not promote embedded client imports inside a larger server page", () => {
+  it("promotes a fragment wrapper with head-only elements and a bare client component", () => {
     const routeClient = findRouteLevelClientComponentImport(`
       import HomeApp from "@/client/pages/home/HomeApp.client";
 
       export default function HomePage() {
         return <>
           <meta name="description" content="home" />
+          <HomeApp />
+        </>;
+      }
+    `);
+
+    expect(routeClient).toEqual({
+      module: "@/client/pages/home/HomeApp.client",
+      localName: "HomeApp",
+    });
+  });
+
+  it("does not promote embedded client imports inside a larger server page", () => {
+    const routeClient = findRouteLevelClientComponentImport(`
+      import HomeApp from "@/client/pages/home/HomeApp.client";
+
+      export default function HomePage() {
+        return <>
+          <header>Server shell</header>
           <HomeApp />
         </>;
       }

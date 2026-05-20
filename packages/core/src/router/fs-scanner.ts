@@ -401,11 +401,14 @@ export class FSScanner {
         } else {
           const routeLevelClientImport = findRouteLevelClientComponentImport(pageFileContent);
           if (routeLevelClientImport) {
-            clientModule = await resolveClientImportModulePath(
+            const resolvedClientImport = await resolveClientImportModulePath(
               rootDir,
               modulePath,
               routeLevelClientImport.module,
-            ) ?? undefined;
+            );
+            if (resolvedClientImport) {
+              clientModule = modulePath;
+            }
           }
         }
       }
