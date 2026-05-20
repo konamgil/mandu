@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.6
+
+### Patch Changes
+
+- Add a runtime hydration probe MCP tool and harden core hydration, watcher, and SQLite migration diagnostics.
+
 ## 0.54.5
 
 ### Patch Changes

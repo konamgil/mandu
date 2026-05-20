@@ -1,5 +1,14 @@
 # @mandujs/cli
 
+## 0.44.11
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mandujs/mcp@0.38.0
+  - @mandujs/core@0.54.6
+  - @mandujs/edge@0.4.54
+
 ## 0.44.10
 
 ### Patch Changes
