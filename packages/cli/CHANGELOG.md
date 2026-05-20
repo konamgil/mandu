@@ -1,5 +1,16 @@
 # @mandujs/cli
 
+## 0.44.13
+
+### Patch Changes
+
+- Refresh internal dependency ranges for the unified runtime status diagnostics release.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.8
+  - @mandujs/mcp@0.38.2
+  - @mandujs/edge@0.4.56
+
 ## 0.44.12
 
 ### Patch Changes

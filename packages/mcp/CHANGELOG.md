@@ -1,5 +1,14 @@
 # @mandujs/mcp
 
+## 0.38.2
+
+### Patch Changes
+
+- Unify hydration diagnostics around runtime status, page client mounts, and nested islands.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.8
+
 ## 0.38.1
 
 ### Patch Changes

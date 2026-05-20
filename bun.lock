@@ -48,7 +48,7 @@
     },
     "demo/auth-starter": {
       "name": "mandu-auth-starter",
-      "version": "0.1.58",
+      "version": "0.1.59",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -67,7 +67,7 @@
     },
     "demo/desktop-starter": {
       "name": "mandu-desktop-starter",
-      "version": "0.1.57",
+      "version": "0.1.58",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -83,7 +83,7 @@
     },
     "demo/edge-workers-starter": {
       "name": "mandu-edge-workers-starter",
-      "version": "0.1.58",
+      "version": "0.1.59",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "@mandujs/edge": "workspace:*",
@@ -148,22 +148,22 @@
     },
     "packages/cli": {
       "name": "@mandujs/cli",
-      "version": "0.44.12",
+      "version": "0.44.13",
       "bin": {
         "mandu": "src/main.ts",
       },
       "dependencies": {
-        "@mandujs/ate": "^0.25.1",
-        "@mandujs/core": "^0.43.0",
-        "@mandujs/edge": "^0.4.31",
-        "@mandujs/mcp": "^0.31.0",
-        "@mandujs/skills": "^0.18.0",
+        "@mandujs/ate": "^0.26.1",
+        "@mandujs/core": "^0.54.8",
+        "@mandujs/edge": "^0.4.56",
+        "@mandujs/mcp": "^0.38.2",
+        "@mandujs/skills": "^0.20.1",
         "cfonts": "^3.3.0",
       },
     },
     "packages/core": {
       "name": "@mandujs/core",
-      "version": "0.54.7",
+      "version": "0.54.8",
       "dependencies": {
         "chokidar": "^5.0.0",
         "fast-glob": "^3.3.2",
@@ -203,7 +203,7 @@
     },
     "packages/edge": {
       "name": "@mandujs/edge",
-      "version": "0.4.55",
+      "version": "0.4.56",
       "dependencies": {
         "@mandujs/core": "workspace:*",
       },
@@ -218,22 +218,22 @@
     },
     "packages/mcp": {
       "name": "@mandujs/mcp",
-      "version": "0.38.1",
+      "version": "0.38.2",
       "bin": {
         "mandu-mcp": "./src/index.ts",
         "mandujs-mcp": "./src/index.ts",
         "mcp": "./src/index.ts",
       },
       "dependencies": {
-        "@mandujs/ate": "^0.25.1",
-        "@mandujs/core": "^0.43.0",
+        "@mandujs/ate": "^0.26.1",
+        "@mandujs/core": "^0.54.8",
         "@mandujs/skills": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.25.3",
       },
     },
     "packages/playground-runner": {
       "name": "@mandujs/playground-runner",
-      "version": "25.0.5",
+      "version": "25.0.6",
       "devDependencies": {
         "@cloudflare/sandbox": "^0.1.0",
         "@cloudflare/workers-types": "^4.20250101.0",

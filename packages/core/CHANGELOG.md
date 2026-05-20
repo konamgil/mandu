@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.8
+
+### Patch Changes
+
+- Unify hydration diagnostics around runtime status, page client mounts, and nested islands.
+
 ## 0.54.7
 
 ### Patch Changes
