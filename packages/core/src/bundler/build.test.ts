@@ -245,7 +245,17 @@ describe("buildClientBundles vendor shims", () => {
 
       const routeClientResult = await runBuildInSubprocess(routeClientRoot, "server-page-route-client-import");
       expect(routeClientResult.success).toBe(true);
-      expect(await Bun.file(path.join(routeClientRoot, ".mandu", "client", "login.island.js")).exists()).toBe(true);
+      const bundlePath = path.join(routeClientRoot, ".mandu", "client", "login.island.js");
+      expect(await Bun.file(bundlePath).exists()).toBe(true);
+
+      const bundleSource = await readFile(bundlePath, "utf-8");
+      expect(bundleSource).not.toContain("var LoginPage = LoginPage;");
+      const parseResult = await Bun.build({
+        entrypoints: [bundlePath],
+        target: "browser",
+        external: ["react", "react-dom", "react-dom/client", "react/jsx-dev-runtime"],
+      });
+      expect(parseResult.success).toBe(true);
     } finally {
       await rm(routeClientRoot, { recursive: true, force: true });
     }
