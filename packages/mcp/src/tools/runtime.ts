@@ -5,7 +5,9 @@
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { getProjectPaths } from "../utils/project.js";
-import { loadManifest } from "@mandujs/core";
+import { loadManduConfig, loadManifest, needsHydration } from "@mandujs/core";
+import { getDevServerState } from "./project.js";
+import { readRuntimeControl } from "../utils/runtime-control.js";
 import path from "path";
 
 
@@ -24,6 +26,47 @@ export const runtimeToolDefinitions: Tool[] = [
       type: "object",
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: "mandu.runtime.probe",
+    annotations: {
+      readOnlyHint: true,
+    },
+    description:
+      "Probe a running Mandu dev/start server by fetching real page HTML and island bundle URLs. " +
+      "Catches silent runtime failures that static manifest/guard checks miss, especially empty data-mandu-src island markers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        baseURL: {
+          type: "string",
+          description: "Explicit dev server URL. Overrides runtime-control/config discovery.",
+        },
+        port: {
+          type: "number",
+          description: "Explicit dev server port. Overrides runtime-control/config discovery.",
+        },
+        routeIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional route IDs to probe. Omit to probe all page routes that can be sampled.",
+        },
+        includeDynamic: {
+          type: "boolean",
+          description: "Probe dynamic routes by substituting __mandu_probe__ for params. Defaults to false.",
+        },
+        checkBundleUrls: {
+          type: "boolean",
+          description: "Fetch every non-empty data-mandu-src URL and require a 2xx response. Defaults to true.",
+        },
+        timeoutMs: {
+          type: "number",
+          description: "Per-request timeout in milliseconds. Defaults to 3000.",
+        },
+      },
+      required: [],
+      additionalProperties: false,
     },
   },
   {
@@ -216,6 +259,74 @@ export default Mandu.contract({
   response: { ... },
 });`,
         },
+      };
+    },
+
+    "mandu.runtime.probe": async (args: Record<string, unknown>) => {
+      const baseUrl = await resolveDevServerBaseUrl(projectRoot, args);
+      const timeoutMs = normalizeTimeout(args.timeoutMs);
+      const checkBundleUrls = args.checkBundleUrls !== false;
+      const includeDynamic = args.includeDynamic === true;
+      const routeIdFilter = Array.isArray(args.routeIds)
+        ? new Set(args.routeIds.filter((id): id is string => typeof id === "string"))
+        : null;
+
+      const result = await loadManifest(paths.manifestPath);
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          baseUrl,
+          error: result.errors,
+        };
+      }
+
+      const pageRoutes = result.data.routes
+        .filter((route) => route.kind === "page")
+        .filter((route) => !routeIdFilter || routeIdFilter.has(route.id))
+        .map((route) => ({
+          route,
+          samplePath: samplePathForPattern(route.pattern, includeDynamic),
+        }));
+
+      const skipped = pageRoutes
+        .filter((entry) => entry.samplePath === null)
+        .map((entry) => ({
+          routeId: entry.route.id,
+          pattern: entry.route.pattern,
+          reason: "dynamic_route",
+        }));
+      const probes = await Promise.all(
+        pageRoutes
+          .filter((entry): entry is typeof entry & { samplePath: string } => entry.samplePath !== null)
+          .map((entry) =>
+            probeRoute({
+              baseUrl,
+              route: entry.route,
+              samplePath: entry.samplePath,
+              timeoutMs,
+              checkBundleUrls,
+            })
+          )
+      );
+
+      const failures = probes.flatMap((probe) =>
+        probe.failures.map((failure) => ({
+          routeId: probe.routeId,
+          pattern: probe.pattern,
+          path: probe.path,
+          ...failure,
+        }))
+      );
+
+      return {
+        success: failures.length === 0,
+        baseUrl,
+        checkedRoutes: probes.length,
+        skippedRoutes: skipped.length,
+        failureCount: failures.length,
+        failures,
+        routes: probes,
+        skipped,
       };
     },
 
@@ -524,10 +635,202 @@ export const appLogger = logger(${JSON.stringify(config, null, 2)});
   handlers["mandu_get_contract_options"] = handlers["mandu.runtime.contractOptions"];
   handlers["mandu_list_logger_options"] = handlers["mandu.runtime.loggerOptions"];
   handlers["mandu_generate_logger_config"] = handlers["mandu.runtime.loggerConfig"];
+  handlers["mandu_runtime_probe"] = handlers["mandu.runtime.probe"];
 
   return handlers;
 }
 
 function insertAfter(content: string, search: string): boolean {
   return content.includes(search);
+}
+
+async function resolveDevServerBaseUrl(
+  projectRoot: string,
+  args: { baseURL?: unknown; port?: unknown } = {},
+): Promise<string> {
+  if (typeof args.baseURL === "string" && args.baseURL.trim()) {
+    return args.baseURL.trim().replace(/\/+$/, "");
+  }
+
+  const explicitPort = normalizePort(args.port);
+  if (explicitPort) {
+    return `http://localhost:${explicitPort}`;
+  }
+
+  const control = await readRuntimeControl(projectRoot);
+  if (control?.baseUrl) {
+    return control.baseUrl.replace(/\/+$/, "");
+  }
+
+  let port: number | undefined;
+  const serverState = getDevServerState();
+  if (serverState) {
+    for (const line of serverState.output) {
+      const portMatch = line.match(/https?:\/\/localhost:(\d+)/);
+      if (portMatch) {
+        port = Number.parseInt(portMatch[1], 10);
+      }
+    }
+  }
+
+  if (!port) {
+    const config = await loadManduConfig(projectRoot);
+    port = config.server?.port ?? 3333;
+  }
+
+  return `http://localhost:${port}`;
+}
+
+function normalizePort(value: unknown): number | undefined {
+  const raw = typeof value === "number" ? value : typeof value === "string" ? Number.parseInt(value, 10) : NaN;
+  if (!Number.isInteger(raw) || raw < 1 || raw > 65535) return undefined;
+  return raw;
+}
+
+function normalizeTimeout(value: unknown): number {
+  const raw = typeof value === "number" ? value : typeof value === "string" ? Number.parseInt(value, 10) : NaN;
+  if (!Number.isInteger(raw) || raw < 100 || raw > 30_000) return 3000;
+  return raw;
+}
+
+function samplePathForPattern(pattern: string, includeDynamic: boolean): string | null {
+  if (!includeDynamic && /(^|\/):[^/]+/.test(pattern)) return null;
+  const sampled = pattern
+    .replace(/:([A-Za-z0-9_]+)/g, "__mandu_probe__")
+    .replace(/\*+/g, "__mandu_probe__");
+  return sampled.startsWith("/") ? sampled : `/${sampled}`;
+}
+
+interface IslandMarker {
+  id: string | null;
+  src: string | null;
+}
+
+function extractIslandMarkers(html: string): IslandMarker[] {
+  const markers: IslandMarker[] = [];
+  const tagPattern = /<[^>]*\bdata-mandu-island(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?[^>]*>/gi;
+  for (const match of html.matchAll(tagPattern)) {
+    const tag = match[0];
+    markers.push({
+      id: readHtmlAttr(tag, "data-mandu-island"),
+      src: readHtmlAttr(tag, "data-mandu-src"),
+    });
+  }
+  return markers;
+}
+
+function readHtmlAttr(tag: string, attr: string): string | null {
+  const pattern = new RegExp(
+    `\\b${attr}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+    "i",
+  );
+  const match = tag.match(pattern);
+  return match ? (match[1] ?? match[2] ?? match[3] ?? "") : null;
+}
+
+async function probeRoute({
+  baseUrl,
+  route,
+  samplePath,
+  timeoutMs,
+  checkBundleUrls,
+}: {
+  baseUrl: string;
+  route: { id: string; pattern: string; clientModule?: string; hydration?: unknown };
+  samplePath: string;
+  timeoutMs: number;
+  checkBundleUrls: boolean;
+}): Promise<{
+  routeId: string;
+  pattern: string;
+  path: string;
+  status: number | null;
+  islandCount: number;
+  failures: Array<{ code: string; message: string; islandId?: string | null; src?: string | null; status?: number | null }>;
+}> {
+  const failures: Array<{ code: string; message: string; islandId?: string | null; src?: string | null; status?: number | null }> = [];
+  const url = new URL(samplePath, `${baseUrl}/`);
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (error) {
+    return {
+      routeId: route.id,
+      pattern: route.pattern,
+      path: samplePath,
+      status: null,
+      islandCount: 0,
+      failures: [{
+        code: "page_fetch_failed",
+        message: error instanceof Error ? error.message : String(error),
+        status: null,
+      }],
+    };
+  }
+
+  if (!response.ok) {
+    failures.push({
+      code: "page_status",
+      message: `Page responded with HTTP ${response.status}`,
+      status: response.status,
+    });
+  }
+
+  const html = await response.text();
+  const markers = extractIslandMarkers(html);
+  const hasRouteIsland = markers.some((marker) => marker.id === route.id);
+  if (route.clientModule && needsHydration(route as Parameters<typeof needsHydration>[0]) && !hasRouteIsland) {
+    failures.push({
+      code: "missing_route_island_marker",
+      message: `Route has clientModule but HTML does not contain data-mandu-island="${route.id}"`,
+      islandId: route.id,
+    });
+  }
+
+  for (const marker of markers) {
+    if (!marker.src || marker.src.trim().length === 0) {
+      failures.push({
+        code: "empty_island_src",
+        message: "Island marker has empty data-mandu-src",
+        islandId: marker.id,
+        src: marker.src,
+      });
+      continue;
+    }
+    if (!checkBundleUrls) continue;
+
+    const bundleUrl = new URL(marker.src, `${baseUrl}/`);
+    try {
+      const bundleResponse = await fetch(bundleUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!bundleResponse.ok) {
+        failures.push({
+          code: "bundle_status",
+          message: `Island bundle responded with HTTP ${bundleResponse.status}`,
+          islandId: marker.id,
+          src: marker.src,
+          status: bundleResponse.status,
+        });
+      }
+    } catch (error) {
+      failures.push({
+        code: "bundle_fetch_failed",
+        message: error instanceof Error ? error.message : String(error),
+        islandId: marker.id,
+        src: marker.src,
+        status: null,
+      });
+    }
+  }
+
+  return {
+    routeId: route.id,
+    pattern: route.pattern,
+    path: samplePath,
+    status: response.status,
+    islandCount: markers.length,
+    failures,
+  };
 }
