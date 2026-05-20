@@ -30,7 +30,11 @@ import {
 } from "./fs-patterns";
 import { mark, measure } from "../perf";
 import { METADATA_ROUTES } from "../routes/types";
-import { hasUseClientDirective } from "./client-entry";
+import {
+  findRouteLevelClientComponentImport,
+  hasUseClientDirective,
+  resolveClientImportModulePath,
+} from "./client-entry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Scanner Class
@@ -229,7 +233,7 @@ export class FSScanner {
    */
   private async createRouteConfigs(
     files: ScannedFile[],
-    _rootDir: string
+    rootDir: string
   ): Promise<{ routes: FSRouteConfig[]; routeErrors: ScanError[] }> {
     const routes: FSRouteConfig[] = [];
     const routeErrors: ScanError[] = [];
@@ -394,6 +398,15 @@ export class FSScanner {
         const hasUseClient = hasUseClientDirective(pageFileContent);
         if (hasUseClient) {
           clientModule = modulePath;
+        } else {
+          const routeLevelClientImport = findRouteLevelClientComponentImport(pageFileContent);
+          if (routeLevelClientImport) {
+            clientModule = await resolveClientImportModulePath(
+              rootDir,
+              modulePath,
+              routeLevelClientImport.module,
+            ) ?? undefined;
+          }
         }
       }
 

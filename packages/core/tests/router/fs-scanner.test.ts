@@ -383,6 +383,43 @@ describe("FSScanner", () => {
     }
   });
 
+  it("should link a nested page that returns a default-imported .client component", async () => {
+    const defaultClientDir = join(import.meta.dir, "__test_default_client_import__");
+
+    await mkdir(join(defaultClientDir, "app/login"), { recursive: true });
+    await mkdir(join(defaultClientDir, "src/client/pages/login"), { recursive: true });
+
+    await writeFile(
+      join(defaultClientDir, "app/login/page.tsx"),
+      `import LoginPage from "@/client/pages/login/LoginPage.client";
+
+       export const metadata = { title: "Login" };
+
+       export default function Page() {
+         return <LoginPage />;
+       }`
+    );
+
+    await writeFile(
+      join(defaultClientDir, "src/client/pages/login/LoginPage.client.tsx"),
+      `"use client";
+       export default function LoginPage() {
+         return <form><button>Login</button></form>;
+       }`
+    );
+
+    try {
+      const result = await generateManifest(defaultClientDir, {});
+      const loginRoute = result.manifest.routes.find((r) => r.pattern === "/login");
+
+      expect(loginRoute).toBeDefined();
+      expect(loginRoute?.clientModule).toBe("src/client/pages/login/LoginPage.client.tsx");
+      expect(loginRoute?.hydration?.strategy).toBe("island");
+    } finally {
+      await rm(defaultClientDir, { recursive: true, force: true });
+    }
+  });
+
   it("should not preserve stale page.tsx clientModule after page becomes server-only", async () => {
     const staleDir = join(import.meta.dir, "__test_stale_client_module__");
 

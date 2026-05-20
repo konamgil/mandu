@@ -8,6 +8,11 @@ export interface ClientComponentImport {
   names: string[];
 }
 
+export interface RouteLevelClientComponentImport {
+  module: string;
+  localName: string;
+}
+
 export function normalizeRouteModulePath(value: string | undefined): string {
   return (value ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
 }
@@ -94,6 +99,39 @@ export function findClientComponentImports(source: string): ClientComponentImpor
   return imports;
 }
 
+export function findRouteLevelClientComponentImport(source: string): RouteLevelClientComponentImport | null {
+  const defaultImports = findClientComponentImports(source).filter((entry) => {
+    const localName = entry.names[0] ?? "";
+    return entry.kind === "default" && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(localName);
+  });
+
+  if (defaultImports.length !== 1) return null;
+
+  const entry = defaultImports[0];
+  const localName = entry.names[0];
+  if (!entry.module || !localName) return null;
+  if (!defaultExportReturnsOnlyClientComponent(source, localName)) return null;
+
+  return { module: entry.module, localName };
+}
+
+export async function resolveClientImportModulePath(
+  rootDir: string,
+  importerModule: string,
+  specifier: string,
+): Promise<string | null> {
+  const base = resolveImportBasePath(rootDir, importerModule, specifier);
+  if (!base) return null;
+
+  for (const candidate of expandClientModuleCandidates(base)) {
+    if (await Bun.file(candidate).exists()) {
+      return path.relative(rootDir, candidate).replace(/\\/g, "/");
+    }
+  }
+
+  return null;
+}
+
 export async function shouldPreserveExistingClientModule(
   route: RouteSpec,
   clientModule: string,
@@ -106,6 +144,147 @@ export async function shouldPreserveExistingClientModule(
     return hasUseClientDirective(source);
   }
   return true;
+}
+
+function resolveImportBasePath(rootDir: string, importerModule: string, specifier: string): string | null {
+  const normalized = specifier.replace(/\\/g, "/");
+  if (normalized.startsWith("@/") || normalized.startsWith("~/")) {
+    return path.resolve(rootDir, "src", normalized.slice(2));
+  }
+  if (normalized.startsWith("./") || normalized.startsWith("../")) {
+    return path.resolve(rootDir, path.dirname(importerModule), normalized);
+  }
+  return null;
+}
+
+function expandClientModuleCandidates(basePath: string): string[] {
+  if (/\.[cm]?[jt]sx?$/.test(basePath)) return [basePath];
+  return [
+    `${basePath}.tsx`,
+    `${basePath}.ts`,
+    `${basePath}.jsx`,
+    `${basePath}.js`,
+  ];
+}
+
+function defaultExportReturnsOnlyClientComponent(source: string, localName: string): boolean {
+  const functionBody = extractDefaultExportFunctionBody(source);
+  if (functionBody !== null) {
+    const returned = extractOnlyReturnExpression(functionBody);
+    return returned !== null && isSelfClosingJsxElement(returned, localName);
+  }
+
+  const arrowExpression = extractDefaultExportArrowExpression(source);
+  return arrowExpression !== null && isSelfClosingJsxElement(arrowExpression, localName);
+}
+
+function extractDefaultExportFunctionBody(source: string): string | null {
+  const match = /export\s+default\s+(?:async\s+)?function(?:\s+[A-Za-z_$][A-Za-z0-9_$]*)?\s*\([^)]*\)\s*(?::\s*[^{=]+)?\{/m.exec(source);
+  if (!match) return null;
+
+  const openBrace = match.index + match[0].lastIndexOf("{");
+  const closeBrace = findMatchingBrace(source, openBrace);
+  if (closeBrace === -1) return null;
+  return source.slice(openBrace + 1, closeBrace);
+}
+
+function extractDefaultExportArrowExpression(source: string): string | null {
+  const match = /export\s+default\s+(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][A-Za-z0-9_$]*)\s*=>\s*/m.exec(source);
+  if (!match) return null;
+
+  const start = match.index + match[0].length;
+  const rest = source.slice(start).trim();
+  if (rest.startsWith("{")) return null;
+
+  const semicolon = rest.indexOf(";");
+  return semicolon === -1 ? rest : rest.slice(0, semicolon);
+}
+
+function extractOnlyReturnExpression(body: string): string | null {
+  const match = /^\s*return\s+([\s\S]*?)\s*;?\s*$/.exec(body);
+  return match?.[1]?.trim() ?? null;
+}
+
+function isSelfClosingJsxElement(expression: string, localName: string): boolean {
+  const expr = stripWrappingParentheses(expression.trim());
+  const escaped = escapeRegExp(localName);
+  return new RegExp(`^<${escaped}\\s*/>$`).test(expr);
+}
+
+function stripWrappingParentheses(value: string): string {
+  let current = value.trim();
+  while (current.startsWith("(") && current.endsWith(")")) {
+    const close = findMatchingParen(current, 0);
+    if (close !== current.length - 1) break;
+    current = current.slice(1, -1).trim();
+  }
+  return current;
+}
+
+function findMatchingBrace(source: string, openIndex: number): number {
+  return findMatchingDelimiter(source, openIndex, "{", "}");
+}
+
+function findMatchingParen(source: string, openIndex: number): number {
+  return findMatchingDelimiter(source, openIndex, "(", ")");
+}
+
+function findMatchingDelimiter(source: string, openIndex: number, open: string, close: string): number {
+  let depth = 0;
+  let quote: '"' | "'" | "`" | null = null;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let i = openIndex; i < source.length; i++) {
+    const char = source[i];
+    const next = source[i + 1];
+    const prev = source[i - 1];
+
+    if (lineComment) {
+      if (char === "\n" || char === "\r") lineComment = false;
+      continue;
+    }
+
+    if (blockComment) {
+      if (char === "*" && next === "/") {
+        blockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote && prev !== "\\") quote = null;
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      lineComment = true;
+      i++;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      blockComment = true;
+      i++;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (char === open) depth++;
+    if (char === close) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+
+  return -1;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export async function validateClientModuleForBrowserBundle(
