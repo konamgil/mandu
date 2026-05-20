@@ -1,5 +1,16 @@
 # @mandujs/cli
 
+## 0.44.16
+
+### Patch Changes
+
+- Refresh internal dependency ranges for the route client entry resolution fix.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.11
+  - @mandujs/mcp@0.38.5
+  - @mandujs/edge@0.4.59
+
 ## 0.44.15
 
 ### Patch Changes

@@ -414,7 +414,7 @@ describe("FSScanner", () => {
       const loginRoute = result.manifest.routes.find((r) => r.pattern === "/login");
 
       expect(loginRoute).toBeDefined();
-      expect(loginRoute?.clientModule).toBe("app/login/page.tsx");
+      expect(loginRoute?.clientModule).toBe("src/client/pages/login/LoginPage.client.tsx");
       expect(loginRoute?.hydration?.strategy).toBe("island");
 
       const generated = await generateRoutes(result.manifest, defaultClientDir);
@@ -425,8 +425,8 @@ describe("FSScanner", () => {
         "utf-8",
       );
       expect(generatedRoute).toContain("Page Module: app/login/page.tsx");
-      expect(generatedRoute).toContain("Client Module: app/login/page.tsx");
-      expect(generatedRoute).toContain("React.createElement(islandModule");
+      expect(generatedRoute).toContain("Client Module: src/client/pages/login/LoginPage.client.tsx");
+      expect(generatedRoute).toContain("React.createElement(pageModule");
       expect(generatedRoute).not.toContain("Login Page");
     } finally {
       await rm(defaultClientDir, { recursive: true, force: true });
@@ -466,7 +466,7 @@ describe("FSScanner", () => {
       const homeRoute = result.manifest.routes.find((r) => r.pattern === "/");
 
       expect(homeRoute).toBeDefined();
-      expect(homeRoute?.clientModule).toBe("app/page.tsx");
+      expect(homeRoute?.clientModule).toBe("src/client/pages/home/HomeApp.client.tsx");
       expect(homeRoute?.hydration?.strategy).toBe("island");
     } finally {
       await rm(fragmentDir, { recursive: true, force: true });
@@ -518,10 +518,46 @@ describe("FSScanner", () => {
       const notificationsRoute = result.manifest.routes.find((r) => r.pattern === "/notifications");
 
       expect(notificationsRoute).toBeDefined();
-      expect(notificationsRoute?.clientModule).toBe("app/notifications/page.tsx");
+      expect(notificationsRoute?.clientModule).toBe("src/client/pages/notifications/NotificationsPage.client.tsx");
       expect(notificationsRoute?.hydration?.strategy).toBe("island");
     } finally {
       await rm(namedClientDir, { recursive: true, force: true });
+    }
+  });
+
+  it("links a page that renders a use-client component whose filename has no .client suffix", async () => {
+    const useClientImportDir = join(import.meta.dir, "__test_use_client_import__");
+
+    await mkdir(join(useClientImportDir, "app/pledges/new"), { recursive: true });
+    await mkdir(join(useClientImportDir, "src/client/widgets/pledge-form"), { recursive: true });
+
+    await writeFile(
+      join(useClientImportDir, "app/pledges/new/page.tsx"),
+      `import { PledgeForm } from "@/client/widgets/pledge-form/PledgeForm";
+
+       export default async function NewPledgePage() {
+         const data = await Promise.resolve([]);
+         return <main><PledgeForm parties={data} candidates={data} /></main>;
+       }`
+    );
+
+    await writeFile(
+      join(useClientImportDir, "src/client/widgets/pledge-form/PledgeForm.tsx"),
+      `"use client";
+       export function PledgeForm() {
+         return <form />;
+       }`
+    );
+
+    try {
+      const result = await generateManifest(useClientImportDir, {});
+      const pledgeRoute = result.manifest.routes.find((r) => r.pattern === "/pledges/new");
+
+      expect(pledgeRoute).toBeDefined();
+      expect(pledgeRoute?.clientModule).toBe("src/client/widgets/pledge-form/PledgeForm.tsx");
+      expect(pledgeRoute?.hydration?.strategy).toBe("island");
+    } finally {
+      await rm(useClientImportDir, { recursive: true, force: true });
     }
   });
 

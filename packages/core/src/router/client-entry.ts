@@ -13,6 +13,8 @@ export interface RouteLevelClientComponentImport {
   localName: string;
 }
 
+const CLIENT_ENTRY_SPECIFIER_PATTERN = /\.(?:client|island)(?:\.[tj]sx?)?$/;
+
 export function normalizeRouteModulePath(value: string | undefined): string {
   return (value ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
 }
@@ -44,9 +46,13 @@ async function readRouteModule(rootDir: string, modulePath: string): Promise<str
 }
 
 export function findClientComponentImports(source: string): ClientComponentImport[] {
+  return findComponentImports(source).filter((entry) => clientSpecifierLooksBrowserOnly(entry.module));
+}
+
+function findComponentImports(source: string): ClientComponentImport[] {
   const imports: ClientComponentImport[] = [];
-  const importFromPattern = /import\s+([\s\S]*?)\s+from\s+["']([^"']*\.client(?:\.[tj]sx?)?)["']/g;
-  const sideEffectPattern = /import\s+["']([^"']*\.client(?:\.[tj]sx?)?)["']/g;
+  const importFromPattern = /import\s+(?!type\b)([\s\S]*?)\s+from\s+["']([^"']+)["']/g;
+  const sideEffectPattern = /import\s+["']([^"']+)["']/g;
 
   for (const match of source.matchAll(importFromPattern)) {
     const clause = (match[1] ?? "").trim();
@@ -105,7 +111,7 @@ export function findRouteLevelClientComponentImport(source: string): RouteLevelC
 }
 
 export function findRouteLevelClientComponentImports(source: string): RouteLevelClientComponentImport[] {
-  const candidates = findClientComponentImports(source).flatMap((entry) =>
+  const candidates = findComponentImports(source).flatMap((entry) =>
     entry.names
       .filter((localName) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(localName))
       .map((localName) => ({ module: entry.module, localName }))
@@ -126,6 +132,26 @@ export async function resolveClientImportModulePath(
   for (const candidate of expandClientModuleCandidates(base)) {
     if (await Bun.file(candidate).exists()) {
       return path.relative(rootDir, candidate).replace(/\\/g, "/");
+    }
+  }
+
+  return null;
+}
+
+export async function resolveRouteLevelClientEntryPath(
+  rootDir: string,
+  routeModule: string,
+  source: string,
+): Promise<string | null> {
+  const routeLevelClientImports = findRouteLevelClientComponentImports(source);
+  for (const routeLevelClientImport of routeLevelClientImports) {
+    const resolved = await resolveClientImportModulePath(rootDir, routeModule, routeLevelClientImport.module);
+    if (!resolved) continue;
+    if (clientSpecifierLooksBrowserOnly(routeLevelClientImport.module)) return resolved;
+
+    const importedSource = await readRouteModule(rootDir, resolved);
+    if (importedSource !== null && hasUseClientDirective(importedSource)) {
+      return resolved;
     }
   }
 
@@ -165,7 +191,15 @@ function expandClientModuleCandidates(basePath: string): string[] {
     `${basePath}.ts`,
     `${basePath}.jsx`,
     `${basePath}.js`,
+    path.join(basePath, "index.tsx"),
+    path.join(basePath, "index.ts"),
+    path.join(basePath, "index.jsx"),
+    path.join(basePath, "index.js"),
   ];
+}
+
+function clientSpecifierLooksBrowserOnly(specifier: string): boolean {
+  return CLIENT_ENTRY_SPECIFIER_PATTERN.test(specifier.replace(/\\/g, "/"));
 }
 
 function defaultExportRendersClientComponents(
@@ -413,7 +447,9 @@ export async function validateClientModuleForBrowserBundle(
   }
 
   if (clientModuleIsRouteComponent(route) && !hasUseClientDirective(source)) {
-    if (await routeComponentHasResolvableClientEntry(rootDir, route.clientModule, source)) {
+    const realClientEntry = await resolveRouteLevelClientEntryPath(rootDir, route.clientModule, source);
+    if (realClientEntry) {
+      route.clientModule = realClientEntry;
       return null;
     }
     return (
@@ -431,13 +467,7 @@ async function routeComponentHasResolvableClientEntry(
   routeModule: string,
   source: string,
 ): Promise<boolean> {
-  const routeLevelClientImports = findRouteLevelClientComponentImports(source);
-  for (const routeLevelClientImport of routeLevelClientImports) {
-    if ((await resolveClientImportModulePath(rootDir, routeModule, routeLevelClientImport.module)) !== null) {
-      return true;
-    }
-  }
-  return false;
+  return (await resolveRouteLevelClientEntryPath(rootDir, routeModule, source)) !== null;
 }
 
 export async function describeMissingHydrationClientModule(

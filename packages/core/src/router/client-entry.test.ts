@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
+import path from "path";
 import {
   findClientComponentImports,
   findRouteLevelClientComponentImport,
   findRouteLevelClientComponentImports,
+  resolveRouteLevelClientEntryPath,
 } from "./client-entry";
 
 describe("findClientComponentImports", () => {
@@ -136,5 +139,54 @@ describe("findClientComponentImports", () => {
         localName: "PledgeActions",
       },
     ]);
+  });
+
+  it("detects rendered component imports without a .client filename suffix", () => {
+    const routeClient = findRouteLevelClientComponentImport(`
+      import { PledgeForm } from "@/client/widgets/pledge-form/PledgeForm";
+
+      export default async function NewPledgePage() {
+        return <main><PledgeForm parties={[]} candidates={[]} /></main>;
+      }
+    `);
+
+    expect(routeClient).toEqual({
+      module: "@/client/widgets/pledge-form/PledgeForm",
+      localName: "PledgeForm",
+    });
+  });
+
+  it("resolves a route-level client entry by reading a use client target without .client in the path", async () => {
+    const rootDir = await mkdtemp(path.join(import.meta.dir, ".tmp-client-entry-"));
+    try {
+      await mkdir(path.join(rootDir, "app", "pledges", "new"), { recursive: true });
+      await mkdir(path.join(rootDir, "src", "client", "widgets", "pledge-form"), { recursive: true });
+
+      const pageSource = `
+        import { PledgeForm } from "@/client/widgets/pledge-form/PledgeForm";
+
+        export default async function NewPledgePage() {
+          return <main><PledgeForm parties={[]} candidates={[]} /></main>;
+        }
+      `;
+      await writeFile(path.join(rootDir, "app", "pledges", "new", "page.tsx"), pageSource);
+      await writeFile(
+        path.join(rootDir, "src", "client", "widgets", "pledge-form", "PledgeForm.tsx"),
+        `"use client";
+         export function PledgeForm() {
+           return <form />;
+         }`,
+      );
+
+      const resolved = await resolveRouteLevelClientEntryPath(
+        rootDir,
+        "app/pledges/new/page.tsx",
+        pageSource,
+      );
+
+      expect(resolved).toBe("src/client/widgets/pledge-form/PledgeForm.tsx");
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
   });
 });

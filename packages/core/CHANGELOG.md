@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.11
+
+### Patch Changes
+
+- Resolve route-level client modules to the actual browser entry and detect rendered client imports by `"use client"` directives.
+
 ## 0.54.10
 
 ### Patch Changes

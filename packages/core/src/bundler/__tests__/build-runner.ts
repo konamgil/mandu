@@ -80,6 +80,25 @@ const manifest: RoutesManifest = mode === "server-page-client-module"
         },
       ],
     }
+  : mode === "server-page-route-client-import"
+    ? {
+        version: 1,
+        routes: [
+          {
+            id: "login",
+            kind: "page",
+            pattern: "/login",
+            module: "app/login/page.tsx",
+            componentModule: "app/login/page.tsx",
+            clientModule: "app/login/page.tsx",
+            hydration: {
+              strategy: "island",
+              priority: "visible",
+              preload: false,
+            },
+          },
+        ],
+      }
   : mode === "hydration-no-client-module"
     ? {
         version: 1,

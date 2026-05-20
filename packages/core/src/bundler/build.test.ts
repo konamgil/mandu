@@ -219,6 +219,38 @@ describe("buildClientBundles vendor shims", () => {
     }
   });
 
+  test("rewrites route-component clientModule to the real client import before bundling", async () => {
+    const routeClientRoot = await mkdtemp(path.join(import.meta.dir, ".tmp-route-client-import-"));
+    try {
+      await mkdir(path.join(routeClientRoot, "app", "login"), { recursive: true });
+      await mkdir(path.join(routeClientRoot, "src", "client", "pages", "login"), { recursive: true });
+      await writeFile(
+        path.join(routeClientRoot, "package.json"),
+        JSON.stringify({ name: "mandu-route-client-import-test", type: "module" }, null, 2),
+        "utf-8",
+      );
+      await writeFile(
+        path.join(routeClientRoot, "app", "login", "page.tsx"),
+        'import LoginPage from "@/client/pages/login/LoginPage.client";\n' +
+          "export default function Page() {\n" +
+          "  return <LoginPage />;\n" +
+          "}\n",
+        "utf-8",
+      );
+      await writeFile(
+        path.join(routeClientRoot, "src", "client", "pages", "login", "LoginPage.client.tsx"),
+        '"use client";\nexport default function LoginPage() { return <form />; }\n',
+        "utf-8",
+      );
+
+      const routeClientResult = await runBuildInSubprocess(routeClientRoot, "server-page-route-client-import");
+      expect(routeClientResult.success).toBe(true);
+      expect(await Bun.file(path.join(routeClientRoot, ".mandu", "client", "login.island.js")).exists()).toBe(true);
+    } finally {
+      await rm(routeClientRoot, { recursive: true, force: true });
+    }
+  });
+
   test("fails when hydration is enabled but no clientModule can be resolved", async () => {
     const missingRoot = await mkdtemp(path.join(import.meta.dir, ".tmp-hydration-no-client-"));
     try {

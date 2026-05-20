@@ -45,7 +45,7 @@ describe("generatePageComponent", () => {
       pattern: "/login",
       module: "app/login/page.tsx",
       componentModule: "app/login/page.tsx",
-      clientModule: "app/login/page.tsx",
+      clientModule: "src/client/pages/login/LoginPage.client.tsx",
       hydration: {
         strategy: "island",
         priority: "immediate",
@@ -55,11 +55,12 @@ describe("generatePageComponent", () => {
 
     const generated = generatePageComponent(route);
 
-    expect(generated).toContain("Client Module: app/login/page.tsx");
+    expect(generated).toContain("Client Module: src/client/pages/login/LoginPage.client.tsx");
     expect(generated).toContain("Page Module: app/login/page.tsx");
-    expect(generated).toContain('import islandModule from "../../../../app/login/page.tsx"');
+    expect(generated).toContain('import islandModule from "../../../../src/client/pages/login/LoginPage.client.tsx"');
+    expect(generated).toContain('import pageModule from "../../../../app/login/page.tsx"');
     expect(generated).toContain("islandModule.definition.render");
-    expect(generated).toContain("React.createElement(islandModule");
+    expect(generated).toContain("React.createElement(pageModule");
     expect(generated).not.toContain("Login Page");
   });
 });

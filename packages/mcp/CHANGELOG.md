@@ -1,5 +1,14 @@
 # @mandujs/mcp
 
+## 0.38.5
+
+### Patch Changes
+
+- Refresh internal dependency ranges for the route client entry resolution fix.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.11
+
 ## 0.38.4
 
 ### Patch Changes
