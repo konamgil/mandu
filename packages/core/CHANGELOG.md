@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.7
+
+### Patch Changes
+
+- Detect passthrough pages that return a default-imported `.client` component so newly added routes hydrate correctly.
+
 ## 0.54.6
 
 ### Patch Changes

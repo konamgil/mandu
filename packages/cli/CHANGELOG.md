@@ -1,5 +1,14 @@
 # @mandujs/cli
 
+## 0.44.12
+
+### Patch Changes
+
+- Refresh internal dependency ranges for the core passthrough client page fix release.
+
+- Updated dependencies []:
+  - @mandujs/mcp@0.38.1
+
 ## 0.44.11
 
 ### Patch Changes

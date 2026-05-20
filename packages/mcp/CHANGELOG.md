@@ -1,5 +1,11 @@
 # @mandujs/mcp
 
+## 0.38.1
+
+### Patch Changes
+
+- Refresh internal dependency ranges for the core passthrough client page fix release.
+
 ## 0.38.0
 
 ### Minor Changes
