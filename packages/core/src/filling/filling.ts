@@ -62,9 +62,17 @@ export interface MiddlewarePlugin {
  * `redirect(url)` helper for the common case; throwing a `Response` is
  * also accepted (Remix idiom).
  */
+export type LoaderResult<T = unknown> = T | Response;
+
 export type Loader<T = unknown> = (
   ctx: ManduContext
-) => T | Response | Promise<T | Response>;
+) => LoaderResult<T> | Promise<LoaderResult<T>>;
+
+/**
+ * Page-level SSR data reader. Prefer this name in public docs when the
+ * distinction from mutation actions or schema contracts matters.
+ */
+export type RouteDataLoader<T = unknown> = Loader<T>;
 
 /** Loader 실행 옵션 */
 export interface LoaderOptions<T = unknown> {
@@ -104,6 +112,19 @@ export class LoaderTimeoutError extends Error {
 
 /** Action handler type — named mutation handler */
 export type ActionHandler = (ctx: ManduContext) => Response | Promise<Response>;
+
+/**
+ * Named mutation/interaction handler. Alias of `ActionHandler`, exported so
+ * docs and generated examples can name the action responsibility directly.
+ */
+export type MutationAction = ActionHandler;
+
+/**
+ * Executable route pipeline: handlers, loader, actions, middleware, cache,
+ * render mode, and deploy intent. This is intentionally separate from the
+ * API schema contract.
+ */
+export type RouteFilling<TLoaderData = unknown> = ManduFilling<TLoaderData>;
 
 interface FillingConfig<TLoaderData = unknown> {
   handlers: Map<HttpMethod, Handler>;

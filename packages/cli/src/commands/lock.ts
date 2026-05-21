@@ -13,7 +13,12 @@
  */
 
 import {
+  diffConfig,
+  formatConfigDiff,
+  summarizeDiff,
   validateAndReport,
+} from "@mandujs/core";
+import {
   generateLockfile,
   readLockfile,
   readMcpConfig,
@@ -22,13 +27,10 @@ import {
   formatValidationResult,
   formatPolicyAction,
   detectMode,
-  diffConfig,
-  formatConfigDiff,
-  summarizeDiff,
   resolveMcpSources,
   type LockfileMode,
   LOCKFILE_PATH,
-} from "@mandujs/core";
+} from "@mandujs/core/lockfile";
 import { resolveFromCwd } from "../util/fs";
 
 // ============================================

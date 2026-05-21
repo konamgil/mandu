@@ -10,8 +10,8 @@ import {
   loadManduConfig,
   loadManifest,
   needsHydration,
-  type BundleManifest,
 } from "@mandujs/core";
+import type { BundleManifest } from "@mandujs/core/bundler";
 import { getDevServerState } from "./project.js";
 import { readRuntimeControl } from "../utils/runtime-control.js";
 import path from "path";

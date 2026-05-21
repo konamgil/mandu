@@ -75,11 +75,16 @@ jobs:
           bun-version: ${{ matrix.bun }}
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run check:public-api
+      - run: bun run check:target-boundaries
+      - run: bun run check:docs-drift
       - run: bun run test:core -- --randomize --retry=2 --seed=${{ github.run_id }}
       - run: bun run test:cli -- --randomize --retry=2 --seed=${{ github.run_id }}
       - run: bun run test:mcp -- --randomize --retry=2 --seed=${{ github.run_id }}
       - run: bun run test:ate -- --randomize --retry=2 --seed=${{ github.run_id }}
       - run: bun run test:edge -- --randomize --retry=2 --seed=${{ github.run_id }}
+      - run: bun run test:edge:build
       - run: bun run test:skills -- --randomize --retry=2 --seed=${{ github.run_id }}
       - run: bun run test:playground-runner -- --randomize --retry=2 --seed=${{ github.run_id }}
       - run: bun run test:smoke

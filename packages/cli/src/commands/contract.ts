@@ -5,13 +5,13 @@
 
 import {
   runContractGuardCheck,
-  generateContractTemplate,
   buildContractRegistry,
   writeContractRegistry,
   readContractRegistry,
   diffContractRegistry,
   validateAndReport,
 } from "@mandujs/core";
+import { generateContractTemplate } from "@mandujs/core/generator";
 import path from "path";
 import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";

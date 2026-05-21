@@ -56,7 +56,9 @@ describe("mandu.guard.check", () => {
       passed: boolean;
       architecture?: { passed: boolean };
       violations?: Array<{
+        code?: string;
         ruleId?: string;
+        explanation?: string;
         fromLayer?: string;
         toLayer?: string;
       }>;
@@ -64,10 +66,17 @@ describe("mandu.guard.check", () => {
 
     expect(result.passed).toBe(false);
     expect(result.architecture?.passed).toBe(false);
-    expect(result.violations?.some((violation) =>
-      violation.ruleId === "FS Routes Import Rule" &&
-      violation.fromLayer === "page" &&
-      violation.toLayer === "server/infra"
-    )).toBe(true);
+    const violation = result.violations?.find((item) =>
+      item.ruleId === "FS Routes Import Rule" &&
+      item.fromLayer === "page" &&
+      item.toLayer === "server/infra"
+    );
+    expect(violation).toMatchObject({
+      code: "MANDU_GUARD_FS_ROUTES_IMPORT_RULE",
+      ruleId: "FS Routes Import Rule",
+      fromLayer: "page",
+      toLayer: "server/infra",
+    });
+    expect(violation?.explanation).toContain("FS Routes Import Rule");
   });
 });

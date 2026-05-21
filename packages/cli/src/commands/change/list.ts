@@ -1,4 +1,4 @@
-import { listChanges, getChangeStats } from "@mandujs/core";
+import { getChangeStats, listChanges } from "@mandujs/core/change";
 import { getRootDir } from "../../util/fs";
 
 function reverseCopy<T>(items: readonly T[]): T[] {

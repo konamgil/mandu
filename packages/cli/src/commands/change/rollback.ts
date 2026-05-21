@@ -1,4 +1,4 @@
-import { rollbackChange } from "@mandujs/core";
+import { rollbackChange } from "@mandujs/core/change";
 import { getRootDir } from "../../util/fs";
 
 export interface ChangeRollbackOptions {

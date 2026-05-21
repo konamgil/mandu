@@ -156,6 +156,18 @@ describe("findClientComponentImports", () => {
     });
   });
 
+  it("does not promote shared UI primitives to route-level client entries", () => {
+    const routeClient = findRouteLevelClientComponentImport(`
+      import { Button } from "@/client/shared/ui/button";
+
+      export default function Page() {
+        return <main><Button>Open</Button></main>;
+      }
+    `);
+
+    expect(routeClient).toBeNull();
+  });
+
   it("resolves a route-level client entry by reading a use client target without .client in the path", async () => {
     const rootDir = await mkdtemp(path.join(import.meta.dir, ".tmp-client-entry-"));
     try {

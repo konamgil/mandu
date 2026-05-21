@@ -9,22 +9,24 @@ import type * as __ManduFsTypes2 from "fs";
  */
 
 import {
-  buildClientBundles,
-  printBundleStats,
   validateAndReport,
-  isTailwindProject,
-  buildCSS,
   startServer,
   runHook,
-  type BundleManifest,
   type ServerOptions,
+  registerManifestHandlers,
 } from "@mandujs/core";
+import {
+  buildClientBundles,
+  printBundleStats,
+  isTailwindProject,
+  buildCSS,
+  type BundleManifest,
+} from "@mandujs/core/bundler";
 import { prerenderRoutes } from "@mandujs/core/bundler/prerender";
 import { resolveReactCompilerConfig } from "@mandujs/core/bundler/plugins";
 import path from "path";
 import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";
-import { registerManifestHandlers } from "@mandujs/core";
 import { createBuildSummaryRows, renderBuildSummaryTable } from "../util/build-summary";
 import { emitStaticExport } from "../util/static-export";
 import { createBundledImporter } from "../util/bun";
@@ -810,7 +812,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
       console.log(
         `   ${analyzeReport.summary.islandCount} island(s), ${analyzeReport.summary.sharedCount} shared chunk(s)`
       );
-      const { formatSize } = await import("@mandujs/core");
+      const { formatSize } = await import("@mandujs/core/bundler");
       console.log(
         `   Total: ${formatSize(analyzeReport.summary.totalRaw)} raw / ${formatSize(analyzeReport.summary.totalGz)} gzip`
       );

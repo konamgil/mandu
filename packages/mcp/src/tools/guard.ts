@@ -7,7 +7,6 @@ import {
   loadManifest,
   runGuardCheck,
   runAutoCorrect,
-  type GeneratedMap,
   // Self-Healing Guard imports
   checkWithHealing,
   healAll,
@@ -19,6 +18,7 @@ import {
   type GuardPreset,
   type Violation,
 } from "@mandujs/core";
+import type { GeneratedMap } from "@mandujs/core/generator";
 import { getProjectPaths, readJsonFile, readConfig } from "../utils/project.js";
 import fs from "fs/promises";
 import path from "path";
@@ -138,7 +138,25 @@ export function guardTools(projectRoot: string) {
     }
   };
 
+  const guardViolationCode = (ruleId: string | undefined, type?: string) =>
+    `MANDU_GUARD_${(ruleId || type || "VIOLATION").toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
+
+  const explainViolation = (input: {
+    type?: string;
+    ruleId?: string;
+    fromLayer?: string;
+    toLayer?: string;
+    suggestion?: string;
+  }): string => {
+    const source = input.fromLayer ? ` from ${input.fromLayer}` : "";
+    const target = input.toLayer ? ` to ${input.toLayer}` : "";
+    const rule = input.ruleId ?? input.type ?? "architecture rule";
+    const fix = input.suggestion ? ` Suggested fix: ${input.suggestion}` : "";
+    return `Violation of ${rule}${source}${target}.${fix}`.trim();
+  };
+
   const summarizeArchitectureViolation = (violation: Violation) => ({
+    code: guardViolationCode(violation.ruleName, violation.type),
     ruleId: violation.ruleName,
     type: violation.type,
     file: path.relative(projectRoot, violation.filePath).replace(/\\/g, "/") || violation.filePath,
@@ -146,16 +164,25 @@ export function guardTools(projectRoot: string) {
     column: violation.column,
     message: violation.ruleDescription,
     suggestion: violation.suggestions[0],
+    explanation: explainViolation({
+      type: violation.type,
+      ruleId: violation.ruleName,
+      fromLayer: violation.fromLayer,
+      toLayer: violation.toLayer,
+      suggestion: violation.suggestions[0],
+    }),
     fromLayer: violation.fromLayer,
     toLayer: violation.toLayer,
     importStatement: violation.importStatement,
   });
 
   const summarizeLegacyViolation = (v: Awaited<ReturnType<typeof runGuardCheck>>["violations"][number]) => ({
+    code: guardViolationCode(v.ruleId),
     ruleId: v.ruleId,
     file: v.file,
     message: v.message,
     suggestion: v.suggestion,
+    explanation: explainViolation({ ruleId: v.ruleId, suggestion: v.suggestion }),
   });
 
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
@@ -521,10 +548,18 @@ export function guardTools(projectRoot: string) {
         preset: config.preset,
         violations: items.map((item) => ({
           // Violation info
+          code: guardViolationCode(item.violation.ruleName, item.violation.type),
           type: item.violation.type,
           file: item.violation.filePath,
           line: item.violation.line,
           message: item.violation.ruleDescription,
+          explanation: explainViolation({
+            type: item.violation.type,
+            ruleId: item.violation.ruleName,
+            fromLayer: item.violation.fromLayer,
+            toLayer: item.violation.toLayer,
+            suggestion: item.healing.primary.explanation,
+          }),
           fromLayer: item.violation.fromLayer,
           toLayer: item.violation.toLayer,
           importStatement: item.violation.importStatement,

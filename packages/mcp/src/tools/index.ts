@@ -293,6 +293,7 @@ export function validateBuiltinToolModules(
   const issues: string[] = [];
   const categories = new Set<string>();
   const toolNames = new Map<string, string>();
+  const descriptions = new Map<string, string>();
 
   for (const module of modules) {
     if (categories.has(module.category)) {
@@ -305,6 +306,19 @@ export function validateBuiltinToolModules(
     }
 
     for (const definition of module.definitions) {
+      if (!definition.description?.trim()) {
+        issues.push(`tool definition is missing description: ${definition.name} in ${module.category}`);
+      }
+      const normalizedDescription = definition.description?.trim().replace(/\s+/g, " ").toLowerCase();
+      if (normalizedDescription) {
+        const previousTool = descriptions.get(normalizedDescription);
+        if (previousTool) {
+          issues.push(
+            `duplicate tool description: ${definition.name} and ${previousTool} both describe the same action`
+          );
+        }
+        descriptions.set(normalizedDescription, definition.name);
+      }
       const previousCategory = toolNames.get(definition.name);
       if (previousCategory) {
         issues.push(

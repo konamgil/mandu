@@ -6,6 +6,8 @@ export interface GenerateScaffoldOptions {
   name?: unknown;
   methods?: unknown;
   force?: boolean;
+  dryRun?: boolean;
+  diff?: boolean;
 }
 
 export async function generateScaffold(options: GenerateScaffoldOptions): Promise<boolean> {
@@ -29,17 +31,30 @@ export async function generateScaffold(options: GenerateScaffoldOptions): Promis
   for (const file of files) {
     const abs = path.join(cwd, file.relativePath);
     if (!options.force && await exists(abs)) {
-      console.error(`File already exists: ${file.relativePath}`);
-      console.error("Re-run with --force to overwrite.");
+      console.error(`File already exists: ${displayPath(file.relativePath)}`);
+      console.error(
+        options.dryRun
+          ? "Re-run with --force to preview the replacement."
+          : "Re-run with --force to overwrite."
+      );
       return false;
     }
   }
 
   for (const file of files) {
+    const shownPath = displayPath(file.relativePath);
+    if (options.dryRun) {
+      console.log(`Would create ${shownPath}`);
+      if (options.diff) {
+        printNewFileDiff(shownPath, file.content);
+      }
+      continue;
+    }
+
     const abs = path.join(cwd, file.relativePath);
     await fs.mkdir(path.dirname(abs), { recursive: true });
     await fs.writeFile(abs, file.content);
-    console.log(`Created ${file.relativePath}`);
+    console.log(`Created ${shownPath}`);
   }
 
   return true;
@@ -133,6 +148,20 @@ function titleFromRoute(routePath: string): string {
     .split(/[-_]/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function displayPath(filePath: string): string {
+  return filePath.replace(/\\/g, "/");
+}
+
+function printNewFileDiff(filePath: string, content: string): void {
+  console.log(`diff --git a/${filePath} b/${filePath}`);
+  console.log("new file mode 100644");
+  console.log("--- /dev/null");
+  console.log(`+++ b/${filePath}`);
+  for (const line of content.split("\n")) {
+    console.log(`+${line}`);
+  }
 }
 
 async function exists(filePath: string): Promise<boolean> {

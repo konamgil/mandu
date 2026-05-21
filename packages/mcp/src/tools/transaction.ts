@@ -5,8 +5,8 @@ import {
   rollbackChange,
   getTransactionStatus,
   hasActiveTransaction,
-} from "@mandujs/core";
-import { acquireLock, releaseLock, checkLock } from "../tx-lock.js";
+} from "@mandujs/core/change";
+import { acquireLock, releaseLock, checkLock, requireLock } from "../tx-lock.js";
 
 export const transactionToolDefinitions: Tool[] = [
   {
@@ -99,9 +99,15 @@ export function transactionTools(projectRoot: string) {
         return { error: lock.error };
       }
 
-      const change = await beginChange(projectRoot, {
-        message: message || "MCP transaction",
-      });
+      let change: Awaited<ReturnType<typeof beginChange>>;
+      try {
+        change = await beginChange(projectRoot, {
+          message: message || "MCP transaction",
+        });
+      } catch (error) {
+        if (lock.lockId) releaseLock(lock.lockId);
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
 
       return {
         success: true,
@@ -122,6 +128,10 @@ export function transactionTools(projectRoot: string) {
           error: "No active transaction to commit",
         };
       }
+      const lockCheck = requireLock(lockId);
+      if (!lockCheck.allowed) {
+        return { error: lockCheck.error };
+      }
 
       const result = await commitChange(projectRoot);
       if (lockId) releaseLock(lockId);
@@ -141,6 +151,10 @@ export function transactionTools(projectRoot: string) {
         return {
           error: "No active transaction to rollback. Provide a changeId to rollback a specific change.",
         };
+      }
+      const lockCheck = requireLock(lockId);
+      if (!lockCheck.allowed) {
+        return { error: lockCheck.error };
       }
 
       const result = await rollbackChange(projectRoot, changeId);

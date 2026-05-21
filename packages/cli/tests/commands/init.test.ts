@@ -4,11 +4,13 @@ import os from "os";
 import path from "path";
 import { __test__, init, isAllowedTemplate } from "../../src/commands/init";
 import {
+  validateAndReport,
+} from "@mandujs/core";
+import {
   readLockfile,
   readMcpConfig,
-  validateAndReport,
   validateLockfile,
-} from "@mandujs/core";
+} from "@mandujs/core/lockfile";
 
 describe("init command template validation", () => {
   const cwd = process.cwd();

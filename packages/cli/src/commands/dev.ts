@@ -1,10 +1,6 @@
 import type * as __ManduChokidarTypes0 from "chokidar";
 import {
   startServer,
-  startDevBundler,
-  SSR_CHANGE_WILDCARD,
-  buildClientBundles,
-  createHMRServer,
   needsHydration,
   loadEnv,
   watchFSRoutes,
@@ -17,14 +13,21 @@ import {
   formatReportAsAgentJSON,
   getPreset,
   validateAndReport,
-  isTailwindProject,
-  startCSSWatch,
   runHook,
+  registerManifestHandlers,
   type RoutesManifest,
   type GuardConfig,
   type Violation,
-  type CSSWatcher,
 } from "@mandujs/core";
+import {
+  startDevBundler,
+  SSR_CHANGE_WILDCARD,
+  buildClientBundles,
+  createHMRServer,
+  isTailwindProject,
+  startCSSWatch,
+  type CSSWatcher,
+} from "@mandujs/core/bundler";
 import { newId } from "@mandujs/core/id";
 import { HMR_PERF } from "@mandujs/core/perf/hmr-markers";
 import { mark, measure, withPerf } from "@mandujs/core/perf";
@@ -39,7 +42,6 @@ import {
   handleBlockedLockfile,
   printRuntimeLockfileStatus,
 } from "../util/lockfile";
-import { registerManifestHandlers } from "@mandujs/core";
 import { resolveReactCompilerConfig } from "@mandujs/core/bundler/plugins";
 import { getFsRoutesGuardPolicy } from "../util/guard-policy";
 import { openBrowser } from "../util/browser";

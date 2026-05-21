@@ -78,14 +78,13 @@ import {
   type ComposedHandler,
 } from "./request-middleware";
 import type { Middleware } from "../middleware/define";
-// Phase 18.λ — scheduler wiring (statically imported so `startServer` stays
-// synchronous; the cost of unused code is trivial — `defineCron` is a thin
-// wrapper around `Bun.cron`).
-import { defineCron as schedulerDefineCron, type CronDef, type CronRegistration } from "../scheduler";
-import { setActiveSchedulerRegistration } from "../middleware/scheduler-cron";
+import {
+  startRuntimeSchedulerLifecycle,
+  type RuntimeSchedulerOptions,
+} from "./scheduler-lifecycle";
 import { createFetchHandler } from "./handler";
 import { wrapBunWebSocket, type WSHandlers, type WSUpgradeData } from "../filling/ws";
-import { handleImageRequest } from "./image-handler";
+import { maybeHandleImageFeatureRequest } from "./image-feature";
 import {
   serveStaticFile,
   computeStrongEtag,
@@ -137,183 +136,19 @@ import type {
   Translator,
 } from "../i18n/types";
 import type { MessageRegistry } from "../i18n/message-registry";
-
-export interface RateLimitOptions {
-  windowMs?: number;
-  max?: number;
-  message?: string;
-  statusCode?: number;
-  headers?: boolean;
-  /**
-   * Reverse proxy 헤더를 신뢰할지 여부
-   * - false(기본): X-Forwarded-For 등을 읽지만 spoofing 가능성을 표시
-   * - true: 전달된 클라이언트 IP를 완전히 신뢰
-   * 주의: trustProxy: false여도 클라이언트 구분을 위해 헤더를 사용하므로
-   *       IP spoofing이 가능합니다. 신뢰할 수 있는 프록시 뒤에서만 사용하세요.
-   */
-  trustProxy?: boolean;
-  /**
-   * 메모리 보호를 위한 최대 key 수
-   * - 초과 시 오래된 key부터 제거
-   */
-  maxKeys?: number;
-}
-
-interface NormalizedRateLimitOptions {
-  windowMs: number;
-  max: number;
-  message: string;
-  statusCode: number;
-  headers: boolean;
-  trustProxy: boolean;
-  maxKeys: number;
-}
-
-interface RateLimitDecision {
-  allowed: boolean;
-  limit: number;
-  remaining: number;
-  resetAt: number;
-}
-
-class MemoryRateLimiter {
-  private readonly store = new Map<string, { count: number; resetAt: number }>();
-  private lastCleanupAt = 0;
-
-  consume(req: Request, routeId: string, options: NormalizedRateLimitOptions): RateLimitDecision {
-    const now = Date.now();
-    this.maybeCleanup(now, options);
-
-    const key = `${this.getClientKey(req, options)}:${routeId}`;
-    const current = this.store.get(key);
-
-    if (!current || current.resetAt <= now) {
-      const resetAt = now + options.windowMs;
-      this.store.set(key, { count: 1, resetAt });
-      this.enforceMaxKeys(options.maxKeys);
-      return { allowed: true, limit: options.max, remaining: Math.max(0, options.max - 1), resetAt };
-    }
-
-    current.count += 1;
-    this.store.set(key, current);
-
-    return {
-      allowed: current.count <= options.max,
-      limit: options.max,
-      remaining: Math.max(0, options.max - current.count),
-      resetAt: current.resetAt,
-    };
-  }
-
-  private maybeCleanup(now: number, options: NormalizedRateLimitOptions): void {
-    if (now - this.lastCleanupAt < Math.max(1_000, options.windowMs)) {
-      return;
-    }
-
-    this.lastCleanupAt = now;
-    for (const [key, entry] of this.store.entries()) {
-      if (entry.resetAt <= now) {
-        this.store.delete(key);
-      }
-    }
-  }
-
-  private enforceMaxKeys(maxKeys: number): void {
-    while (this.store.size > maxKeys) {
-      const oldestKey = this.store.keys().next().value;
-      if (!oldestKey) break;
-      this.store.delete(oldestKey);
-    }
-  }
-
-  private getClientKey(req: Request, options: NormalizedRateLimitOptions): string {
-    const candidates = [
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
-      req.headers.get("x-real-ip")?.trim(),
-      req.headers.get("cf-connecting-ip")?.trim(),
-      req.headers.get("true-client-ip")?.trim(),
-      req.headers.get("fly-client-ip")?.trim(),
-    ];
-
-    for (const candidate of candidates) {
-      if (candidate) {
-        const sanitized = candidate.slice(0, 64);
-        // trustProxy: false면 경고를 위해 prefix 추가 (spoofing 가능)
-        return options.trustProxy ? sanitized : `unverified:${sanitized}`;
-      }
-    }
-
-    // 헤더가 전혀 없는 경우만 fallback (로컬 개발 환경)
-    return "default";
-  }
-}
-
-function normalizeRateLimitOptions(options: boolean | RateLimitOptions | undefined): NormalizedRateLimitOptions | false {
-  if (!options) return false;
-  if (options === true) {
-    return {
-      windowMs: 60_000,
-      max: 100,
-      message: "Too Many Requests",
-      statusCode: 429,
-      headers: true,
-      trustProxy: false,
-      maxKeys: 10_000,
-    };
-  }
-
-  const windowMs = Number.isFinite(options.windowMs) ? Math.max(1_000, options.windowMs!) : 60_000;
-  const max = Number.isFinite(options.max) ? Math.max(1, Math.floor(options.max!)) : 100;
-  const statusCode = Number.isFinite(options.statusCode)
-    ? Math.min(599, Math.max(400, Math.floor(options.statusCode!)))
-    : 429;
-  const maxKeys = Number.isFinite(options.maxKeys)
-    ? Math.max(100, Math.floor(options.maxKeys!))
-    : 10_000;
-
-  return {
-    windowMs,
-    max,
-    message: options.message ?? "Too Many Requests",
-    statusCode,
-    headers: options.headers ?? true,
-    trustProxy: options.trustProxy ?? false,
-    maxKeys,
-  };
-}
-
-function appendRateLimitHeaders(response: Response, decision: RateLimitDecision, options: NormalizedRateLimitOptions): Response {
-  if (!options.headers) return response;
-
-  const headers = new Headers(response.headers);
-  const retryAfterSec = Math.max(1, Math.ceil((decision.resetAt - Date.now()) / 1000));
-
-  headers.set("X-RateLimit-Limit", String(decision.limit));
-  headers.set("X-RateLimit-Remaining", String(decision.remaining));
-  headers.set("X-RateLimit-Reset", String(Math.floor(decision.resetAt / 1000)));
-  headers.set("Retry-After", String(retryAfterSec));
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
-function createRateLimitResponse(decision: RateLimitDecision, options: NormalizedRateLimitOptions): Response {
-  const response = Response.json(
-    {
-      error: "rate_limit_exceeded",
-      message: options.message,
-      limit: decision.limit,
-      remaining: decision.remaining,
-      retryAfter: Math.max(1, Math.ceil((decision.resetAt - Date.now()) / 1000)),
-    },
-    { status: options.statusCode }
-  );
-
-  return appendRateLimitHeaders(response, decision, options);
-}
+import {
+  appendRateLimitHeaders,
+  createRateLimitResponse,
+  MemoryRateLimiter,
+  normalizeRateLimitOptions,
+  type NormalizedRateLimitOptions,
+  type RateLimitOptions,
+} from "./rate-limit";
+export {
+  createRateLimiter,
+  type RateLimitDecision,
+  type RateLimitOptions,
+} from "./rate-limit";
 
 // ========== Server Options ==========
 export interface ServerOptions {
@@ -547,10 +382,7 @@ export interface ServerOptions {
    *
    * Typically threaded from `ManduConfig.scheduler`.
    */
-  scheduler?: {
-    jobs?: CronDef[];
-    disabled?: boolean;
-  };
+  scheduler?: RuntimeSchedulerOptions;
   /**
    * Phase 18.μ — first-class i18n. Threaded from `ManduConfig.i18n`.
    *
@@ -3367,8 +3199,12 @@ async function handleRequestInternal(
   }
 
   // 1.5. Image optimization handler (/_mandu/image)
-  if (!settings.edge && pathname === "/_mandu/image") {
-    const imageResponse = await handleImageRequest(req, settings.rootDir, settings.publicDir);
+  if (pathname === "/_mandu/image") {
+    const imageResponse = await maybeHandleImageFeatureRequest(req, {
+      edge: settings.edge,
+      rootDir: settings.rootDir,
+      publicDir: settings.publicDir,
+    });
     if (imageResponse) return ok(imageResponse);
   }
 
@@ -4149,43 +3985,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     }
   }
 
-  // ─── Phase 18.λ — declarative cron scheduler ────────────────────────────
-  // Boot the scheduler AFTER the HTTP listener is live so a malformed cron
-  // expression (caught by validateCronExpression) surfaces alongside the
-  // other boot errors rather than aborting the server. `startServer` is
-  // synchronous by contract, so we use the already-imported scheduler
-  // module rather than `await import`.
-  let schedulerRegistration: CronRegistration | null = null;
-  const jobDefs = schedulerOption?.jobs ?? [];
-  const schedulerDisabled = schedulerOption?.disabled === true;
-  if (jobDefs.length > 0 && !schedulerDisabled) {
-    try {
-      schedulerRegistration = schedulerDefineCron(jobDefs);
-      schedulerRegistration.start();
-      setActiveSchedulerRegistration(schedulerRegistration);
-      const bunJobCount = Object.keys(schedulerRegistration.status()).filter(
-        (name) => {
-          const def = jobDefs.find((j) => j.name === name);
-          const runOn = def?.runOn && def.runOn.length > 0 ? def.runOn : ["bun", "workers"];
-          return runOn.includes("bun");
-        },
-      ).length;
-      console.log(
-        `⏰ Scheduler: ${bunJobCount} cron job(s) registered on Bun runtime` +
-          (jobDefs.length !== bunJobCount
-            ? ` (${jobDefs.length - bunJobCount} workers-only — see wrangler.toml)`
-            : ""),
-      );
-    } catch (err) {
-      // Scheduler failures MUST NOT crash the server — a bad cron string is
-      // a developer error, but the HTTP surface should keep serving. Log
-      // loudly and leave the registration null.
-      console.error(
-        "❌ [scheduler] failed to start — HTTP server continues without cron jobs:",
-        err instanceof Error ? err.message : err,
-      );
-    }
-  }
+  const schedulerLifecycle = startRuntimeSchedulerLifecycle(schedulerOption);
 
   return {
     server,
@@ -4199,20 +3999,7 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
       registry.devtoolsAdapter?.stop();
       registry.devtoolsAdapter = null;
       registry.kitchen = null;
-      // Fire-and-forget the async scheduler drain so `stop()` stays
-      // synchronous for backwards compatibility with existing consumers.
-      // Tests that need to await drain can reach for `registration.stop()`
-      // directly; `server.stop()` triggers shutdown but doesn't block on
-      // in-flight cron handler completion here.
-      if (schedulerRegistration) {
-        const reg = schedulerRegistration;
-        schedulerRegistration = null;
-        void reg.stop()
-          .then(() => setActiveSchedulerRegistration(null))
-          .catch((err) => {
-            console.error("[scheduler] shutdown error:", err);
-          });
-      }
+      schedulerLifecycle.stop();
       void server.stop();
     },
   };
@@ -4340,59 +4127,4 @@ export function createAppFetchHandler(
     middlewareConfig: middleware?.config ?? null,
     handleRequest,
   });
-}
-
-// ========== Rate Limiting Public API ==========
-
-/**
- * Rate limiter 인스턴스 생성
- * API 핸들러에서 직접 사용 가능
- *
- * @example
- * ```typescript
- * import { createRateLimiter } from '@mandujs/core/runtime/server';
- *
- * const limiter = createRateLimiter({ max: 5, windowMs: 60000 });
- *
- * export async function POST(req: Request) {
- *   const decision = limiter.check(req, 'my-api-route');
- *   if (!decision.allowed) {
- *     return limiter.createResponse(decision);
- *   }
- *   // ... 정상 로직
- * }
- * ```
- */
-export function createRateLimiter(options?: RateLimitOptions) {
-  const normalized = normalizeRateLimitOptions(options || true);
-  if (!normalized) {
-    throw new Error('Rate limiter options cannot be false');
-  }
-
-  const limiter = new MemoryRateLimiter();
-
-  return {
-    /**
-     * Rate limit 체크
-     * @param req Request 객체 (IP 추출용)
-     * @param routeId 라우트 식별자 (동일 IP라도 라우트별로 독립적인 limit)
-     */
-    check(req: Request, routeId: string): RateLimitDecision {
-      return limiter.consume(req, routeId, normalized);
-    },
-
-    /**
-     * Rate limit 초과 시 429 응답 생성
-     */
-    createResponse(decision: RateLimitDecision): Response {
-      return createRateLimitResponse(decision, normalized);
-    },
-
-    /**
-     * 정상 응답에 Rate limit 헤더 추가
-     */
-    addHeaders(response: Response, decision: RateLimitDecision): Response {
-      return appendRateLimitHeaders(response, decision, normalized);
-    },
-  };
 }

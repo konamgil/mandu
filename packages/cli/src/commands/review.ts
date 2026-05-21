@@ -1,13 +1,15 @@
 import {
-  analyzeViolations,
-  formatDoctorReport,
   loadManifest,
   runContractGuardCheck,
   runGuardCheck,
-  initializeBrain,
-  getBrain,
   type GuardViolation,
 } from "@mandujs/core";
+import {
+  analyzeViolations,
+  formatDoctorReport,
+  getBrain,
+  initializeBrain,
+} from "@mandujs/core/brain";
 import { getChangedFiles } from "../util/git";
 
 export interface ReviewOptions {

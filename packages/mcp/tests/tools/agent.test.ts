@@ -125,7 +125,7 @@ describe("mandu.agent.context MCP tool", () => {
     };
 
     expect(result.ok).toBe(true);
-    expect(result.checks.map((check) => check.id)).toEqual(["manifest"]);
+    expect(result.checks.map((check) => check.id)).toEqual(["internal-api", "manifest"]);
     expect(result.nextRepairInput).toBe(".mandu/agent-verify.json");
   });
 

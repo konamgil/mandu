@@ -19,6 +19,7 @@ interface ClassificationRule {
 export interface PublicApiBoundaryResult {
   issues: string[];
   classified: Record<ApiStability, string[]>;
+  rootStarExports: string[];
 }
 
 const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
@@ -26,7 +27,12 @@ const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
     stability: "internal",
     exact: [
       "./bundler",
+      "./change",
       "./dev-error-overlay",
+      "./generator",
+      "./internal",
+      "./lockfile",
+      "./paths",
       "./plugins/runner",
       "./resource/generator-repo",
       "./runtime/cache",
@@ -34,6 +40,7 @@ const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
       "./runtime/server",
       "./runtime/fast-refresh-types",
       "./guard/tsgolint-bridge",
+      "./watcher",
     ],
     prefixes: [
       "./bundler/",
@@ -46,10 +53,12 @@ const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
     exact: [
       "./a11y",
       "./agent",
+      "./brain",
       "./deploy",
       "./design",
       "./desktop",
       "./diagnose",
+      "./experimental",
       "./kitchen",
       "./scheduler",
     ],
@@ -107,6 +116,28 @@ const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
   },
 ];
 
+const STABLE_ROOT_STAR_EXPORTS = new Set([
+  "./spec",
+  "./runtime",
+  "./guard",
+  "./report",
+  "./filling",
+  "./errors",
+  "./logging",
+  "./slot",
+  "./contract",
+  "./openapi",
+  "./router",
+  "./config",
+  "./utils",
+  "./seo",
+  "./island",
+  "./intent",
+  "./observability",
+  "./resource",
+  "./types",
+]);
+
 export function classifyCoreExport(subpath: string): ApiStability | null {
   for (const rule of CLASSIFICATION_RULES) {
     if (rule.exact?.includes(subpath)) return rule.stability;
@@ -117,15 +148,27 @@ export function classifyCoreExport(subpath: string): ApiStability | null {
   return null;
 }
 
+export function findRootStarExports(source: string): string[] {
+  const exports: string[] = [];
+  const pattern = /^\s*export\s+\*\s+from\s+["'](\.[^"']+)["']\s*;?\s*$/gm;
+  for (const match of source.matchAll(pattern)) {
+    exports.push(match[1] as string);
+  }
+  return exports;
+}
+
 export function checkPublicApiBoundary(rootDir: string = process.cwd()): PublicApiBoundaryResult {
   const pkgPath = resolve(rootDir, "packages/core/package.json");
+  const rootIndexPath = resolve(rootDir, "packages/core/src/index.ts");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as PackageJson;
+  const rootIndex = readFileSync(rootIndexPath, "utf-8");
   const classified: Record<ApiStability, string[]> = {
     stable: [],
     experimental: [],
     internal: [],
   };
   const issues: string[] = [];
+  const rootStarExports = findRootStarExports(rootIndex);
 
   for (const subpath of Object.keys(pkg.exports ?? {}).sort()) {
     const stability = classifyCoreExport(subpath);
@@ -136,7 +179,13 @@ export function checkPublicApiBoundary(rootDir: string = process.cwd()): PublicA
     classified[stability].push(subpath);
   }
 
-  return { issues, classified };
+  for (const subpath of rootStarExports) {
+    if (!STABLE_ROOT_STAR_EXPORTS.has(subpath)) {
+      issues.push(`❌ root @mandujs/core export * from ${subpath} is not in the stable root surface`);
+    }
+  }
+
+  return { issues, classified, rootStarExports };
 }
 
 if (import.meta.main) {

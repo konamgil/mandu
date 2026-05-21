@@ -8,12 +8,14 @@
 import {
   loadManifest,
   runGuardCheck,
+} from "@mandujs/core";
+import {
   analyzeViolations,
   printDoctorReport,
   generateDoctorMarkdownReport,
   initializeBrain,
   getBrain,
-} from "@mandujs/core";
+} from "@mandujs/core/brain";
 import { resolveFromCwd, getRootDir } from "../util/fs";
 import path from "path";
 import fs from "fs/promises";

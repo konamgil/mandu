@@ -26,8 +26,19 @@ jobs:
       - name: Verify packages
         run: |
           bun run typecheck
+          bun run lint
+          bun run check:public-api
+          bun run check:target-boundaries
+          bun run check:docs-drift
           bun run test:packages
           bun run test:smoke
+          bun run test:edge:build
+
+      - name: Release performance gates
+        run: |
+          bun run perf:baseline:check
+          bun run perf:ci
+          bun run perf:expanded
 
       - name: Setup registry auth
         run: |

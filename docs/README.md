@@ -16,8 +16,9 @@ Mandu's product direction is **Agent-Native Fullstack Framework**: a framework f
 ## Quick Start
 
 ```bash
-bunx @mandujs/cli init my-app
+bunx @mandujs/cli create my-app --yes
 cd my-app
+bun install
 bun run dev
 ```
 

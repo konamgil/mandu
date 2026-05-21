@@ -9,7 +9,7 @@ import {
   formatValidationResult,
   type LockfileValidationResult,
   type LockfileMode,
-} from "@mandujs/core";
+} from "@mandujs/core/lockfile";
 
 /**
  * Lockfile command templates for consistent messaging

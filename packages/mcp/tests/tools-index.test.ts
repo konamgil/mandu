@@ -46,6 +46,57 @@ describe("builtin MCP tool module registry", () => {
     ]);
   });
 
+  test("validator reports missing tool descriptions", () => {
+    const invalid = [
+      {
+        ...TOOL_MODULES[0],
+        category: "invalid-description",
+        definitions: [
+          {
+            ...TOOL_MODULES[0].definitions[0],
+            name: "missing.description",
+            description: "",
+          },
+        ],
+      },
+    ];
+
+    expect(validateBuiltinToolModules(invalid)).toEqual([
+      "tool definition is missing description: missing.description in invalid-description",
+    ]);
+  });
+
+  test("validator reports duplicate tool descriptions", () => {
+    const invalid = [
+      {
+        ...TOOL_MODULES[0],
+        category: "overlap-a",
+        definitions: [
+          {
+            ...TOOL_MODULES[0].definitions[0],
+            name: "overlap.a",
+            description: "Create a route file.",
+          },
+        ],
+      },
+      {
+        ...TOOL_MODULES[1],
+        category: "overlap-b",
+        definitions: [
+          {
+            ...TOOL_MODULES[1].definitions[0],
+            name: "overlap.b",
+            description: "Create   a route file.",
+          },
+        ],
+      },
+    ];
+
+    expect(validateBuiltinToolModules(invalid)).toEqual([
+      "duplicate tool description: overlap.b and overlap.a both describe the same action",
+    ]);
+  });
+
   test("every module declares at least one tool definition", () => {
     for (const module of TOOL_MODULES) {
       expect(module.definitions.length).toBeGreaterThan(0);

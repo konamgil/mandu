@@ -316,14 +316,15 @@ function formatLegacy(
 ): string {
   const message = interpolate(info?.message ?? "Unknown error", context);
   const suggestion = info?.suggestion ? interpolate(info.suggestion, context) : undefined;
+  const docs = info?.docLink ?? "packages/cli/README.md";
 
-  const lines = ["", `❌ Error [${code}]`, `   ${message}`];
-  if (suggestion) {
-    lines.push("", `💡 ${suggestion}`);
-  }
-  if (info?.docLink) {
-    lines.push(`📖 ${info.docLink}`);
-  }
+  const lines = [
+    "",
+    `❌ Error [${code}]`,
+    `Cause: ${message}`,
+    `Action: ${suggestion ?? "Run the command with --help, then retry with valid input."}`,
+    `Docs: ${docs}`,
+  ];
   lines.push("");
   return lines.join("\n");
 }
@@ -393,7 +394,10 @@ export function handleCLIError(error: unknown): never {
   }
 
   if (error instanceof Error) {
-    console.error(`\n❌ Unexpected error: ${error.message}\n`);
+    console.error("\n❌ Unexpected error");
+    console.error(`Cause: ${error.message}`);
+    console.error("Action: Re-run with DEBUG=1 for a stack trace, then file an issue with the command and output.");
+    console.error("Docs: packages/cli/README.md\n");
     if (process.env.DEBUG) {
       console.error(error.stack);
     }
@@ -416,7 +420,9 @@ export function handleCLIError(error: unknown): never {
     summary = String(error);
   }
   console.error("\n❌ Unknown error occurred (non-Error thrown)");
-  console.error("   " + summary.split("\n").join("\n   ") + "\n");
+  console.error("Cause: " + summary.split("\n").join("\nCause: "));
+  console.error("Action: Re-run with DEBUG=1 and report the thrown value.");
+  console.error("Docs: packages/cli/README.md\n");
   if (process.env.DEBUG) {
     // eslint-disable-next-line no-console
     console.error("Thrown value:", error);

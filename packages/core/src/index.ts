@@ -22,34 +22,24 @@ export const __MANDU_CORE_VERSION__: string = (() => {
 })();
 
 export * from "./spec";
-export * from "./agent";
 export * from "./runtime";
-export * from "./generator";
 export * from "./guard";
 export * from "./report";
 export * from "./filling";
-export * from "./change";
 export * from "./errors";
 export * from "./logging";
 export * from "./slot";
-export * from "./bundler";
 export * from "./contract";
 export * from "./openapi";
-export * from "./brain";
-export * from "./watcher";
 export * from "./router";
 export * from "./config";
-export * from "./lockfile";
 export * from "./utils";
 export * from "./seo";
 export * from "./island";
 export * from "./intent";
-export * from "./devtools";
-export * from "./paths";
 export * from "./observability";
 export * from "./resource";
 export * from "./types";
-export * from "./kitchen";
 export { runHook } from "./plugins";
 export type { ManduPlugin, ManduHooks } from "./plugins";
 

@@ -1,7 +1,6 @@
-import type { BundleManifest, BundleOutput } from "@mandujs/core";
 import type { RouteSpec } from "@mandujs/core";
+import { formatSize, type BundleManifest, type BundleOutput } from "@mandujs/core/bundler";
 import { renderTable } from "../terminal";
-import { formatSize } from "@mandujs/core";
 import path from "path";
 
 export interface BuildSummaryRow {

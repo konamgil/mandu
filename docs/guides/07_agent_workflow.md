@@ -13,7 +13,7 @@ Mandu agents should not "just edit files". They should use the installed Mandu M
 The official loop:
 
 ```text
-understand -> select skill/tool -> inspect -> plan -> edit through official path -> guard/contract/test -> report
+classify -> select skill/tool -> inspect -> plan -> change -> guard/contract/test -> report
 ```
 
 If an MCP tool or skill is unavailable, the agent may fall back to direct file edits, but it must say which official path was unavailable.
@@ -58,6 +58,7 @@ Use this table before editing.
 | Deployment | Deploy flow | `mandu-deploy` | runtime/build/deploy tools where available | `bun run build`, target deploy command |
 | Test generation | ATE flow | ATE prompts/skills when available | MCP project/route/contract inspection | `bun run test:*`, add focused tests |
 | Release | Release flow | release docs | MCP status tools if available | `bun changeset status`, `bun run check:publish` |
+| Docs drift | Docs sync flow | documentation skill if available | docs/search tools if available | `bun run check:docs-drift` |
 
 Rule of thumb:
 
@@ -162,6 +163,8 @@ Choose validation based on risk.
 | Config/typing | `bun run typecheck` |
 | Guard/routing/contract | targeted tests + `bun run typecheck` |
 | Runtime/build/hydration | `bun run test:smoke`, `bun run perf:ci` when relevant |
+| Agent-generated tests | `mandu.run.tests` or `bun run mandu -- test --reporter=json`; inspect structured failing test summary |
+| ATE flow | `mandu.ate.run` -> `mandu.ate.report`; compare `summary.quality.score` before/after when a prior run exists |
 | Package/release | `bun changeset status`, `bun run check:publish` |
 | Broad package change | `bun run lint`, `bun run typecheck`, `bun run test:packages` |
 
@@ -169,7 +172,71 @@ Agents should state which validation they skipped and why.
 
 ---
 
-## 7. Anti-Patterns
+## 7. Transaction Protocol
+
+Destructive MCP write loops should use the transaction tools when available:
+
+1. `mandu.tx.begin` with a session id.
+2. Make the scoped change.
+3. Run the matching guard/contract/test gate.
+4. `mandu.tx.commit` with the returned `lockId` when validation passes.
+5. `mandu.tx.rollback` with the returned `lockId` when validation fails.
+
+Commit and rollback must be rejected when a different active lock is held.
+
+---
+
+## 8. Report Artifact
+
+Agent output should include enough structure for a supervisor or another agent to reproduce the work:
+
+```text
+Task domain:
+Selected skill:
+Selected MCP tools:
+Fallbacks:
+Changed files and reasons:
+Validation run:
+Validation skipped:
+Next action:
+```
+
+For code changes, `mandu agent verify` should record `changedFileReasons` and suggested commands.
+
+For ATE changes, `.mandu/reports/<runId>/summary.json` should include:
+
+```text
+quality.score:
+quality.grade:
+quality.signals:
+```
+
+When a previous summary exists, compare scores and include the delta in the activity report or PR comment.
+
+---
+
+## 9. Internal API Boundaries
+
+Agents may edit framework internals only when the task requires it. These paths require extra scrutiny:
+
+- `packages/core/src/runtime/**`
+- `packages/core/src/bundler/**`
+- `packages/core/src/server/**`
+- `packages/core/src/guard/**`
+- `packages/core/src/spec/**`
+- `packages/core/src/router/**`
+- `packages/core/src/internal/**`
+
+When these files change, run:
+
+```bash
+bun run check:public-api
+bun run check:target-boundaries
+```
+
+---
+
+## 10. Anti-Patterns
 
 Avoid these:
 
@@ -183,7 +250,7 @@ Avoid these:
 
 ---
 
-## 8. Agent Prompt Block
+## 11. Agent Prompt Block
 
 Use this in project prompts or agent instructions:
 
@@ -205,7 +272,7 @@ After editing:
 
 ---
 
-## 9. Supervisor Checklist
+## 12. Supervisor Checklist
 
 When reviewing an agent's work, ask:
 

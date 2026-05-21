@@ -159,12 +159,20 @@ export interface AgentSuggestedCommand {
   required: boolean;
 }
 
+export interface AgentChangedFileReason {
+  file: string;
+  reasons: string[];
+  recommendedChecks: string[];
+  internalApi: boolean;
+}
+
 export interface AgentVerifyReport {
   schemaVersion: 1;
   framework: "mandu";
   generatedAt: string;
   project: AgentProjectSummary;
   changedFiles: string[];
+  changedFileReasons: AgentChangedFileReason[];
   gitAvailable: boolean;
   notes: string[];
   ok: boolean;

@@ -42,7 +42,8 @@ import {
   type PlanDiffEntry,
   type PlanDiffEntryKind,
 } from "@mandujs/core/deploy";
-import { resolveBrainAdapter, type RoutesManifest } from "@mandujs/core";
+import type { RoutesManifest } from "@mandujs/core";
+import { resolveBrainAdapter } from "@mandujs/core/brain";
 import { resolveManifest } from "../../util/manifest";
 import { CLI_ERROR_CODES } from "../../errors/codes";
 

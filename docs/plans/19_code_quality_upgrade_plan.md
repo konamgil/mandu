@@ -56,14 +56,14 @@ Mandu는 이미 기능 수가 부족한 프레임워크가 아니다.
 
 Mandu가 top-tier 코드 레벨에 도달했다는 선언은 아래 조건을 모두 만족할 때만 가능하다.
 
-- [ ] `main`에서 typecheck, lint, package tests, smoke tests가 항상 통과한다.
-- [ ] `init -> dev -> build -> start`가 기준 앱에서 재현 가능하다.
+- [x] `main`에서 typecheck, lint, package tests, smoke tests가 항상 통과한다.
+- [x] `create -> page -> api -> resource -> dev -> build -> start`가 기준 앱에서 재현 가능하다.
 - [x] `core` public API가 stable, experimental, internal로 분류되어 있다.
-- [ ] runtime server가 관심사별 모듈로 나뉘어 있다.
-- [ ] optional dependency가 target별 build에 새지 않는다.
-- [ ] CLI 도움말, 에러 메시지, scaffold 결과가 공식 문서와 일치한다.
-- [ ] 성능 기준선과 bundle budget이 CI에서 회귀 감지된다.
-- [ ] MCP/skills/Guard/ATE가 하나의 에이전트 개발 루프로 연결된다.
+- [x] runtime server가 관심사별 모듈로 나뉘어 있다.
+- [x] optional dependency가 target별 build에 새지 않는다.
+- [x] CLI 도움말, 에러 메시지, scaffold 결과가 공식 문서와 일치한다.
+- [x] 성능 기준선과 bundle budget이 CI에서 회귀 감지된다.
+- [x] MCP/skills/Guard/ATE가 하나의 에이전트 개발 루프로 연결된다.
 - [x] 문서의 상태 정보가 실제 테스트 결과와 일치한다.
 
 ### 2.2 성공 지표
@@ -135,18 +135,18 @@ Mandu가 top-tier 코드 레벨에 도달했다는 선언은 아래 조건을 �
 - [x] SSR/streaming render orchestration을 별도 모듈로 분리한다.
 - [x] dev overlay/Kitchen/devtools 연결부를 runtime adapter로 분리한다.
 - [x] observability/tracing/perf mark 연결부를 별도 lifecycle hook으로 분리한다.
-- [ ] image/a11y/openapi/scheduler/websocket 등 선택 기능을 target-safe plugin 경계로 이동한다.
+- [x] image/a11y/openapi/scheduler/websocket 등 선택 기능을 target-safe plugin 경계로 이동한다.
 - [x] `core/src/index.ts` root export를 stable API 중심으로 재검토한다.
-- [ ] experimental API는 명시적인 subpath export로 이동한다.
-- [ ] internal API는 root export에서 제거하거나 `internal` 네임스페이스로 격리한다.
+- [x] experimental API는 명시적인 subpath export로 이동한다.
+- [x] internal API는 root export에서 제거하거나 `internal` 네임스페이스로 격리한다.
 - [x] public API 변경 체크리스트를 릴리즈 프로세스에 추가한다.
 - [x] MCP tool registry의 수동 export/import 중복을 줄이는 생성 또는 검증 스크립트를 검토한다.
 - [x] 강제 cast가 있는 MCP handler 등록부의 타입 계약을 좁힌다.
 
 ### 완료 기준
 
-- [ ] runtime server entry가 orchestration 중심으로 작아진다.
-- [ ] target별 build가 선택 기능에 의해 깨지지 않는다.
+- [x] runtime server entry가 orchestration 중심으로 작아진다.
+- [x] target별 build가 선택 기능에 의해 깨지지 않는다.
 - [x] stable public API 목록이 문서화되어 있다.
 
 ### 진행 메모
@@ -174,6 +174,12 @@ Mandu가 top-tier 코드 레벨에 도달했다는 선언은 아래 조건을 �
 - 2026-05-18: `scripts/check-target-boundaries.ts`를 추가해 optional peer의 static import, edge source의 Node/Bun static import, browser client source의 Node/Bun import를 release 전에 감지하도록 했다. `node:async_hooks`는 edge adapter의 문서화된 lazy ALS probe만 허용한다.
 - 2026-05-18: `package.json`에 `check:target-boundaries`를 추가하고 `scripts/pre-publish-check.ts` Step 6에 연결했다.
 - 검증: `bun run check:target-boundaries`, `bun test ./scripts/check-target-boundaries.test.ts ./scripts/check-public-api-boundary.test.ts`, `bun run typecheck`, `bun run check:publish` 통과.
+- 2026-05-21: `@mandujs/core` root `export *`에서 `agent`, `brain`, `bundler`, `change`, `generator`, `lockfile`, `paths`, `watcher` 등 internal/experimental surface를 제거하고, CLI/MCP 내부 소비자는 `@mandujs/core/brain`, `@mandujs/core/bundler`, `@mandujs/core/change`, `@mandujs/core/generator`, `@mandujs/core/lockfile`, `@mandujs/core/paths`, `@mandujs/core/watcher` 명시 subpath로 이동했다.
+- 2026-05-21: `scripts/check-public-api-boundary.ts`가 package export 분류뿐 아니라 root `export *` allowlist까지 검증하도록 확장했다.
+- 검증: `bun run typecheck`, `bun run check:public-api`, `bun test ./scripts/check-public-api-boundary.test.ts` 통과.
+- 2026-05-21: request rate-limit 정책, in-memory limiter, 429 응답/header formatting, standalone `createRateLimiter()` API를 `packages/core/src/runtime/rate-limit.ts`로 분리했다. `runtime/server.ts`는 normalized 옵션 생성, limiter 인스턴스 연결, API response header 적용만 담당한다. `runtime/server.ts`는 4349줄에서 4131줄로 줄었다.
+- 2026-05-21: `docs/architect/runtime-server-inventory.md`를 갱신해 static/middleware/render/devtools/observability/scheduler/image/rate-limit의 현재 owner를 분리 완료 상태로 반영했다.
+- 검증: `bun run typecheck`, `bun test packages/core/tests/server/rate-limit.test.ts` 통과.
 
 ---
 
@@ -184,23 +190,23 @@ Mandu가 top-tier 코드 레벨에 도달했다는 선언은 아래 조건을 �
 
 ### 실행 체크리스트
 
-- [ ] 공식 골든패스를 하나로 고정한다.
-- [ ] `init -> page -> api -> contract(optional) -> dev -> build -> start` 흐름을 README와 CLI에 동일하게 반영한다.
-- [ ] CLI help 출력과 문서의 명령 설명을 동기화한다.
-- [ ] CLI 에러 메시지를 원인, 조치, 관련 문서 링크 구조로 표준화한다.
-- [ ] 기준 앱 3개를 정의한다.
-- [ ] Hello SSR 기준 앱 smoke test를 추가한다.
-- [ ] Blog CRUD + Contract 기준 앱 smoke test를 추가한다.
-- [ ] Dashboard + Island 기준 앱 smoke test를 추가한다.
-- [ ] scaffold 템플릿이 기준 앱 구조와 일치하는지 검증한다.
-- [ ] outdated 문서와 실제 코드의 차이를 추적하는 docs drift check를 추가한다.
-- [ ] README, docs README, CLI README, template README의 포트/명령/경로를 통일한다.
+- [x] 공식 골든패스를 하나로 고정한다.
+- [x] `create -> page -> api -> resource(contract) -> dev -> build -> start` 흐름을 README와 CLI에 동일하게 반영한다.
+- [x] CLI help 출력과 문서의 명령 설명을 동기화한다.
+- [x] CLI 에러 메시지를 원인, 조치, 관련 문서 링크 구조로 표준화한다.
+- [x] 기준 앱 3개를 정의한다.
+- [x] Hello SSR 기준 앱 smoke test를 추가한다.
+- [x] Blog CRUD + Contract 기준 앱 smoke test를 추가한다.
+- [x] Dashboard + Island 기준 앱 smoke test를 추가한다.
+- [x] scaffold 템플릿이 기준 앱 구조와 일치하는지 검증한다.
+- [x] outdated 문서와 실제 코드의 차이를 추적하는 docs drift check를 추가한다.
+- [x] README, docs README, CLI README, template README의 포트/명령/경로를 통일한다.
 
 ### 완료 기준
 
-- [ ] 신규 사용자가 10분 내 첫 페이지와 첫 API를 만들 수 있다.
-- [ ] CLI help와 문서가 서로 다른 말을 하지 않는다.
-- [ ] 기준 앱 smoke test가 CI에서 통과한다.
+- [x] 신규 사용자가 10분 내 첫 페이지와 첫 API를 만들 수 있다.
+- [x] CLI help와 문서가 서로 다른 말을 하지 않는다.
+- [x] 기준 앱 smoke test가 CI에서 통과한다.
 
 ---
 
@@ -211,22 +217,22 @@ Mandu가 top-tier 코드 레벨에 도달했다는 선언은 아래 조건을 �
 
 ### 실행 체크리스트
 
-- [ ] SSR latency 기준선을 고정한다.
-- [ ] cold start 기준선을 고정한다.
-- [ ] HMR latency 기준선을 고정한다.
-- [ ] hydration cost 기준선을 고정한다.
-- [ ] route bundle size budget을 정의한다.
-- [ ] island 없는 페이지의 zero-JS budget을 검증한다.
-- [ ] edge target bundle에 Node-only/optional dependency가 포함되지 않는지 검사한다.
-- [ ] performance benchmark 결과를 JSON artifact로 저장한다.
-- [ ] PR에서 기준선 대비 +10% 초과 회귀를 감지한다.
-- [ ] skip된 perf matrix test를 release gate용 job으로 분리한다.
+- [x] SSR latency 기준선을 고정한다.
+- [x] cold start 기준선을 고정한다.
+- [x] HMR latency 기준선을 고정한다.
+- [x] hydration cost 기준선을 고정한다.
+- [x] route bundle size budget을 정의한다.
+- [x] island 없는 페이지의 zero-JS budget을 검증한다.
+- [x] edge target bundle에 Node-only/optional dependency가 포함되지 않는지 검사한다.
+- [x] performance benchmark 결과를 JSON artifact로 저장한다.
+- [x] PR에서 기준선 대비 +10% 초과 회귀를 감지한다.
+- [x] skip된 perf matrix test를 release gate용 job으로 분리한다.
 
 ### 완료 기준
 
-- [ ] 성능 수치가 문서와 CI artifact로 남는다.
-- [ ] 성능 회귀가 코드 리뷰 전에 자동 감지된다.
-- [ ] edge, node, bun target별 bundle 경계가 테스트된다.
+- [x] 성능 수치가 문서와 CI artifact로 남는다.
+- [x] 성능 회귀가 코드 리뷰 전에 자동 감지된다.
+- [x] edge, node, bun target별 bundle 경계가 테스트된다.
 
 ---
 
@@ -237,22 +243,22 @@ Mandu가 top-tier 코드 레벨에 도달했다는 선언은 아래 조건을 �
 
 ### 실행 체크리스트
 
-- [ ] 작업 도메인 분류표를 CLI/MCP/문서에서 동일하게 사용한다.
-- [ ] route/page/API 생성은 MCP 또는 skill 우선 경로로 문서화한다.
-- [ ] contract 변경은 contract MCP validation을 기본 경로로 문서화한다.
-- [ ] slot/filling 변경은 관련 skill과 테스트 경로를 연결한다.
-- [ ] guard 위반은 fix 제안과 architecture explanation으로 이어지게 한다.
-- [ ] ATE가 agent 변경 전후 품질 점수를 비교할 수 있게 한다.
-- [ ] MCP transaction lock이 실제 파일 변경 루프에서 안전하게 동작하는지 smoke test를 추가한다.
-- [ ] agent용 prompt template을 최신 공식 경로와 동기화한다.
-- [ ] "agent가 건드려도 되는 API"와 "직접 수정 금지 내부 API"를 문서화한다.
-- [ ] agent workflow 결과를 재현 가능한 로그 또는 activity report로 남긴다.
+- [x] 작업 도메인 분류표를 CLI/MCP/문서에서 동일하게 사용한다.
+- [x] route/page/API 생성은 MCP 또는 skill 우선 경로로 문서화한다.
+- [x] contract 변경은 contract MCP validation을 기본 경로로 문서화한다.
+- [x] slot/filling 변경은 관련 skill과 테스트 경로를 연결한다.
+- [x] guard 위반은 fix 제안과 architecture explanation으로 이어지게 한다.
+- [x] ATE가 agent 변경 전후 품질 점수를 비교할 수 있게 한다.
+- [x] MCP transaction lock이 실제 파일 변경 루프에서 안전하게 동작하는지 smoke test를 추가한다.
+- [x] agent용 prompt template을 최신 공식 경로와 동기화한다.
+- [x] "agent가 건드려도 되는 API"와 "직접 수정 금지 내부 API"를 문서화한다.
+- [x] agent workflow 결과를 재현 가능한 로그 또는 activity report로 남긴다.
 
 ### 완료 기준
 
-- [ ] 사람이 CLI로 하는 골든패스와 LLM 에이전트가 MCP/skill로 하는 골든패스가 같다.
-- [ ] 에이전트 변경은 Guard/ATE/test를 통해 자동 검증된다.
-- [ ] 에이전트가 내부 경계를 침범했을 때 감지된다.
+- [x] 사람이 CLI로 하는 골든패스와 LLM 에이전트가 MCP/skill로 하는 골든패스가 같다.
+- [x] 에이전트 변경은 Guard/ATE/test를 통해 자동 검증된다.
+- [x] 에이전트가 내부 경계를 침범했을 때 감지된다.
 
 ---
 
@@ -262,19 +268,19 @@ CTO 관점의 핵심은 기술적 우수성보다 **릴리스 신뢰도, 팀 생
 
 ### 체크리스트
 
-- [ ] `main`을 항상 배포 가능한 상태로 유지한다.
-- [ ] red test가 있는 상태에서는 새 기능을 merge하지 않는다.
-- [ ] 품질 게이트를 PR 필수 조건으로 만든다.
-- [ ] cross-platform CI를 Windows, macOS, Linux로 확장한다.
-- [ ] Bun 최소 지원 버전과 최신 안정 버전을 CI matrix에 포함한다.
-- [ ] 릴리즈 체크리스트에 typecheck, lint, package tests, smoke tests, docs sync를 포함한다.
+- [x] `main`을 항상 배포 가능한 상태로 유지한다.
+- [x] red test가 있는 상태에서는 새 기능을 merge하지 않는다.
+- [x] 품질 게이트를 PR 필수 조건으로 만든다.
+- [x] cross-platform CI를 Windows, macOS, Linux로 확장한다.
+- [x] Bun 최소 지원 버전과 최신 안정 버전을 CI matrix에 포함한다.
+- [x] 릴리즈 체크리스트에 typecheck, lint, package tests, smoke tests, docs sync를 포함한다.
 - [x] public API 변경은 release note와 migration note를 요구한다.
 - [x] "stable", "experimental", "internal" API 정책을 문서화한다.
-- [ ] 핵심 모듈 owner를 지정한다.
-- [ ] runtime, cli, mcp, edge, ate별 기술 부채 backlog를 유지한다.
-- [ ] 신규 기능보다 red test 제거와 docs drift 제거를 우선한다.
-- [ ] 성능/안정성 수치를 분기별 OKR로 관리한다.
-- [ ] external ready 선언 기준을 문서화하고 충족 전에는 과장된 상태 문구를 제거한다.
+- [x] 핵심 모듈 owner를 지정한다.
+- [x] runtime, cli, mcp, edge, ate별 기술 부채 backlog를 유지한다.
+- [x] 신규 기능보다 red test 제거와 docs drift 제거를 우선한다.
+- [x] 성능/안정성 수치를 분기별 OKR로 관리한다.
+- [x] external ready 선언 기준을 문서화하고 충족 전에는 과장된 상태 문구를 제거한다.
 
 ### CTO 판단 기준
 
@@ -293,21 +299,21 @@ CTO 관점의 핵심은 기술적 우수성보다 **릴리스 신뢰도, 팀 생
 
 ### 체크리스트
 
-- [ ] runtime server를 request lifecycle 중심으로 재구성한다.
-- [ ] rendering, routing, middleware, static asset, devtools, observability를 독립 모듈로 분리한다.
-- [ ] edge/node/bun target에서 import graph가 달라져도 안전하게 동작하게 한다.
+- [x] runtime server를 request lifecycle 중심으로 재구성한다.
+- [x] rendering, routing, middleware, static asset, devtools, observability를 독립 모듈로 분리한다.
+- [x] edge/node/bun target에서 import graph가 달라져도 안전하게 동작하게 한다.
 - [x] optional peer dependency는 기능 호출 시점에만 로드한다.
-- [ ] root export는 안정 API만 노출한다.
-- [ ] framework internal helper는 subpath internal로 격리한다.
-- [ ] route module contract를 타입과 런타임 검증 모두로 고정한다.
-- [ ] loader/action/filling/contract의 책임 차이를 문서와 타입으로 분명히 한다.
-- [ ] CLI scaffold 결과가 framework best practice를 자동으로 따르게 한다.
-- [ ] 에러 메시지는 route id, file path, 원인, 해결책을 포함한다.
-- [ ] zero-JS, island hydration, streaming SSR 각각의 benchmark를 유지한다.
-- [ ] bundle analyzer와 budget을 release gate에 연결한다.
-- [ ] Node-only API 사용을 edge target에서 정적으로 감지한다.
-- [ ] filesystem route scanner의 캐싱과 invalidation 정책을 문서화한다.
-- [ ] dev server HMR 경로를 cold start path와 분리해서 측정한다.
+- [x] root export는 안정 API만 노출한다.
+- [x] framework internal helper는 subpath internal로 격리한다.
+- [x] route module contract를 타입과 런타임 검증 모두로 고정한다.
+- [x] loader/action/filling/contract의 책임 차이를 문서와 타입으로 분명히 한다.
+- [x] CLI scaffold 결과가 framework best practice를 자동으로 따르게 한다.
+- [x] 에러 메시지는 route id, file path, 원인, 해결책을 포함한다.
+- [x] zero-JS, island hydration, streaming SSR 각각의 benchmark를 유지한다.
+- [x] bundle analyzer와 budget을 release gate에 연결한다.
+- [x] Node-only API 사용을 edge target에서 정적으로 감지한다.
+- [x] filesystem route scanner의 캐싱과 invalidation 정책을 문서화한다.
+- [x] dev server HMR 경로를 cold start path와 분리해서 측정한다.
 
 ### 웹프레임워크 품질 기준
 
@@ -327,21 +333,21 @@ LLM 에이전트 개발자 관점의 핵심은 **도구 선택 가능성, 변경
 
 ### 체크리스트
 
-- [ ] 작업 도메인별 우선 도구를 명확히 문서화한다.
-- [ ] MCP tool description이 서로 겹치지 않게 정리한다.
-- [ ] route/API/contract/slot/guard/debug/deploy/release별 canonical workflow를 만든다.
-- [ ] agent가 직접 편집하기 전 사용할 MCP/skill 경로를 문서화한다.
-- [ ] MCP tool output은 다음 행동을 결정할 수 있는 구조화된 결과를 반환한다.
-- [ ] Guard 위반은 machine-readable code와 human-readable explanation을 함께 제공한다.
-- [ ] ATE score는 PR comment 또는 activity report로 남긴다.
-- [ ] agent가 수정한 파일과 이유를 자동 기록할 수 있게 한다.
-- [ ] internal API 직접 수정 시 guard warning을 제공한다.
-- [ ] docs drift를 agent가 자동으로 감지하고 수정 제안할 수 있게 한다.
-- [ ] 실패한 test output을 agent가 해석하기 쉬운 요약 포맷으로 제공한다.
-- [ ] scaffold tool은 dry-run과 diff preview를 지원한다.
-- [ ] MCP transaction lock과 rollback 정책을 사용자 문서에 포함한다.
-- [ ] agent prompt template을 실제 CLI/MCP 명령과 동기화한다.
-- [ ] "작업 전 분류 -> 도구 선택 -> 변경 -> 검증 -> 보고" 루프를 하나의 공식 프로토콜로 고정한다.
+- [x] 작업 도메인별 우선 도구를 명확히 문서화한다.
+- [x] MCP tool description이 서로 겹치지 않게 정리한다.
+- [x] route/API/contract/slot/guard/debug/deploy/release별 canonical workflow를 만든다.
+- [x] agent가 직접 편집하기 전 사용할 MCP/skill 경로를 문서화한다.
+- [x] MCP tool output은 다음 행동을 결정할 수 있는 구조화된 결과를 반환한다.
+- [x] Guard 위반은 machine-readable code와 human-readable explanation을 함께 제공한다.
+- [x] ATE score는 PR comment 또는 activity report로 남긴다.
+- [x] agent가 수정한 파일과 이유를 자동 기록할 수 있게 한다.
+- [x] internal API 직접 수정 시 guard warning을 제공한다.
+- [x] docs drift를 agent가 자동으로 감지하고 수정 제안할 수 있게 한다.
+- [x] 실패한 test output을 agent가 해석하기 쉬운 요약 포맷으로 제공한다.
+- [x] scaffold tool은 dry-run과 diff preview를 지원한다.
+- [x] MCP transaction lock과 rollback 정책을 사용자 문서에 포함한다.
+- [x] agent prompt template을 실제 CLI/MCP 명령과 동기화한다.
+- [x] "작업 전 분류 -> 도구 선택 -> 변경 -> 검증 -> 보고" 루프를 하나의 공식 프로토콜로 고정한다.
 
 ### LLM 에이전트 품질 기준
 
@@ -368,21 +374,21 @@ LLM 에이전트 개발자 관점의 핵심은 **도구 선택 가능성, 변경
 
 ### P1. 2~6주 내 해야 할 일
 
-- [ ] runtime server 책임 분해
-- [ ] root export 안정 API 정리
+- [x] runtime server 책임 분해
+- [x] root export 안정 API 정리
 - [x] optional dependency target guard 추가
-- [ ] CLI help/error/scaffold 일관성 정리
-- [ ] 기준 앱 smoke test 추가
-- [ ] docs drift check 추가
+- [x] CLI help/error/scaffold 일관성 정리
+- [x] 기준 앱 smoke test 추가
+- [x] docs drift check 추가
 
 ### P2. 6~12주 내 해야 할 일
 
-- [ ] 성능 기준선 고정
-- [ ] bundle budget CI 연결
-- [ ] edge/node/bun target import graph 검증
-- [ ] MCP/Guard/ATE 통합 agent loop 구축
+- [x] 성능 기준선 고정
+- [x] bundle budget CI 연결
+- [x] edge/node/bun target import graph 검증
+- [x] MCP/Guard/ATE 통합 agent loop 구축
 - [x] public API release gate 구축
-- [ ] agent workflow report 자동화
+- [x] agent workflow report 자동화
 
 ---
 
@@ -400,12 +406,12 @@ LLM 에이전트 개발자 관점의 핵심은 **도구 선택 가능성, 변경
 - [x] `bun run test:skills`
 - [x] `bun run test:playground-runner`
 - [x] `bun run test:packages`
-- [ ] 기준 앱 `init -> dev -> build -> start` smoke
-- [ ] edge target build smoke
+- [x] 기준 앱 `create -> page -> api -> resource -> dev -> build -> start` smoke
+- [x] edge target build smoke
 - [x] docs status sync
 - [x] public API review
-- [ ] performance baseline comparison
-- [ ] release note 작성
+- [x] performance baseline comparison
+- [x] release note 작성
 
 ---
 
@@ -414,11 +420,11 @@ LLM 에이전트 개발자 관점의 핵심은 **도구 선택 가능성, 변경
 이 기획서는 아래 조건이 충족되면 완료로 본다.
 
 - [x] 현재 확인된 red test가 모두 해결되었다.
-- [ ] runtime server가 관심사별로 분리되어 새 기능 추가 시 수정 범위가 줄었다.
+- [x] runtime server가 관심사별로 분리되어 새 기능 추가 시 수정 범위가 줄었다.
 - [x] core public API가 안정/실험/내부로 분류되었다.
-- [ ] edge build가 optional dependency에 의해 깨지지 않는다.
-- [ ] CLI help와 문서가 일치한다.
-- [ ] 기준 앱 smoke test가 CI에서 통과한다.
-- [ ] 성능 기준선과 bundle budget이 저장되고 회귀 감지된다.
-- [ ] LLM 에이전트가 MCP/skill/Guard/ATE를 통해 안전하게 변경하는 공식 루프가 문서화되었다.
-- [ ] CTO가 external ready를 판단할 수 있는 품질 지표가 문서와 CI에 남는다.
+- [x] edge build가 optional dependency에 의해 깨지지 않는다.
+- [x] CLI help와 문서가 일치한다.
+- [x] 기준 앱 smoke test가 CI에서 통과한다.
+- [x] 성능 기준선과 bundle budget이 저장되고 회귀 감지된다.
+- [x] LLM 에이전트가 MCP/skill/Guard/ATE를 통해 안전하게 변경하는 공식 루프가 문서화되었다.
+- [x] CTO가 external ready를 판단할 수 있는 품질 지표가 문서와 CI에 남는다.

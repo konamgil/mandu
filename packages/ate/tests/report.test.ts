@@ -2,7 +2,7 @@ import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { composeSummary, writeSummary } from "../src/report";
+import { compareQualityScores, composeSummary, writeSummary } from "../src/report";
 import { readJson } from "../src/fs";
 import type { SummaryJson, OracleLevel } from "../src/types";
 
@@ -61,6 +61,34 @@ describe("report", () => {
 
     // Assert
     expect(summary.ok).toBe(false);
+  });
+
+  test("should attach a quality score to summaries", () => {
+    const repoRoot = join(testDir, `project-${Date.now()}`);
+    mkdirSync(repoRoot, { recursive: true });
+
+    const summary = composeSummary({
+      repoRoot,
+      runId: "run-quality",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      finishedAt: "2026-01-01T00:05:00.000Z",
+      exitCode: 0,
+      oracleLevel: "L1" as OracleLevel,
+      impact: { mode: "subset", changedFiles: ["app/page.tsx"], selectedRoutes: ["index"] },
+    });
+
+    expect(summary.quality?.score).toBeGreaterThanOrEqual(85);
+    expect(summary.quality?.grade).toBe("pass");
+    expect(summary.quality?.signals).toContain("impact-scoped route subset selected");
+  });
+
+  test("should compare quality score deltas", () => {
+    expect(compareQualityScores(70, 85)).toEqual({
+      beforeScore: 70,
+      afterScore: 85,
+      delta: 15,
+      verdict: "improved",
+    });
   });
 
   test("should include oracle results", () => {

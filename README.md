@@ -44,7 +44,7 @@ The short version: Mandu is for teams that want AI help without turning their co
 ## Start in One Minute
 
 ```bash
-bunx @mandujs/cli init my-app
+bunx @mandujs/cli create my-app --yes
 cd my-app
 bun install
 bun run dev
@@ -55,7 +55,7 @@ Open `http://localhost:3333`.
 Want the realtime chat starter?
 
 ```bash
-bunx @mandujs/cli init my-chat --template realtime-chat
+bunx @mandujs/cli create my-chat --template realtime-chat --yes
 ```
 
 Prefer installing a reusable `mandu` command first?
@@ -68,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/konamgil/mandu/main/install.sh | sh
 iwr https://raw.githubusercontent.com/konamgil/mandu/main/install.ps1 -useb | iex
 ```
 
-Then run `mandu init my-app`.
+Then run `mandu create my-app --yes`.
 
 ## Make a Page
 
