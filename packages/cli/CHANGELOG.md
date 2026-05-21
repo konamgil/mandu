@@ -1,5 +1,16 @@
 # @mandujs/cli
 
+## 0.44.17
+
+### Patch Changes
+
+- Refresh internal dependency ranges for the fast-refresh island bundle fix.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.12
+  - @mandujs/mcp@0.38.6
+  - @mandujs/edge@0.4.60
+
 ## 0.44.16
 
 ### Patch Changes

@@ -104,6 +104,9 @@ function nodeEnvDefine(options: BundlerOptions): string {
   return JSON.stringify(resolveBundlerMode(options));
 }
 
+const FAST_REFRESH_SELF_ALIAS_PATTERN =
+  /^var\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*\1;\s*\r?\n(?=\$RefreshReg\$\(\1,\s*["'][^"']*:default["']\);)/gm;
+
 function resolveClientOutDir(rootDir: string, outDir?: string): string {
   const defaultOutDir = path.join(rootDir, ".mandu/client");
   if (!outDir) return defaultOutDir;
@@ -321,6 +324,7 @@ async function buildPerIslandBundle(
       const grouped = result.logs.map((l) => `  - ${l.message}`).join("\n");
       throw new Error(`Island build failed for '${entry.name}' (source: ${entry.filePath}):\n${grouped}\n  Hint: Check the import paths and TypeScript types in this island file.`);
     }
+    await sanitizeGeneratedClientBundle(path.join(outDir, outputName), isDev);
     return { name: entry.name, js: `/.mandu/client/${outputName}`, route: entry.routeId, priority: entry.priority };
   } catch (error) {
     await fs.unlink(entryPath).catch(() => {});
@@ -368,9 +372,9 @@ async function buildPartialBundle(
     }
 
     const outputPath = path.join(outDir, outputName);
+    const sanitizedContent = await sanitizeGeneratedClientBundle(outputPath, isDev);
     const outputFile = Bun.file(outputPath);
-    const content = await outputFile.text();
-    const gzipped = Bun.gzipSync(Buffer.from(content));
+    const gzipped = Bun.gzipSync(Buffer.from(sanitizedContent));
 
     return {
       name: entry.name,
@@ -1960,7 +1964,7 @@ async function buildIsland(
     }
 
     const outputFile = Bun.file(actualOutputPath);
-    const content = await outputFile.text();
+    const content = await sanitizeGeneratedClientBundle(actualOutputPath, isDev);
     const gzipped = Bun.gzipSync(Buffer.from(content));
 
     return {
@@ -1974,6 +1978,48 @@ async function buildIsland(
     await fs.unlink(entryPath).catch(() => {});
     throw error;
   }
+}
+
+async function sanitizeGeneratedClientBundle(outputPath: string, isDev: boolean): Promise<string> {
+  const source = await Bun.file(outputPath).text();
+  if (!isDev) return source;
+
+  const sanitized = removeFastRefreshSelfAliases(source);
+  if (sanitized === source) return source;
+
+  await Bun.write(outputPath, sanitized);
+  await validateGeneratedClientBundle(outputPath);
+  return sanitized;
+}
+
+function removeFastRefreshSelfAliases(source: string): string {
+  return source.replace(FAST_REFRESH_SELF_ALIAS_PATTERN, (line, localName: string, offset: number) => {
+    const priorSource = source.slice(0, offset);
+    const declarationPattern = new RegExp(`(?:const|let|class|function)\\s+${escapeRegExp(localName)}\\b`);
+    return declarationPattern.test(priorSource) ? "" : line;
+  });
+}
+
+async function validateGeneratedClientBundle(outputPath: string): Promise<void> {
+  const tempOutDir = await fs.mkdtemp(path.join(path.dirname(outputPath), ".validate-"));
+  try {
+    const result = await safeBuild({
+      entrypoints: [outputPath],
+      outdir: tempOutDir,
+      target: "browser",
+      external: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime"],
+    });
+    if (result.success) return;
+
+    const grouped = result.logs.map((log) => `  - ${log.message}`).join("\n");
+    throw new Error(`Generated client bundle failed syntax validation (source: ${outputPath}):\n${grouped}`);
+  } finally {
+    await fs.rm(tempOutDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

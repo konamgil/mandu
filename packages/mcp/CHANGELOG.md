@@ -1,5 +1,14 @@
 # @mandujs/mcp
 
+## 0.38.6
+
+### Patch Changes
+
+- Refresh internal dependency ranges for the fast-refresh island bundle fix.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.12
+
 ## 0.38.5
 
 ### Patch Changes

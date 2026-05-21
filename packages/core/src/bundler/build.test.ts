@@ -239,7 +239,12 @@ describe("buildClientBundles vendor shims", () => {
       );
       await writeFile(
         path.join(routeClientRoot, "src", "client", "pages", "login", "LoginPage.client.tsx"),
-        '"use client";\nexport default function LoginPage() { return <form />; }\n',
+        '"use client";\n' +
+          'import { useState } from "react";\n' +
+          "export default function LoginPage() {\n" +
+          '  const [email, setEmail] = useState("");\n' +
+          '  return <form><input value={email} onChange={(event) => setEmail(event.currentTarget.value)} /></form>;\n' +
+          "}\n",
         "utf-8",
       );
 

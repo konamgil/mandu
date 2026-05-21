@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.12
+
+### Patch Changes
+
+- Remove Bun fast-refresh self-alias declarations that can make default-exported island bundles invalid JavaScript.
+
 ## 0.54.11
 
 ### Patch Changes
