@@ -38,11 +38,11 @@ interface PerfBudgetEntry {
   baseline: number | null;
 }
 
-interface PerfScenario {
+export interface PerfScenario {
   id: string;
   app: string;
   status: "active" | "manual" | "planned";
-  mode: "dev" | "prod" | "build" | "hmr";
+  mode: "dev" | "prod" | "build" | "hmr" | "streaming";
   url: string;
   runner: string;
   measuredMetrics: string[];
@@ -76,21 +76,26 @@ interface BenchmarkJson {
   raw: Array<Record<string, unknown>>;
 }
 
-interface ScenarioMetrics {
+export interface ScenarioMetrics {
   ssr_ttfb_p95_ms?: number;
   hydration_p95_ms?: number;
   initial_js_bundle_kb?: number;
+  cold_start_p95_ms?: number;
   hmr_latency_p95_ms?: number;
   route_scan_p95_ms?: number;
   resource_generation_p95_ms?: number;
 }
 
-interface MetricResult {
+export interface MetricResult {
   metric: string;
   measured: number | null;
   budget: number;
   baseline: number | null;
   deltaFromBudget: number | null;
+  deltaFromBaseline: number | null;
+  regressionFromBaselinePct: number | null;
+  regressionThresholdPct: number | null;
+  failureReason: "budget" | "baseline-regression" | null;
   status: "pass" | "warn" | "fail" | "unsupported";
 }
 
@@ -544,7 +549,9 @@ async function measureProjectMetrics(
   return { metrics, warnings };
 }
 
-function compareScenarioMetrics(
+const BASELINE_REGRESSION_THRESHOLD_PCT = 10;
+
+export function compareScenarioMetrics(
   scenario: PerfScenario,
   metrics: ScenarioMetrics,
 ): MetricResult[] {
@@ -558,15 +565,31 @@ function compareScenarioMetrics(
         budget: budgetEntry.budget,
         baseline: budgetEntry.baseline,
         deltaFromBudget: null,
+        deltaFromBaseline: null,
+        regressionFromBaselinePct: null,
+        regressionThresholdPct: budgetEntry.baseline === null ? null : BASELINE_REGRESSION_THRESHOLD_PCT,
+        failureReason: null,
         status: "unsupported",
       };
     }
 
     const warningBudget = budgetEntry.budget * (1 - budgetEntry.warningThresholdPct / 100);
+    const deltaFromBaseline = budgetEntry.baseline === null ? null : measured - budgetEntry.baseline;
+    const regressionFromBaselinePct =
+      budgetEntry.baseline !== null && budgetEntry.baseline > 0
+        ? (deltaFromBaseline! / budgetEntry.baseline) * 100
+        : null;
+    const baselineRegression =
+      regressionFromBaselinePct !== null &&
+      regressionFromBaselinePct > BASELINE_REGRESSION_THRESHOLD_PCT;
 
     let status: MetricResult["status"] = "pass";
+    let failureReason: MetricResult["failureReason"] = null;
     if (measured > budgetEntry.budget) {
       status = "fail";
+      failureReason = "budget";
+    } else if (baselineRegression) {
+      status = "warn";
     } else if (measured > warningBudget) {
       status = "warn";
     }
@@ -577,6 +600,10 @@ function compareScenarioMetrics(
       budget: budgetEntry.budget,
       baseline: budgetEntry.baseline,
       deltaFromBudget: measured - budgetEntry.budget,
+      deltaFromBaseline,
+      regressionFromBaselinePct,
+      regressionThresholdPct: budgetEntry.baseline === null ? null : BASELINE_REGRESSION_THRESHOLD_PCT,
+      failureReason,
       status,
     };
   });
@@ -601,12 +628,12 @@ function renderMarkdownReport(results: ScenarioResult[], generatedAt: string): s
       lines.push(`- Warning: ${warning}`);
     }
     lines.push("");
-    lines.push("| Metric | Measured | Baseline | Budget | Status |");
-    lines.push("|---|---:|---:|---:|---|");
+    lines.push("| Metric | Measured | Baseline | Δ baseline | Budget | Status | Reason |");
+    lines.push("|---|---:|---:|---:|---:|---|---|");
 
     for (const metric of result.results) {
       lines.push(
-        `| \`${metric.metric}\` | ${metric.measured === null ? "n/a" : metric.measured.toFixed(1)} | ${metric.baseline === null ? "n/a" : metric.baseline.toFixed(1)} | ${metric.budget.toFixed(1)} | ${metric.status} |`
+        `| \`${metric.metric}\` | ${metric.measured === null ? "n/a" : metric.measured.toFixed(1)} | ${metric.baseline === null ? "n/a" : metric.baseline.toFixed(1)} | ${metric.regressionFromBaselinePct === null ? "n/a" : `${metric.regressionFromBaselinePct.toFixed(1)}%`} | ${metric.budget.toFixed(1)} | ${metric.status} | ${metric.failureReason ?? ""} |`
       );
     }
 
@@ -766,20 +793,27 @@ async function runHmrScenarioBenchmark(
 
   await fs.mkdir(scenarioOutputDir, { recursive: true });
   const { runBenchmark } = await import("./hmr-bench");
+  const measuresColdStart = scenario.measuredMetrics.includes("cold_start_p95_ms");
+  const measuresHmrLatency = scenario.measuredMetrics.includes("hmr_latency_p95_ms");
   const report = await runBenchmark({
-    iterations: Math.max(1, runs),
-    skipCold: true,
+    iterations: measuresHmrLatency ? Math.max(1, runs) : 0,
+    skipCold: !measuresColdStart,
     cellsOnly: "hybrid",
     writeReport: false,
   });
 
-  const measured = report.hardAssertions.islandP95Ms;
-  if (measured === null) {
+  const hmrMeasured = report.hardAssertions.islandP95Ms;
+  const coldStartMeasured = report.hardAssertions.coldStartP95Ms;
+  if (measuresHmrLatency && hmrMeasured === null) {
     warnings.push("HMR island latency was not measured by the hybrid benchmark subset.");
+  }
+  if (measuresColdStart && coldStartMeasured === null) {
+    warnings.push("Cold start latency was not measured by the HMR benchmark harness.");
   }
 
   const metrics: ScenarioMetrics = {
-    hmr_latency_p95_ms: measured ?? undefined,
+    hmr_latency_p95_ms: hmrMeasured ?? undefined,
+    cold_start_p95_ms: coldStartMeasured ?? undefined,
   };
   await fs.writeFile(
     benchmarkJsonPath,
@@ -847,7 +881,7 @@ async function main(): Promise<number> {
   for (const scenario of results) {
     for (const metric of scenario.results) {
       console.log(
-        `${scenario.scenarioId} ${metric.metric}: ${metric.measured === null ? "n/a" : metric.measured.toFixed(1)} (budget ${metric.budget.toFixed(1)}) -> ${metric.status}`,
+        `${scenario.scenarioId} ${metric.metric}: ${metric.measured === null ? "n/a" : metric.measured.toFixed(1)} (baseline ${metric.baseline === null ? "n/a" : metric.baseline.toFixed(1)}, budget ${metric.budget.toFixed(1)}) -> ${metric.status}${metric.failureReason ? ` (${metric.failureReason})` : ""}`,
       );
       if (metric.status === "fail") {
         hasFailure = true;
@@ -865,5 +899,7 @@ async function main(): Promise<number> {
   return 0;
 }
 
-const exitCode = await main();
-process.exit(exitCode);
+if (import.meta.main) {
+  const exitCode = await main();
+  process.exit(exitCode);
+}

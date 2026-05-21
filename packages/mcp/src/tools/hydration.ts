@@ -1,15 +1,13 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   loadManifest,
-  buildClientBundles,
-  formatSize,
   needsHydration,
   getRouteHydration,
-  type BundleManifest,
   type SpecHydrationStrategy,
   type HydrationPriority,
   type HydrationConfig,
 } from "@mandujs/core";
+import { buildClientBundles, formatSize, type BundleManifest } from "@mandujs/core/bundler";
 import { getProjectPaths, readJsonFile, writeJsonFile } from "../utils/project.js";
 import path from "path";
 

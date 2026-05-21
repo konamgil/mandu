@@ -20,12 +20,14 @@ import {
   guardConfig,
   formatConfigGuardResult,
   calculateHealthScore,
+  type GuardConfig,
+} from "@mandujs/core";
+import {
   collectCompilerLintTargets,
   runReactCompilerLint,
   formatCompilerReport,
-  type GuardConfig,
   type ReactCompilerDiagnostic,
-} from "@mandujs/core";
+} from "@mandujs/core/bundler";
 import { resolveReactCompilerConfig } from "@mandujs/core/bundler/plugins";
 import path from "path";
 import { resolveFromCwd, isDirectory, pathExists } from "../util/fs";

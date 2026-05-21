@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "lastReviewed": "2026-05-01",
+  "lastReviewed": "2026-05-21",
   "metrics": {
     "ssr_ttfb_p95_ms": {
       "unit": "ms",
@@ -17,6 +17,11 @@
       "direction": "lower-is-better",
       "description": "Transferred JavaScript payload needed for the first screen."
     },
+    "cold_start_p95_ms": {
+      "unit": "ms",
+      "direction": "lower-is-better",
+      "description": "Time from dev server process start to the ready signal."
+    },
     "hmr_latency_p95_ms": {
       "unit": "ms",
       "direction": "lower-is-better",
@@ -31,6 +36,11 @@
       "unit": "ms",
       "direction": "lower-is-better",
       "description": "Resource generation latency for representative CRUD/resource workloads."
+    },
+    "streaming_ssr_ttfb_p95_ms": {
+      "unit": "ms",
+      "direction": "lower-is-better",
+      "description": "Time to first streamed SSR shell chunk for an async Suspense page."
     }
   },
   "scenarios": [
@@ -55,7 +65,7 @@
         "hydration_p95_ms": {
           "budget": 500,
           "warningThresholdPct": 10,
-          "baseline": null
+          "baseline": 0
         },
         "initial_js_bundle_kb": {
           "budget": 1300,
@@ -63,7 +73,7 @@
           "baseline": 1124.4
         }
       },
-      "notes": "Current official demo baseline entry. Active app path verified against demo/todo-app. HTTP metrics frozen from a local Windows run on 2026-05-01; hydration remains unsupported because browser launch failed."
+      "notes": "Current official demo baseline entry. Active app path verified against demo/todo-app. HTTP metrics frozen from a local Windows run on 2026-05-01; hydration baseline frozen from a local Windows browser run on 2026-05-21."
     },
     {
       "id": "todo-app-home-prod",
@@ -86,15 +96,15 @@
         "hydration_p95_ms": {
           "budget": 350,
           "warningThresholdPct": 10,
-          "baseline": null
+          "baseline": 0
         },
         "initial_js_bundle_kb": {
-          "budget": 150,
+          "budget": 0,
           "warningThresholdPct": 10,
           "baseline": 0
         }
       },
-      "notes": "Production-mode budget for the first official reference path. HTTP metrics frozen from a local Windows run on 2026-05-01; hydration remains unsupported because browser launch failed."
+      "notes": "Production-mode budget for the first official reference path. HTTP metrics frozen from a local Windows run on 2026-05-01; hydration baseline frozen from a local Windows browser run on 2026-05-21."
     },
     {
       "id": "hello-ssr-home",
@@ -117,7 +127,7 @@
         "hydration_p95_ms": {
           "budget": 350,
           "warningThresholdPct": 10,
-          "baseline": null
+          "baseline": 10.9
         },
         "initial_js_bundle_kb": {
           "budget": 1200,
@@ -125,7 +135,7 @@
           "baseline": 1043.7
         }
       },
-      "notes": "Official hello SSR reference path, backed by the existing demo/starter app. HTTP metrics frozen from a local Windows run on 2026-05-01; hydration remains unsupported because browser launch failed."
+      "notes": "Official hello SSR reference path, backed by the existing demo/starter app. HTTP metrics frozen from a local Windows run on 2026-05-01; hydration baseline frozen from a local Windows browser run on 2026-05-21."
     },
     {
       "id": "blog-crud-contract-list",
@@ -150,7 +160,7 @@
         "hydration_p95_ms": {
           "budget": 450,
           "warningThresholdPct": 10,
-          "baseline": null
+          "baseline": 11.3
         },
         "initial_js_bundle_kb": {
           "budget": 1200,
@@ -168,7 +178,7 @@
           "baseline": 168.1
         }
       },
-      "notes": "Contract/resource-heavy reference scenario backed by demo/todo-app until a dedicated blog CRUD app exists. HTTP, route-scan, and resource-generation metrics frozen from a local Windows run on 2026-05-01; hydration remains unsupported because browser launch failed."
+      "notes": "Contract/resource-heavy reference scenario backed by demo/todo-app until a dedicated blog CRUD app exists. HTTP, route-scan, and resource-generation metrics frozen from a local Windows run on 2026-05-01; hydration baseline frozen from a local Windows browser run on 2026-05-21."
     },
     {
       "id": "auth-starter-hmr-island",
@@ -188,11 +198,50 @@
         }
       },
       "notes": "Expanded manual gate. Runs the hybrid island subset from scripts/hmr-bench.ts; excluded from default perf:ci because watcher timings are slower and more host-sensitive. Baseline frozen from a local Windows run on 2026-05-01."
+    },
+    {
+      "id": "auth-starter-cold-start",
+      "app": "auth-starter",
+      "status": "manual",
+      "mode": "hmr",
+      "url": "dev:cold-start",
+      "runner": "scripts/hmr-bench.ts",
+      "measuredMetrics": [
+        "cold_start_p95_ms"
+      ],
+      "budgets": {
+        "cold_start_p95_ms": {
+          "budget": 700,
+          "warningThresholdPct": 15,
+          "baseline": 547
+        }
+      },
+      "notes": "Expanded manual release gate for dev-server cold start. Baseline is the documented Phase 7.2 cold one-shot median; default perf:ci excludes it because process-spawn timing is host-sensitive."
+    },
+    {
+      "id": "streaming-ssr-async-shell",
+      "app": "synthetic",
+      "status": "manual",
+      "mode": "streaming",
+      "url": "/streaming-slow",
+      "runner": "scripts/streaming-ssr-bench.ts",
+      "measuredMetrics": [
+        "streaming_ssr_ttfb_p95_ms"
+      ],
+      "budgets": {
+        "streaming_ssr_ttfb_p95_ms": {
+          "budget": 1500,
+          "warningThresholdPct": 10,
+          "baseline": 5
+        }
+      },
+      "notes": "Expanded manual release gate. Runs a synthetic async Suspense page and fails if the first streamed shell chunk exceeds the budget. Baseline frozen from a local Windows run on 2026-05-21."
     }
   ],
   "notes": [
     "Budgets are enforced ceilings. Baselines define the frozen historical value for active scenarios.",
     "P0-F-0 reconnects active scenarios to real demo directories; P0-F-2 fills active baseline values.",
-    "P1 promotes starter and todo-app into broader reference scenarios. Manual scenarios are runnable by id but excluded from default perf:ci."
+    "P1 promotes starter and todo-app into broader reference scenarios. Manual scenarios are runnable by id but excluded from default perf:ci.",
+    "CI and release gates treat measured values more than 10% above a non-zero baseline as regressions."
   ]
 }

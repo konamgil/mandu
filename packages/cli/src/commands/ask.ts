@@ -1,10 +1,12 @@
 import {
-  getCompactArchitecture,
   getBrain,
   initializeBrain,
+} from "@mandujs/core/brain";
+import {
+  getCompactArchitecture,
   searchDecisions,
   type CompactArchitecture,
-} from "@mandujs/core";
+} from "@mandujs/core/guard";
 import { collectPositionals } from "../util/cli-args";
 
 export interface AskOptions {

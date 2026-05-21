@@ -11,6 +11,7 @@ import { tmpdir } from "os";
 import { join, resolve } from "path";
 import { checkPublicApiBoundary } from "./check-public-api-boundary";
 import { checkTargetBoundaries } from "./check-target-boundaries";
+import { checkDocsDrift } from "./check-docs-drift";
 
 interface PackageJson {
   name: string;
@@ -616,6 +617,33 @@ for (const templateDir of TEMPLATE_DIRS) {
   } else {
     console.log(`  ✅ ${templateDir}/tsconfig.json: paths/baseUrl consistent`);
   }
+}
+
+console.log();
+
+// 9. Official docs and CLI surface drift check
+console.log("📚 Step 9: Docs/CLI drift check...\n");
+
+try {
+  const docsDriftIssues = checkDocsDrift(process.cwd());
+  if (docsDriftIssues.length > 0) {
+    hasIssues = true;
+    docsDriftIssues.forEach((issue) => {
+      console.log(`  ❌ ${issue.file}: ${issue.message}`);
+    });
+    console.log();
+    console.log(
+      "  💡 Keep README, docs README, CLI help, and smoke paths aligned with the canonical golden path."
+    );
+  } else {
+    console.log("  ✅ Official docs, CLI generate help, and smoke path are aligned");
+  }
+} catch (err) {
+  hasIssues = true;
+  console.error(
+    "  ❌ docs drift check failed:",
+    err instanceof Error ? err.message : String(err)
+  );
 }
 
 console.log();

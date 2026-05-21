@@ -21,19 +21,20 @@
 | page loader, filling, SSR, streaming SSR orchestration | `runtime/server.ts`, `runtime/page-render-response.ts`, `runtime/ssr.ts`, `runtime/streaming-ssr.ts` | render orchestrator | 부분 분리 |
 | metadata route dispatch | `runtime/server.ts`, `routes/metadata-routes.ts` | metadata runtime adapter | 부분 분리 |
 | not-found fallback orchestration | `runtime/server.ts`, `runtime/not-found.ts` | route error adapter | 미분리 |
-| image optimization endpoint | `runtime/image-handler.ts` 호출 | target-safe optional feature adapter | 부분 분리 |
+| rate limit policy, in-memory limiter, 429/header formatting | `runtime/rate-limit.ts` 호출 | `runtime/rate-limit.ts` | 분리 완료 |
+| image optimization endpoint | `runtime/image-feature.ts`, `runtime/image-handler.ts` 호출 | target-safe optional feature adapter | 분리 완료 |
 | OpenAPI endpoint | `runtime/openapi-endpoint.ts` 호출 | target-safe optional feature adapter | 부분 분리 |
 | Kitchen/devtools endpoints | `runtime/devtools-adapter.ts`, `kitchen/*` | devtools runtime adapter | 분리 완료 |
 | observability metrics, heap, event stream, request recording | `runtime/observability-lifecycle.ts`, `observability/*`, `runtime/devtools-adapter.ts` | observability lifecycle hook | 분리 완료 |
 | tracing span wrapper | `runtime/observability-lifecycle.ts`, `observability/tracing.ts` | request lifecycle hook | 분리 완료 |
-| scheduler lifecycle | `runtime/server.ts`, `scheduler/*`, `middleware/scheduler-cron.ts` | lifecycle module | 미분리 |
+| scheduler lifecycle | `runtime/scheduler-lifecycle.ts`, `scheduler/*`, `middleware/scheduler-cron.ts` | lifecycle module | 분리 완료 |
 | i18n context wiring | `runtime/server.ts`, `i18n/*` | request context module | 미분리 |
 
 ## 다음 분리 순서
 
 1. page route cache/PPR save orchestration을 render/cache adapter로 분리한다.
-2. image/a11y/openapi/scheduler/websocket 등 선택 기능을 target-safe plugin 경계로 이동한다.
-3. root export를 stable, experimental, internal API 정책에 맞춰 재검토한다.
+2. route dispatch/API execution/not-found fallback을 request dispatcher module로 분리한다.
+3. i18n context wiring을 request context module로 분리한다.
 
 ## 체크 기준
 

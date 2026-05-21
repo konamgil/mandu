@@ -2513,7 +2513,7 @@ export async function buildClientBundles(
       try {
         return { ok: true as const, result: await buildIsland(route, rootDir, outDir, options) };
       } catch (error) {
-        return { ok: false as const, route, error: String(error) };
+        return { ok: false as const, route, error: formatBundlerException(error) };
       }
     }),
   );
@@ -2632,6 +2632,12 @@ export function printBundleStats(result: BundleResult): void {
   const partialCount = Object.keys(result.manifest.partials ?? {}).length;
   if (result.outputs.length === 0 && partialCount === 0) {
     console.log("No islands or partials to bundle (hydration: none or no client entry)");
+    if (result.errors.length > 0) {
+      console.log("\n⚠️ Errors:");
+      for (const error of result.errors) {
+        console.log(`  ${error}`);
+      }
+    }
     return;
   }
 
@@ -2660,4 +2666,18 @@ export function printBundleStats(result: BundleResult): void {
   }
 
   console.log("");
+}
+
+function formatBundlerException(error: unknown): string {
+  if (error instanceof AggregateError) {
+    const parts = [String(error)];
+    for (const nested of error.errors) {
+      parts.push(`  - ${formatBundlerException(nested).replace(/\n/g, "\n    ")}`);
+    }
+    return parts.join("\n");
+  }
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+  return String(error);
 }

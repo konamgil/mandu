@@ -21,7 +21,8 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { loadManduConfig, startWatcher, type ManduConfig } from "@mandujs/core";
+import { loadManduConfig, type ManduConfig } from "@mandujs/core";
+import { startWatcher } from "@mandujs/core/watcher";
 
 // DNA-001: 플러그인 기반 도구 레지스트리
 import { mcpToolRegistry } from "./registry/mcp-tool-registry.js";

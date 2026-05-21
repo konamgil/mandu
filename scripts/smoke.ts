@@ -227,6 +227,73 @@ async function assertHomePage(url: string): Promise<void> {
   );
 }
 
+async function assertGeneratedPage(url: string): Promise<void> {
+  await waitForHttp(
+    url,
+    "generated page",
+    async (response) => {
+      if (!response.ok) {
+        throw new Error(`Expected 200 response, got ${response.status}`);
+      }
+
+      const html = await response.text();
+      if (!html.includes("Golden Smoke")) {
+        throw new Error("Expected generated page HTML to include 'Golden Smoke'");
+      }
+    }
+  );
+}
+
+async function assertGeneratedApi(url: string): Promise<void> {
+  await waitForHttp(
+    url,
+    "generated API",
+    async (response) => {
+      if (!response.ok) {
+        throw new Error(`Expected 200 response, got ${response.status}`);
+      }
+
+      const data = await response.json() as {
+        ok?: boolean;
+        route?: string;
+      };
+
+      if (data.ok !== true || data.route !== "/api/golden-smoke") {
+        throw new Error(`Expected generated API ok response, got ${JSON.stringify(data)}`);
+      }
+    }
+  );
+}
+
+async function assertFileExists(filePath: string): Promise<void> {
+  try {
+    await fs.access(filePath);
+  } catch {
+    throw new Error(`Expected generated file to exist: ${filePath}`);
+  }
+}
+
+async function assertGeneratedArtifacts(projectDir: string): Promise<void> {
+  await Promise.all([
+    assertFileExists(path.join(projectDir, "app", "golden-smoke", "page.tsx")),
+    assertFileExists(path.join(projectDir, "app", "api", "golden-smoke", "route.ts")),
+    assertFileExists(path.join(projectDir, "spec", "resources", "post.resource.ts")),
+    assertFileExists(path.join(projectDir, ".mandu", "generated", "server", "contracts", "post.contract.ts")),
+    assertFileExists(path.join(projectDir, "spec", "slots", "post.slot.ts")),
+  ]);
+}
+
+async function linkLocalManduCore(projectDir: string): Promise<void> {
+  const target = path.join(projectDir, "node_modules", "@mandujs", "core");
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.rm(target, { recursive: true, force: true });
+  await fs.symlink(
+    path.join(repoRoot, "packages", "core"),
+    target,
+    process.platform === "win32" ? "junction" : "dir",
+  );
+}
+
 async function stripManduPackageDeps(projectDir: string): Promise<void> {
   const packageJsonPath = path.join(projectDir, "package.json");
   const content = await fs.readFile(packageJsonPath, "utf-8");
@@ -257,13 +324,13 @@ async function main(): Promise<void> {
   let cleanupTempDir = true;
 
   try {
-    console.log("1/5 init");
+    console.log("1/7 create");
     await runCommand(
       [
         "bun",
         "run",
         cliEntry,
-        "init",
+        "create",
         projectName,
         "--template",
         "default",
@@ -273,11 +340,31 @@ async function main(): Promise<void> {
       smokeRunRoot,
     );
 
-    console.log("2/5 install app third-party dependencies");
+    console.log("2/7 install app third-party dependencies");
     await stripManduPackageDeps(projectDir);
     await runCommand(["bun", "install"], projectDir);
+    await linkLocalManduCore(projectDir);
 
-    console.log("3/5 dev smoke");
+    console.log("3/7 generate page/api/resource");
+    await runCommand(["bun", "run", cliEntry, "generate", "page", "/golden-smoke"], projectDir);
+    await runCommand(["bun", "run", cliEntry, "generate", "api", "/api/golden-smoke", "--methods=GET,POST"], projectDir);
+    await runCommand(
+      [
+        "bun",
+        "run",
+        cliEntry,
+        "generate",
+        "resource",
+        "post",
+        "--fields=title:string!,body:string?",
+        "--timestamps",
+        "--ci",
+      ],
+      projectDir,
+    );
+    await assertGeneratedArtifacts(projectDir);
+
+    console.log("4/7 dev smoke");
     const devPort = await getFreePort();
     const devCommand = startCommand(["bun", "run", cliEntry, "dev"], projectDir, {
       PORT: String(devPort),
@@ -286,6 +373,8 @@ async function main(): Promise<void> {
     try {
       await assertHealthEndpoint(`http://localhost:${devPort}/api/health`);
       await assertHomePage(`http://localhost:${devPort}/`);
+      await assertGeneratedPage(`http://localhost:${devPort}/golden-smoke`);
+      await assertGeneratedApi(`http://localhost:${devPort}/api/golden-smoke`);
     } catch (error) {
       const result = await stopCommand(devCommand);
       throw new Error(
@@ -298,11 +387,11 @@ async function main(): Promise<void> {
 
     await stopCommand(devCommand);
 
-    console.log("4/5 build smoke");
+    console.log("5/7 build smoke");
     await runCommand(["bun", "run", cliEntry, "build"], projectDir);
     await fs.access(path.join(projectDir, ".mandu", "manifest.json"));
 
-    console.log("5/5 start smoke");
+    console.log("6/7 start smoke");
     const startPort = await getFreePort();
     const startCommandHandle = startCommand(["bun", "run", cliEntry, "start"], projectDir, {
       PORT: String(startPort),
@@ -311,6 +400,8 @@ async function main(): Promise<void> {
     try {
       await assertHealthEndpoint(`http://localhost:${startPort}/api/health`);
       await assertHomePage(`http://localhost:${startPort}/`);
+      await assertGeneratedPage(`http://localhost:${startPort}/golden-smoke`);
+      await assertGeneratedApi(`http://localhost:${startPort}/api/golden-smoke`);
     } catch (error) {
       const result = await stopCommand(startCommandHandle);
       throw new Error(
@@ -323,7 +414,8 @@ async function main(): Promise<void> {
 
     await stopCommand(startCommandHandle);
 
-    console.log("Smoke passed: init -> dev -> build -> start");
+    console.log("7/7 complete");
+    console.log("Smoke passed: create -> page -> api -> resource -> dev -> build -> start");
   } catch (error) {
     cleanupTempDir = false;
     console.error(error instanceof Error ? error.message : String(error));

@@ -8,6 +8,7 @@ import {
   buildAgentContext,
 } from "./context";
 import type {
+  AgentChangedFileReason,
   AgentDiagnostic,
   AgentDiagnosticSeverity,
   AgentSuggestedCommand,
@@ -208,7 +209,11 @@ function matchesChanged(
   return candidates.some((file) => changed.has(file));
 }
 
-function commandSuggestions(changedFiles: string[], diagnostics: AgentDiagnostic[]): AgentSuggestedCommand[] {
+function commandSuggestions(
+  changedFiles: string[],
+  diagnostics: AgentDiagnostic[],
+  changedFileReasons: AgentChangedFileReason[] = [],
+): AgentSuggestedCommand[] {
   const files = changedFiles.map(normalizePath).filter((value): value is string => Boolean(value));
   const out: AgentSuggestedCommand[] = [];
   const add = (command: string, reason: string, required: boolean) => {
@@ -243,11 +248,97 @@ function commandSuggestions(changedFiles: string[], diagnostics: AgentDiagnostic
   if (files.some((file) => file.includes("package.json") || file === "bun.lock")) {
     add("bun run check:publish", "Package metadata or lockfile changed.", true);
   }
+  if (changedFileReasons.some((entry) => entry.internalApi)) {
+    add("bun run check:public-api && bun run check:target-boundaries", "Internal framework boundaries changed.", true);
+  }
   if (diagnostics.some((d) => d.severity === "error" || d.severity === "fatal")) {
     add("mandu agent repair --from .mandu/agent-verify.json", "Verification produced repairable diagnostics.", false);
   }
 
   return out;
+}
+
+function isInternalApiEdit(file: string): boolean {
+  return [
+    "packages/core/src/runtime/",
+    "packages/core/src/bundler/",
+    "packages/core/src/server/",
+    "packages/core/src/guard/",
+    "packages/core/src/spec/",
+    "packages/core/src/router/",
+    "packages/core/src/internal/",
+  ].some((prefix) => file.startsWith(prefix));
+}
+
+function changedFileReason(file: string): AgentChangedFileReason {
+  const normalized = normalizePath(file) ?? file;
+  const reasons: string[] = [];
+  const recommendedChecks: string[] = [];
+
+  if (/\.(ts|tsx|js|jsx)$/.test(normalized)) {
+    reasons.push("Source code changed.");
+    recommendedChecks.push("bun run typecheck");
+  }
+  if (/\.test\.(ts|tsx|js|jsx)$/.test(normalized)) {
+    reasons.push("Test code changed.");
+    recommendedChecks.push(`bun test ${normalized}`);
+  }
+  if (normalized.startsWith("packages/cli/")) {
+    reasons.push("CLI behavior or documentation changed.");
+    recommendedChecks.push("bun test packages/cli/src");
+  }
+  if (normalized.startsWith("packages/mcp/")) {
+    reasons.push("MCP tool surface changed.");
+    recommendedChecks.push("bun test packages/mcp/tests");
+  }
+  if (normalized.startsWith("docs/") || normalized.endsWith("README.md") || normalized.endsWith("README.ko.md")) {
+    reasons.push("User-facing documentation changed.");
+    recommendedChecks.push("bun run check:docs-drift");
+  }
+  if (normalized === "package.json" || normalized === "bun.lock" || normalized.endsWith("/package.json")) {
+    reasons.push("Package metadata or dependency graph changed.");
+    recommendedChecks.push("bun run check:publish");
+  }
+
+  const internalApi = isInternalApiEdit(normalized);
+  if (internalApi) {
+    reasons.push("Framework internal API changed.");
+    recommendedChecks.push("bun run check:public-api && bun run check:target-boundaries");
+  }
+
+  return {
+    file: normalized,
+    reasons: reasons.length > 0 ? reasons : ["Changed file requires standard verification."],
+    recommendedChecks: [...new Set(recommendedChecks)],
+    internalApi,
+  };
+}
+
+function buildChangedFileReasons(changedFiles: string[]): AgentChangedFileReason[] {
+  return changedFiles
+    .map(normalizePath)
+    .filter((file): file is string => Boolean(file))
+    .map(changedFileReason);
+}
+
+function internalApiDiagnostics(changedFileReasons: AgentChangedFileReason[]): AgentDiagnostic[] {
+  return changedFileReasons
+    .filter((entry) => entry.internalApi)
+    .map((entry) => ({
+      code: "MANDU_VERIFY_INTERNAL_API_EDIT",
+      severity: "warning" as const,
+      title: "Internal framework API changed",
+      file: entry.file,
+      cause: "This file is part of Mandu's internal runtime/bundler/guard surface and can affect public behavior indirectly.",
+      suggestedFix: {
+        type: "run_command" as const,
+        command: "bun run check:public-api && bun run check:target-boundaries",
+        description: "Verify public API classification and target-safe import boundaries.",
+      },
+      docs: "docs/architect/public-api-boundary.md",
+      repairable: false,
+      source: "agent.verify",
+    }));
 }
 
 function check(
@@ -284,6 +375,7 @@ export async function buildAgentVerifyReport(
   const root = path.resolve(rootDir);
   const changed = await collectChangedFiles(root, options);
   const changedSet = new Set(changed.files.map(normalizePath).filter((value): value is string => Boolean(value)));
+  const changedFileReasons = buildChangedFileReasons(changed.files);
   const context = await buildAgentContext(root, {
     includeDiagnose: false,
     includeGit: false,
@@ -291,6 +383,11 @@ export async function buildAgentVerifyReport(
   const notes = [...changed.notes];
   const checks: AgentVerifyCheck[] = [];
   const diagnostics: AgentDiagnostic[] = [];
+  const internalDiagnostics = internalApiDiagnostics(changedFileReasons);
+  diagnostics.push(...internalDiagnostics);
+  checks.push(check("internal-api", "Internal API boundary", internalDiagnostics, {
+    changedFiles: changedFileReasons.filter((entry) => entry.internalApi).length,
+  }));
 
   if (options.includeDiagnose !== false) {
     try {
@@ -384,12 +481,13 @@ export async function buildAgentVerifyReport(
     generatedAt: new Date().toISOString(),
     project: context.project,
     changedFiles: changed.files,
+    changedFileReasons,
     gitAvailable: changed.gitAvailable,
     notes,
     ok,
     checks,
     diagnostics,
-    suggestedCommands: commandSuggestions(changed.files, diagnostics),
+    suggestedCommands: commandSuggestions(changed.files, diagnostics, changedFileReasons),
     nextRepairInput: AGENT_VERIFY_RELATIVE_PATH,
   };
 }

@@ -12,8 +12,8 @@ import {
   validateAndReport,
   runHook,
   type RoutesManifest,
-  type BundleManifest,
 } from "@mandujs/core";
+import type { BundleManifest } from "@mandujs/core/bundler";
 import { newId } from "@mandujs/core/id";
 import { resolveFromCwd } from "../util/fs";
 import { CLI_ERROR_CODES, printCLIError } from "../errors";

@@ -24,11 +24,16 @@ export function formatErrorResponse(error: ManduError, options: FormatOptions = 
     code: error.code,
     message: error.message,
     summary: error.summary,
+    cause: error.summary,
     fix: error.fix,
+    filePath: error.fix.file,
+    solution: error.fix.suggestion,
   };
 
   if (error.route) {
     response.route = error.route;
+    response.routeId = error.route.id;
+    response.routePattern = error.route.pattern;
   }
 
   // 개발 모드에서만 디버그 정보 포함
@@ -65,6 +70,7 @@ export function formatErrorForConsole(error: ManduError, options: FormatOptions 
   } else {
     lines.push(`  → ${error.summary}`);
   }
+  lines.push(`  Cause: ${error.summary}`);
 
   // 수정 안내
   lines.push("");
@@ -75,11 +81,14 @@ export function formatErrorForConsole(error: ManduError, options: FormatOptions 
     lines.push(`  Fix: ${error.fix.file}${error.fix.line ? `:${error.fix.line}` : ""}`);
     lines.push(`       ${error.fix.suggestion}`);
   }
+  lines.push(`  File: ${error.fix.file}${error.fix.line ? `:${error.fix.line}` : ""}`);
+  lines.push(`  Solution: ${error.fix.suggestion}`);
 
   // 라우트 컨텍스트
   if (error.route) {
     lines.push("");
-    lines.push(`  Route: ${error.route.id} (${error.route.pattern})`);
+    lines.push(`  Route ID: ${error.route.id}`);
+    lines.push(`  Route: ${error.route.pattern}`);
   }
 
   // 디버그 정보 (개발 모드)

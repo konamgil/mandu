@@ -108,5 +108,8 @@ describe("formatCLIError with markdown templates", () => {
     expect(out).toContain("Bun runtime not found");
     // Legacy path should include the `❌ Error [` prefix.
     expect(out).toContain("❌ Error [CLI_E002]");
+    expect(out).toContain("Cause:");
+    expect(out).toContain("Action:");
+    expect(out).toContain("Docs:");
   });
 });

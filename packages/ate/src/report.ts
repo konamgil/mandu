@@ -4,6 +4,85 @@ import { createDefaultOracle } from "./oracle";
 import type { SummaryJson, OracleLevel } from "./types";
 import { generateHtmlReport } from "./reporter/html";
 
+export interface QualityScore {
+  score: number;
+  grade: "pass" | "warn" | "fail";
+  signals: string[];
+}
+
+export interface QualityScoreComparison {
+  beforeScore: number;
+  afterScore: number;
+  delta: number;
+  verdict: "improved" | "regressed" | "unchanged";
+}
+
+function clampScore(score: number): number {
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function gradeScore(score: number): QualityScore["grade"] {
+  if (score >= 85) return "pass";
+  if (score >= 60) return "warn";
+  return "fail";
+}
+
+export function computeQualityScore(summary: Pick<SummaryJson, "ok" | "oracle" | "heal" | "impact">): QualityScore {
+  const signals: string[] = [];
+  let score = summary.ok ? 50 : 10;
+  signals.push(summary.ok ? "test runner passed" : "test runner failed");
+
+  const oracleSignals = [
+    ["L0 smoke oracle", summary.oracle.l0.ok],
+    ["L1 structure oracle", summary.oracle.l1.ok],
+    ["L2 contract oracle", summary.oracle.l2.ok],
+    ["L3 behavior oracle", summary.oracle.l3.ok],
+  ] as const;
+
+  for (const [label, ok] of oracleSignals) {
+    if (ok) {
+      score += 10;
+      signals.push(`${label} passed`);
+    } else {
+      signals.push(`${label} did not pass`);
+    }
+  }
+
+  if (summary.impact.mode === "subset" && summary.impact.selectedRoutes.length > 0) {
+    score += 5;
+    signals.push("impact-scoped route subset selected");
+  }
+
+  if (summary.heal.attempted && summary.heal.suggestions.length === 0) {
+    score += 5;
+    signals.push("no heal suggestions required");
+  } else if (summary.heal.suggestions.length > 0) {
+    signals.push(`${summary.heal.suggestions.length} heal suggestion(s) pending`);
+  }
+
+  const finalScore = clampScore(score);
+  return {
+    score: finalScore,
+    grade: gradeScore(finalScore),
+    signals,
+  };
+}
+
+export function compareQualityScores(
+  before: Pick<SummaryJson, "quality"> | number,
+  after: Pick<SummaryJson, "quality"> | number,
+): QualityScoreComparison {
+  const beforeScore = typeof before === "number" ? before : before.quality?.score ?? 0;
+  const afterScore = typeof after === "number" ? after : after.quality?.score ?? 0;
+  const delta = afterScore - beforeScore;
+  return {
+    beforeScore,
+    afterScore,
+    delta,
+    verdict: delta > 0 ? "improved" : delta < 0 ? "regressed" : "unchanged",
+  };
+}
+
 export function composeSummary(params: {
   repoRoot: string;
   runId: string;
@@ -31,7 +110,7 @@ export function composeSummary(params: {
     throw new Error(`Oracle 생성 실패: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
   }
 
-  return {
+  const summary: SummaryJson = {
     schemaVersion: 1,
     runId: params.runId,
     startedAt: params.startedAt,
@@ -59,6 +138,9 @@ export function composeSummary(params: {
       selectedRoutes: [],
     },
   };
+
+  summary.quality = computeQualityScore(summary);
+  return summary;
 }
 
 export function writeSummary(repoRoot: string, runId: string, summary: SummaryJson): string {

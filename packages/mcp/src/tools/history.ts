@@ -4,7 +4,7 @@ import {
   pruneHistory,
   getChangeStats,
   readSnapshotById,
-} from "@mandujs/core";
+} from "@mandujs/core/change";
 
 export const historyToolDefinitions: Tool[] = [
   {

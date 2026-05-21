@@ -43,9 +43,9 @@ import {
 import {
   generateManifest,
   loadManifest,
-  resolveBrainAdapter,
   type RoutesManifest,
 } from "@mandujs/core";
+import { resolveBrainAdapter } from "@mandujs/core/brain";
 import path from "node:path";
 
 /**

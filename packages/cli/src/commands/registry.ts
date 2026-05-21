@@ -1180,12 +1180,15 @@ registerCommand({
     "    --methods=<list>    HTTP methods, e.g. 'GET,POST,DELETE'",
     "    --timestamps        Add createdAt/updatedAt fields",
     "    --force             Overwrite existing files",
+    "    --dry-run           Preview scaffold output without writing files",
+    "    --diff              With --dry-run, print a unified new-file diff",
     "    --ai=<prompt>       Use the AI generator (any subcommand)",
     "    --ci                Non-interactive mode",
     "",
     "  Examples:",
     "    mandu generate resource party --fields='name:string!,color:string!' --ci",
     "    mandu generate page /blog/[slug]",
+    "    mandu generate page /dashboard --dry-run --diff",
     "    mandu generate both",
     "",
   ].join("\n"),
@@ -1225,6 +1228,8 @@ registerCommand({
         name: ctx.args[2] || ctx.options._positional,
         methods: ctx.options.methods,
         force: ctx.options.force === "true",
+        dryRun: ctx.options["dry-run"] === "true" || ctx.options["dry-run"] === "",
+        diff: ctx.options.diff === "true" || ctx.options.diff === "",
       });
     }
 

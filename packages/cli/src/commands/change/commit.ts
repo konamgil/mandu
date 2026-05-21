@@ -1,4 +1,4 @@
-import { commitChange } from "@mandujs/core";
+import { commitChange } from "@mandujs/core/change";
 import { getRootDir } from "../../util/fs";
 
 export async function changeCommit(): Promise<boolean> {

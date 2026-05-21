@@ -35,6 +35,23 @@ export interface McpErrorResponse {
 export interface McpToolResponse {
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
+  _meta?: McpResponseMeta;
+}
+
+export type McpNextActionKind = "none" | "inspect" | "verify" | "repair" | "retry";
+
+export interface McpNextAction {
+  kind: McpNextActionKind;
+  reason: string;
+  command?: string;
+  tool?: string;
+  input?: unknown;
+}
+
+export interface McpResponseMeta {
+  toolName: string;
+  ok: boolean;
+  nextAction: McpNextAction;
 }
 
 /**
@@ -186,6 +203,51 @@ function isSoftErrorResult(result: unknown): boolean {
   return false;
 }
 
+function inferNextAction(toolName: string, result: unknown, errorResponse?: McpErrorResponse): McpNextAction {
+  if (errorResponse) {
+    return {
+      kind: errorResponse.retryable ? "retry" : "repair",
+      reason: errorResponse.suggestion ?? errorResponse.error,
+    };
+  }
+
+  if (result && typeof result === "object") {
+    const obj = result as Record<string, unknown>;
+    if (isSoftErrorResult(result)) {
+      return { kind: "repair", reason: String(obj.error ?? "Tool returned an error result.") };
+    }
+    if (typeof obj.nextVerifyCommand === "string") {
+      return { kind: "verify", reason: "Tool returned an explicit verification command.", command: obj.nextVerifyCommand };
+    }
+    if (typeof obj.nextRepairInput === "string") {
+      return {
+        kind: "repair",
+        reason: "Tool returned a repair input artifact.",
+        command: `mandu agent repair --from ${obj.nextRepairInput}`,
+        input: obj.nextRepairInput,
+      };
+    }
+    if (obj.dryRun === true) {
+      return { kind: "inspect", reason: "Dry-run completed; review the preview before applying changes." };
+    }
+    if (Array.isArray(obj.nextSteps) && obj.nextSteps.length > 0) {
+      return { kind: "inspect", reason: "Tool returned follow-up steps.", input: obj.nextSteps };
+    }
+    if (typeof obj.tip === "string") {
+      return { kind: "inspect", reason: obj.tip };
+    }
+  }
+
+  return { kind: "none", reason: `${toolName} completed successfully.` };
+}
+
+function attachMeta(payload: unknown, meta: McpResponseMeta): unknown {
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    return { ...(payload as Record<string, unknown>), _meta: meta };
+  }
+  return { data: payload, _meta: meta };
+}
+
 export function createToolResponse(
   toolName: string,
   result: unknown,
@@ -193,28 +255,40 @@ export function createToolResponse(
 ): McpToolResponse {
   if (error) {
     const errorResponse = formatMcpError(error, toolName);
+    const meta: McpResponseMeta = {
+      toolName,
+      ok: false,
+      nextAction: inferNextAction(toolName, null, errorResponse),
+    };
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(errorResponse, null, 2),
+          text: JSON.stringify(attachMeta(errorResponse, meta), null, 2),
         },
       ],
       isError: true,
+      _meta: meta,
     };
   }
 
   // Detect soft errors returned by handlers (e.g. { error: "Route not found" })
   const softError = isSoftErrorResult(result);
+  const meta: McpResponseMeta = {
+    toolName,
+    ok: !softError,
+    nextAction: inferNextAction(toolName, result),
+  };
 
   return {
     content: [
       {
         type: "text",
-        text: JSON.stringify(result, null, 2),
+        text: JSON.stringify(attachMeta(result, meta), null, 2),
       },
     ],
     ...(softError && { isError: true }),
+    _meta: meta,
   };
 }
 

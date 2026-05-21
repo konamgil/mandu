@@ -16,8 +16,9 @@ Mandu의 제품 방향은 **Agent-Native Fullstack Framework**입니다. 에이�
 ## 빠른 시작
 
 ```bash
-bunx @mandujs/cli init my-app
+bunx @mandujs/cli create my-app --yes
 cd my-app
+bun install
 bun run dev
 ```
 

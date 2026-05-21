@@ -1,7 +1,7 @@
 import type { SummaryJson } from "../types";
 
 export function generateHtmlTemplate(summary: SummaryJson, screenshotUrls: string[] = []): string {
-  const { runId, startedAt, finishedAt, ok, oracle, playwright, heal, impact } = summary;
+  const { runId, startedAt, finishedAt, ok, oracle, playwright, heal, impact, quality } = summary;
 
   const duration = new Date(finishedAt).getTime() - new Date(startedAt).getTime();
   const durationStr = `${(duration / 1000).toFixed(2)}s`;
@@ -45,7 +45,7 @@ export function generateHtmlTemplate(summary: SummaryJson, screenshotUrls: strin
     </div>
 
     <!-- Summary Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
       <div class="bg-white rounded-lg shadow p-6 border-l-4 ${ok ? "border-green-500" : "border-red-500"}">
         <div class="text-sm font-medium text-gray-600 mb-1">Status</div>
         <div class="text-2xl font-bold ${statusClass} inline-block px-3 py-1 rounded">${statusText}</div>
@@ -64,6 +64,12 @@ export function generateHtmlTemplate(summary: SummaryJson, screenshotUrls: strin
       <div class="bg-white rounded-lg shadow p-6 border-l-4 border-gray-400">
         <div class="text-sm font-medium text-gray-600 mb-1">Skipped</div>
         <div class="text-3xl font-bold text-gray-600">${skipCount}</div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6 border-l-4 ${quality?.grade === "pass" ? "border-green-500" : quality?.grade === "warn" ? "border-yellow-500" : "border-red-500"}">
+        <div class="text-sm font-medium text-gray-600 mb-1">Quality Score</div>
+        <div class="text-3xl font-bold text-gray-900">${quality?.score ?? 0}</div>
+        <div class="text-xs text-gray-500 uppercase">${quality?.grade ?? "fail"}</div>
       </div>
     </div>
 

@@ -22,7 +22,7 @@ bun add -D @mandujs/cli
 Or use directly with `bunx`:
 
 ```bash
-bunx @mandujs/cli init my-app
+bunx @mandujs/cli create my-app --yes
 ```
 
 ## Quick Start
@@ -31,10 +31,10 @@ bunx @mandujs/cli init my-app
 
 ```bash
 # Interactive mode (recommended)
-bunx @mandujs/cli init
+bunx @mandujs/cli create
 
 # Non-interactive mode
-bunx @mandujs/cli init my-app --yes
+bunx @mandujs/cli create my-app --yes
 ```
 
 The interactive mode asks for project name, template selection, and whether to install dependencies. Use `--yes` / `-y` to skip prompts. Use `--no-install` to skip automatic `bun install`.
@@ -309,7 +309,7 @@ bunx mandu guard --preset fsd
 
 ```bash
 # Initialize project
-bunx @mandujs/cli init my-app
+bunx @mandujs/cli create my-app --yes
 
 # Development
 bunx mandu dev --guard

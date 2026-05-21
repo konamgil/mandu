@@ -152,6 +152,13 @@ export interface ContractInstance extends ContractSchema {
   _validated?: boolean;
 }
 
+/**
+ * Public API schema boundary. Use this alias in docs and generated examples
+ * when distinguishing a request/response contract from an executable filling.
+ */
+export type ApiContract<T extends ContractDefinition = ContractDefinition> =
+  T & ContractInstance;
+
 /** Validation error detail */
 export interface ContractValidationIssue {
   /** Field path (e.g., "body.email") */

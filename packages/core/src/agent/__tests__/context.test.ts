@@ -33,6 +33,24 @@ async function writeFile(root: string, rel: string, content: string): Promise<vo
   await fs.writeFile(abs, content, "utf8");
 }
 
+async function runGit(root: string, args: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+  try {
+    const proc = Bun.spawn(["git", ...args], {
+      cwd: root,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    return { ok: exitCode === 0, stdout, stderr };
+  } catch (error) {
+    return { ok: false, stdout: "", stderr: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 describe("agent context", () => {
   let root: string;
 
@@ -174,7 +192,7 @@ describe("agent context", () => {
 
     expect(report.framework).toBe("mandu");
     expect(report.ok).toBe(true);
-    expect(report.checks.map((check) => check.id)).toEqual(["manifest"]);
+    expect(report.checks.map((check) => check.id)).toEqual(["internal-api", "manifest"]);
     expect(report.suggestedCommands.map((cmd) => cmd.command)).toContain("bun run typecheck");
     expect(report.nextRepairInput).toBe(".mandu/agent-verify.json");
 
@@ -182,6 +200,35 @@ describe("agent context", () => {
     expect(result.path).toBe(agentVerifyReportPath(root));
     const parsed = JSON.parse(await fs.readFile(result.path, "utf8"));
     expect(parsed.project.name).toBe("agent-app");
+  });
+
+  it("records changed file reasons and warns on internal API edits", async () => {
+    const version = await runGit(root, ["--version"]);
+    if (!version.ok) return;
+
+    expect((await runGit(root, ["init"])).ok).toBe(true);
+    await runGit(root, ["config", "user.email", "agent@example.com"]);
+    await runGit(root, ["config", "user.name", "Agent"]);
+    expect((await runGit(root, ["add", "."])).ok).toBe(true);
+    expect((await runGit(root, ["commit", "-m", "initial"])).ok).toBe(true);
+
+    await writeFile(root, "packages/core/src/runtime/internal-change.ts", "export const value = 1;\n");
+
+    const report = await buildAgentVerifyReport(root, {
+      includeDiagnose: false,
+      includeGuard: false,
+      includeContract: false,
+    });
+
+    const reason = report.changedFileReasons.find(
+      (entry) => entry.file === "packages/core/src/runtime/internal-change.ts",
+    );
+    expect(reason?.internalApi).toBe(true);
+    expect(reason?.recommendedChecks).toContain("bun run check:public-api && bun run check:target-boundaries");
+    expect(report.diagnostics.some((diag) => diag.code === "MANDU_VERIFY_INTERNAL_API_EDIT")).toBe(true);
+    expect(report.suggestedCommands.map((cmd) => cmd.command)).toContain(
+      "bun run check:public-api && bun run check:target-boundaries",
+    );
   });
 
   it("turns a verify report into repair actions", async () => {
@@ -197,6 +244,7 @@ describe("agent context", () => {
         configFile: null,
       },
       changedFiles: [],
+      changedFileReasons: [],
       gitAvailable: false,
       notes: [],
       ok: false,

@@ -25,6 +25,18 @@ segment tree — no manual wiring, no config entries.
 | `not-found.tsx`  | subtree     | 404 surface for `notFound()` / no match    | status 404 body, layouts preserved                  |
 | `route.ts`       | leaf        | HTTP handler (`GET`/`POST`/…)              | no SSR — returns a `Response`                       |
 
+## Route Module Contract
+
+`app/**/page.tsx` and `app/**/route.ts` have different contracts and should not be interchangeable:
+
+- `page.tsx` default export renders UI for a route.
+- `route.ts` default export or method exports handle HTTP requests.
+- `layout.tsx`, `loading.tsx`, `error.tsx`, and `not-found.tsx` are convention modules resolved by nearest ancestor.
+- Server-only imports belong in slots/fillings or server modules, not in page or island modules.
+- Client interactivity belongs in `*.island.tsx` or `*.partial.tsx`, not in generated server contracts.
+
+The scanner and guard should reject route modules that blur these responsibilities.
+
 **Nearest-ancestor resolution.** Each page route carries three resolved
 module paths after scanning: `loadingModule`, `errorModule`,
 `notFoundModule`. At scan time the scanner walks from the route's own
@@ -177,6 +189,17 @@ manifest client entry instead of bundling the page's server import graph into
 `/.mandu/client/*.island.js`. For embedded interactivity inside an async server
 page, use a `*.partial.tsx` entry and render its `.Render` component with SSR
 props.
+
+## Scanner Caching And Invalidation
+
+The filesystem route scanner treats `app/` as the source of truth and `.mandu/routes.manifest.json` as a generated cache. In dev mode, any change to route convention files must invalidate the affected route subtree:
+
+- adding/removing `page.tsx` or `route.ts` changes the route list;
+- adding/removing `layout.tsx` changes descendant layout chains;
+- adding/removing `loading.tsx`, `error.tsx`, or `not-found.tsx` changes nearest-ancestor resolution;
+- adding/removing `*.island.tsx` or `*.partial.tsx` changes hydration/client bundle metadata.
+
+Generated manifests should be refreshed by `mandu dev`, `mandu build`, or the route generation command. Agents should not manually edit `.mandu/routes.manifest.json`.
 
 ## Next.js App Router parity
 

@@ -44,7 +44,7 @@ Mandu는 명확한 프로젝트 구조, 타입 안전한 API, island 기반 Reac
 ## 1분 만에 시작하기
 
 ```bash
-bunx @mandujs/cli init my-app
+bunx @mandujs/cli create my-app --yes
 cd my-app
 bun install
 bun run dev
@@ -55,7 +55,7 @@ bun run dev
 실시간 채팅 스타터를 쓰고 싶다면:
 
 ```bash
-bunx @mandujs/cli init my-chat --template realtime-chat
+bunx @mandujs/cli create my-chat --template realtime-chat --yes
 ```
 
 매번 `bunx`를 쓰기보다 `mandu` 명령을 먼저 설치하고 싶다면:
@@ -68,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/konamgil/mandu/main/install.sh | sh
 iwr https://raw.githubusercontent.com/konamgil/mandu/main/install.ps1 -useb | iex
 ```
 
-그 다음 `mandu init my-app`을 실행하세요.
+그 다음 `mandu create my-app --yes`를 실행하세요.
 
 ## 페이지 만들기
 

@@ -309,6 +309,11 @@ export interface SummaryJson {
     attempted: boolean;
     suggestions: Array<{ kind: string; title: string; diff: string }>;
   };
+  quality?: {
+    score: number;
+    grade: "pass" | "warn" | "fail";
+    signals: string[];
+  };
   impact: {
     mode: "full" | "subset";
     changedFiles: string[];

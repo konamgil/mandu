@@ -80,6 +80,11 @@ describe("Error Handler", () => {
 
       const parsed = JSON.parse(response.content[0].text);
       expect(parsed.routes).toHaveLength(1);
+      expect(parsed._meta).toMatchObject({
+        toolName: "test_tool",
+        ok: true,
+        nextAction: { kind: "none" },
+      });
     });
 
     it("should create error response", () => {
@@ -92,16 +97,45 @@ describe("Error Handler", () => {
       const parsed = JSON.parse(response.content[0].text);
       expect(parsed.error).toBe("Test error");
       expect(parsed.category).toBeDefined();
+      expect(parsed._meta).toMatchObject({
+        toolName: "test_tool",
+        ok: false,
+        nextAction: { kind: "repair" },
+      });
     });
 
     it("sets isError: true for soft error results", () => {
       const result = createToolResponse("test-tool", { error: "something went wrong" });
       expect(result.isError).toBe(true);
+      expect(result._meta?.ok).toBe(false);
+      expect(result._meta?.nextAction.kind).toBe("repair");
     });
 
     it("does not set isError for success results", () => {
       const result = createToolResponse("test-tool", { success: true, data: "ok" });
       expect(result.isError).toBeFalsy();
+    });
+
+    it("surfaces explicit verification commands as next actions", () => {
+      const result = createToolResponse("mandu.agent.apply", {
+        ok: true,
+        nextVerifyCommand: "mandu agent verify --changed",
+      });
+
+      expect(result._meta?.nextAction).toMatchObject({
+        kind: "verify",
+        command: "mandu agent verify --changed",
+      });
+    });
+
+    it("surfaces dry-run previews as inspect next actions", () => {
+      const result = createToolResponse("mandu.generate", {
+        dryRun: true,
+        files: ["app/page.tsx"],
+      });
+
+      expect(result._meta?.nextAction.kind).toBe("inspect");
+      expect(result._meta?.nextAction.reason).toContain("Dry-run");
     });
   });
 

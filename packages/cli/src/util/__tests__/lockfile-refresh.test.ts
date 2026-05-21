@@ -3,12 +3,14 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  validateConfig,
+} from "@mandujs/core";
+import {
   generateLockfile,
   readLockfile,
-  validateConfig,
   validateLockfile,
   writeLockfile,
-} from "@mandujs/core";
+} from "@mandujs/core/lockfile";
 import { refreshStaleRuntimeLockfile } from "../lockfile";
 
 let tmpRoot: string | null = null;

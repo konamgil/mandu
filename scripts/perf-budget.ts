@@ -10,6 +10,10 @@ const MetricResultSchema = z.object({
   budget: z.number().nonnegative(),
   baseline: z.number().nonnegative().nullable(),
   deltaFromBudget: z.number().nullable(),
+  deltaFromBaseline: z.number().nullable().optional(),
+  regressionFromBaselinePct: z.number().nullable().optional(),
+  regressionThresholdPct: z.number().nullable().optional(),
+  failureReason: z.enum(["budget", "baseline-regression"]).nullable().optional(),
   status: z.enum(["pass", "warn", "fail", "unsupported"]),
 });
 
@@ -93,7 +97,12 @@ function toGithubAnnotation(level: "warning" | "error", title: string, message: 
 function formatMetricLine(scenarioId: string, result: MetricResult): string {
   const measured = result.measured === null ? "n/a" : result.measured.toFixed(1);
   const baseline = result.baseline === null ? "n/a" : result.baseline.toFixed(1);
-  return `${scenarioId} ${result.metric}: measured=${measured}, baseline=${baseline}, budget=${result.budget.toFixed(1)}, status=${result.status}`;
+  const regression =
+    result.regressionFromBaselinePct === null || result.regressionFromBaselinePct === undefined
+      ? "n/a"
+      : `${result.regressionFromBaselinePct.toFixed(1)}%`;
+  const reason = result.failureReason ? `, reason=${result.failureReason}` : "";
+  return `${scenarioId} ${result.metric}: measured=${measured}, baseline=${baseline}, regression=${regression}, budget=${result.budget.toFixed(1)}, status=${result.status}${reason}`;
 }
 
 function renderMarkdown(summary: PerfSummary): string {
@@ -116,12 +125,12 @@ function renderMarkdown(summary: PerfSummary): string {
     }
 
     lines.push("");
-    lines.push("| Metric | Measured | Baseline | Budget | Status |");
-    lines.push("|---|---:|---:|---:|---|");
+    lines.push("| Metric | Measured | Baseline | Δ baseline | Budget | Status | Reason |");
+    lines.push("|---|---:|---:|---:|---:|---|---|");
 
     for (const result of scenario.results) {
       lines.push(
-        `| \`${result.metric}\` | ${result.measured === null ? "n/a" : result.measured.toFixed(1)} | ${result.baseline === null ? "n/a" : result.baseline.toFixed(1)} | ${result.budget.toFixed(1)} | ${result.status} |`
+        `| \`${result.metric}\` | ${result.measured === null ? "n/a" : result.measured.toFixed(1)} | ${result.baseline === null ? "n/a" : result.baseline.toFixed(1)} | ${result.regressionFromBaselinePct === null || result.regressionFromBaselinePct === undefined ? "n/a" : `${result.regressionFromBaselinePct.toFixed(1)}%`} | ${result.budget.toFixed(1)} | ${result.status} | ${result.failureReason ?? ""} |`
       );
     }
 
@@ -210,5 +219,7 @@ async function main(): Promise<number> {
   return 0;
 }
 
-const exitCode = await main();
-process.exit(exitCode);
+if (import.meta.main) {
+  const exitCode = await main();
+  process.exit(exitCode);
+}

@@ -24,13 +24,14 @@ bun add -D @mandujs/cli
 
 ```bash
 # 대화형 모드 (권장)
-bunx @mandujs/cli init
+bunx @mandujs/cli create
 
 # 비대화형 모드
-bunx @mandujs/cli init my-app --yes
+bunx @mandujs/cli create my-app --yes
 
 # 개발 서버 시작
 cd my-app
+bun install
 bun run dev
 ```
 

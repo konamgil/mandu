@@ -21,7 +21,7 @@ const ScenarioSchema = z.object({
   id: z.string().min(1),
   app: z.string().min(1),
   status: z.enum(["active", "manual", "planned"]),
-  mode: z.enum(["dev", "prod", "build", "hmr"]),
+  mode: z.enum(["dev", "prod", "build", "hmr", "streaming"]),
   url: z.string().min(1),
   runner: z.string().min(1),
   measuredMetrics: z.array(z.string().min(1)).min(1),
@@ -43,7 +43,7 @@ function validateCrossReferences(config: PerfBaseline): void {
   const metricKeys = new Set(Object.keys(config.metrics));
 
   for (const scenario of config.scenarios) {
-    if (scenario.status === "active" || scenario.status === "manual") {
+    if ((scenario.status === "active" || scenario.status === "manual") && scenario.app !== "synthetic") {
       const demoPath = new URL(`${scenario.app}/`, demoRoot);
       if (!existsSync(demoPath)) {
         throw new Error(`${scenario.status} scenario '${scenario.id}' points to missing demo '${scenario.app}'`);

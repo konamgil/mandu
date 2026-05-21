@@ -112,13 +112,27 @@ export function findRouteLevelClientComponentImport(source: string): RouteLevelC
 
 export function findRouteLevelClientComponentImports(source: string): RouteLevelClientComponentImport[] {
   const candidates = findComponentImports(source).flatMap((entry) =>
-    entry.names
-      .filter((localName) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(localName))
-      .map((localName) => ({ module: entry.module, localName }))
+    isRouteLevelClientEntrySpecifier(entry.module)
+      ? entry.names
+          .filter((localName) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(localName))
+          .map((localName) => ({ module: entry.module, localName }))
+      : []
   );
 
   if (candidates.length === 0) return [];
   return defaultExportRendersClientComponents(source, candidates);
+}
+
+function isRouteLevelClientEntrySpecifier(specifier: string): boolean {
+  const normalized = specifier.replace(/\\/g, "/");
+  if (
+    normalized.includes("/client/shared/") ||
+    normalized.startsWith("@/client/shared/") ||
+    normalized.startsWith("src/client/shared/")
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export async function resolveClientImportModulePath(
@@ -163,6 +177,7 @@ export async function shouldPreserveExistingClientModule(
   clientModule: string,
   rootDir: string,
 ): Promise<boolean> {
+  if (!isRouteLevelClientEntrySpecifier(clientModule)) return false;
   const source = await readRouteModule(rootDir, clientModule);
   if (source === null) return false;
   if (hasUseServerDirective(source)) return false;

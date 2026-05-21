@@ -1,7 +1,6 @@
 import {
   loadManifest,
   generateManifest,
-  generateRoutes,
   buildGenerateReport,
   printReportSummary,
   writeReport,
@@ -9,6 +8,7 @@ import {
   generateResourcesArtifacts,
   logGeneratorResult,
 } from "@mandujs/core";
+import { generateRoutes } from "@mandujs/core/generator";
 import { resolveFromCwd, getRootDir } from "../util/fs";
 import path from "path";
 import fs from "fs/promises";

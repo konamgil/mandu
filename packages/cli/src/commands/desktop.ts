@@ -70,7 +70,8 @@ export function _desktopEntryTemplate(): string {
  */
 
 import { startServer } from "@mandujs/core";
-import type { RoutesManifest, BundleManifest } from "@mandujs/core";
+import type { RoutesManifest } from "@mandujs/core";
+import type { BundleManifest } from "@mandujs/core/bundler";
 import path from "path";
 import fs from "fs";
 

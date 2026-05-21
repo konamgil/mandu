@@ -13,19 +13,20 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import type { ActivityMonitor } from "../activity-monitor.js";
+import { loadManifest, runGuardCheck } from "@mandujs/core";
 import {
-  loadManifest,
-  runGuardCheck,
   analyzeViolations,
   initializeBrain,
   getBrain,
-  startWatcher,
-  stopWatcher,
-  getWatcher,
-  generateJsonStatus,
   initializeArchitectureAnalyzer,
   getArchitectureAnalyzer,
-} from "@mandujs/core";
+} from "@mandujs/core/brain";
+import {
+  generateJsonStatus,
+  getWatcher,
+  startWatcher,
+  stopWatcher,
+} from "@mandujs/core/watcher";
 import { getProjectPaths } from "../utils/project.js";
 
 export const brainToolDefinitions: Tool[] = [
@@ -664,7 +665,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
 
   // #235 followup — brain auth tools (status / login / logout).
   handlers["mandu.brain.status"] = async () => {
-    const core = await import("@mandujs/core");
+    const core = await import("@mandujs/core/brain");
     assertBrainAuthSurface(core);
     const store = core.getCredentialStore();
     const resolution = await core.resolveBrainAdapter({
@@ -744,7 +745,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
     };
 
     if (provider === "openai") {
-      const core = await import("@mandujs/core");
+      const core = await import("@mandujs/core/brain");
       assertBrainAuthSurface(core);
       const auth = new core.ChatGPTAuth();
       const existing = auth.locateAuthFile();
@@ -835,7 +836,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
     }
 
     // Anthropic — Mandu-managed OAuth loopback flow.
-    const core = await import("@mandujs/core");
+    const core = await import("@mandujs/core/brain");
     assertBrainAuthSurface(core);
     try {
       const adapter = new core.AnthropicOAuthAdapter({
@@ -888,7 +889,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
     const { provider = "all" } = args as {
       provider?: "openai" | "anthropic" | "all";
     };
-    const core = await import("@mandujs/core");
+    const core = await import("@mandujs/core/brain");
     assertBrainAuthSurface(core);
     const store = core.getCredentialStore();
     const targets =

@@ -21,13 +21,13 @@ import {
 // `readFileSync(… init-landing.md)` path was broken inside binaries
 // because the file import resolved to a `$bunfs` virtual path.
 import { CLI_UX_TEMPLATES } from "../../generated/cli-ux-manifest.js";
+import { validateAndReport } from "@mandujs/core";
 import {
   generateLockfile,
-  readMcpConfig,
-  validateAndReport,
-  writeLockfile,
   LOCKFILE_PATH,
-} from "@mandujs/core";
+  readMcpConfig,
+  writeLockfile,
+} from "@mandujs/core/lockfile";
 // `setupClaudeSkills` is the dev-mode filesystem copier and remains the
 // public API exposed by `@mandujs/skills`. The CLI no longer calls it
 // directly (Phase 11.A: binary-safe path below), but we keep the type

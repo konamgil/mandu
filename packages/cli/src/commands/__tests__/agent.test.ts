@@ -182,7 +182,7 @@ describe("mandu agent CLI", () => {
     expect(ok).toBe(true);
     const parsed = JSON.parse(out);
     expect(parsed.ok).toBe(true);
-    expect(parsed.checks.map((check: { id: string }) => check.id)).toEqual(["manifest"]);
+    expect(parsed.checks.map((check: { id: string }) => check.id)).toEqual(["internal-api", "manifest"]);
     expect(parsed.nextRepairInput).toBe(".mandu/agent-verify.json");
   });
 
