@@ -44,6 +44,7 @@ nul
 .claude/scheduled_tasks.lock
 
 # Local debug / ad-hoc scratch files
+DNA/
 packages/cli/chokidar-test.ts
 
 # Auto-generated test artifacts
