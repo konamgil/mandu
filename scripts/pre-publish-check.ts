@@ -14,6 +14,10 @@ import { checkTargetBoundaries } from "./check-target-boundaries";
 import { checkDocsDrift } from "./check-docs-drift";
 import { collectTempArtifactDirs } from "./pre-publish-temp-artifacts";
 import { collectPublishOrderIssues, PUBLISHABLE_PACKAGE_DIRS } from "./publish-order";
+import {
+  transformClientBoundaries,
+  validateClientBoundaryServerOnlyImports,
+} from "../packages/core/src/bundler/client-boundary-transform";
 
 interface PackageJson {
   name: string;
@@ -366,6 +370,63 @@ async function auditCrossPackageSubpaths(versionMap: Map<string, string>): Promi
   return issues;
 }
 
+function checkClientBoundaryGuardrails(): string[] {
+  const issues: string[] = [];
+  const transformResult = transformClientBoundaries(
+    `
+import Widget from "./Widget.client";
+
+export default function Page({ actionRef }) {
+  return (
+    <table>
+      <tbody>
+        <tr>
+          <Widget ref={actionRef} onSave={() => actionRef.current?.()}><span>child</span></Widget>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+`,
+    {
+      routeId: "prepublish-boundary",
+      fileName: "app/prepublish/page.tsx",
+    },
+  );
+  const codes = new Set(transformResult.diagnostics.map((diagnostic) => diagnostic.code));
+  const expectedCodes = [
+    "MANDU_BOUNDARY_INVALID_HOST_CONTEXT",
+    "MANDU_BOUNDARY_UNSUPPORTED_CHILDREN",
+    "MANDU_BOUNDARY_UNSUPPORTED_REF",
+    "MANDU_BOUNDARY_UNSUPPORTED_FUNCTION_PROP",
+  ] as const;
+  for (const expected of expectedCodes) {
+    if (!codes.has(expected)) {
+      issues.push(`❌ Missing client boundary guardrail diagnostic: ${expected}`);
+    }
+  }
+
+  const serverOnlyDiagnostics = validateClientBoundaryServerOnlyImports(
+    `
+import { readFile } from "node:fs/promises";
+import "server-only";
+export default function Widget() { return String(readFile); }
+`,
+    {
+      id: "prepublish-boundary--0",
+      routeId: "prepublish-boundary",
+      module: "src/client/Widget.client.tsx",
+      exportName: "default",
+    },
+    "src/client/Widget.client.tsx",
+  );
+  if (!serverOnlyDiagnostics.some((diagnostic) => diagnostic.code === "MANDU_BOUNDARY_SERVER_ONLY_IMPORT")) {
+    issues.push("❌ Missing client boundary guardrail diagnostic: MANDU_BOUNDARY_SERVER_ONLY_IMPORT");
+  }
+
+  return issues;
+}
+
 console.log("🔍 Pre-publish check: workspace 의존성 검증\n");
 
 const versions = loadVersionMap(PUBLISHABLE_PACKAGE_DIRS);
@@ -665,6 +726,31 @@ try {
   hasIssues = true;
   console.error(
     "  ❌ docs drift check failed:",
+    err instanceof Error ? err.message : String(err)
+  );
+}
+
+console.log();
+
+// 10. F42 client boundary guardrail smoke
+console.log("🧱 Step 10: Client boundary guardrails (F42)...\n");
+
+try {
+  const guardrailIssues = checkClientBoundaryGuardrails();
+  if (guardrailIssues.length > 0) {
+    hasIssues = true;
+    guardrailIssues.forEach((issue) => console.log(`  ${issue}`));
+    console.log();
+    console.log(
+      "  💡 Invalid compiler-owned client boundaries must fail before npm publish."
+    );
+  } else {
+    console.log("  ✅ Invalid client boundaries fail with stable diagnostics");
+  }
+} catch (err) {
+  hasIssues = true;
+  console.error(
+    "  ❌ client boundary guardrail check failed:",
     err instanceof Error ? err.message : String(err)
   );
 }

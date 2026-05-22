@@ -25,6 +25,7 @@ import path from "path";
 import fs from "fs";
 import { LRUCache } from "../utils/lru-cache";
 import { registerCacheSize, unregisterCacheSize } from "../observability/metrics";
+export { generateFastRefreshPreamble } from "./fast-refresh-preamble";
 
 /**
  * #184: 공통 디렉토리 변경 시 사용하는 sentinel.
@@ -138,6 +139,8 @@ export interface RebuildResult {
 export interface DevBundler {
   /** 초기 빌드 결과 */
   initialBuild: BundleResult;
+  /** Reverse import graph initial seed completion for deterministic tests. */
+  reverseGraphReady: Promise<void>;
   /** 파일 감시 중지 */
   close: () => void;
 }
@@ -648,6 +651,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
   // keep the legacy "silent drop" behavior so no project is made
   // worse by turning this on.
   const reverseGraph = new ReverseImportGraph();
+  let reverseGraphSeedPromise: Promise<void> | null = null;
 
   /**
    * Re-scan a single file's imports and update its row in the
@@ -1243,6 +1247,10 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     changedFile: string,
   ): Promise<number> => {
     const absChanged = path.resolve(rootDir, changedFile);
+    if (reverseGraphSeedPromise) {
+      await reverseGraphSeedPromise;
+    }
+
     // Refresh the changed file's OWN imports first. A leaf edit can
     // legitimately add or remove imports (e.g. switching a barrel
     // from `./en` to `./ko`); the reverse graph must track that so
@@ -1655,7 +1663,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
   // and the first user edit can't race the seed (first event goes
   // through the 100 ms debounce, by which point the scan has finished
   // for any realistic project size).
-  seedReverseGraph().catch((err) => {
+  reverseGraphSeedPromise = seedReverseGraph().catch((err) => {
     console.warn(
       "[Mandu HMR] reverse import-graph seed skipped:",
       err instanceof Error ? err.message : String(err),
@@ -1664,6 +1672,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
 
   return {
     initialBuild,
+    reverseGraphReady: reverseGraphSeedPromise,
     close: () => {
       // B6: clear all per-file timers to release event-loop refs.
       // Phase 17 — `LRUCache.clear()` fires the registered `onEvict`
@@ -2206,88 +2215,6 @@ export function createHMRServer(
       oldestId: replayBuffer.length > 0 ? replayBuffer[0]!.id : null,
     }),
   };
-}
-
-/**
- * Phase 7.1 B-3 — HTML preamble for React Fast Refresh.
- *
- * Emitted by the SSR renderer in dev mode, **before** any island JS
- * evaluates. Two concerns, one <script>:
- *
- *   1. Install inert stubs for `$RefreshReg$` / `$RefreshSig$` on
- *      `window`. Bun's `reactFastRefresh: true` transform inserts calls
- *      to these at the top of every transformed module; if they are
- *      undefined when the module body runs, we get a runtime error and
- *      the island never hydrates. Vite's preamble does the same inline
- *      stub install for the same reason.
- *
- *   2. Fire a dynamic `import()` of the bundled glue (`_fast-refresh-
- *      runtime.js`), which in turn `await`s the real `react-refresh/
- *      runtime`, installs `window.__MANDU_HMR__`, and upgrades the
- *      stubs to live wrappers that forward to the refresh runtime. The
- *      race between "module evaluates and calls `$RefreshReg$`" and
- *      "glue has upgraded the stubs" is benign — registrations that
- *      land on the stub are simply no-ops, which at worst means the
- *      very first mount isn't tracked. Subsequent hot swaps land on
- *      the live wrappers and work normally.
- *
- * The emitted script is **inline** (no `type="module"`, no external
- * src). This is deliberate: the stubs must exist before *any* module
- * script runs, and inline execution blocks the parser. The dynamic
- * import inside the inline script is non-blocking so we don't stall
- * First Contentful Paint.
- *
- * CSP note: the inline <script> uses no `eval` or `new Function`; it
- * only calls `Object.assign`, defines functions, and initiates an
- * `import()`. All of these are permitted under `script-src 'self'
- * 'unsafe-inline'` which is Mandu's default dev CSP (production CSP
- * forbids `unsafe-inline`, but this preamble is dev-only).
- *
- * `glueUrl` and `runtimeUrl` come from the build manifest's
- * `shared.fastRefresh` block (populated only in dev). Both must be
- * absolute URLs served from the same origin as the HTML, which our
- * bundler always guarantees (`/.mandu/client/...`).
- */
-export function generateFastRefreshPreamble(
-  glueUrl: string,
-  runtimeUrl: string,
-): string {
-  // Both URLs must be non-empty. If either is missing (e.g. vendor
-  // shim build failed), the caller (ssr.ts) should skip this preamble
-  // entirely — defensive guard here keeps the output valid regardless.
-  if (!glueUrl || !runtimeUrl) {
-    return `<script>/* Mandu Fast Refresh: missing runtime assets, preamble skipped */</script>`;
-  }
-  // JSON.stringify escapes the URLs safely for inline `<script>`:
-  //   - quotes produce a valid JS string literal
-  //   - forward-slashes / backslashes are handled
-  // We also `split('</')` to avoid a stray `</script>` sequence in the
-  // URL bytes breaking the enclosing tag. This is the same defense
-  // Vite uses in its own preamble emitter.
-  const glueLit = JSON.stringify(glueUrl).split("</").join('<"+"/');
-  const runtimeLit = JSON.stringify(runtimeUrl).split("</").join('<"+"/');
-  return `<script>
-// Phase 7.1 B-3 React Fast Refresh preamble (Mandu dev-only)
-(function () {
-  if (typeof window === "undefined") return;
-  // Install inert stubs so transformed modules that run BEFORE the
-  // async runtime upgrade don't hit ReferenceError on $RefreshReg$.
-  if (!window.$RefreshReg$) window.$RefreshReg$ = function () {};
-  if (!window.$RefreshSig$) window.$RefreshSig$ = function () { return function (t) { return t; }; };
-  // Async-load the glue; failures are reported but never throw out of
-  // the preamble — a missing runtime degrades to full-reload HMR.
-  import(${glueLit})
-    .then(function (mod) {
-      var runtimeImport = function () { return import(${runtimeLit}); };
-      if (mod && typeof mod.installGlobal === "function") {
-        return mod.installGlobal({ runtimeImport: runtimeImport });
-      }
-    })
-    .catch(function (err) {
-      console.error("[Mandu Fast Refresh] preamble failed:", err);
-    });
-})();
-</script>`;
 }
 
 /**

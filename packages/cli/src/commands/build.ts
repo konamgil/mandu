@@ -29,7 +29,7 @@ import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";
 import { createBuildSummaryRows, renderBuildSummaryTable } from "../util/build-summary";
 import { emitStaticExport } from "../util/static-export";
-import { createBundledImporter } from "../util/bun";
+import { createCachedBundledImporter, type BundledImportOptions } from "../util/bun";
 
 export interface BuildOptions {
   /** Build mode for client bundles */
@@ -283,7 +283,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   const hydratedRoutes = manifest.routes.filter(
     (route) =>
       route.kind === "page" &&
-      route.clientModule &&
+      (!!route.clientModule || !!route.boundaries?.length) &&
       (!route.hydration || route.hydration.strategy !== "none")
   );
 
@@ -318,7 +318,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
 
   if (hydratedRoutes.length === 0) {
     console.log("\n📭 No routes require hydration.");
-    console.log("   (no clientModule or hydration.strategy: none)");
+    console.log("   (no clientModule/client boundaries or hydration.strategy: none)");
     // Pure-SSR projects still need `.mandu/manifest.json` for `mandu start`
     // to boot. Emit a stub manifest with empty bundles — the start path reads
     // it only for bundle asset lookup, which is a no-op when nothing hydrates.
@@ -335,10 +335,12 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     await fs.writeFile(manifestPath, JSON.stringify(stubManifest, null, 2));
     bundleManifest = stubManifest;
   } else {
-    console.log(`\n🏝️  Building ${hydratedRoutes.length} Island(s)...`);
+    console.log(`\n🏝️  Building ${hydratedRoutes.length} hydrated route(s)...`);
     for (const route of hydratedRoutes) {
       const hydration = route.hydration || { strategy: "island", priority: "visible" };
-      console.log(`   - ${route.id} (${hydration.strategy}, ${hydration.priority || "visible"})`);
+      const boundaryCount = route.kind === "page" ? route.boundaries?.length ?? 0 : 0;
+      const boundaryLabel = boundaryCount > 0 ? `, ${boundaryCount} boundary(s)` : "";
+      console.log(`   - ${route.id} (${hydration.strategy}, ${hydration.priority || "visible"}${boundaryLabel})`);
     }
 
     // 4. Bundle build
@@ -430,17 +432,11 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     console.log("\n📄 Prerendering static pages...");
 
     try {
-      const bundledImport = createBundledImporter({ rootDir: cwd });
-      const prerenderImportCache = new Map<string, Promise<unknown>>();
-      const importForPrerender = <T = unknown>(modulePath: string): Promise<T> => {
-        const absolute = path.resolve(modulePath);
-        let pending = prerenderImportCache.get(absolute);
-        if (!pending) {
-          pending = bundledImport(absolute);
-          prerenderImportCache.set(absolute, pending);
-        }
-        return pending as Promise<T>;
-      };
+      const bundledImport = createCachedBundledImporter({ rootDir: cwd });
+      const importForPrerender = <T = unknown>(
+        modulePath: string,
+        opts?: BundledImportOptions,
+      ): Promise<T> => bundledImport(path.resolve(modulePath), opts);
 
       // 임시 서버 시작 (SSR 렌더링용 — 외부 접근 불가하도록 port 0)
       await registerManifestHandlers(manifest, cwd, {

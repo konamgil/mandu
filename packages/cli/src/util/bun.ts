@@ -48,8 +48,10 @@
  * the Phase 7.0 rollout will wire `changedFile` through from the file
  * watcher.
  *
- * Production (`mandu start`) uses standard `import` because no invalidation
- * is needed there.
+ * Production (`mandu start`) usually uses standard `import`, but routes with
+ * compiler-owned client boundaries still use the bundled importer so the SSR
+ * boundary transform can preserve relative imports before the module is cached
+ * for the lifetime of the production process.
  */
 
 import path from "path";
@@ -58,6 +60,13 @@ import { statSync } from "fs";
 import type { BunPlugin } from "bun";
 import { safeBuild } from "@mandujs/core/bundler/safe-build";
 import { defaultBundlerPlugins } from "@mandujs/core/bundler/plugins";
+import {
+  assertNoClientBoundaryDiagnostics,
+  transformClientBoundaries,
+  validateClientBoundaryExport,
+  validateClientBoundaryServerOnlyImports,
+  type ClientBoundaryHydrateMode,
+} from "@mandujs/core/bundler";
 import { HMR_PERF } from "@mandujs/core/perf/hmr-markers";
 import { isPerfEnabled, mark, measure } from "@mandujs/core/perf";
 import {
@@ -363,6 +372,148 @@ function createTsconfigPathsPlugin(aliases: TsconfigPathAlias[]): BunPlugin | nu
   };
 }
 
+function createClientBoundaryTransformPlugin(
+  rootDir: string,
+  rootPathAbs: string,
+  aliases: TsconfigPathAlias[],
+  options?: BundledImportOptions,
+): BunPlugin | null {
+  const transformOptions = options?.clientBoundaryTransform;
+  if (!transformOptions) return null;
+
+  const target = path.resolve(rootPathAbs);
+  const sourceReplays = createBoundarySourceReplays(rootDir, transformOptions.boundaries);
+  return {
+    name: "mandu:client-boundary-transform",
+    setup(build) {
+      build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
+        const pathKey = normalizeFsPathKey(args.path);
+        const targetKey = normalizeFsPathKey(target);
+        const boundaryReplay = sourceReplays?.get(pathKey);
+        const ordinalOffset = sourceReplays
+          ? boundaryReplay?.[0]?.ordinal
+          : pathKey === targetKey
+            ? 0
+            : undefined;
+        if (ordinalOffset === undefined) return undefined;
+
+        const source = await Bun.file(args.path).text();
+        const result = transformClientBoundaries(source, {
+          routeId: transformOptions.routeId,
+          fileName: path.relative(rootDir, args.path).replace(/\\/g, "/"),
+          hydrate: normalizeClientBoundaryHydrate(transformOptions.hydrate),
+          ordinalOffset,
+          boundaryReplay,
+        });
+        if (!result.transformed) return undefined;
+        const diagnostics = [...result.diagnostics];
+        for (const boundary of result.boundaries) {
+          const resolvedModule = resolveClientBoundaryImport(rootDir, args.path, boundary.module, aliases);
+          if (!resolvedModule) continue;
+          const moduleSource = await readFile(resolvedModule, "utf-8");
+          const resolvedBoundary = {
+            ...boundary,
+            module: path.relative(rootDir, resolvedModule).replace(/\\/g, "/"),
+          };
+          diagnostics.push(...validateClientBoundaryServerOnlyImports(moduleSource, resolvedBoundary, resolvedBoundary.module));
+          const validation = validateClientBoundaryExport(moduleSource, resolvedBoundary);
+          if (validation.diagnostic) diagnostics.push(validation.diagnostic);
+        }
+        assertNoClientBoundaryDiagnostics(diagnostics);
+        return {
+          contents: result.code,
+          loader: loaderForPath(args.path),
+        };
+      });
+    },
+  };
+}
+
+function createBoundarySourceReplays(
+  rootDir: string,
+  boundaries: BundledImportClientBoundary[] | undefined,
+): Map<string, Array<{ id?: string; ordinal: number }>> | null {
+  if (!boundaries || boundaries.length === 0) return null;
+
+  const replays = new Map<string, Array<{ id?: string; ordinal: number }>>();
+  for (const boundary of boundaries) {
+    const sourceFile = boundary.source?.file;
+    if (!sourceFile) continue;
+    const abs = path.isAbsolute(sourceFile)
+      ? sourceFile
+      : path.resolve(rootDir, sourceFile);
+    const key = normalizeFsPathKey(abs);
+    const list = replays.get(key) ?? [];
+    list.push({
+      ...(boundary.id ? { id: boundary.id } : {}),
+      ordinal: boundary.ordinal,
+    });
+    replays.set(key, list);
+  }
+
+  for (const [key, list] of replays) {
+    replays.set(key, list.sort((a, b) => a.ordinal - b.ordinal));
+  }
+
+  return replays.size > 0 ? replays : null;
+}
+
+function normalizeFsPathKey(filePath: string): string {
+  const resolved = path.resolve(filePath);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function normalizeClientBoundaryHydrate(value: string | undefined): ClientBoundaryHydrateMode {
+  if (
+    value === "immediate" ||
+    value === "visible" ||
+    value === "idle" ||
+    value === "interaction" ||
+    value === "load" ||
+    value === "manual" ||
+    value?.startsWith("media(")
+  ) {
+    return value as ClientBoundaryHydrateMode;
+  }
+  return "visible";
+}
+
+function resolveClientBoundaryImport(
+  rootDir: string,
+  importerPath: string,
+  specifier: string,
+  aliases: readonly TsconfigPathAlias[],
+): string | null {
+  if (specifier.startsWith(".") || specifier.startsWith("/")) {
+    const base = specifier.startsWith("/")
+      ? path.resolve(rootDir, `.${specifier}`)
+      : path.resolve(path.dirname(importerPath), specifier);
+    return resolveExistingModule(base);
+  }
+
+  for (const alias of aliases) {
+    const matched = matchTsconfigAlias(specifier, alias);
+    if (matched === null) continue;
+    for (const replacement of alias.replacements) {
+      const candidate = replacement.includes("*")
+        ? replacement.replace(/\*/g, matched)
+        : replacement;
+      const resolved = resolveExistingModule(candidate);
+      if (resolved) return resolved;
+    }
+  }
+
+  return resolveExistingModule(path.resolve(rootDir, specifier));
+}
+
+function loaderForPath(filePath: string): "js" | "jsx" | "ts" | "tsx" {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".tsx") return "tsx";
+  if (ext === ".ts" || ext === ".mts" || ext === ".cts") return "ts";
+  if (ext === ".jsx") return "jsx";
+  return "js";
+}
+
 const installedTsconfigPathPluginRoots = new Set<string>();
 
 export async function installTsconfigPathsPlugin(rootDir: string): Promise<void> {
@@ -440,6 +591,19 @@ export interface BundledImporterOptions {
  */
 export interface BundledImportOptions {
   changedFile?: string;
+  clientBoundaryTransform?: {
+    routeId: string;
+    hydrate?: string;
+    boundaries?: BundledImportClientBoundary[];
+  };
+}
+
+interface BundledImportClientBoundary {
+  id?: string;
+  ordinal: number;
+  source?: {
+    file: string;
+  };
 }
 
 /**
@@ -467,6 +631,70 @@ export interface BundledImporter {
    * isolation between cases.
    */
   dispose(): Promise<void>;
+}
+
+/**
+ * Stable cache key for production/prerender SSR imports. Boundary transform
+ * options are part of the key because the same source module can be registered
+ * under different route-owned boundary manifests.
+ */
+export function createBundledImportCacheKey(
+  modulePath: string,
+  opts?: BundledImportOptions,
+): string {
+  const transform = opts?.clientBoundaryTransform;
+  const boundaries = transform?.boundaries
+    ?.map((boundary) => [
+      boundary.id ?? "",
+      boundary.ordinal,
+      boundary.source?.file ? normalizeFsPathKey(boundary.source.file) : "",
+    ].join(":"))
+    .join("|") ?? "";
+
+  return [
+    normalizeFsPathKey(modulePath),
+    opts?.changedFile ? normalizeFsPathKey(opts.changedFile) : "",
+    transform?.routeId ?? "",
+    transform?.hydrate ?? "",
+    boundaries,
+  ].join("\0");
+}
+
+/**
+ * Production/prerender wrapper around createBundledImporter. Unlike the dev
+ * importer, calls without changedFile are safe to cache because source files do
+ * not change during a production server process or a single build prerender run.
+ */
+export function createCachedBundledImporter(
+  options: BundledImporterOptions,
+): BundledImporter {
+  const importer = createBundledImporter(options);
+  const cache = new Map<string, Promise<unknown>>();
+
+  const importCached = (async <T = unknown>(
+    modulePath: string,
+    opts?: BundledImportOptions,
+  ): Promise<T> => {
+    const key = createBundledImportCacheKey(modulePath, opts);
+    let pending = cache.get(key);
+    if (!pending) {
+      pending = importer(modulePath, opts);
+      cache.set(key, pending);
+    }
+    return pending as Promise<T>;
+  }) as BundledImporter;
+
+  importCached.invalidate = (filePath: string): void => {
+    cache.clear();
+    importer.invalidate(filePath);
+  };
+
+  importCached.dispose = async (): Promise<void> => {
+    cache.clear();
+    await importer.dispose();
+  };
+
+  return importCached;
 }
 
 /**
@@ -568,6 +796,7 @@ export function createBundledImporter(
   const rebuildAndImport = async <T>(
     rootPathAbs: string,
     perfEnabled: boolean,
+    opts?: BundledImportOptions,
   ): Promise<T> => {
     await ensureCleanCacheDir();
 
@@ -598,13 +827,18 @@ export function createBundledImporter(
       // downstream project hits a regression on a newer Bun patch, the
       // `MANDU_DISABLE_BUNDLER_PLUGINS=1` env var provides an emergency
       // escape hatch without requiring a config change.
-      const tsconfigPathsPlugin = createTsconfigPathsPlugin(
-        await ensureTsconfigPathAliases(),
-      );
+      const tsconfigPathAliases = await ensureTsconfigPathAliases();
+      const tsconfigPathsPlugin = createTsconfigPathsPlugin(tsconfigPathAliases);
+      const clientBoundaryTransformPlugin = createClientBoundaryTransformPlugin(rootDir, rootPathAbs, tsconfigPathAliases, opts);
       const ssrPlugins =
         process.env.MANDU_DISABLE_BUNDLER_PLUGINS === "1"
           ? []
           : defaultBundlerPlugins();
+      const plugins = [
+        ...(clientBoundaryTransformPlugin ? [clientBoundaryTransformPlugin] : []),
+        ...(tsconfigPathsPlugin ? [tsconfigPathsPlugin] : []),
+        ...ssrPlugins,
+      ];
       debugSSRImport(
         `bundling entry=${rootPathAbs}; process.execPath=${process.execPath}; in-bun=${isBunExecutable(process.execPath)}`,
       );
@@ -626,9 +860,7 @@ export function createBundledImporter(
           // package). The bundler-plugin caveat that previously lived here
           // was tied to Bun 1.3.10; see the plugin-install block above.
           external: externalList,
-          plugins: tsconfigPathsPlugin
-            ? [tsconfigPathsPlugin, ...ssrPlugins]
-            : ssrPlugins,
+          plugins,
         });
       } else {
         result = await runExternalBunBuild({
@@ -752,7 +984,7 @@ export function createBundledImporter(
     }
 
     // Cache miss (or no changedFile hint / no prior entry) — full rebuild.
-    const result = await rebuildAndImport<T>(absPath, perfEnabled);
+    const result = await rebuildAndImport<T>(absPath, perfEnabled, opts);
     if (perfEnabled) measure(HMR_PERF.SSR_BUNDLED_IMPORT, HMR_PERF.SSR_BUNDLED_IMPORT);
     return result;
   };

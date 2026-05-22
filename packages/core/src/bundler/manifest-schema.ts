@@ -173,6 +173,15 @@ const PartialEntrySchema = z.object({
   priority: PrioritySchema,
 });
 
+const BoundaryEntrySchema = z.object({
+  route: z.string().min(1),
+  js: safeManduUrl("boundaries[].js"),
+  module: z.string().min(1),
+  exportName: z.string().min(1),
+  priority: PrioritySchema,
+  hydrate: z.string().min(1),
+});
+
 const FastRefreshSchema = z.object({
   runtime: safeManduUrl("shared.fastRefresh.runtime"),
   glue: safeManduUrl("shared.fastRefresh.glue"),
@@ -229,6 +238,7 @@ export const BundleManifestSchema = z
     bundles: z.record(z.string(), BundleEntrySchema),
     islands: z.record(z.string(), IslandEntrySchema).optional(),
     partials: z.record(z.string(), PartialEntrySchema).optional(),
+    boundaries: z.record(z.string(), BoundaryEntrySchema).optional(),
     shared: SharedSchema,
     importMap: ImportMapSchema.optional(),
   })

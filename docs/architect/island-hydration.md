@@ -73,6 +73,79 @@ onto the wrapper element:
 The client runtime reads `data-hydrate` and dispatches via
 `scheduleHydration()`.
 
+## Compiler-owned client boundaries
+
+F42 adds a separate path for server routes that directly import `.client` or
+`.island` components. App code stays React-like:
+
+```tsx
+import { CommentsSection } from "../client/CommentsSection.client";
+
+export default async function Page({ comments }) {
+  return <CommentsSection initialComments={comments} />;
+}
+```
+
+The server build rewrites that JSX to Mandu's internal boundary component
+before SSR imports the route. The client component module is not executed
+during boundary discovery, and the route manifest becomes the source of truth
+for the boundary id, module, export name, hydration priority, and source
+location.
+
+SSR emits a marker plus a boundary-local props payload:
+
+```html
+<div
+  data-mandu-island="pledges-$id--0"
+  data-mandu-boundary-id="pledges-$id--0"
+  data-mandu-route-id="pledges-$id"
+  data-mandu-client-module="src/client/CommentsSection.client.tsx"
+  data-mandu-client-export="CommentsSection"
+  data-hydrate="visible"
+></div>
+<script type="application/json" data-mandu-props="pledges-$id--0">
+  {"initialComments":[]}
+</script>
+```
+
+The actual `data-mandu-src` value is filled from `.mandu/manifest.json`
+when the boundary bundle is present. The JSON payload uses Mandu's route data
+serializer and escapes script-closing sequences so it is safe inside an HTML
+`application/json` script.
+
+Hydration props resolve in this order:
+
+1. `script[data-mandu-props="<boundary-id>"]`
+2. Route-level `__MANDU_DATA__` fallback
+3. Empty props with a development warning
+
+Named and default client exports both resolve from explicit boundary metadata
+before any generated-entry fallback. Repeated renders of the same boundary id
+keep the manifest id for the first instance and append an instance suffix for
+later props payloads.
+
+Streaming SSR uses the same contract in F42: each compiler-owned boundary
+emits its props script immediately next to the marker, and route-filtered
+boundary chunks may be preloaded from the manifest. Delayed or out-of-order
+props delivery is reserved for the F44 hydration scheduler work.
+
+### Boundary restrictions
+
+F42 intentionally rejects ambiguous boundary shapes at build/dev time:
+
+- Non-empty `children` on transformed client components are not serialized.
+- Function props, refs, React elements, symbols, and visible non-plain objects
+  fail with stable `MANDU_BOUNDARY_*` diagnostics.
+- Client boundary modules may not import server-only modules such as Node/Bun
+  built-ins, `server-only`, non-client `@mandujs/core` paths, or `*.server`
+  files.
+- Compiler-owned boundaries cannot be emitted directly inside known invalid
+  HTML host contexts such as `table`, `thead`, `tbody`, `tfoot`, `tr`,
+  `select`, `optgroup`, `option`, `ul`, `ol`, `dl`, or `p`. The current marker
+  uses sibling `<div>` and `<script>` nodes, so those contexts need a server
+  wrapper, valid host restructuring, or an explicit island API until
+  context-safe markers are implemented.
+
 ## Island vs partial
 
 An island is a page-level client bundle. Do not render a compiled island as

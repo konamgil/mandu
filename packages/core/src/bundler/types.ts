@@ -77,6 +77,24 @@ export interface BundleManifest {
       priority: "immediate" | "visible" | "idle" | "interaction";
     }
   >;
+  /** Compiler-owned client boundary bundles keyed by boundary id. */
+  boundaries?: Record<
+    string,
+    {
+      /** Owning route id */
+      route: string;
+      /** JavaScript bundle path */
+      js: string;
+      /** Source client module */
+      module: string;
+      /** Client export name */
+      exportName: string;
+      /** Hydration priority */
+      priority: "immediate" | "visible" | "idle" | "interaction";
+      /** Hydration mode emitted into data-hydrate */
+      hydrate: string;
+    }
+  >;
   /** 공유 청크 */
   shared: {
     /** Hydration 런타임 */

@@ -214,6 +214,7 @@ async function renderStreamingPageResponse(
     criticalData: options.loaderData as Record<string, unknown> | undefined,
     enableClientRouter: true,
     cssPath: options.cssPath,
+    islandPreWrapped: !!options.islandPreWrapped,
     transitions: options.transitions,
     prefetch: options.prefetch,
     spa: options.spa,

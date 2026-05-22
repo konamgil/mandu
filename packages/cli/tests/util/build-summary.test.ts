@@ -16,6 +16,7 @@ describe("build summary helpers", () => {
       await fs.writeFile(path.join(clientDir, "runtime.js"), "console.log('runtime');");
       await fs.writeFile(path.join(clientDir, "vendor.js"), "console.log('vendor');");
       await fs.writeFile(path.join(clientDir, "router.js"), "console.log('router');");
+      await fs.writeFile(path.join(clientDir, "home--0.boundary.js"), "console.log('boundary');");
 
       const routes: RouteSpec[] = [
         {
@@ -54,6 +55,16 @@ describe("build summary helpers", () => {
             priority: "visible",
           },
         },
+        boundaries: {
+          "home--0": {
+            route: "home",
+            js: "/.mandu/client/home--0.boundary.js",
+            module: "src/client/Home.client.tsx",
+            exportName: "Home",
+            priority: "visible",
+            hydrate: "visible",
+          },
+        },
         shared: {
           runtime: "/.mandu/client/runtime.js",
           vendor: "/.mandu/client/vendor.js",
@@ -66,12 +77,14 @@ describe("build summary helpers", () => {
 
       const rows = await createBuildSummaryRows(rootDir, routes, outputs, manifest);
       expect(rows.some((row) => row.bundle === "/")).toBe(true);
+      expect(rows.some((row) => row.bundle === "boundary:home--0")).toBe(true);
       expect(rows.some((row) => row.bundle === "runtime.js")).toBe(true);
       expect(rows.some((row) => row.bundle === "vendor.js")).toBe(true);
       expect(rows.some((row) => row.bundle === "router.js")).toBe(true);
 
       const table = renderBuildSummaryTable(rows, 420);
       expect(table).toContain("Bundle");
+      expect(table).toContain("boundary/visible");
       expect(table).toContain("Total");
       expect(table).toContain("420ms");
       expect(table).toContain("mandu preview");

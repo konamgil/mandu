@@ -39,6 +39,17 @@ export async function createBuildSummaryRows(
     });
   }
 
+  for (const [boundaryId, boundary] of Object.entries(manifest.boundaries ?? {})) {
+    const metrics = await readAssetMetrics(rootDir, boundary.js);
+    if (!metrics) continue;
+    rows.push({
+      bundle: `boundary:${boundaryId}`,
+      size: formatSize(metrics.size),
+      gzip: formatSize(metrics.gzipSize),
+      strategy: `boundary/${boundary.hydrate}`,
+    });
+  }
+
   const sharedAssets = [
     { label: path.basename(manifest.shared.runtime), assetPath: manifest.shared.runtime },
     { label: path.basename(manifest.shared.vendor), assetPath: manifest.shared.vendor },

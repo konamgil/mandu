@@ -23,9 +23,13 @@ import { escapeHtmlAttr, escapeHtmlText, escapeJsonForInlineScript, escapeJsStri
 import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
 import { getRenderToString } from "./react-renderer";
 import { mark, measure } from "../perf";
-import { generateFastRefreshPreamble } from "../bundler/dev";
+import { generateFastRefreshPreamble } from "../bundler/fast-refresh-preamble";
 import { PREFETCH_HELPER_SCRIPT } from "../client/prefetch-helper";
 import { SPA_NAV_HELPER_SCRIPT } from "../client/spa-nav-helper";
+import {
+  createManduClientBoundaryRenderScope,
+  renderWithManduClientBoundaryManifest,
+} from "../internal/client-boundary";
 
 /**
  * Issue #192 — `@view-transition` at-rule, mirror of the constant in
@@ -112,6 +116,8 @@ export interface StreamingSSROptions {
   hydration?: HydrationConfig;
   /** 번들 매니페스트 */
   bundleManifest?: BundleManifest;
+  /** React element already contains its own island wrapper. */
+  islandPreWrapped?: boolean;
   /** 추가 head 태그 (SEO metadata와 병합됨) */
   headTags?: string;
   /**
@@ -552,6 +558,7 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     prefetch = true,
     spa = true,
     layoutChain,
+    islandPreWrapped = false,
   } = options;
 
   // Issue #233 — layout-key for SPA cross-layout detection. Mirror of the
@@ -627,7 +634,7 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     const bundleSrc = bundle?.js ? `${bundle.js}?t=${Date.now()}` : "";
     const priority = hydration.priority || "visible";
     const hydrate = priorityToHydrateStrategy(priority);
-    if (hasRouteBundle) {
+    if (hasRouteBundle && !islandPreWrapped) {
       islandOpenTag = `<div data-mandu-island="${escapeHtmlAttr(routeId)}" data-mandu-src="${escapeHtmlAttr(bundleSrc)}" data-mandu-priority="${escapeHtmlAttr(priority)}" data-hydrate="${escapeHtmlAttr(hydrate)}" style="display:contents">`;
     }
   }
@@ -698,6 +705,7 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
     enableClientRouter = false,
     hydration,
     devtools,
+    islandPreWrapped = false,
   } = options;
 
   const scripts: string[] = [];
@@ -756,14 +764,32 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
     }
 
     // 6. Island modulepreload
-    const bundle = bundleManifest.bundles[routeId];
-    if (bundle) {
-      const cacheBust = `${bundle.js}${bundle.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
-      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
+    const routeIslands = bundleManifest.islands
+      ? Object.values(bundleManifest.islands).filter((island) => island.route === routeId)
+      : [];
+    if (routeIslands.length > 0) {
+      for (const island of routeIslands) {
+        const cacheBust = `${island.js}${island.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
+        scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
+      }
+    } else {
+      const bundle = bundleManifest.bundles[routeId];
+      if (bundle) {
+        const cacheBust = `${bundle.js}${bundle.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
+        scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
+      }
     }
     if (bundleManifest.partials) {
       for (const partial of Object.values(bundleManifest.partials)) {
         const cacheBust = `${partial.js}${partial.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
+        scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
+      }
+    }
+
+    if (bundleManifest.boundaries) {
+      for (const boundary of Object.values(bundleManifest.boundaries)) {
+        if (boundary.route !== routeId) continue;
+        const cacheBust = `${boundary.js}${boundary.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
         scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
       }
     }
@@ -800,7 +826,7 @@ function generateHTMLTailContent(options: StreamingSSROptions): string {
   }
 
   // Island wrapper 닫기 (hydration이 필요한 경우)
-  const islandCloseTag = needsHydration && bundleManifest.bundles[routeId]?.js ? "</div>" : "";
+  const islandCloseTag = needsHydration && !islandPreWrapped && bundleManifest.bundles[routeId]?.js ? "</div>" : "";
 
   return `${islandCloseTag}</div>
   ${scripts.join("\n  ")}`;
@@ -1030,7 +1056,11 @@ export async function renderToStream(
   }
 
   const encoder = new TextEncoder();
-  const collectedHeadTags = collectStreamingHeadTags(element);
+  const collectedHeadTags = renderWithManduClientBoundaryManifest(
+    options.routeId,
+    options.bundleManifest,
+    () => collectStreamingHeadTags(element),
+  );
   const resolvedOptions = collectedHeadTags
     ? { ...options, headTags: [options.headTags, collectedHeadTags].filter(Boolean).join("\n") }
     : options;
@@ -1075,40 +1105,49 @@ export async function renderToStream(
   // needed on this code path.
   // 실패 시 throw → renderStreamingResponse에서 500 처리
   const renderToReadableStream = getRenderToReadableStream();
-  const reactStream = await renderToReadableStream(element, {
-    onError: (error: Error) => {
-      if (timedOut) return;
+  const renderBoundaryScope = createManduClientBoundaryRenderScope(
+    routeId,
+    resolvedOptions.bundleManifest,
+  );
+  const scopedElement = renderBoundaryScope.wrapElement(element);
+  const reactStream = await renderBoundaryScope(() =>
+    renderToReadableStream(scopedElement, {
+      onError: (error: Error) => {
+        if (timedOut) return;
 
-      metrics.hasError = true;
-      const streamingError: StreamingError = {
-        error,
-        isShellError: !shellSent,
-        recoverable: shellSent,
-        timestamp: Date.now(),
-      };
+        metrics.hasError = true;
+        const streamingError: StreamingError = {
+          error,
+          isShellError: !shellSent,
+          recoverable: shellSent,
+          timestamp: Date.now(),
+        };
 
-      console.error("[Mandu Streaming] React render error:", error);
+        console.error("[Mandu Streaming] React render error:", error);
 
-      if (!shellSent) {
-        // Shell 전 에러 - 콜백만 호출 (throw는 하지 않음, 이미 스트림 시작됨)
-        onShellError?.(streamingError);
-      } else {
-        // Shell 후 에러 - 스트림에 에러 스크립트 삽입됨
-        onStreamError?.(streamingError);
-      }
+        if (!shellSent) {
+          // Shell 전 에러 - 콜백만 호출 (throw는 하지 않음, 이미 스트림 시작됨)
+          onShellError?.(streamingError);
+        } else {
+          // Shell 후 에러 - 스트림에 에러 스크립트 삽입됨
+          onStreamError?.(streamingError);
+        }
 
-      onError?.(error);
-    },
-  });
+        onError?.(error);
+      },
+    }),
+  );
 
   // allReady는 백그라운드에서 메트릭용으로만 사용 (대기 안 함!)
-  reactStream.allReady.then(() => {
-    metrics.allReadyTime = Date.now() - metrics.startTime;
-    if (isDev) {
-      console.log(`[Mandu Streaming] All ready: ${routeId} (${metrics.allReadyTime}ms)`);
-    }
-  }).catch(() => {
-    // 에러는 onError에서 이미 처리됨
+  renderBoundaryScope(() => {
+    reactStream.allReady.then(() => {
+      metrics.allReadyTime = Date.now() - metrics.startTime;
+      if (isDev) {
+        console.log(`[Mandu Streaming] All ready: ${routeId} (${metrics.allReadyTime}ms)`);
+      }
+    }).catch(() => {
+      // 에러는 onError에서 이미 처리됨
+    });
   });
 
   // Custom stream으로 래핑 (Shell + React Content + Tail)
@@ -1120,7 +1159,9 @@ export async function renderToStream(
 
   async function readWithTimeout(): Promise<ReadableStreamReadResult<Uint8Array> | null> {
     if (!deadline) {
-      return reader.read() as Promise<ReadableStreamReadResult<Uint8Array>>;
+      return renderBoundaryScope(() =>
+        reader.read() as Promise<ReadableStreamReadResult<Uint8Array>>
+      );
     }
 
     const remaining = deadline - Date.now();
@@ -1133,10 +1174,12 @@ export async function renderToStream(
       timeoutId = setTimeout(() => resolve({ kind: "timeout" }), remaining);
     });
 
-    const readPromise = reader
-      .read()
-      .then((result) => ({ kind: "read" as const, result: result as ReadableStreamReadResult<Uint8Array> }))
-      .catch((error: unknown) => ({ kind: "error" as const, error }));
+    const readPromise = renderBoundaryScope(() =>
+      reader
+        .read()
+        .then((result) => ({ kind: "read" as const, result: result as ReadableStreamReadResult<Uint8Array> }))
+        .catch((error: unknown) => ({ kind: "error" as const, error }))
+    );
 
     const result = await Promise.race([readPromise, timeoutPromise]);
 

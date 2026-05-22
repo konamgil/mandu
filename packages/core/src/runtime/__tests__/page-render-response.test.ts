@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import React from "react";
 import { renderPageResponse } from "../page-render-response";
 import type { BundleManifest } from "../../bundler/types";
+import { __ManduClientBoundary } from "../../internal/client-boundary";
 
 const HYDRATED_MANIFEST: BundleManifest = {
   version: 1,
@@ -102,6 +103,164 @@ describe("runtime page render response orchestration", () => {
     expect(html).toContain('data-hydrate="interaction"');
   });
 
+  it("does not duplicate pre-wrapped streaming islands and preloads split island chunks", async () => {
+    const response = await renderPageResponse({
+      app: React.createElement(
+        "div",
+        {
+          "data-mandu-island": "home",
+          "data-mandu-src": "/.mandu/client/home.island.js?t=prewrapped",
+          "data-mandu-priority": "visible",
+          "data-hydrate": "visible",
+          style: { display: "contents" },
+        },
+        React.createElement("main", null, "prewrapped-stream-page"),
+      ),
+      useStreaming: true,
+      title: "Prewrapped Stream",
+      headTags: "",
+      isDev: false,
+      routeId: "home",
+      routePattern: "/",
+      loaderData: undefined,
+      hydration: { strategy: "island", priority: "visible", preload: false },
+      bundleManifest: {
+        ...HYDRATED_MANIFEST,
+        islands: {
+          "home-widget": {
+            route: "home",
+            js: "/.mandu/client/home-widget.island.js",
+            priority: "visible",
+          },
+        },
+      },
+      islandPreWrapped: true,
+      transitions: false,
+      prefetch: false,
+      spa: false,
+      devtools: false,
+    });
+
+    const html = await response.text();
+    expect(html.match(/data-mandu-island="home"/g)?.length).toBe(1);
+    expect(html).toContain("prewrapped-stream-page");
+    expect(html).toContain('<link rel="modulepreload" href="/.mandu/client/home-widget.island.js?v=');
+    expect(html).not.toContain('<link rel="modulepreload" href="/.mandu/client/home.island.js?v=');
+  });
+
+  it("serializes compiler-owned client boundaries on the streaming path", async () => {
+    const routeId = "stream-boundary";
+    const manifest: BundleManifest = {
+      ...HYDRATED_MANIFEST,
+      bundles: {},
+      boundaries: {
+        "stream-boundary--0": {
+          route: routeId,
+          js: "/.mandu/client/stream-boundary--0.boundary.js",
+          module: "src/client/Counter.client.tsx",
+          exportName: "Counter",
+          priority: "visible",
+          hydrate: "visible",
+        },
+      },
+    };
+
+    const response = await renderPageResponse({
+      app: React.createElement(
+        "main",
+        null,
+        React.createElement(__ManduClientBoundary, {
+          routeId,
+          boundaryId: "stream-boundary--0",
+          module: "src/client/Counter.client.tsx",
+          exportName: "Counter",
+          hydrate: "visible",
+          props: { count: 7 },
+        }),
+      ),
+      useStreaming: true,
+      title: "Stream Boundary",
+      headTags: "",
+      isDev: false,
+      routeId,
+      routePattern: "/stream-boundary",
+      loaderData: undefined,
+      hydration: { strategy: "island", priority: "visible", preload: false },
+      bundleManifest: manifest,
+      transitions: false,
+      prefetch: false,
+      spa: false,
+      devtools: false,
+    });
+
+    const html = await response.text();
+    expect(html).toContain('data-mandu-island="stream-boundary--0"');
+    expect(html).toContain('data-mandu-boundary-id="stream-boundary--0"');
+    expect(html).toContain('data-mandu-client-export="Counter"');
+    expect(html).toContain('data-mandu-src="/.mandu/client/stream-boundary--0.boundary.js?t=');
+    expect(html).toContain('type="application/json" data-mandu-props="stream-boundary--0"');
+    expect(html).toContain('"count":7');
+    expect(html).toContain('<link rel="modulepreload" href="/.mandu/client/stream-boundary--0.boundary.js?v=');
+    expect(html).not.toContain('data-mandu-island="stream-boundary" data-mandu-src=');
+  });
+
+  it("keeps boundary context across async streaming server components", async () => {
+    const routeId = "async-stream-boundary";
+    const manifest: BundleManifest = {
+      ...HYDRATED_MANIFEST,
+      bundles: {},
+      boundaries: {
+        "async-stream-boundary--0": {
+          route: routeId,
+          js: "/.mandu/client/async-stream-boundary--0.boundary.js",
+          module: "src/client/AsyncCounter.client.tsx",
+          exportName: "AsyncCounter",
+          priority: "visible",
+          hydrate: "visible",
+        },
+      },
+    };
+
+    async function AsyncPage() {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      return React.createElement(
+        "main",
+        null,
+        React.createElement(__ManduClientBoundary, {
+          routeId,
+          boundaryId: "async-stream-boundary--0",
+          module: "src/client/AsyncCounter.client.tsx",
+          exportName: "AsyncCounter",
+          hydrate: "visible",
+          props: { count: 11 },
+        }),
+      );
+    }
+
+    const response = await renderPageResponse({
+      app: React.createElement(AsyncPage),
+      useStreaming: true,
+      title: "Async Stream Boundary",
+      headTags: "",
+      isDev: false,
+      routeId,
+      routePattern: "/async-stream-boundary",
+      loaderData: undefined,
+      hydration: { strategy: "island", priority: "visible", preload: false },
+      bundleManifest: manifest,
+      transitions: false,
+      prefetch: false,
+      spa: false,
+      devtools: false,
+    });
+
+    const html = await response.text();
+    expect(html).toContain('data-mandu-island="async-stream-boundary--0"');
+    expect(html).toContain('data-mandu-src="/.mandu/client/async-stream-boundary--0.boundary.js?t=');
+    expect(html).toContain('data-mandu-props="async-stream-boundary--0"');
+    expect(html).toContain('"count":11');
+  });
+
   it("serializes non-streaming loaderData as the route server data exactly once", async () => {
     const response = await renderPageResponse({
       app: React.createElement("main", null, "hydrated-page"),
@@ -186,6 +345,59 @@ describe("runtime page render response orchestration", () => {
     expect(html).toContain('"pledges"');
     expect(html).toContain("Public transit");
     expect(html).not.toContain('data-mandu-island="candidates-$id"');
+  });
+
+  it("serializes inline client props through a sync server wrapper fallback", async () => {
+    function ClientWidget({ label }: { label: string }) {
+      return React.createElement("button", null, label);
+    }
+
+    function ServerWrapper({ label }: { label: string }) {
+      return React.createElement("section", null, React.createElement(ClientWidget, { label }));
+    }
+
+    function WrappedPage() {
+      return React.createElement("main", null, React.createElement(ServerWrapper, { label: "wrapped" }));
+    }
+
+    const response = await renderPageResponse({
+      app: React.createElement(WrappedPage),
+      useStreaming: false,
+      title: "Wrapped",
+      headTags: "",
+      isDev: false,
+      routeId: "wrapped-fallback",
+      routePattern: "/wrapped",
+      hydration: { strategy: "island", priority: "visible", preload: false },
+      bundleManifest: {
+        ...HYDRATED_MANIFEST,
+        bundles: {
+          "wrapped-fallback": {
+            js: "/.mandu/client/wrapped-fallback.island.js",
+            dependencies: ["_runtime", "_react"],
+            priority: "visible",
+          },
+        },
+      },
+      loaderData: undefined,
+      transitions: false,
+      prefetch: false,
+      spa: false,
+      devtools: false,
+      inlineClientHydration: {
+        routeId: "wrapped-fallback",
+        src: "/.mandu/client/wrapped-fallback.island.js",
+        priority: "visible",
+        component: ClientWidget,
+      },
+    });
+
+    const html = await response.text();
+    expect(html).toContain('data-mandu-island="wrapped-fallback--0"');
+    expect(html).toContain('data-mandu-src="/.mandu/client/wrapped-fallback.island.js"');
+    expect(html).toContain('data-mandu-props="wrapped-fallback--0"');
+    expect(html).toContain('"label":"wrapped"');
+    expect(html).not.toContain('data-mandu-island="wrapped-fallback"');
   });
 
   it("does not invoke sync function components while looking for inline client targets", async () => {

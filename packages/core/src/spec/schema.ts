@@ -35,6 +35,31 @@ export const HydrationConfig = z.object({
 
 export type HydrationConfig = z.infer<typeof HydrationConfig>;
 
+// ========== Client Boundary Metadata ==========
+
+export const RouteClientBoundarySource = z.object({
+  file: z.string().min(1),
+  line: z.number().int().positive(),
+  column: z.number().int().positive(),
+});
+export type RouteClientBoundarySource = z.infer<typeof RouteClientBoundarySource>;
+
+export const RouteClientBoundary = z.object({
+  id: z.string().min(1),
+  routeId: z.string().min(1),
+  module: z.string().min(1),
+  importSpecifier: z.string().min(1).optional(),
+  exportName: z.string().min(1),
+  localName: z.string().min(1),
+  hydrate: z.string().min(1).default("visible"),
+  ordinal: z.number().int().nonnegative(),
+  propsSource: z.enum(["inline", "route-data", "data-props", "none", "unknown"]).default("inline"),
+  propsKeys: z.array(z.string()).optional(),
+  hasSpreadProps: z.boolean().optional(),
+  source: RouteClientBoundarySource,
+});
+export type RouteClientBoundary = z.infer<typeof RouteClientBoundary>;
+
 // ========== Loader 설정 ==========
 
 export const LoaderConfig = z.object({
@@ -75,6 +100,7 @@ const RouteSpecBase = {
   slotModule: z.string().optional(),
   clientModule: z.string().optional(),
   clientExportName: z.string().optional(),
+  boundaries: z.array(RouteClientBoundary).optional(),
   contractModule: z.string().optional(),
   hydration: HydrationConfig.optional(),
   loader: LoaderConfig.optional(),

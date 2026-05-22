@@ -6,7 +6,7 @@
  * @module router/fs-types
  */
 
-import type { RouteKind, HydrationConfig, SpecHttpMethod } from "../spec/schema";
+import type { RouteKind, HydrationConfig, RouteClientBoundary, SpecHttpMethod } from "../spec/schema";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Segment Types
@@ -122,6 +122,9 @@ export interface FSRouteConfig {
 
   /** Named export used by the route-level client module, if not default. */
   clientExportName?: string;
+
+  /** Compiler-discovered client boundaries rendered by this route. */
+  boundaries?: RouteClientBoundary[];
 
   /** 적용할 레이아웃 체인 */
   layoutChain: string[];

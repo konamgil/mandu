@@ -4,7 +4,7 @@ import type * as __ManduPluginsReactCompilerTypes0 from "./plugins/react-compile
  * Bun.build 기반 클라이언트 번들 빌드
  */
 
-import type { RoutesManifest, RouteSpec } from "../spec/schema";
+import type { RouteClientBoundary, RoutesManifest, RouteSpec } from "../spec/schema";
 import { needsHydration, getRouteHydration } from "../spec/schema";
 import type {
   BundleResult,
@@ -37,6 +37,18 @@ import {
 } from "./vendor-cache";
 import path from "path";
 import fs from "fs/promises";
+
+interface BoundaryBundleBuild {
+  id: string;
+  route: string;
+  js: string;
+  module: string;
+  exportName: string;
+  priority: "immediate" | "visible" | "idle" | "interaction";
+  hydrate: string;
+  size: number;
+  gzipSize: number;
+}
 
 /**
  * Resolve Mandu's default bundler plugin set from a `BundlerOptions`
@@ -415,7 +427,7 @@ function getHydratedRoutes(manifest: RoutesManifest): RouteSpec[] {
   return manifest.routes.filter(
     (route) =>
       route.kind === "page" &&
-      route.clientModule &&
+      (!!route.clientModule || !!route.boundaries?.length) &&
       needsHydration(route)
   );
 }
@@ -425,6 +437,7 @@ function getHydrationRoutesMissingClientModule(manifest: RoutesManifest): RouteS
     (route) =>
       route.kind === "page" &&
       !route.clientModule &&
+      !route.boundaries?.length &&
       needsHydration(route)
   );
 }
@@ -525,6 +538,7 @@ import { hydrateRoot, createRoot } from 'react-dom/client';
 // Hydrated roots 추적 (unmount용) - 전역 초기화
 window.__MANDU_ROOTS__ = window.__MANDU_ROOTS__ || new Map();
 const hydratedRoots = window.__MANDU_ROOTS__;
+const warnedBoundaryPropFallbacks = new Set();
 
 const TYPE_MARKERS = {
   UNDEFINED: "\\u0000_",
@@ -624,7 +638,21 @@ function readManduData() {
   return window.__MANDU_DATA__;
 }
 
-const getServerData = (id) => readManduData()[id]?.serverData || {};
+const getServerData = (id, element) => {
+  const data = readManduData();
+  if (data[id] && Object.prototype.hasOwnProperty.call(data[id], 'serverData')) {
+    return data[id].serverData;
+  }
+  const routeId = element?.getAttribute?.('data-mandu-route-id');
+  if (
+    routeId &&
+    data[routeId] &&
+    Object.prototype.hasOwnProperty.call(data[routeId], 'serverData')
+  ) {
+    return data[routeId].serverData;
+  }
+  return {};
+};
 
 function findPropsScript(id) {
   const scripts = document.querySelectorAll('script[data-mandu-props]');
@@ -661,7 +689,33 @@ function readDataProps(element) {
 }
 
 function getIslandProps(id, element) {
-  return parsePropsScript(id) || readDataProps(element) || getServerData(id);
+  const inlineProps = parsePropsScript(id);
+  if (inlineProps) return inlineProps;
+
+  const dataProps = readDataProps(element);
+  if (dataProps) return dataProps;
+
+  const boundaryId = element?.getAttribute?.('data-mandu-boundary-id');
+  if (boundaryId && !warnedBoundaryPropFallbacks.has(id)) {
+    warnedBoundaryPropFallbacks.add(id);
+    console.warn(
+      '[Mandu] Missing boundary-local props for transformed client boundary ' +
+      boundaryId +
+      '; falling back to route server data.'
+    );
+  }
+
+  return getServerData(id, element);
+}
+
+function resolveIslandExport(module, element) {
+  const exportName = element.getAttribute('data-mandu-client-export');
+  if (exportName) {
+    if (exportName === 'default' && module.default) return module.default;
+    if (exportName !== 'default' && module[exportName]) return module[exportName];
+    console.warn('[Mandu] Client boundary export "' + exportName + '" was not found; falling back to default export.');
+  }
+  return module.default;
 }
 
 /**
@@ -909,7 +963,7 @@ async function loadAndHydrate(element, src) {
   try {
     // Dynamic import - 이 시점에 Island 모듈 로드
     const module = await import(src);
-    const island = module.default;
+    const island = resolveIslandExport(module, element);
     const data = getIslandProps(id, element);
 
     // Mandu Island (preferred)
@@ -998,15 +1052,22 @@ async function loadAndHydrate(element, src) {
     // Plain React component fallback (e.g. "use client" pages)
     else if (typeof island === 'function' || React.isValidElement(island)) {
       console.warn('[Mandu] Plain component hydration:', id);
-      const renderMode = 'hydrate';
+      const shouldHydrate = hasHydratableMarkup(element);
+      const renderMode = shouldHydrate ? 'hydrate' : 'mount';
 
-      const root = typeof island === 'function'
-        ? hydrateRoot(
-            element,
-            React.createElement(island, data),
-            createHydrationOptions(element, id, renderMode)
-          )
-        : hydrateRoot(element, island, createHydrationOptions(element, id, renderMode));
+      const root = shouldHydrate
+        ? (typeof island === 'function'
+            ? hydrateRoot(
+                element,
+                React.createElement(island, data),
+                createHydrationOptions(element, id, renderMode)
+              )
+            : hydrateRoot(element, island, createHydrationOptions(element, id, renderMode)))
+        : createRoot(element);
+
+      if (!shouldHydrate) {
+        root.render(typeof island === 'function' ? React.createElement(island, data) : island);
+      }
 
       hydratedRoots.set(id, root);
 
@@ -1589,6 +1650,9 @@ function generateIslandEntry(routeId: string, clientModulePath: string, exportNa
   // Windows 경로의 백슬래시를 슬래시로 변환 (JS escape 문제 방지)
   const normalizedPath = clientModulePath.replace(/\\/g, "/");
   const normalizedExportName = exportName && exportName !== "default" ? exportName : undefined;
+  const namedExport = normalizedExportName && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(normalizedExportName)
+    ? `export const ${normalizedExportName} = exportedIsland;`
+    : "";
   const candidates = [
     normalizedExportName,
     inferClientExportNameFromPath(clientModulePath),
@@ -1608,8 +1672,10 @@ import React from "react";
 import * as islandModule from ${importSpecifier};
 
 const candidateExportNames = ${JSON.stringify(candidates)};
+const explicitExportName = ${JSON.stringify(normalizedExportName ?? null)};
 
 function resolveIslandExport(mod) {
+  if (explicitExportName && mod[explicitExportName]) return mod[explicitExportName];
   if (mod.default) return mod.default;
   for (const name of candidateExportNames) {
     if (mod[name]) return mod[name];
@@ -1630,6 +1696,7 @@ const exportedIsland = island && island.__mandu_island === true
     };
 
 export default exportedIsland;
+${namedExport}
 `;
 }
 
@@ -2181,6 +2248,169 @@ async function buildIsland(
   }
 }
 
+async function buildBoundaryBundle(
+  boundary: RouteClientBoundary,
+  rootDir: string,
+  outDir: string,
+  options: BundlerOptions,
+): Promise<BoundaryBundleBuild> {
+  const clientModulePath = path.join(rootDir, boundary.module);
+  const assetStem = routeIdToAssetStem(boundary.id);
+  const entryStem = `_entry_boundary_${assetStem}`;
+  const entryPath = path.join(outDir, `${entryStem}.js`);
+  const outputName = `${assetStem}.boundary.js`;
+  const isDev = isDevelopmentBuild(options);
+
+  try {
+    await Bun.write(entryPath, generateIslandEntry(boundary.id, clientModulePath, boundary.exportName));
+
+    const result = await safeBuild({
+      entrypoints: [entryPath],
+      outdir: outDir,
+      naming: options.splitting ? "[name]-[hash].js" : outputName,
+      minify: shouldMinify(options),
+      sourcemap: options.sourcemap ? "external" : "none",
+      target: "browser",
+      splitting: shouldSplitChunks(options),
+      ...(isDev ? { reactFastRefresh: true } : {}),
+      plugins: [...manduClientPlugins(options), ...(isDev ? [fastRefreshPlugin()] : [])],
+      external: ["react", "react-dom", "react-dom/client", ...(options.external || [])],
+      define: {
+        "process.env.NODE_ENV": nodeEnvDefine(options),
+        ...options.define,
+      },
+    });
+
+    await fs.unlink(entryPath).catch(() => {});
+
+    if (!result.success) {
+      const grouped = result.logs.map((l) => `  - ${l.message}`).join("\n");
+      throw new Error(`Boundary build failed for '${boundary.id}' (source: ${clientModulePath}):\n${grouped}\n  Hint: Check the import paths and TypeScript types in this client boundary file.`);
+    }
+
+    let actualOutputPath: string;
+    let actualOutputName: string;
+    if (options.splitting && result.outputs.length > 0) {
+      const entryOutput = result.outputs.find(
+        (o) => o.kind === "entry-point" || o.path.includes(entryStem) || o.path.includes(assetStem),
+      );
+      actualOutputPath = entryOutput?.path ?? result.outputs[0].path;
+      actualOutputName = path.basename(actualOutputPath);
+    } else {
+      actualOutputPath = path.join(outDir, outputName);
+      actualOutputName = outputName;
+    }
+
+    const outputFile = Bun.file(actualOutputPath);
+    const content = await sanitizeGeneratedClientBundle(actualOutputPath, isDev);
+    const gzipped = Bun.gzipSync(Buffer.from(content));
+    const priority = boundaryPriorityToLegacyPriority(boundary.hydrate);
+
+    return {
+      id: boundary.id,
+      route: boundary.routeId,
+      js: `/.mandu/client/${actualOutputName}`,
+      module: boundary.module,
+      exportName: boundary.exportName,
+      priority,
+      hydrate: boundary.hydrate,
+      size: outputFile.size,
+      gzipSize: gzipped.length,
+    };
+  } finally {
+    await fs.unlink(entryPath).catch(() => {});
+  }
+}
+
+async function buildBoundaryBundlesForRecords(
+  boundaries: RouteClientBoundary[],
+  rootDir: string,
+  outDir: string,
+  options: BundlerOptions,
+  errors: string[],
+): Promise<BoundaryBundleBuild[]> {
+  if (boundaries.length === 0) return [];
+  if (pushDuplicateBoundaryIdErrors(boundaries, errors)) return [];
+
+  const results = await Promise.all(
+    boundaries.map(async (boundary) => {
+      try {
+        return await buildBoundaryBundle(boundary, rootDir, outDir, options);
+      } catch (error) {
+        errors.push(`[boundary:${boundary.id}] ${String(error)}`);
+        return null;
+      }
+    }),
+  );
+
+  return results.filter((result): result is BoundaryBundleBuild => result !== null);
+}
+
+function pushDuplicateBoundaryIdErrors(boundaries: RouteClientBoundary[], errors: string[]): boolean {
+  const firstById = new Map<string, RouteClientBoundary>();
+  let hasDuplicate = false;
+
+  for (const boundary of boundaries) {
+    const first = firstById.get(boundary.id);
+    if (!first) {
+      firstById.set(boundary.id, boundary);
+      continue;
+    }
+
+    hasDuplicate = true;
+    errors.push(
+      `[boundary:${boundary.id}] MANDU_BOUNDARY_DUPLICATE_ID Duplicate client boundary id. ` +
+      `First route="${first.routeId}" source="${first.source.file}", duplicate route="${boundary.routeId}" source="${boundary.source.file}". ` +
+      "Boundary ids must be unique before bundle manifest generation.",
+    );
+  }
+
+  return hasDuplicate;
+}
+
+function mergeBoundaryBundlesIntoManifest(
+  manifest: BundleManifest,
+  routeIds: Iterable<string>,
+  boundaryBundles: BoundaryBundleBuild[],
+): void {
+  const rebuiltRouteIds = new Set(routeIds);
+  if (rebuiltRouteIds.size === 0 && boundaryBundles.length === 0) return;
+
+  if (manifest.boundaries) {
+    for (const [id, boundary] of Object.entries(manifest.boundaries)) {
+      if (rebuiltRouteIds.has(boundary.route)) {
+        delete manifest.boundaries[id];
+      }
+    }
+  }
+
+  if (boundaryBundles.length > 0) {
+    manifest.boundaries = manifest.boundaries || {};
+    for (const boundary of boundaryBundles) {
+      manifest.boundaries[boundary.id] = {
+        route: boundary.route,
+        js: boundary.js,
+        module: boundary.module,
+        exportName: boundary.exportName,
+        priority: boundary.priority,
+        hydrate: boundary.hydrate,
+      };
+    }
+  }
+
+  if (manifest.boundaries && Object.keys(manifest.boundaries).length === 0) {
+    delete manifest.boundaries;
+  }
+}
+
+function boundaryPriorityToLegacyPriority(value: string): BoundaryBundleBuild["priority"] {
+  if (value === "load") return "immediate";
+  if (value === "immediate" || value === "visible" || value === "idle" || value === "interaction") {
+    return value;
+  }
+  return "visible";
+}
+
 async function sanitizeGeneratedClientBundle(outputPath: string, isDev: boolean): Promise<string> {
   const source = await Bun.file(outputPath).text();
   if (!isDev) return source;
@@ -2235,6 +2465,7 @@ function createBundleManifest(
   env: "development" | "production",
   islandBundles?: Array<{ name: string; js: string; route: string; priority: IslandFileEntry["priority"] }>,
   partialBundles?: Array<{ name: string; js: string; priority: PartialFileEntry["priority"] }>,
+  boundaryBundles?: BoundaryBundleBuild[],
 ): BundleManifest {
   const bundles: BundleManifest["bundles"] = {};
 
@@ -2273,6 +2504,21 @@ function createBundleManifest(
     }
   }
 
+  let boundaries: BundleManifest["boundaries"];
+  if (boundaryBundles && boundaryBundles.length > 0) {
+    boundaries = {};
+    for (const boundary of boundaryBundles) {
+      boundaries[boundary.id] = {
+        route: boundary.route,
+        js: boundary.js,
+        module: boundary.module,
+        exportName: boundary.exportName,
+        priority: boundary.priority,
+        hydrate: boundary.hydrate,
+      };
+    }
+  }
+
   // Phase 7.1 B-2: expose Fast Refresh dev bundles so the HTML
   // preamble can inject a dynamic import pointing at them. Only
   // populated when buildVendorShims ran in dev mode.
@@ -2291,6 +2537,7 @@ function createBundleManifest(
     bundles,
     ...(islands ? { islands } : {}),
     ...(partials ? { partials } : {}),
+    ...(boundaries ? { boundaries } : {}),
     shared: {
       runtime: runtimePath,
       vendor: vendorResult.react, // primary vendor for backwards compatibility
@@ -2489,10 +2736,12 @@ export async function buildClientBundles(
 
   // 부분 빌드 모드: targetRouteIds가 지정되면 해당 Island만 재빌드 (#122)
   if (options.targetRouteIds && options.targetRouteIds.length > 0) {
-    const targetRoutes = hydratedRoutes.filter((r) => options.targetRouteIds!.includes(r.id));
+    const targetRouteIds = new Set(options.targetRouteIds);
+    const targetRoutes = hydratedRoutes.filter((r) => targetRouteIds.has(r.id));
+    const targetIslandRoutes = targetRoutes.filter((route) => !!route.clientModule);
 
     const targetResults = await Promise.all(
-      targetRoutes.map(async (route) => {
+      targetIslandRoutes.map(async (route) => {
         try {
           return { ok: true as const, result: await buildIsland(route, rootDir, outDir, options) };
         } catch (error) {
@@ -2504,6 +2753,15 @@ export async function buildClientBundles(
       if (r.ok) outputs.push(r.result);
       else errors.push(`[${r.routeId}] ${r.error}`);
     }
+
+    const boundaryRecords = targetRoutes.flatMap((route) => route.boundaries ?? []);
+    const boundaryBundles = await buildBoundaryBundlesForRecords(
+      boundaryRecords,
+      rootDir,
+      outDir,
+      options,
+      errors,
+    );
 
     // 기존 매니페스트를 읽어 변경된 Island만 갱신
     let existingManifest: BundleManifest;
@@ -2519,12 +2777,12 @@ export async function buildClientBundles(
     for (const routeId of invalidClientRouteIds) {
       delete existingManifest.bundles[routeId];
     }
-    if (outputs.length > 0 || invalidClientRouteIds.size > 0) {
+    if (outputs.length > 0 || invalidClientRouteIds.size > 0 || boundaryRecords.length > 0) {
       for (const output of outputs) {
         if (existingManifest.bundles[output.routeId]) {
           existingManifest.bundles[output.routeId].js = output.outputPath;
         } else {
-          const route = targetRoutes.find((r) => r.id === output.routeId);
+          const route = targetIslandRoutes.find((r) => r.id === output.routeId);
           const hydration = route ? getRouteHydration(route) : null;
           existingManifest.bundles[output.routeId] = {
             js: output.outputPath,
@@ -2534,6 +2792,12 @@ export async function buildClientBundles(
         }
       }
 
+      mergeBoundaryBundlesIntoManifest(
+        existingManifest,
+        targetRoutes.map((route) => route.id),
+        boundaryBundles,
+      );
+
       await fs.writeFile(
         path.join(rootDir, ".mandu/manifest.json"),
         JSON.stringify(existingManifest, null, 2)
@@ -2541,7 +2805,15 @@ export async function buildClientBundles(
     }
     // When all builds failed, do NOT overwrite manifest — keep previous good state
 
-    const stats = calculateStats(outputs, startTime);
+    const stats = calculateStats(
+      outputs,
+      startTime,
+      boundaryBundles.map((boundary) => ({
+        routeId: `boundary:${boundary.id}`,
+        size: boundary.size,
+        gzipSize: boundary.gzipSize,
+      })),
+    );
     return { success: errors.length === 0, outputs, errors, manifest: existingManifest, stats };
   }
 
@@ -2599,7 +2871,7 @@ export async function buildClientBundles(
     }
 
     const islandResults = await Promise.all(
-      hydratedRoutes.map(async (route) => {
+      hydratedRoutes.filter((route) => !!route.clientModule).map(async (route) => {
         try {
           return { ok: true as const, result: await buildIsland(route, rootDir, outDir, options) };
         } catch (error) {
@@ -2656,6 +2928,20 @@ export async function buildClientBundles(
       }
     }
 
+    const boundaryRecords = hydratedRoutes.flatMap((route) => route.boundaries ?? []);
+    const boundaryBundles = await buildBoundaryBundlesForRecords(
+      boundaryRecords,
+      rootDir,
+      outDir,
+      options,
+      errors,
+    );
+    mergeBoundaryBundlesIntoManifest(
+      existingManifest,
+      hydratedRoutes.map((route) => route.id),
+      boundaryBundles,
+    );
+
     const partialBundles: PartialBundleBuild[] = [];
     if (partialFiles.length > 0) {
       const partialResults = await Promise.all(
@@ -2693,11 +2979,18 @@ export async function buildClientBundles(
     const stats = calculateStats(
       outputs,
       startTime,
-      partialBundles.map((partial) => ({
-        routeId: `partial:${partial.name}`,
-        size: partial.size,
-        gzipSize: partial.gzipSize,
-      })),
+      [
+        ...partialBundles.map((partial) => ({
+          routeId: `partial:${partial.name}`,
+          size: partial.size,
+          gzipSize: partial.gzipSize,
+        })),
+        ...boundaryBundles.map((boundary) => ({
+          routeId: `boundary:${boundary.id}`,
+          size: boundary.size,
+          gzipSize: boundary.gzipSize,
+        })),
+      ],
     );
     return { success: errors.length === 0, outputs, errors, manifest: existingManifest, stats };
   }
@@ -2756,7 +3049,7 @@ export async function buildClientBundles(
 
   // 5. 각 Island 번들 병렬 빌드 (#185: L1631의 per-island와 일관성 확보)
   const fullIslandResults = await Promise.all(
-    hydratedRoutes.map(async (route) => {
+    hydratedRoutes.filter((route) => !!route.clientModule).map(async (route) => {
       try {
         return { ok: true as const, result: await buildIsland(route, rootDir, outDir, options) };
       } catch (error) {
@@ -2801,6 +3094,24 @@ export async function buildClientBundles(
     }
   }
 
+  const boundaryRecords = hydratedRoutes.flatMap((route) => route.boundaries ?? []);
+  const boundaryBundles: BoundaryBundleBuild[] = [];
+  if (boundaryRecords.length > 0 && !pushDuplicateBoundaryIdErrors(boundaryRecords, errors)) {
+    const boundaryResults = await Promise.all(
+      boundaryRecords.map(async (boundary) => {
+        try {
+          return await buildBoundaryBundle(boundary, rootDir, outDir, options);
+        } catch (error) {
+          errors.push(`[boundary:${boundary.id}] ${String(error)}`);
+          return null;
+        }
+      }),
+    );
+    for (const result of boundaryResults) {
+      if (result) boundaryBundles.push(result);
+    }
+  }
+
   const partialBundles: PartialBundleBuild[] = [];
   if (partialFiles.length > 0) {
     const partialResults = await Promise.all(
@@ -2828,6 +3139,7 @@ export async function buildClientBundles(
     env,
     islandBundles,
     partialBundles,
+    boundaryBundles,
   );
 
   await fs.writeFile(
@@ -2839,11 +3151,18 @@ export async function buildClientBundles(
   const stats = calculateStats(
     outputs,
     startTime,
-    partialBundles.map((partial) => ({
-      routeId: `partial:${partial.name}`,
-      size: partial.size,
-      gzipSize: partial.gzipSize,
-    })),
+    [
+      ...partialBundles.map((partial) => ({
+        routeId: `partial:${partial.name}`,
+        size: partial.size,
+        gzipSize: partial.gzipSize,
+      })),
+      ...boundaryBundles.map((boundary) => ({
+        routeId: `boundary:${boundary.id}`,
+        size: boundary.size,
+        gzipSize: boundary.gzipSize,
+      })),
+    ],
   );
 
   // Phase 18.τ — fire onBundleComplete(stats) before return.
@@ -2876,8 +3195,9 @@ export function printBundleStats(result: BundleResult): void {
   console.log("=".repeat(50));
 
   const partialCount = Object.keys(result.manifest.partials ?? {}).length;
-  if (result.outputs.length === 0 && partialCount === 0) {
-    console.log("No islands or partials to bundle (hydration: none or no client entry)");
+  const boundaryCount = Object.keys(result.manifest.boundaries ?? {}).length;
+  if (result.outputs.length === 0 && partialCount === 0 && boundaryCount === 0) {
+    console.log("No islands, partials, or boundaries to bundle (hydration: none or no client entry)");
     if (result.errors.length > 0) {
       console.log("\n⚠️ Errors:");
       for (const error of result.errors) {
@@ -2902,6 +3222,9 @@ export function printBundleStats(result: BundleResult): void {
   }
   if (partialCount > 0) {
     console.log(`  Partials: ${partialCount}`);
+  }
+  if (boundaryCount > 0) {
+    console.log(`  Boundaries: ${boundaryCount}`);
   }
 
   if (result.errors.length > 0) {

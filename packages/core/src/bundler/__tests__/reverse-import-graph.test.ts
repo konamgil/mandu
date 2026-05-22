@@ -347,6 +347,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitFor(predicate: () => boolean, timeoutMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await sleep(50);
+  }
+  return predicate();
+}
+
 function createTempProject(): string {
   const root = mkdtempSync(path.join(tmpdir(), "mandu-189-"));
   mkdirSync(path.join(root, ".mandu"), { recursive: true });
@@ -436,20 +445,7 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")(
         },
       });
       close = bundler.close;
-
-      // Give the seedReverseGraph fire-and-forget a chance to finish.
-      // The seed is O(|routes| * fs.readFile) which on a 2-route
-      // manifest completes in <50 ms on any dev machine.
-      await sleep(100);
-
-      // Deep leaf edit — NOT in any known root set, NOT in a default
-      // common dir (`app/` isn't a common dir by default).
-      writeFileSync(
-        path.join(rootDir, "app/_utils/translations/ko.ts"),
-        'export const greeting = "안녕하세요";\n',
-      );
-
-      await sleep(WATCH_SETTLE_MS);
+      await bundler.reverseGraphReady;
 
       // The leaf change should reach onSSRChange via the
       // barrel -> page.tsx transitive chain. The callback is
@@ -462,6 +458,19 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")(
               .replace(/\\/g, "/")
               .toLowerCase()
           : path.resolve(rootDir, "app/page.tsx").replace(/\\/g, "/");
+
+      // Deep leaf edit — NOT in any known root set, NOT in a default
+      // common dir (`app/` isn't a common dir by default). During the
+      // full suite, reverse-graph seeding and Windows watcher arming can
+      // race the first write, so retry with distinct contents until the
+      // observable SSR root dispatch appears.
+      for (let attempt = 0; attempt < 5 && !ssrCalls.includes(normalizedPage); attempt++) {
+        writeFileSync(
+          path.join(rootDir, "app/_utils/translations/ko.ts"),
+          `export const greeting = "안녕하세요-${attempt}";\n`,
+        );
+        await waitFor(() => ssrCalls.includes(normalizedPage), WATCH_SETTLE_MS);
+      }
 
       expect(ssrCalls.length).toBeGreaterThanOrEqual(1);
       // Exact path match — defensive so a future refactor that loses
@@ -495,7 +504,7 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")(
         },
       });
       close = bundler.close;
-      await sleep(100);
+      await bundler.reverseGraphReady;
 
       // Write a brand-new file that nothing imports. Has to live
       // UNDER a watched directory for the watcher to see it at all;

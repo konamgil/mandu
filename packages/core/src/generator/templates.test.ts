@@ -38,6 +38,49 @@ describe("generatePageComponent", () => {
     expect(generated).not.toContain('React.createElement("p", null, "Route ID: about")');
   });
 
+  test("imports the real page module for compiler-owned boundary routes without a clientModule", () => {
+    const route: RouteSpec = {
+      id: "login",
+      kind: "page",
+      pattern: "/login",
+      module: "app/login/page.tsx",
+      componentModule: "app/login/page.tsx",
+      hydration: {
+        strategy: "island",
+        priority: "visible",
+        preload: false,
+      },
+      boundaries: [
+        {
+          id: "login--0",
+          routeId: "login",
+          module: "src/client/pages/login/LoginPage.client.tsx",
+          importSpecifier: "@/client/pages/login/LoginPage.client",
+          exportName: "default",
+          localName: "LoginPage",
+          hydrate: "visible",
+          ordinal: 0,
+          propsSource: "inline",
+          propsKeys: [],
+          hasSpreadProps: false,
+          source: {
+            file: "app/login/page.tsx",
+            line: 6,
+            column: 10,
+          },
+        },
+      ],
+    };
+
+    const generated = generatePageComponent(route);
+
+    expect(generated).toContain("Page Module: app/login/page.tsx");
+    expect(generated).toContain('import pageModule from "../../../../app/login/page.tsx"');
+    expect(generated).toContain("React.createElement(pageModule");
+    expect(generated).not.toContain("Client Module:");
+    expect(generated).not.toContain("Login Page");
+  });
+
   test("renders route-level default-imported client components through the page module", () => {
     const route: RouteSpec = {
       id: "login",

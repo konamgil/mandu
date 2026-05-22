@@ -18,6 +18,7 @@ import {
   checkDevArtifactsInProd,
   checkPackageExportGaps,
   checkNestedInternalCore,
+  checkClientBoundaryManifests,
 } from "../checks";
 import { runExtendedDiagnose, buildReport } from "../run";
 
@@ -390,6 +391,104 @@ describe("checkNestedInternalCore", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────
+// client_boundary_manifests
+// ──────────────────────────────────────────────────────────────────
+
+describe("checkClientBoundaryManifests", () => {
+  let rootDir: string;
+  beforeEach(async () => { rootDir = await mkTmpRoot(); });
+  afterEach(async () => { await fs.rm(rootDir, { recursive: true, force: true }); });
+
+  it("skips gracefully when routes manifest is missing", async () => {
+    const result = await checkClientBoundaryManifests(rootDir);
+    expect(result.ok).toBe(true);
+    expect(result.details?.skipped).toBe(true);
+  });
+
+  it("passes when the routes manifest has no compiler-owned boundaries", async () => {
+    await writeFile(rootDir, ".mandu/routes.manifest.json", JSON.stringify({
+      routes: [{ id: "home", kind: "page" }],
+    }));
+    const result = await checkClientBoundaryManifests(rootDir);
+    expect(result.ok).toBe(true);
+    expect(result.details?.boundaryCount).toBe(0);
+  });
+
+  it("flags duplicate client boundary ids in the routes manifest", async () => {
+    await writeFile(rootDir, ".mandu/routes.manifest.json", JSON.stringify({
+      routes: [
+        {
+          id: "a",
+          boundaries: [{ id: "dup--0", routeId: "a", module: "src/client/A.client.tsx", exportName: "A" }],
+        },
+        {
+          id: "b",
+          boundaries: [{ id: "dup--0", routeId: "b", module: "src/client/B.client.tsx", exportName: "B" }],
+        },
+      ],
+    }));
+    const result = await checkClientBoundaryManifests(rootDir);
+    expect(result.ok).toBe(false);
+    expect(result.severity).toBe("error");
+    expect(result.message).toMatch(/duplicate/);
+  });
+
+  it("flags missing boundary bundle manifest entries", async () => {
+    await writeFile(rootDir, ".mandu/routes.manifest.json", JSON.stringify({
+      routes: [
+        {
+          id: "home",
+          boundaries: [{ id: "home--0", routeId: "home", module: "src/client/Home.client.tsx", exportName: "Home" }],
+        },
+      ],
+    }));
+    await writeFile(rootDir, ".mandu/manifest.json", JSON.stringify({
+      version: 1,
+      buildTime: "x",
+      env: "production",
+      bundles: {},
+      boundaries: {},
+      shared: { runtime: "/.mandu/client/_runtime.js", vendor: "/.mandu/client/_react.js" },
+    }));
+    const result = await checkClientBoundaryManifests(rootDir);
+    expect(result.ok).toBe(false);
+    expect(result.severity).toBe("error");
+    expect(result.message).toMatch(/incomplete/);
+    expect(result.details?.missingEntries).toEqual(["home--0"]);
+  });
+
+  it("passes when route and bundle boundary manifests line up", async () => {
+    await writeFile(rootDir, ".mandu/routes.manifest.json", JSON.stringify({
+      routes: [
+        {
+          id: "home",
+          boundaries: [{ id: "home--0", routeId: "home", module: "src/client/Home.client.tsx", exportName: "Home" }],
+        },
+      ],
+    }));
+    await writeFile(rootDir, ".mandu/client/home--0.boundary.js", "export default function Home() {}\n");
+    await writeFile(rootDir, ".mandu/manifest.json", JSON.stringify({
+      version: 1,
+      buildTime: "x",
+      env: "production",
+      bundles: {},
+      boundaries: {
+        "home--0": {
+          route: "home",
+          js: "/.mandu/client/home--0.boundary.js",
+          module: "src/client/Home.client.tsx",
+          exportName: "Home",
+        },
+      },
+      shared: { runtime: "/.mandu/client/_runtime.js", vendor: "/.mandu/client/_react.js" },
+    }));
+    const result = await checkClientBoundaryManifests(rootDir);
+    expect(result.ok).toBe(true);
+    expect(result.details?.boundaryCount).toBe(1);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────
 // aggregator
 // ──────────────────────────────────────────────────────────────────
 
@@ -398,10 +497,10 @@ describe("runExtendedDiagnose", () => {
   beforeEach(async () => { rootDir = await mkTmpRoot(); });
   afterEach(async () => { await fs.rm(rootDir, { recursive: true, force: true }); });
 
-  it("runs all 7 extended checks and returns a structured report", async () => {
+  it("runs all 8 extended checks and returns a structured report", async () => {
     const report = await runExtendedDiagnose(rootDir);
-    // #261 added `nested_internal_core` — total is now 7.
-    expect(report.summary.total).toBe(7);
+    // F42/F45 added `client_boundary_manifests` — total is now 8.
+    expect(report.summary.total).toBe(8);
     // manifest is missing → at least one error
     expect(report.healthy).toBe(false);
     expect(report.errorCount).toBeGreaterThanOrEqual(1);
@@ -412,6 +511,7 @@ describe("runExtendedDiagnose", () => {
     expect(rules).toContain("dev_artifacts_in_prod");
     expect(rules).toContain("package_export_gaps");
     expect(rules).toContain("nested_internal_core");
+    expect(rules).toContain("client_boundary_manifests");
     expect(rules).toContain("a11y_hints");
   });
 

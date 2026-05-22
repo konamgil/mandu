@@ -830,3 +830,184 @@ export async function checkNestedInternalCore(rootDir: string): Promise<Diagnose
     },
   };
 }
+
+// ────────────────────────────────────────────────────────────────────────
+// 8. client_boundary_manifests (F42/F45)
+// ────────────────────────────────────────────────────────────────────────
+
+interface DiagnoseRouteBoundary {
+  id?: unknown;
+  routeId?: unknown;
+  module?: unknown;
+  exportName?: unknown;
+  source?: unknown;
+}
+
+interface DiagnoseRouteRecord {
+  id?: unknown;
+  boundaries?: unknown;
+}
+
+async function readJsonObject(filePath: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await fs.readFile(filePath, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function toRouteRecords(value: unknown): DiagnoseRouteRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is DiagnoseRouteRecord =>
+    !!entry && typeof entry === "object" && !Array.isArray(entry)
+  );
+}
+
+function toRouteBoundaries(route: DiagnoseRouteRecord): DiagnoseRouteBoundary[] {
+  if (!Array.isArray(route.boundaries)) return [];
+  return route.boundaries.filter((entry): entry is DiagnoseRouteBoundary =>
+    !!entry && typeof entry === "object" && !Array.isArray(entry)
+  );
+}
+
+function bundleAssetExists(rootDir: string, jsPath: unknown): Promise<boolean> {
+  if (typeof jsPath !== "string" || jsPath.length === 0) return Promise.resolve(false);
+  const relativePath = jsPath.startsWith("/")
+    ? jsPath.slice(1)
+    : jsPath;
+  return fs.access(path.join(rootDir, relativePath)).then(
+    () => true,
+    () => false,
+  );
+}
+
+/**
+ * F42/F45 check: validate compiler-owned client boundary records.
+ *
+ * This does not rebuild the app. It inspects generated route and bundle
+ * manifests and reports:
+ *   - duplicate boundary ids in `.mandu/routes.manifest.json`
+ *   - malformed boundary records missing id/module/exportName
+ *   - missing boundary bundle entries in `.mandu/manifest.json`
+ *   - boundary bundle entries whose JS asset is absent on disk
+ */
+export async function checkClientBoundaryManifests(rootDir: string): Promise<DiagnoseCheckResult> {
+  const routesManifestPath = path.join(rootDir, ".mandu", "routes.manifest.json");
+  const routesManifest = await readJsonObject(routesManifestPath);
+
+  if (!routesManifest) {
+    return {
+      ok: true,
+      rule: "client_boundary_manifests",
+      message: "Routes manifest is missing or unreadable — boundary manifest check skipped.",
+      details: { skipped: true, routesManifestPath: path.relative(rootDir, routesManifestPath) },
+    };
+  }
+
+  const boundaries: Array<{ routeId: string; id: string; module: string; exportName: string }> = [];
+  const malformed: Array<{ routeId: string; reason: string }> = [];
+  const seen = new Map<string, string>();
+  const duplicates: Array<{ id: string; firstRouteId: string; duplicateRouteId: string }> = [];
+
+  for (const route of toRouteRecords(routesManifest.routes)) {
+    const routeId = typeof route.id === "string" ? route.id : "(unknown-route)";
+    for (const boundary of toRouteBoundaries(route)) {
+      const id = typeof boundary.id === "string" ? boundary.id : "";
+      const module = typeof boundary.module === "string" ? boundary.module : "";
+      const exportName = typeof boundary.exportName === "string" ? boundary.exportName : "";
+      if (!id || !module || !exportName) {
+        malformed.push({ routeId, reason: "Boundary record must include id, module, and exportName." });
+        continue;
+      }
+
+      const firstRouteId = seen.get(id);
+      if (firstRouteId) {
+        duplicates.push({ id, firstRouteId, duplicateRouteId: routeId });
+      } else {
+        seen.set(id, routeId);
+      }
+      boundaries.push({ routeId, id, module, exportName });
+    }
+  }
+
+  if (malformed.length > 0 || duplicates.length > 0) {
+    return {
+      ok: false,
+      rule: "client_boundary_manifests",
+      severity: "error",
+      message: `Client boundary route manifest has ${malformed.length} malformed record(s) and ${duplicates.length} duplicate id(s).`,
+      suggestion: "Regenerate routes with `mandu generate` or rerun the build; boundary ids must be unique and include id/module/exportName.",
+      details: {
+        boundaryCount: boundaries.length,
+        malformed: malformed.slice(0, 10),
+        duplicates: duplicates.slice(0, 10),
+      },
+    };
+  }
+
+  if (boundaries.length === 0) {
+    return {
+      ok: true,
+      rule: "client_boundary_manifests",
+      message: "No compiler-owned client boundaries recorded in the routes manifest.",
+      details: { boundaryCount: 0 },
+    };
+  }
+
+  const bundleManifestPath = path.join(rootDir, ".mandu", "manifest.json");
+  const bundleManifest = await readJsonObject(bundleManifestPath);
+  if (!bundleManifest) {
+    return {
+      ok: false,
+      rule: "client_boundary_manifests",
+      severity: "warning",
+      message: `Routes manifest declares ${boundaries.length} client boundary record(s), but bundle manifest is missing.`,
+      suggestion: "Run `mandu build` before deploy so boundary bundles are emitted and can be checked.",
+      details: { boundaryCount: boundaries.length, bundleManifestPath: path.relative(rootDir, bundleManifestPath) },
+    };
+  }
+
+  const bundleBoundaries = bundleManifest.boundaries && typeof bundleManifest.boundaries === "object" && !Array.isArray(bundleManifest.boundaries)
+    ? bundleManifest.boundaries as Record<string, unknown>
+    : {};
+  const missingEntries: string[] = [];
+  const missingAssets: string[] = [];
+
+  for (const boundary of boundaries) {
+    const entry = bundleBoundaries[boundary.id];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      missingEntries.push(boundary.id);
+      continue;
+    }
+    const jsPath = (entry as { js?: unknown }).js;
+    if (!(await bundleAssetExists(rootDir, jsPath))) {
+      missingAssets.push(boundary.id);
+    }
+  }
+
+  if (missingEntries.length > 0 || missingAssets.length > 0) {
+    return {
+      ok: false,
+      rule: "client_boundary_manifests",
+      severity: "error",
+      message: `Client boundary bundle manifest is incomplete: ${missingEntries.length} missing entr${missingEntries.length === 1 ? "y" : "ies"}, ${missingAssets.length} missing asset(s).`,
+      suggestion: "Run `mandu clean && mandu build`; if the issue persists, inspect `mandu.route.boundaries` with `includeBundle: true`.",
+      details: {
+        boundaryCount: boundaries.length,
+        missingEntries: missingEntries.slice(0, 10),
+        missingAssets: missingAssets.slice(0, 10),
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    rule: "client_boundary_manifests",
+    message: `Client boundary manifests are consistent for ${boundaries.length} boundary record(s).`,
+    details: { boundaryCount: boundaries.length },
+  };
+}

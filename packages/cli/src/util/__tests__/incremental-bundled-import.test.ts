@@ -17,11 +17,14 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, symlinkSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   createBundledImporter,
+  createCachedBundledImporter,
   type BundledImporter,
 } from "../bun";
 import {
@@ -37,6 +40,20 @@ const BUNDLE_CACHE_REL = ".mandu/dev-cache/ssr";
 
 function cacheDir(root: string): string {
   return path.join(root, BUNDLE_CACHE_REL);
+}
+
+function linkBoundaryRuntimeDeps(rootDir: string): void {
+  mkdirSync(path.join(rootDir, "node_modules", "@mandujs"), { recursive: true });
+  symlinkSync(
+    path.resolve(import.meta.dir, "../../../../core"),
+    path.join(rootDir, "node_modules", "@mandujs", "core"),
+    "junction",
+  );
+  symlinkSync(
+    path.resolve(import.meta.dir, "../../../../../node_modules/react"),
+    path.join(rootDir, "node_modules", "react"),
+    "junction",
+  );
 }
 
 describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")(
@@ -98,6 +115,223 @@ export default function render() { return bar(); }
       const files = readdirSync(cacheDir(rootDir));
       expect(files.length).toBe(1);
       expect(files[0]).toMatch(/\.mjs$/);
+    });
+
+    it("applies client boundary transform before SSR importing a page", async () => {
+      importer = createBundledImporter({ rootDir });
+      const pagePath = path.join(rootDir, "src/page.tsx");
+      const clientPath = path.join(rootDir, "src/ClientWidget.client.tsx");
+      linkBoundaryRuntimeDeps(rootDir);
+      writeFileSync(
+        clientPath,
+        `throw new Error("client module should not execute during SSR transform");
+export function ClientWidget() {
+  return null;
+}
+`,
+      );
+      writeFileSync(
+        pagePath,
+        `import React from "react";
+import { ClientWidget } from "./ClientWidget.client";
+
+export default function Page() {
+  return <main><ClientWidget label="ok" /></main>;
+}
+`,
+      );
+
+      const mod = (await importer(pagePath, {
+        clientBoundaryTransform: {
+          routeId: "boundary-page",
+          hydrate: "visible",
+        },
+      })) as { default: React.ComponentType };
+      const html = renderToStaticMarkup(React.createElement(mod.default));
+
+      expect(html).toContain('data-mandu-island="boundary-page--0"');
+      expect(html).toContain('data-mandu-client-export="ClientWidget"');
+      expect(html).toContain('data-mandu-props="boundary-page--0"');
+      expect(html).toContain('"label":"ok"');
+    });
+
+    it("production cached boundary imports keep SSR props request-local", async () => {
+      importer = createCachedBundledImporter({ rootDir });
+      const pagePath = path.join(rootDir, "src/production-boundary-page.tsx");
+      const clientPath = path.join(rootDir, "src/ProductionWidget.client.tsx");
+      linkBoundaryRuntimeDeps(rootDir);
+      writeFileSync(
+        clientPath,
+        `throw new Error("production client module should not execute during SSR transform");
+export default function ProductionWidget() {
+  return null;
+}
+`,
+      );
+      writeFileSync(
+        pagePath,
+        `import React from "react";
+import ProductionWidget from "./ProductionWidget.client";
+
+export default function Page({ label }) {
+  return <main><ProductionWidget label={label} /></main>;
+}
+`,
+      );
+
+      const opts = {
+        clientBoundaryTransform: {
+          routeId: "production-boundary-page",
+          hydrate: "visible",
+          boundaries: [
+            {
+              id: "production-boundary-page--manifest",
+              ordinal: 0,
+              source: {
+                file: "src/production-boundary-page.tsx",
+              },
+            },
+          ],
+        },
+      };
+
+      const firstModule = (await importer(pagePath, opts)) as { default: React.ComponentType<{ label: string }> };
+      const secondModule = (await importer(pagePath, opts)) as { default: React.ComponentType<{ label: string }> };
+      expect(secondModule).toBe(firstModule);
+
+      const firstHtml = renderToStaticMarkup(React.createElement(firstModule.default, { label: "first-request" }));
+      const secondHtml = renderToStaticMarkup(React.createElement(secondModule.default, { label: "second-request" }));
+
+      expect(firstHtml).toContain('data-mandu-props="production-boundary-page--manifest"');
+      expect(firstHtml).toContain('"label":"first-request"');
+      expect(firstHtml).not.toContain("second-request");
+      expect(secondHtml).toContain('data-mandu-props="production-boundary-page--manifest"');
+      expect(secondHtml).toContain('"label":"second-request"');
+      expect(secondHtml).not.toContain("first-request");
+    });
+
+    it("fails client boundary transform when a named client export is missing", async () => {
+      importer = createBundledImporter({ rootDir });
+      const pagePath = path.join(rootDir, "src/missing-export-page.tsx");
+      const clientPath = path.join(rootDir, "src/MissingExport.client.tsx");
+      linkBoundaryRuntimeDeps(rootDir);
+      writeFileSync(
+        clientPath,
+        `export function ExistingWidget() {
+  return null;
+}
+`,
+      );
+      writeFileSync(
+        pagePath,
+        `import React from "react";
+import { MissingWidget } from "./MissingExport.client";
+
+export default function Page() {
+  return <main><MissingWidget label="bad" /></main>;
+}
+`,
+      );
+
+      await expect(importer(pagePath, {
+        clientBoundaryTransform: {
+          routeId: "missing-export-page",
+          hydrate: "visible",
+        },
+      })).rejects.toThrow(/MANDU_BOUNDARY_UNRESOLVED_EXPORT.*MissingWidget.*Suggestion:/s);
+    });
+
+    it("fails client boundary transform when the client module imports server-only APIs", async () => {
+      importer = createBundledImporter({ rootDir });
+      const pagePath = path.join(rootDir, "src/server-only-boundary-page.tsx");
+      const clientPath = path.join(rootDir, "src/ServerOnlyWidget.client.tsx");
+      linkBoundaryRuntimeDeps(rootDir);
+      writeFileSync(
+        clientPath,
+        `import { readFile } from "node:fs/promises";
+import { Database } from "bun:sqlite";
+export function ServerOnlyWidget() {
+  return String(readFile) + String(Database);
+}
+`,
+      );
+      writeFileSync(
+        pagePath,
+        `import React from "react";
+import { ServerOnlyWidget } from "./ServerOnlyWidget.client";
+
+export default function Page() {
+  return <main><ServerOnlyWidget /></main>;
+}
+`,
+      );
+
+      await expect(importer(pagePath, {
+        clientBoundaryTransform: {
+          routeId: "server-only-boundary-page",
+          hydrate: "visible",
+        },
+      })).rejects.toThrow(/MANDU_BOUNDARY_SERVER_ONLY_IMPORT.*node:fs\/promises.*bun:sqlite.*Suggestion:/s);
+    });
+
+    it("applies client boundary transform inside route-owned server wrappers", async () => {
+      importer = createBundledImporter({ rootDir });
+      linkBoundaryRuntimeDeps(rootDir);
+
+      const pagePath = path.join(rootDir, "src/wrapped-page.tsx");
+      const wrapperPath = path.join(rootDir, "src/Wrapper.tsx");
+      const clientPath = path.join(rootDir, "src/ClientWidget.client.tsx");
+      writeFileSync(
+        clientPath,
+        `throw new Error("transitive client module should not execute during SSR transform");
+export function ClientWidget() {
+  return null;
+}
+`,
+      );
+      writeFileSync(
+        wrapperPath,
+        `import React from "react";
+import { ClientWidget } from "./ClientWidget.client";
+
+export function Wrapper({ label }) {
+  return <section><ClientWidget label={label} /></section>;
+}
+`,
+      );
+      writeFileSync(
+        pagePath,
+        `import React from "react";
+import { Wrapper } from "./Wrapper";
+
+export default function Page() {
+  return <main><Wrapper label="wrapped" /></main>;
+}
+`,
+      );
+
+      const mod = (await importer(pagePath, {
+        clientBoundaryTransform: {
+          routeId: "wrapped-page",
+          hydrate: "visible",
+          boundaries: [
+            {
+              id: "wrapped-page--manifest",
+              ordinal: 0,
+              source: {
+                file: "src/Wrapper.tsx",
+              },
+            },
+          ],
+        },
+      })) as { default: React.ComponentType };
+      const html = renderToStaticMarkup(React.createElement(mod.default));
+
+      expect(html).toContain("<section>");
+      expect(html).toContain('data-mandu-island="wrapped-page--manifest"');
+      expect(html).toContain('data-mandu-client-export="ClientWidget"');
+      expect(html).toContain('data-mandu-props="wrapped-page--manifest"');
+      expect(html).toContain('"label":"wrapped"');
     });
 
     it("cache hit: same root called twice with no changedFile does NOT rebuild needlessly", async () => {

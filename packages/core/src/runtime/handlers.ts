@@ -23,7 +23,7 @@ import {
   type PageRegistration,
 } from "./server";
 import { registerManifest } from "./registry";
-import { needsHydration, type RoutesManifest } from "../spec/schema";
+import { needsHydration, type RouteClientBoundary, type RoutesManifest } from "../spec/schema";
 
 type RouteModule = Record<string, unknown>;
 
@@ -92,7 +92,17 @@ export interface RegisterHandlersOptions {
    * module's import graph, `importFn` returns the cached bundle in ~0.1 ms
    * instead of re-running Bun.build.
    */
-  importFn: (modulePath: string, opts?: { changedFile?: string }) => Promise<unknown>;
+  importFn: (
+    modulePath: string,
+    opts?: {
+      changedFile?: string;
+      clientBoundaryTransform?: {
+        routeId: string;
+        hydrate?: string;
+        boundaries?: RouteClientBoundary[];
+      };
+    },
+  ) => Promise<unknown>;
   /** Set for tracking already registered layout paths */
   registeredLayouts: Set<string>;
   /** Clear layout cache on reload */
@@ -116,8 +126,22 @@ export async function registerManifestHandlers(
   options: RegisterHandlersOptions
 ): Promise<void> {
   const { importFn, registeredLayouts, isReload = false, changedFile } = options;
-  const importOpts: { changedFile?: string } | undefined =
+  const baseImportOpts: { changedFile?: string } | undefined =
     changedFile !== undefined ? { changedFile } : undefined;
+  const importOptsForRoute = (route?: RoutesManifest["routes"][number]) => {
+    const boundaryTransform = route?.kind === "page" && route.boundaries?.length
+        ? {
+            routeId: route.id,
+            hydrate: route.hydration?.priority ?? "visible",
+            boundaries: route.boundaries,
+          }
+      : undefined;
+    if (!baseImportOpts && !boundaryTransform) return undefined;
+    return {
+      ...baseImportOpts,
+      ...(boundaryTransform ? { clientBoundaryTransform: boundaryTransform } : {}),
+    };
+  };
 
   if (isReload) {
     registeredLayouts.clear();
@@ -137,7 +161,7 @@ export async function registerManifestHandlers(
     if (route.kind === "metadata") {
       const modulePath = path.resolve(rootDir, route.module);
       registerMetadataHandler(route.id, async () => {
-        return importFn(modulePath, importOpts);
+        return importFn(modulePath, importOptsForRoute(route));
       });
       console.log(`  🗺️  Metadata: ${route.pattern} -> ${route.id}`);
       continue;
@@ -146,7 +170,7 @@ export async function registerManifestHandlers(
     if (route.kind === "api") {
       const modulePath = path.resolve(rootDir, route.module);
       try {
-        const module = (await importFn(modulePath, importOpts)) as RouteModule;
+        const module = (await importFn(modulePath, importOptsForRoute(route))) as RouteModule;
         let handler: unknown = module.default ?? module.handler ?? module;
 
         // 1) ManduFilling instance
@@ -193,7 +217,7 @@ export async function registerManifestHandlers(
               // Layout modules must export a default component. Runtime
               // validation in `renderToHTML` / page-loader asserts this —
               // so casting the unknown `importFn` result is safe here.
-              return importFn(absLayoutPath, importOpts);
+              return importFn(absLayoutPath, baseImportOpts);
             }) as Parameters<typeof registerLayoutLoader>[1]);
             registeredLayouts.add(layoutPath);
             console.log(`  🎨 Layout: ${layoutPath}`);
@@ -204,7 +228,7 @@ export async function registerManifestHandlers(
       // Use PageHandler if slotModule exists (filling.loader support)
       if (route.slotModule) {
         registerPageHandler(route.id, async () => {
-          const mod = (await importFn(componentPath, importOpts)) as Record<string, unknown>;
+          const mod = (await importFn(componentPath, importOptsForRoute(route))) as Record<string, unknown>;
           // Normalize the page module shape. Users write pages in two styles:
           //   (a) `export default function Page() {…}` + `export const filling = …`
           //   (b) `export default { component: …, filling: … }`
@@ -242,7 +266,7 @@ export async function registerManifestHandlers(
           `  📄 Page: ${route.pattern} -> ${route.id} (with loader)${isIsland ? " 🏝️" : ""}${hasLayout ? " 🎨" : ""}`
         );
       } else {
-        registerPageLoader(route.id, (() => importFn(componentPath, importOpts)) as Parameters<typeof registerPageLoader>[1]);
+        registerPageLoader(route.id, (() => importFn(componentPath, importOptsForRoute(route))) as Parameters<typeof registerPageLoader>[1]);
         console.log(
           `  📄 Page: ${route.pattern} -> ${route.id}${isIsland ? " 🏝️" : ""}${hasLayout ? " 🎨" : ""}`
         );
@@ -252,7 +276,7 @@ export async function registerManifestHandlers(
 
   // Phase 6.3: register `app/not-found.tsx` if it exists. Global, one per
   // app — the server falls through to the built-in 404 if unregistered.
-  await registerAppNotFound(rootDir, importFn, importOpts);
+  await registerAppNotFound(rootDir, importFn, baseImportOpts);
 }
 
 /**
@@ -262,7 +286,7 @@ export async function registerManifestHandlers(
  */
 async function registerAppNotFound(
   rootDir: string,
-  importFn: (modulePath: string, opts?: { changedFile?: string }) => Promise<unknown>,
+  importFn: RegisterHandlersOptions["importFn"],
   importOpts?: { changedFile?: string },
 ): Promise<void> {
   const candidates = [

@@ -8,10 +8,11 @@ import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 import { PORTS, TIMEOUTS } from "../constants";
 import { decodeHtmlText, escapeHtmlAttr, escapeHtmlText, escapeJsonForInlineScript } from "./escape";
 import { REACT_INTERNALS_SHIM_SCRIPT } from "./shims";
-import { generateFastRefreshPreamble } from "../bundler/dev";
+import { generateFastRefreshPreamble } from "../bundler/fast-refresh-preamble";
 import { PREFETCH_HELPER_SCRIPT } from "../client/prefetch-helper";
 import { SPA_NAV_HELPER_SCRIPT } from "../client/spa-nav-helper";
 import { maybeInjectDevOverlay } from "../dev-error-overlay";
+import { renderWithManduClientBoundaryManifest } from "../internal/client-boundary";
 
 /**
  * Issue #192 — `@view-transition` at-rule block.
@@ -272,6 +273,14 @@ function generateHydrationScripts(
   if (manifest.partials) {
     for (const partial of Object.values(manifest.partials)) {
       const cacheBust = `${partial.js}${partial.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
+    }
+  }
+
+  if (manifest.boundaries) {
+    for (const boundary of Object.values(manifest.boundaries)) {
+      if (boundary.route !== routeId) continue;
+      const cacheBust = `${boundary.js}${boundary.js.includes('?') ? '&' : '?'}v=${Date.now()}`;
       scripts.push(`<link rel="modulepreload" href="${escapeHtmlAttr(cacheBust)}">`);
     }
   }
@@ -703,7 +712,9 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   } catch { /* client 모듈 로드 실패 시 무시 */ }
 
   const renderToString = getRenderToString();
-  let content = renderToString(element);
+  let content = renderWithManduClientBoundaryManifest(routeId, bundleManifest, () =>
+    renderToString(element),
+  );
 
   // 렌더링 중 수집된 head 태그
   collectedHeadTags = headGet?.() ?? "";

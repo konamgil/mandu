@@ -8,7 +8,7 @@
  *   .mandu/workers/manifest.json — cloned RoutesManifest (serializable copy)
  *   wrangler.toml               — generated if absent; preserved otherwise
  *
- * The worker entry imports `@mandujs/core` + `@mandujs/edge/workers` and
+ * The worker entry imports runtime-only `@mandujs/core` subpaths plus `@mandujs/edge/workers` and
  * calls `createWorkersHandler(manifest)` after registering every route
  * module. Route modules are inlined into the bundle by `Bun.build` with
  * `target: "browser"` and `format: "esm"` — Workers is happiest with ESM
@@ -210,8 +210,7 @@ function generateRegisterSource(manifest: RoutesManifest, rootDir: string): stri
   lines.push(`  registerPageHandler,`);
   lines.push(`  registerPageLoader,`);
   lines.push(`  registerLayoutLoader,`);
-  lines.push(`  needsHydration,`);
-  lines.push(`} from "@mandujs/core";`);
+  lines.push(`} from "@mandujs/core/runtime/server";`);
   lines.push("");
 
   let importIndex = 0;
@@ -282,9 +281,6 @@ function generateRegisterSource(manifest: RoutesManifest, rootDir: string): stri
   }
 
   lines.push(...imports);
-  lines.push("");
-  lines.push("// eslint-disable-next-line @typescript-eslint/no-unused-vars");
-  lines.push("const _needsHydration = needsHydration; // keep symbol referenced");
   lines.push("");
   lines.push(...registrations);
   lines.push("");

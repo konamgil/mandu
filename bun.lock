@@ -48,7 +48,7 @@
     },
     "demo/auth-starter": {
       "name": "mandu-auth-starter",
-      "version": "0.1.68",
+      "version": "0.1.69",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -67,7 +67,7 @@
     },
     "demo/desktop-starter": {
       "name": "mandu-desktop-starter",
-      "version": "0.1.67",
+      "version": "0.1.68",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -83,7 +83,7 @@
     },
     "demo/edge-workers-starter": {
       "name": "mandu-edge-workers-starter",
-      "version": "0.1.68",
+      "version": "0.1.69",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "@mandujs/edge": "workspace:*",
@@ -148,7 +148,7 @@
     },
     "packages/cli": {
       "name": "@mandujs/cli",
-      "version": "0.44.20",
+      "version": "0.44.21",
       "bin": {
         "mandu": "src/main.ts",
       },
@@ -163,12 +163,13 @@
     },
     "packages/core": {
       "name": "@mandujs/core",
-      "version": "0.54.17",
+      "version": "0.54.18",
       "dependencies": {
         "chokidar": "^5.0.0",
         "fast-glob": "^3.3.2",
         "glob": "^13.0.0",
         "minimatch": "^10.1.1",
+        "typescript": ">=6.0.0",
         "zod": "^3.23.8",
       },
       "devDependencies": {
@@ -203,7 +204,7 @@
     },
     "packages/edge": {
       "name": "@mandujs/edge",
-      "version": "0.4.65",
+      "version": "0.4.66",
       "dependencies": {
         "@mandujs/core": "workspace:*",
       },
@@ -218,7 +219,7 @@
     },
     "packages/mcp": {
       "name": "@mandujs/mcp",
-      "version": "0.38.9",
+      "version": "0.38.10",
       "bin": {
         "mandu-mcp": "./src/index.ts",
         "mandujs-mcp": "./src/index.ts",
@@ -233,7 +234,7 @@
     },
     "packages/playground-runner": {
       "name": "@mandujs/playground-runner",
-      "version": "25.0.15",
+      "version": "25.0.16",
       "devDependencies": {
         "@cloudflare/sandbox": "^0.1.0",
         "@cloudflare/workers-types": "^4.20250101.0",

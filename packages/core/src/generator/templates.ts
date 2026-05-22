@@ -244,7 +244,9 @@ export function generatePageComponent(route: RouteSpec): string {
     return generatePageComponentWithIsland(route);
   }
 
-  if (needsHydration(route)) {
+  const hasCompilerOwnedBoundaries = (route.boundaries?.length ?? 0) > 0;
+
+  if (needsHydration(route) && !hasCompilerOwnedBoundaries) {
     throw new Error(
       `[${route.id}] Route has hydration strategy "${route.hydration?.strategy}" but no clientModule. ` +
       "Refusing to generate a placeholder page because it would disagree with runtime hydration state.",
@@ -258,6 +260,13 @@ export function generatePageComponent(route: RouteSpec): string {
 
   if (route.kind === "page" && route.componentModule) {
     return generatePageComponentFromModule(route);
+  }
+
+  if (needsHydration(route)) {
+    throw new Error(
+      `[${route.id}] Route has hydration strategy "${route.hydration?.strategy}" and compiler-owned boundaries, ` +
+      "but no componentModule. Refusing to generate a placeholder page because it would disagree with runtime hydration state.",
+    );
   }
 
   const pageName = toPascalCase(route.id);

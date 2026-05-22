@@ -53,7 +53,7 @@ Use this table before editing.
 | Add API | Contract/API flow | `mandu-create-api`, `mandu-slot` | `mandu_add_route`, `mandu_create_contract`, `mandu_update_route_contract`, `mandu_validate_contracts` | edit `app/api/**/route.ts`, run contract checks |
 | Add or modify slot/filling | Slot flow | `mandu-slot` | `mandu_read_slot`, `mandu_write_slot`, `mandu_validate_slot` | edit slot/filling file, run typecheck/tests |
 | Fix architecture/import issue | Guard flow | `mandu-guard-guide` | `mandu_guard_check`, `mandu_check_import`, `mandu_check_location`, `mandu_explain_rule` | `bun run mandu -- guard-check` |
-| Hydration/island issue | Hydration flow | `mandu-hydration` | `mandu_list_islands`, `mandu_set_hydration`, `mandu_build`, `mandu_build_status` | `bun run build`, `bun run perf:hydration` |
+| Hydration/island/client boundary issue | Hydration boundary flow | `mandu-hydration` | `mandu.route.boundaries` (`includeBundle: true` after build), `mandu.route.get`, `mandu_list_islands`, `mandu_set_hydration`, `mandu_build`, `mandu_build_status` | `mandu agent context --json`, `mandu agent manifest --write`, `bun run build`, `bun run perf:hydration` |
 | Runtime/debug failure | Diagnose flow | `mandu-debug` | `mandu_doctor`, `mandu_analyze_error`, `mandu_get_runtime_config` | targeted test + source inspection |
 | Deployment | Deploy flow | `mandu-deploy` | runtime/build/deploy tools where available | `bun run build`, target deploy command |
 | Test generation | ATE flow | ATE prompts/skills when available | MCP project/route/contract inspection | `bun run test:*`, add focused tests |
@@ -90,14 +90,18 @@ For API route changes:
 3. Keep runtime validation, OpenAPI, tests, and client assumptions aligned.
 4. Run contract validation or targeted tests.
 
-### 3.3 Hydration and Island Changes
+### 3.3 Hydration, Island, and Client Boundary Changes
 
-For `*.island.tsx`, client bundle, or hydration failures:
+For `*.client.tsx`, `*.island.tsx`, client bundle, or hydration failures:
 
 1. Use `mandu-hydration` skill.
-2. Inspect islands with MCP when available.
-3. Run build or hydration benchmark depending on risk.
-4. Treat `[data-mandu-error]` as a real failure, not a cosmetic issue.
+2. Identify the affected route with `mandu.route.list`, `mandu.route.get`, or `mandu agent context --json`.
+3. Inspect compiler-owned route boundary metadata before editing generated code: call `mandu.route.boundaries` with `{ "routeId": "<route-id>" }`.
+4. After a build, use `mandu.route.boundaries` with `{ "routeId": "<route-id>", "includeBundle": true }` when boundary chunk correlation matters.
+5. If MCP is unavailable, run `mandu agent context --json` or `mandu agent manifest --write` and inspect `routes[].boundaries` in `.mandu/agent-manifest.json`.
+6. Check `module`, `exportName`, `hydrate`, `propsSource`, `propsKeys`, `hasSpreadProps`, and `source` against the intended route/API/contract/slot data flow.
+7. Run build or hydration benchmark depending on risk.
+8. Treat `[data-mandu-error]` as a real failure, not a cosmetic issue.
 
 ### 3.4 Debugging
 
@@ -263,6 +267,7 @@ Before editing:
 3. Use installed Mandu skills when a skill matches the task.
 4. Use Mandu MCP tools for route, contract, slot, guard, hydration, build, or diagnosis work when available.
 5. If an MCP tool/skill is unavailable, say so and use the closest CLI/source fallback.
+6. For island/hydration/client boundary work, inspect `mandu.route.boundaries` first. If MCP is unavailable, use `mandu agent context --json` or `mandu agent manifest --write` and read `routes[].boundaries`.
 
 After editing:
 1. Run the narrowest validation that proves the change.

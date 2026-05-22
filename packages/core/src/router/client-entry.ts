@@ -1,6 +1,10 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import type { RouteSpec } from "../spec/schema";
+import {
+  formatClientBoundaryDiagnostics,
+  validateClientBoundaryServerOnlyImports,
+} from "../bundler/client-boundary-transform";
 
 export interface ClientComponentImport {
   module: string;
@@ -517,7 +521,8 @@ export async function validateClientModuleForBrowserBundle(
     if (realClientEntry) {
       route.clientModule = realClientEntry.modulePath;
       route.clientExportName = realClientEntry.exportName;
-      return null;
+      const realSource = await readRouteModule(rootDir, route.clientModule);
+      return realSource === null ? null : formatClientModuleBrowserDiagnostics(route, realSource);
     }
     return (
       `[${route.id}] Route component "${route.clientModule}" is configured as clientModule, ` +
@@ -526,7 +531,23 @@ export async function validateClientModuleForBrowserBundle(
     );
   }
 
-  return null;
+  return formatClientModuleBrowserDiagnostics(route, source);
+}
+
+function formatClientModuleBrowserDiagnostics(route: RouteSpec, source: string): string | null {
+  if (!route.clientModule) return null;
+  const diagnostics = validateClientBoundaryServerOnlyImports(
+    source,
+    {
+      id: `${route.id}--client-module`,
+      routeId: route.id,
+      module: route.clientModule,
+      exportName: route.clientExportName ?? "default",
+    },
+    route.clientModule,
+  );
+  if (diagnostics.length === 0) return null;
+  return formatClientBoundaryDiagnostics(diagnostics);
 }
 
 async function routeComponentHasResolvableClientEntry(

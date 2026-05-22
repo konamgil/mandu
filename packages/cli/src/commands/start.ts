@@ -27,6 +27,7 @@ import {
 import { registerManifestHandlers } from "@mandujs/core";
 import { removeRuntimeControl, writeRuntimeControl } from "../util/runtime-control";
 import { resolveDisplayHost } from "../util/host";
+import { createCachedBundledImporter } from "../util/bun";
 import path from "path";
 import fs from "fs";
 
@@ -129,9 +130,32 @@ export async function start(options: StartOptions = {}): Promise<void> {
     process.exit(1);
   }
 
-  // Register handlers (standard import — no cache invalidation)
+  // Register handlers. Boundary-transformed routes need the SSR bundler's
+  // onLoad transform so relative imports keep resolving from the original file.
   const registeredLayouts = new Set<string>();
-  const productionImport = async (modulePath: string) => {
+  const hasClientBoundaries = manifest.routes.some((route) => route.kind === "page" && !!route.boundaries?.length);
+  const boundaryImporter = hasClientBoundaries ? createCachedBundledImporter({ rootDir }) : null;
+  const productionImport = async (
+    modulePath: string,
+    opts?: {
+      changedFile?: string;
+      clientBoundaryTransform?: {
+        routeId: string;
+        hydrate?: string;
+        boundaries?: Array<{
+          id?: string;
+          ordinal: number;
+          source?: {
+            file: string;
+          };
+        }>;
+      };
+    },
+  ) => {
+    if (boundaryImporter && opts?.clientBoundaryTransform) {
+      return boundaryImporter(modulePath, opts);
+    }
+
     const url = Bun.pathToFileURL(modulePath);
     return import(url.href);
   };

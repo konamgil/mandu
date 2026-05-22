@@ -53,6 +53,9 @@
 
 import { buildClientBundles } from "../build";
 import type { RoutesManifest } from "../../spec/schema";
+import { mkdir } from "fs/promises";
+import path from "path";
+import { generateManifest } from "../../router/fs-routes";
 
 const rootDir = process.argv[2];
 if (!rootDir) {
@@ -61,7 +64,9 @@ if (!rootDir) {
 }
 const mode = process.argv[3] ?? "default";
 
-const manifest: RoutesManifest = mode === "server-page-client-module"
+const manifest: RoutesManifest = mode === "client-boundary-generated-transitive"
+  ? (await generateManifest(rootDir)).manifest
+  : mode === "server-page-client-module"
   ? {
       version: 1,
       routes: [
@@ -118,6 +123,83 @@ const manifest: RoutesManifest = mode === "server-page-client-module"
           },
         ],
       }
+  : mode === "client-boundary"
+    || mode === "client-boundary-target"
+    || mode === "client-boundary-skip-framework"
+    || mode === "client-boundary-duplicate-id"
+    ? {
+        version: 1,
+        routes: [
+          {
+            id: "boundary-demo",
+            kind: "page",
+            pattern: "/boundary",
+            module: "app/boundary/page.tsx",
+            componentModule: "app/boundary/page.tsx",
+            hydration: {
+              strategy: "island",
+              priority: "visible",
+              preload: false,
+            },
+            boundaries: [
+              {
+                id: "boundary-demo--0",
+                routeId: "boundary-demo",
+                module: "src/client/BoundaryWidget.client.tsx",
+                importSpecifier: "@/client/BoundaryWidget.client",
+                exportName: "BoundaryWidget",
+                localName: "BoundaryWidget",
+                hydrate: "visible",
+                ordinal: 0,
+                propsSource: "inline",
+                propsKeys: ["label"],
+                hasSpreadProps: false,
+                source: {
+                  file: "app/boundary/page.tsx",
+                  line: 5,
+                  column: 12,
+                },
+              },
+            ],
+          },
+          ...(mode === "client-boundary-duplicate-id"
+            ? [
+                {
+                  id: "boundary-copy",
+                  kind: "page" as const,
+                  pattern: "/boundary-copy",
+                  module: "app/boundary/page.tsx",
+                  componentModule: "app/boundary/page.tsx",
+                  hydration: {
+                    strategy: "island" as const,
+                    priority: "visible" as const,
+                    preload: false,
+                  },
+                  boundaries: [
+                    {
+                      id: "boundary-demo--0",
+                      routeId: "boundary-copy",
+                      module: "src/client/BoundaryWidget.client.tsx",
+                      importSpecifier: "@/client/BoundaryWidget.client",
+                      exportName: "BoundaryWidget",
+                      localName: "BoundaryWidget",
+                      hydrate: "visible" as const,
+                      ordinal: 0,
+                      propsSource: "inline" as const,
+                      propsKeys: ["label"],
+                      hasSpreadProps: false,
+                      source: {
+                        file: "app/boundary/page.tsx",
+                        line: 8,
+                        column: 12,
+                      },
+                    },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      }
   : mode === "i18n-locale-route-id"
     ? {
         version: 1,
@@ -157,16 +239,46 @@ const manifest: RoutesManifest = mode === "server-page-client-module"
       };
 
 try {
+  if (mode === "client-boundary-target" || mode === "client-boundary-skip-framework") {
+    await mkdir(path.join(rootDir, ".mandu"), { recursive: true });
+    await Bun.write(
+      path.join(rootDir, ".mandu", "manifest.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          buildTime: "2026-05-23T00:00:00.000Z",
+          env: "development",
+          bundles: {},
+          shared: {
+            runtime: "/.mandu/client/_runtime.js",
+            vendor: "/.mandu/client/_react.js",
+            router: "/.mandu/client/_router.js",
+          },
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
   const result = await buildClientBundles(manifest, rootDir, {
     minify: false,
     sourcemap: false,
     splitting: false,
+    ...(mode === "client-boundary-target" ? { targetRouteIds: ["boundary-demo"] } : {}),
+    ...(mode === "client-boundary-skip-framework" ? { skipFrameworkBundles: true } : {}),
   });
   process.stdout.write(
     JSON.stringify({
       success: result.success,
       errors: result.errors,
       manifest: {
+        routes: manifest.routes.map((route) => ({
+          id: route.id,
+          module: route.module,
+          componentModule: route.componentModule,
+          boundaries: route.kind === "page" ? route.boundaries ?? [] : [],
+        })),
         shared: {
           runtime: result.manifest.shared?.runtime ?? null,
           vendor: result.manifest.shared?.vendor ?? null,
@@ -174,6 +286,7 @@ try {
           fastRefresh: result.manifest.shared?.fastRefresh ?? null,
         },
         bundles: result.manifest.bundles ?? {},
+        boundaries: result.manifest.boundaries ?? {},
       },
     }) + "\n",
   );

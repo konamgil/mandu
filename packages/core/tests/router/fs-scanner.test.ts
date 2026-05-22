@@ -414,8 +414,27 @@ describe("FSScanner", () => {
       const loginRoute = result.manifest.routes.find((r) => r.pattern === "/login");
 
       expect(loginRoute).toBeDefined();
-      expect(loginRoute?.clientModule).toBe("src/client/pages/login/LoginPage.client.tsx");
+      expect(loginRoute?.clientModule).toBeUndefined();
       expect(loginRoute?.hydration?.strategy).toBe("island");
+      expect(loginRoute?.boundaries?.map(({ id, module, importSpecifier, exportName, localName, hydrate, propsKeys }) => ({
+        id,
+        module,
+        importSpecifier,
+        exportName,
+        localName,
+        hydrate,
+        propsKeys,
+      }))).toEqual([
+        {
+          id: `${loginRoute?.id}--0`,
+          module: "src/client/pages/login/LoginPage.client.tsx",
+          importSpecifier: "@/client/pages/login/LoginPage.client",
+          exportName: "default",
+          localName: "LoginPage",
+          hydrate: "visible",
+          propsKeys: [],
+        },
+      ]);
 
       const generated = await generateRoutes(result.manifest, defaultClientDir);
       expect(generated.success).toBe(true);
@@ -425,7 +444,7 @@ describe("FSScanner", () => {
         "utf-8",
       );
       expect(generatedRoute).toContain("Page Module: app/login/page.tsx");
-      expect(generatedRoute).toContain("Client Module: src/client/pages/login/LoginPage.client.tsx");
+      expect(generatedRoute).not.toContain("Client Module: src/client/pages/login/LoginPage.client.tsx");
       expect(generatedRoute).toContain("React.createElement(pageModule");
       expect(generatedRoute).not.toContain("Login Page");
     } finally {
@@ -466,8 +485,25 @@ describe("FSScanner", () => {
       const homeRoute = result.manifest.routes.find((r) => r.pattern === "/");
 
       expect(homeRoute).toBeDefined();
-      expect(homeRoute?.clientModule).toBe("src/client/pages/home/HomeApp.client.tsx");
+      expect(homeRoute?.clientModule).toBeUndefined();
       expect(homeRoute?.hydration?.strategy).toBe("island");
+      expect(homeRoute?.boundaries?.map(({ id, module, importSpecifier, exportName, localName, hydrate }) => ({
+        id,
+        module,
+        importSpecifier,
+        exportName,
+        localName,
+        hydrate,
+      }))).toEqual([
+        {
+          id: `${homeRoute?.id}--0`,
+          module: "src/client/pages/home/HomeApp.client.tsx",
+          importSpecifier: "@/client/pages/home/HomeApp.client",
+          exportName: "default",
+          localName: "HomeApp",
+          hydrate: "visible",
+        },
+      ]);
     } finally {
       await rm(fragmentDir, { recursive: true, force: true });
     }
@@ -518,8 +554,36 @@ describe("FSScanner", () => {
       const notificationsRoute = result.manifest.routes.find((r) => r.pattern === "/notifications");
 
       expect(notificationsRoute).toBeDefined();
-      expect(notificationsRoute?.clientModule).toBe("src/client/pages/notifications/NotificationsPage.client.tsx");
+      expect(notificationsRoute?.clientModule).toBeUndefined();
       expect(notificationsRoute?.hydration?.strategy).toBe("island");
+      expect(notificationsRoute?.boundaries?.map(({ id, module, importSpecifier, exportName, localName, hydrate, propsKeys }) => ({
+        id,
+        module,
+        importSpecifier,
+        exportName,
+        localName,
+        hydrate,
+        propsKeys,
+      }))).toEqual([
+        {
+          id: `${notificationsRoute?.id}--0`,
+          module: "src/client/widgets/bell/NotificationBell.client.tsx",
+          importSpecifier: "@/client/widgets/bell/NotificationBell.client",
+          exportName: "NotificationBell",
+          localName: "NotificationBell",
+          hydrate: "visible",
+          propsKeys: ["count"],
+        },
+        {
+          id: `${notificationsRoute?.id}--1`,
+          module: "src/client/pages/notifications/NotificationsPage.client.tsx",
+          importSpecifier: "@/client/pages/notifications/NotificationsPage.client",
+          exportName: "NotificationsPage",
+          localName: "NotificationsPage",
+          hydrate: "visible",
+          propsKeys: [],
+        },
+      ]);
     } finally {
       await rm(namedClientDir, { recursive: true, force: true });
     }

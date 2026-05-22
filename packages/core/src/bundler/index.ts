@@ -5,6 +5,7 @@
 
 export * from "./types";
 export * from "./build";
+export * from "./client-boundary-transform";
 export * from "./dev";
 export * from "./css";
 export * from "./plugins";

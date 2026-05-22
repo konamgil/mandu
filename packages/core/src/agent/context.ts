@@ -119,6 +119,7 @@ function summarizeRoute(route: RouteSpec | {
   methods?: string[];
   hydration?: { strategy?: string; priority?: string };
   clientModule?: string;
+  boundaries?: RouteSpec["boundaries"];
   contractModule?: string;
   layoutChain?: string[];
   metadataKind?: string;
@@ -127,6 +128,21 @@ function summarizeRoute(route: RouteSpec | {
     "metadataKind" in route && typeof route.metadataKind === "string"
       ? route.metadataKind
       : undefined;
+  const boundaries = Array.isArray(route.boundaries)
+    ? route.boundaries.map((boundary) => ({
+        id: boundary.id,
+        module: boundary.module,
+        ...(boundary.importSpecifier ? { importSpecifier: boundary.importSpecifier } : {}),
+        exportName: boundary.exportName,
+        localName: boundary.localName,
+        ordinal: boundary.ordinal,
+        hydrate: boundary.hydrate,
+        propsSource: boundary.propsSource,
+        propsKeys: boundary.propsKeys ?? [],
+        hasSpreadProps: !!boundary.hasSpreadProps,
+        source: boundary.source,
+      }))
+    : [];
   return {
     id: route.id,
     pattern: route.pattern,
@@ -144,6 +160,7 @@ function summarizeRoute(route: RouteSpec | {
     hasClientModule: typeof route.clientModule === "string" && route.clientModule.length > 0,
     hasContractModule:
       typeof route.contractModule === "string" && route.contractModule.length > 0,
+    ...(boundaries.length > 0 ? { boundaryCount: boundaries.length, boundaries } : {}),
     layoutDepth: Array.isArray(route.layoutChain) ? route.layoutChain.length : 0,
     ...(metadataKind ? { metadataKind } : {}),
   };

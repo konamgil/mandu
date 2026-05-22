@@ -46,6 +46,27 @@ describe("mandu agent CLI", () => {
           module: "app/page.tsx",
           componentModule: "app/page.tsx",
           layoutChain: [],
+          hydration: { strategy: "island", priority: "visible", preload: false },
+          boundaries: [
+            {
+              id: "home--0",
+              routeId: "home",
+              module: "src/client/HomeWidget.client.tsx",
+              importSpecifier: "@/client/HomeWidget.client",
+              exportName: "HomeWidget",
+              localName: "HomeWidget",
+              hydrate: "visible",
+              ordinal: 0,
+              propsSource: "inline",
+              propsKeys: ["user"],
+              hasSpreadProps: false,
+              source: {
+                file: "app/page.tsx",
+                line: 5,
+                column: 12,
+              },
+            },
+          ],
         },
       ],
     }));
@@ -80,6 +101,14 @@ describe("mandu agent CLI", () => {
     const parsed = JSON.parse(out);
     expect(parsed.project.name).toBe("cli-agent-app");
     expect(parsed.routes).toHaveLength(1);
+    expect(parsed.routes[0].boundaries[0]).toMatchObject({
+      id: "home--0",
+      module: "src/client/HomeWidget.client.tsx",
+      importSpecifier: "@/client/HomeWidget.client",
+      exportName: "HomeWidget",
+      localName: "HomeWidget",
+      ordinal: 0,
+    });
     expect(parsed.commands.verify).toBe("mandu agent verify --changed --json");
   });
 
@@ -98,6 +127,7 @@ describe("mandu agent CLI", () => {
     const raw = await fs.readFile(path.join(root, ".mandu", "agent-manifest.json"), "utf8");
     const parsed = JSON.parse(raw);
     expect(parsed.project.name).toBe("cli-agent-app");
+    expect(parsed.routes[0].boundaries[0].id).toBe("home--0");
   });
 
   it("prints and writes JSON plan output", async () => {

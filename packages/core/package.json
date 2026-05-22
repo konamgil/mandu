@@ -1,6 +1,6 @@
 {
   "name": "@mandujs/core",
-  "version": "0.54.17",
+  "version": "0.54.18",
   "description": "Mandu Framework Core - Spec, Generator, Guard, Runtime",
   "type": "module",
   "main": "./src/index.ts",
@@ -65,6 +65,7 @@
     "./i18n": "./src/i18n/index.ts",
     "./id": "./src/id/index.ts",
     "./internal": "./src/internal/index.ts",
+    "./internal/client-boundary": "./src/internal/client-boundary.ts",
     "./observability": "./src/observability/index.ts",
     "./openapi/generator": "./src/openapi/generator.ts",
     "./perf": "./src/perf/index.ts",
@@ -203,6 +204,7 @@
     "fast-glob": "^3.3.2",
     "glob": "^13.0.0",
     "minimatch": "^10.1.1",
+    "typescript": ">=6.0.0",
     "zod": "^3.23.8"
   }
 }

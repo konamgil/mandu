@@ -15,6 +15,7 @@ describe("check-public-api-boundary", () => {
     expect(classifyCoreExport("./change")).toBe("internal");
     expect(classifyCoreExport("./generator")).toBe("internal");
     expect(classifyCoreExport("./internal")).toBe("internal");
+    expect(classifyCoreExport("./internal/client-boundary")).toBe("internal");
     expect(classifyCoreExport("./lockfile")).toBe("internal");
     expect(classifyCoreExport("./paths")).toBe("internal");
     expect(classifyCoreExport("./runtime/server")).toBe("internal");

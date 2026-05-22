@@ -1,5 +1,18 @@
 # @mandujs/cli
 
+## 0.44.21
+
+### Patch Changes
+
+- Add compiler-owned client boundary metadata, boundary-local hydration props, and route boundary inspection.
+
+  The core runtime and bundler now preserve transformed client boundary props through SSR and generated hydration runtime paths, fail unsupported boundary shapes earlier, and validate discovered client exports. The CLI SSR bundled import path applies the same boundary transform and diagnostics. The MCP server exposes route boundary metadata through `mandu.route.boundaries`.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.18
+  - @mandujs/mcp@0.38.10
+  - @mandujs/edge@0.4.66
+
 ## 0.44.20
 
 ### Patch Changes

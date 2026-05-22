@@ -12,6 +12,7 @@ export * as runtimeCache from "../runtime/cache";
 export * as runtimeRouter from "../runtime/router";
 export * as runtimeServer from "../runtime/server";
 export * as runtimeFastRefreshTypes from "../runtime/fast-refresh-types";
+export * as clientBoundary from "./client-boundary";
 
 export * as resourceDdlDiff from "../resource/ddl/diff";
 export * as resourceDdlEmit from "../resource/ddl/emit";

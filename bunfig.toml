@@ -8,3 +8,4 @@ linker = "isolated"
 
 [test]
 root = "./packages"
+pathIgnorePatterns = ["packages/cli/templates/**/tests/e2e/**"]

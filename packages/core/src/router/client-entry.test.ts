@@ -6,6 +6,7 @@ import {
   findRouteLevelClientComponentImport,
   findRouteLevelClientComponentImports,
   resolveRouteLevelClientEntryPath,
+  validateClientModuleForBrowserBundle,
 } from "./client-entry";
 
 const repoTempRoot = path.resolve(import.meta.dir, "../../../..", ".tmp-test-artifacts");
@@ -228,6 +229,42 @@ describe("findClientComponentImports", () => {
       );
 
       expect(resolved).toBe("src/client/widgets/pledge-form/PledgeForm.tsx");
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("validates explicit route-level client modules against server-only imports", async () => {
+    const rootDir = await mkRepoTempDir("client-entry-server-only-");
+    try {
+      await mkdir(path.join(rootDir, "app"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "app", "dashboard.island.tsx"),
+        `"use client";
+         import { Database } from "bun:sqlite";
+         export default function Dashboard() {
+           return String(Database);
+         }`,
+      );
+
+      const error = await validateClientModuleForBrowserBundle(
+        {
+          id: "dashboard",
+          kind: "page",
+          pattern: "/dashboard",
+          module: "app/dashboard.tsx",
+          componentModule: "app/dashboard.tsx",
+          clientModule: "app/dashboard.island.tsx",
+          clientExportName: "default",
+          hydration: { strategy: "island", priority: "visible", preload: false },
+        },
+        rootDir,
+      );
+
+      expect(error).toContain("MANDU_BOUNDARY_SERVER_ONLY_IMPORT");
+      expect(error).toContain("bun:sqlite");
+      expect(error).toContain("route=dashboard");
+      expect(error).toContain("Suggestion:");
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }

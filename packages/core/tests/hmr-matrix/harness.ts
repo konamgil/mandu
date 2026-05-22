@@ -23,12 +23,27 @@
  * a `touchUntilSeen` retry loop (borrowed from `dev-reliability.test.ts`).
  */
 
-import { writeFileSync, mkdirSync, rmSync, mkdtempSync } from "fs";
+import { writeFileSync, mkdirSync, rmSync, mkdtempSync, existsSync, symlinkSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { startDevBundler, type DevBundler } from "../../src/bundler/dev";
 import type { RoutesManifest } from "../../src/spec/schema";
 import type { ProjectForm, ScenarioCell } from "../../src/bundler/scenario-matrix";
+
+ensureWorkspaceNodePathForFixtureBuilds();
+
+function ensureWorkspaceNodePathForFixtureBuilds(): void {
+  const repoNodeModules = path.resolve(import.meta.dir, "../../../..", "node_modules");
+  if (!existsSync(repoNodeModules)) return;
+
+  const entries = (process.env.NODE_PATH ?? "")
+    .split(path.delimiter)
+    .filter(Boolean);
+  const normalizedEntries = new Set(entries.map((entry) => path.resolve(entry)));
+  if (normalizedEntries.has(repoNodeModules)) return;
+
+  process.env.NODE_PATH = [...entries, repoNodeModules].join(path.delimiter);
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Timing constants (tuned for Windows fs.watch flakiness)
@@ -111,6 +126,8 @@ function makeObservations(): Observations {
  * fast path fire instead of a cold full build on every test.
  */
 export function initProjectSkeleton(root: string): void {
+  linkWorkspaceNodeModules(root);
+
   mkdirSync(path.join(root, ".mandu"), { recursive: true });
   mkdirSync(path.join(root, ".mandu/client"), { recursive: true });
   writeFileSync(
@@ -191,6 +208,19 @@ export function initProjectSkeleton(root: string): void {
     path.join(root, "app-styles.css"),
     "/* v0 */ body { color: red; }\n",
   );
+}
+
+function linkWorkspaceNodeModules(root: string): void {
+  const repoNodeModules = path.resolve(import.meta.dir, "../../../..", "node_modules");
+  const fixtureNodeModules = path.join(root, "node_modules");
+  if (!existsSync(repoNodeModules) || existsSync(fixtureNodeModules)) return;
+
+  try {
+    symlinkSync(repoNodeModules, fixtureNodeModules, process.platform === "win32" ? "junction" : "dir");
+  } catch {
+    // Best effort: the NODE_PATH fallback below still helps when the test
+    // process was launched with resolver support for it.
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

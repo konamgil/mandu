@@ -44,8 +44,28 @@ export interface AgentRouteSummary {
   };
   hasClientModule: boolean;
   hasContractModule: boolean;
+  boundaryCount?: number;
+  boundaries?: AgentRouteBoundarySummary[];
   layoutDepth: number;
   metadataKind?: string;
+}
+
+export interface AgentRouteBoundarySummary {
+  id: string;
+  module: string;
+  importSpecifier?: string;
+  exportName: string;
+  localName: string;
+  ordinal: number;
+  hydrate: string;
+  propsSource: string;
+  propsKeys: string[];
+  hasSpreadProps: boolean;
+  source: {
+    file: string;
+    line: number;
+    column: number;
+  };
 }
 
 export interface AgentArtifactSummary {

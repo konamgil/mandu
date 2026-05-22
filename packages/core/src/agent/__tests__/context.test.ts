@@ -71,6 +71,27 @@ describe("agent context", () => {
           module: "app/page.tsx",
           componentModule: "app/page.tsx",
           layoutChain: [],
+          hydration: { strategy: "island", priority: "visible", preload: false },
+          boundaries: [
+            {
+              id: "home--0",
+              routeId: "home",
+              module: "src/client/HomeWidget.client.tsx",
+              importSpecifier: "@/client/HomeWidget.client",
+              exportName: "HomeWidget",
+              localName: "HomeWidget",
+              hydrate: "visible",
+              ordinal: 0,
+              propsSource: "inline",
+              propsKeys: ["user"],
+              hasSpreadProps: false,
+              source: {
+                file: "app/page.tsx",
+                line: 5,
+                column: 12,
+              },
+            },
+          ],
         },
         {
           id: "api-ping",
@@ -105,6 +126,22 @@ describe("agent context", () => {
     expect(context.routeSource).toBe("manifest");
     expect(context.routes).toHaveLength(2);
     expect(context.pages.map((r) => r.id)).toEqual(["home"]);
+    expect(context.pages[0]?.boundaryCount).toBe(1);
+    expect(context.pages[0]?.boundaries?.[0]).toMatchObject({
+      id: "home--0",
+      module: "src/client/HomeWidget.client.tsx",
+      importSpecifier: "@/client/HomeWidget.client",
+      exportName: "HomeWidget",
+      localName: "HomeWidget",
+      ordinal: 0,
+      hydrate: "visible",
+      propsKeys: ["user"],
+      source: {
+        file: "app/page.tsx",
+        line: 5,
+        column: 12,
+      },
+    });
     expect(context.apis.map((r) => r.id)).toEqual(["api-ping"]);
     expect(context.apis[0]?.hasContractModule).toBe(true);
     expect(context.partials.map((p) => p.path)).toEqual(["app/dashboard/counter.partial.tsx"]);
@@ -127,6 +164,7 @@ describe("agent context", () => {
     const manifest = await readAgentManifest(root);
     expect(manifest?.schemaVersion).toBe(1);
     expect(manifest?.project.name).toBe("agent-app");
+    expect(manifest?.routes[0]?.boundaries?.[0]?.id).toBe("home--0");
     expect(manifest?.agentWorkflow.canonical).toEqual(["context", "plan", "apply", "verify", "repair"]);
   });
 

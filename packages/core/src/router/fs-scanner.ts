@@ -7,7 +7,7 @@
  */
 
 import { stat } from "fs/promises";
-import { join, relative, basename, extname } from "path";
+import { dirname, join, relative, basename, extname } from "path";
 import type {
   ScannedFile,
   FSScannerConfig,
@@ -33,8 +33,17 @@ import { METADATA_ROUTES } from "../routes/types";
 import type { HydrationConfig } from "../spec/schema";
 import {
   hasUseClientDirective,
+  resolveClientImportModulePath,
   resolveRouteLevelClientEntry,
 } from "./client-entry";
+import {
+  assertNoClientBoundaryDiagnostics,
+  collectStaticImportSpecifiers,
+  isClientBoundaryModuleSpecifier,
+  transformClientBoundaries,
+  validateClientBoundaryExport,
+  validateClientBoundaryServerOnlyImports,
+} from "../bundler/client-boundary-transform";
 
 const HYDRATION_STRATEGIES = new Set(["none", "island", "full", "progressive"]);
 const HYDRATION_PRIORITIES = new Set(["immediate", "visible", "idle", "interaction"]);
@@ -406,8 +415,10 @@ export class FSScanner {
       // clientModule 결정: island 파일 또는 "use client"가 있는 page 자체
       let clientModule: string | undefined;
       let clientExportName: string | undefined;
+      let boundaries: NonNullable<FSRouteConfig["boundaries"]> = [];
       let hydration: HydrationConfig | undefined;
       let pageFileContent: string | null = null;
+      let pageHasUseClient = false;
 
       if (file.type === "page") {
         try {
@@ -417,6 +428,23 @@ export class FSScanner {
         }
         if (pageFileContent) {
           hydration = parsePageHydrationConfig(pageFileContent);
+          pageHasUseClient = hasUseClientDirective(pageFileContent);
+          if (!pageHasUseClient) {
+            boundaries = await this.resolveClientBoundaries(
+              rootDir,
+              modulePath,
+              routeId,
+              pageFileContent,
+              hydration?.priority ?? "visible",
+            );
+          }
+          if (boundaries.length > 0 && !hydration) {
+            hydration = {
+              strategy: "island",
+              priority: "visible",
+              preload: false,
+            };
+          }
         }
       }
 
@@ -438,10 +466,9 @@ export class FSScanner {
         }
       } else if (file.type === "page" && pageFileContent) {
         // page 파일 자체에서 "use client" 확인
-        const hasUseClient = hasUseClientDirective(pageFileContent);
-        if (hasUseClient) {
+        if (pageHasUseClient) {
           clientModule = modulePath;
-        } else {
+        } else if (boundaries.length === 0) {
           const routeClientEntry = await resolveRouteLevelClientEntry(rootDir, modulePath, pageFileContent);
           clientModule = routeClientEntry?.modulePath;
           clientExportName = routeClientEntry?.exportName;
@@ -465,6 +492,7 @@ export class FSScanner {
         componentModule: file.type === "page" ? modulePath : undefined,
         clientModule,
         clientExportName,
+        boundaries: boundaries && boundaries.length > 0 ? boundaries : undefined,
         hydration,
         layoutChain,
         loadingModule,
@@ -503,6 +531,112 @@ export class FSScanner {
     return new RegExp(
       `typeof\\s+${islandVarName}\\s*!==\\s*["']undefined["']\\s*&&\\s*null`
     ).test(pageContent);
+  }
+
+  private async resolveClientBoundaries(
+    rootDir: string,
+    routeModule: string,
+    routeId: string,
+    source: string,
+    hydrate: NonNullable<HydrationConfig["priority"]>,
+  ): Promise<NonNullable<FSRouteConfig["boundaries"]>> {
+    const modules = await this.collectRouteBoundaryModules(rootDir, routeModule, source);
+    const boundaries: NonNullable<FSRouteConfig["boundaries"]> = [];
+
+    for (const moduleInfo of modules) {
+      const result = transformClientBoundaries(moduleInfo.source, {
+        routeId,
+        fileName: moduleInfo.modulePath,
+        hydrate,
+        ordinalOffset: boundaries.length,
+      });
+      if (result.boundaries.length === 0) continue;
+
+      const diagnostics = [...result.diagnostics];
+      const resolved = await Promise.all(result.boundaries.map(async (boundary) => {
+        const modulePath = await resolveClientImportModulePath(rootDir, boundary.source.file, boundary.module);
+        const resolvedBoundary = {
+          ...boundary,
+          module: modulePath ?? boundary.module,
+        };
+        if (modulePath) {
+          const clientSource = await Bun.file(join(rootDir, modulePath)).text();
+          diagnostics.push(...validateClientBoundaryServerOnlyImports(clientSource, resolvedBoundary, modulePath));
+          const validation = validateClientBoundaryExport(clientSource, resolvedBoundary, modulePath);
+          if (validation.diagnostic) diagnostics.push(validation.diagnostic);
+        }
+        return resolvedBoundary;
+      }));
+      assertNoClientBoundaryDiagnostics(diagnostics);
+      boundaries.push(...resolved);
+    }
+
+    return boundaries;
+  }
+
+  private async collectRouteBoundaryModules(
+    rootDir: string,
+    routeModule: string,
+    routeSource: string,
+  ): Promise<Array<{ modulePath: string; source: string }>> {
+    const visited = new Set<string>();
+    const modules: Array<{ modulePath: string; source: string }> = [];
+
+    const visit = async (modulePath: string, source: string): Promise<void> => {
+      const normalizedModulePath = modulePath.replace(/\\/g, "/").replace(/^\.\//, "");
+      if (visited.has(normalizedModulePath)) return;
+      visited.add(normalizedModulePath);
+      modules.push({ modulePath: normalizedModulePath, source });
+
+      for (const specifier of collectStaticImportSpecifiers(source, normalizedModulePath)) {
+        if (isClientBoundaryModuleSpecifier(specifier)) continue;
+        const resolved = await this.resolveRouteOwnedImportModulePath(rootDir, normalizedModulePath, specifier);
+        if (!resolved || visited.has(resolved)) continue;
+
+        let childSource: string;
+        try {
+          childSource = await Bun.file(join(rootDir, resolved)).text();
+        } catch {
+          continue;
+        }
+        if (hasUseClientDirective(childSource)) continue;
+
+        await visit(resolved, childSource);
+      }
+    };
+
+    await visit(routeModule, routeSource);
+    return modules;
+  }
+
+  private async resolveRouteOwnedImportModulePath(
+    rootDir: string,
+    importerModule: string,
+    specifier: string,
+  ): Promise<string | null> {
+    const normalized = specifier.replace(/\\/g, "/");
+    let basePath: string | null = null;
+
+    if (normalized.startsWith("@/") || normalized.startsWith("~/")) {
+      basePath = join(rootDir, "src", normalized.slice(2));
+    } else if (normalized.startsWith("./") || normalized.startsWith("../")) {
+      basePath = join(rootDir, dirname(importerModule), normalized);
+    }
+
+    if (!basePath) return null;
+
+    for (const candidate of expandRouteImportCandidates(basePath)) {
+      try {
+        const entry = await stat(candidate);
+        if (entry.isFile()) {
+          return relative(rootDir, candidate).replace(/\\/g, "/");
+        }
+      } catch {
+        // Try the next candidate.
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -772,6 +906,20 @@ function prefixRouteWithLocale(route: FSRouteConfig, locale: string): FSRouteCon
       ...route.segments,
     ],
   };
+}
+
+function expandRouteImportCandidates(basePath: string): string[] {
+  if (/\.[cm]?[jt]sx?$/.test(basePath)) return [basePath];
+  return [
+    `${basePath}.tsx`,
+    `${basePath}.ts`,
+    `${basePath}.jsx`,
+    `${basePath}.js`,
+    join(basePath, "index.tsx"),
+    join(basePath, "index.ts"),
+    join(basePath, "index.jsx"),
+    join(basePath, "index.js"),
+  ];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

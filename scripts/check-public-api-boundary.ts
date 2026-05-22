@@ -31,6 +31,7 @@ const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
       "./dev-error-overlay",
       "./generator",
       "./internal",
+      "./internal/client-boundary",
       "./lockfile",
       "./paths",
       "./plugins/runner",

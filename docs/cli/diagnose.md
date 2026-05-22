@@ -46,6 +46,7 @@ Every check returns the unified shape:
 | `cloneelement_warnings` | `info` (1-10), `warning` (>10) | `Each child in a list should have a unique "key" prop` occurrences in `.mandu/build.log` or `.mandu/dev-server.stderr.log`. Closes #212 (fixed in `@mandujs/core >= 0.32.0`). |
 | `dev_artifacts_in_prod` | `error` | `_devtools.js` present when `manifest.env === 'production'` OR `mandu.config.ts` sets `dev.devtools: false`; prerendered HTML referencing devtools scripts. |
 | `package_export_gaps`   | `error` | User imports of `@mandujs/core/<subpath>` where `<subpath>` is NOT declared in the installed core's `exports` map. Catches the #194 / #202 / #210 pattern. |
+| `client_boundary_manifests` | `error` | F42 compiler-owned client boundary records that are missing a route id, bundle manifest entry, module, export name, or route/bundle correlation. Blocks shipping SSR HTML that references a boundary the client cannot hydrate. |
 
 ### Legacy checks (MCP composite only)
 

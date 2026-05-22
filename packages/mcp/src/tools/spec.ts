@@ -3,7 +3,7 @@ import {
   loadManifest,
   generateManifest,
 } from "@mandujs/core";
-import { getProjectPaths, isInsideProject } from "../utils/project.js";
+import { getProjectPaths, isInsideProject, readJsonFile } from "../utils/project.js";
 import path from "path";
 import fs from "fs/promises";
 
@@ -37,6 +37,28 @@ export const specToolDefinitions: Tool[] = [
         },
       },
       required: ["routeId"],
+    },
+  },
+  {
+    name: "mandu.route.boundaries",
+    description:
+      "Inspect compiler-discovered client boundary metadata for one route or all routes, including route manifest records and optional bundle manifest entries.",
+    annotations: {
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      properties: {
+        routeId: {
+          type: "string",
+          description: "Optional route ID to inspect. Omit to list boundaries for all routes.",
+        },
+        includeBundle: {
+          type: "boolean",
+          description: "When true, also correlate route boundaries with .mandu/manifest.json boundary bundle entries.",
+        },
+      },
+      required: [],
     },
   },
   {
@@ -143,6 +165,113 @@ export function specTools(projectRoot: string) {
       }
 
       return { route };
+    },
+
+    "mandu.route.boundaries": async (args: Record<string, unknown>) => {
+      const { routeId, includeBundle = false } = args as { routeId?: string; includeBundle?: boolean };
+
+      const result = await loadManifest(paths.manifestPath);
+      if (!result.success || !result.data) {
+        return { error: result.errors };
+      }
+
+      const bundleManifestPath = path.join(projectRoot, ".mandu", "manifest.json");
+      const bundleManifest = includeBundle
+        ? await readJsonFile<{
+            boundaries?: Record<string, {
+              route?: string;
+              js?: string;
+              module?: string;
+              exportName?: string;
+              priority?: string;
+              hydrate?: string;
+            }>;
+          }>(bundleManifestPath)
+        : null;
+
+      const routes = routeId
+        ? result.data.routes.filter((route) => route.id === routeId)
+        : result.data.routes;
+
+      if (routeId && routes.length === 0) {
+        return { error: `Route not found: ${routeId}` };
+      }
+
+      const inspected = routes.map((route) => {
+        const boundaries = route.boundaries ?? [];
+        const diagnostics: Array<{
+          code: string;
+          severity: "warning";
+          message: string;
+          routeId: string;
+          boundaryId?: string;
+        }> = [];
+
+        if (includeBundle && boundaries.length > 0 && !bundleManifest) {
+          diagnostics.push({
+            code: "MANDU_BOUNDARY_BUNDLE_MANIFEST_MISSING",
+            severity: "warning",
+            message: "Route has compiler-discovered client boundaries, but .mandu/manifest.json was not found. Run mandu build to inspect generated boundary chunks.",
+            routeId: route.id,
+          });
+        }
+
+        const boundaryRecords = boundaries.map((boundary) => {
+          const bundle = bundleManifest?.boundaries?.[boundary.id];
+          if (includeBundle && bundleManifest && !bundle) {
+            diagnostics.push({
+              code: "MANDU_BOUNDARY_BUNDLE_ENTRY_MISSING",
+              severity: "warning",
+              message: `Boundary '${boundary.id}' is present in routes manifest but missing from .mandu/manifest.json boundaries.`,
+              routeId: route.id,
+              boundaryId: boundary.id,
+            });
+          }
+
+          return {
+            id: boundary.id,
+            routeId: boundary.routeId,
+            module: boundary.module,
+            importSpecifier: boundary.importSpecifier,
+            exportName: boundary.exportName,
+            localName: boundary.localName,
+            hydrate: boundary.hydrate,
+            ordinal: boundary.ordinal,
+            propsSource: boundary.propsSource,
+            propsKeys: boundary.propsKeys ?? [],
+            hasSpreadProps: !!boundary.hasSpreadProps,
+            source: boundary.source,
+            bundle: bundle
+              ? {
+                  js: bundle.js ?? null,
+                  priority: bundle.priority ?? null,
+                  hydrate: bundle.hydrate ?? null,
+                }
+              : null,
+          };
+        });
+
+        return {
+          routeId: route.id,
+          pattern: route.pattern,
+          module: route.module,
+          boundaryCount: boundaryRecords.length,
+          boundaries: boundaryRecords,
+          diagnostics,
+        };
+      });
+
+      return {
+        source: {
+          routesManifest: ".mandu/routes.manifest.json",
+          bundleManifest: includeBundle && bundleManifest ? ".mandu/manifest.json" : null,
+        },
+        includeBundle,
+        routeId: routeId ?? null,
+        routeCount: inspected.length,
+        boundaryCount: inspected.reduce((count, route) => count + route.boundaryCount, 0),
+        routes: inspected,
+      };
     },
 
     "mandu.route.add": async (args: Record<string, unknown>) => {

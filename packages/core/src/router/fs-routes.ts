@@ -100,6 +100,18 @@ export function fsRouteToRouteSpec(fsRoute: FSRouteConfig): RouteSpec {
         : fsRoute.hydration
           ? { hydration: fsRoute.hydration }
           : {}),
+      ...(fsRoute.boundaries && fsRoute.boundaries.length > 0
+        ? {
+            boundaries: fsRoute.boundaries.map((boundary) => ({
+              ...boundary,
+              module: normalizePath(boundary.module),
+              source: {
+                ...boundary.source,
+                file: normalizePath(boundary.source.file),
+              },
+            })),
+          }
+        : {}),
       ...(fsRoute.layoutChain && fsRoute.layoutChain.length > 0
         ? { layoutChain: fsRoute.layoutChain.map(normalizePath) }
         : {}),
@@ -319,6 +331,7 @@ export async function generateManifest(
         if (
           prev.clientModule &&
           !route.clientModule &&
+          !(route.kind === "page" && route.boundaries && route.boundaries.length > 0) &&
           await shouldPreserveExistingClientModule(route, prev.clientModule, rootDir)
         ) {
           route.clientModule = prev.clientModule;
