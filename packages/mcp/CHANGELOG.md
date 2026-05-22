@@ -1,5 +1,14 @@
 # @mandujs/mcp
 
+## 0.38.7
+
+### Patch Changes
+
+- Refresh internal dependency ranges for the route-level named client bundle fix.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.13
+
 ## 0.38.6
 
 ### Patch Changes

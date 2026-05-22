@@ -90,6 +90,7 @@ export function fsRouteToRouteSpec(fsRoute: FSRouteConfig): RouteSpec {
       ...(fsRoute.clientModule
         ? {
             clientModule: normalizePath(fsRoute.clientModule),
+            ...(fsRoute.clientExportName ? { clientExportName: fsRoute.clientExportName } : {}),
             hydration: fsRoute.hydration ?? {
               strategy: "island" as const,
               priority: "immediate" as const,
@@ -319,6 +320,7 @@ export async function generateManifest(
           await shouldPreserveExistingClientModule(route, prev.clientModule, rootDir)
         ) {
           route.clientModule = prev.clientModule;
+          route.clientExportName = prev.clientExportName;
         }
         if (prev.hydration && !route.hydration) {
           route.hydration = prev.hydration;

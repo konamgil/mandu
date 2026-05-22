@@ -32,7 +32,7 @@ import { mark, measure } from "../perf";
 import { METADATA_ROUTES } from "../routes/types";
 import {
   hasUseClientDirective,
-  resolveRouteLevelClientEntryPath,
+  resolveRouteLevelClientEntry,
 } from "./client-entry";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -366,6 +366,7 @@ export class FSScanner {
 
       // clientModule 결정: island 파일 또는 "use client"가 있는 page 자체
       let clientModule: string | undefined;
+      let clientExportName: string | undefined;
       let pageFileContent: string | null = null;
 
       if (file.type === "page") {
@@ -398,7 +399,9 @@ export class FSScanner {
         if (hasUseClient) {
           clientModule = modulePath;
         } else {
-          clientModule = await resolveRouteLevelClientEntryPath(rootDir, modulePath, pageFileContent) ?? undefined;
+          const routeClientEntry = await resolveRouteLevelClientEntry(rootDir, modulePath, pageFileContent);
+          clientModule = routeClientEntry?.modulePath;
+          clientExportName = routeClientEntry?.exportName;
         }
       }
 
@@ -418,6 +421,7 @@ export class FSScanner {
         module: modulePath,
         componentModule: file.type === "page" ? modulePath : undefined,
         clientModule,
+        clientExportName,
         layoutChain,
         loadingModule,
         errorModule,

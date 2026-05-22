@@ -11,9 +11,20 @@ export interface ClientComponentImport {
 export interface RouteLevelClientComponentImport {
   module: string;
   localName: string;
+  exportName: string;
 }
 
 const CLIENT_ENTRY_SPECIFIER_PATTERN = /\.(?:client|island)(?:\.[tj]sx?)?$/;
+const DEFAULT_EXPORT_NAME = "default";
+
+interface ComponentImportSpecifier {
+  importedName: string;
+  localName: string;
+}
+
+interface ComponentImportRecord extends ClientComponentImport {
+  specifiers: ComponentImportSpecifier[];
+}
 
 export function normalizeRouteModulePath(value: string | undefined): string {
   return (value ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
@@ -46,11 +57,21 @@ async function readRouteModule(rootDir: string, modulePath: string): Promise<str
 }
 
 export function findClientComponentImports(source: string): ClientComponentImport[] {
-  return findComponentImports(source).filter((entry) => clientSpecifierLooksBrowserOnly(entry.module));
+  return findComponentImportRecords(source)
+    .filter((entry) => clientSpecifierLooksBrowserOnly(entry.module))
+    .map(toPublicClientComponentImport);
 }
 
-function findComponentImports(source: string): ClientComponentImport[] {
-  const imports: ClientComponentImport[] = [];
+function toPublicClientComponentImport(entry: ComponentImportRecord): ClientComponentImport {
+  return {
+    module: entry.module,
+    kind: entry.kind,
+    names: entry.names,
+  };
+}
+
+function findComponentImportRecords(source: string): ComponentImportRecord[] {
+  const imports: ComponentImportRecord[] = [];
   const importFromPattern = /import\s+(?!type\b)([\s\S]*?)\s+from\s+["']([^"']+)["']/g;
   const sideEffectPattern = /import\s+["']([^"']+)["']/g;
 
@@ -58,6 +79,7 @@ function findComponentImports(source: string): ClientComponentImport[] {
     const clause = (match[1] ?? "").trim();
     const module = match[2] ?? "";
     const names: string[] = [];
+    const specifiers: ComponentImportSpecifier[] = [];
     let hasDefault = false;
     let hasNamed = false;
     let hasNamespace = false;
@@ -69,20 +91,28 @@ function findComponentImports(source: string): ClientComponentImport[] {
         const name = rawName.trim();
         if (!name) continue;
         const parts = name.split(/\s+as\s+/i).map((part) => part.trim()).filter(Boolean);
-        names.push(parts[1] ?? parts[0]);
+        const importedName = parts[0] ?? "";
+        const localName = parts[1] ?? importedName;
+        names.push(localName);
+        specifiers.push({ importedName, localName });
       }
     }
 
     if (/\*\s+as\s+/.test(clause)) {
       hasNamespace = true;
       const namespaceMatch = clause.match(/\*\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)/);
-      if (namespaceMatch?.[1]) names.push(namespaceMatch[1]);
+      if (namespaceMatch?.[1]) {
+        names.push(namespaceMatch[1]);
+        specifiers.push({ importedName: "*", localName: namespaceMatch[1] });
+      }
     }
 
     const beforeNamed = clause.split("{")[0]?.replace(/,\s*$/, "").trim() ?? "";
     if (beforeNamed && !beforeNamed.startsWith("*")) {
       hasDefault = true;
-      names.push(beforeNamed.split(",")[0].trim());
+      const localName = beforeNamed.split(",")[0].trim();
+      names.push(localName);
+      specifiers.push({ importedName: DEFAULT_EXPORT_NAME, localName });
     }
 
     const kind =
@@ -94,13 +124,13 @@ function findComponentImports(source: string): ClientComponentImport[] {
             ? "namespace"
             : "default";
 
-    imports.push({ module, kind, names });
+    imports.push({ module, kind, names, specifiers });
   }
 
   for (const match of source.matchAll(sideEffectPattern)) {
     const module = match[1] ?? "";
     if (imports.some((entry) => entry.module === module)) continue;
-    imports.push({ module, kind: "side-effect", names: [] });
+    imports.push({ module, kind: "side-effect", names: [], specifiers: [] });
   }
 
   return imports;
@@ -111,11 +141,15 @@ export function findRouteLevelClientComponentImport(source: string): RouteLevelC
 }
 
 export function findRouteLevelClientComponentImports(source: string): RouteLevelClientComponentImport[] {
-  const candidates = findComponentImports(source).flatMap((entry) =>
+  const candidates = findComponentImportRecords(source).flatMap((entry) =>
     isRouteLevelClientEntrySpecifier(entry.module)
-      ? entry.names
-          .filter((localName) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(localName))
-          .map((localName) => ({ module: entry.module, localName }))
+      ? entry.specifiers
+          .filter((specifier) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(specifier.localName))
+          .map((specifier) => ({
+            module: entry.module,
+            localName: specifier.localName,
+            exportName: specifier.importedName,
+          }))
       : []
   );
 
@@ -157,15 +191,25 @@ export async function resolveRouteLevelClientEntryPath(
   routeModule: string,
   source: string,
 ): Promise<string | null> {
+  return (await resolveRouteLevelClientEntry(rootDir, routeModule, source))?.modulePath ?? null;
+}
+
+export async function resolveRouteLevelClientEntry(
+  rootDir: string,
+  routeModule: string,
+  source: string,
+): Promise<{ modulePath: string; exportName: string } | null> {
   const routeLevelClientImports = findRouteLevelClientComponentImports(source);
   for (const routeLevelClientImport of routeLevelClientImports) {
     const resolved = await resolveClientImportModulePath(rootDir, routeModule, routeLevelClientImport.module);
     if (!resolved) continue;
-    if (clientSpecifierLooksBrowserOnly(routeLevelClientImport.module)) return resolved;
+    if (clientSpecifierLooksBrowserOnly(routeLevelClientImport.module)) {
+      return { modulePath: resolved, exportName: routeLevelClientImport.exportName };
+    }
 
     const importedSource = await readRouteModule(rootDir, resolved);
     if (importedSource !== null && hasUseClientDirective(importedSource)) {
-      return resolved;
+      return { modulePath: resolved, exportName: routeLevelClientImport.exportName };
     }
   }
 
@@ -462,9 +506,10 @@ export async function validateClientModuleForBrowserBundle(
   }
 
   if (clientModuleIsRouteComponent(route) && !hasUseClientDirective(source)) {
-    const realClientEntry = await resolveRouteLevelClientEntryPath(rootDir, route.clientModule, source);
+    const realClientEntry = await resolveRouteLevelClientEntry(rootDir, route.clientModule, source);
     if (realClientEntry) {
-      route.clientModule = realClientEntry;
+      route.clientModule = realClientEntry.modulePath;
+      route.clientExportName = realClientEntry.exportName;
       return null;
     }
     return (

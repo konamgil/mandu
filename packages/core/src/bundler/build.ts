@@ -1443,17 +1443,60 @@ async function buildRouterRuntime(
  * - Runtime이 dynamic import로 로드
  * - 등록/초기화 코드 없음
  */
-function generateIslandEntry(routeId: string, clientModulePath: string): string {
+function generateIslandEntry(routeId: string, clientModulePath: string, exportName?: string): string {
   // Windows 경로의 백슬래시를 슬래시로 변환 (JS escape 문제 방지)
   const normalizedPath = clientModulePath.replace(/\\/g, "/");
+  const normalizedExportName = exportName && exportName !== "default" ? exportName : undefined;
+  const candidates = [
+    normalizedExportName,
+    inferClientExportNameFromPath(clientModulePath),
+    inferClientExportNameFromRouteId(routeId),
+  ].filter((candidate, index, values): candidate is string =>
+    !!candidate && values.indexOf(candidate) === index
+  );
+  const importSpecifier = JSON.stringify(normalizedPath);
+  const routeLabel = JSON.stringify(routeId);
+  const commentRouteId = routeId.replace(/\*\//g, "* /");
   return `
 /**
- * Mandu Island: ${routeId} (Generated)
+ * Mandu Island: ${commentRouteId} (Generated)
  * Pure export - no side effects
  */
-import island from "${normalizedPath}";
+import * as islandModule from ${importSpecifier};
+
+const candidateExportNames = ${JSON.stringify(candidates)};
+
+function resolveIslandExport(mod) {
+  if (mod.default) return mod.default;
+  for (const name of candidateExportNames) {
+    if (mod[name]) return mod[name];
+  }
+  const runtimeExports = Object.keys(mod).filter((name) => name !== "__esModule");
+  if (runtimeExports.length === 1) return mod[runtimeExports[0]];
+  throw new Error(
+    "[Mandu Island] " + ${routeLabel} + " must export a default component" +
+      (candidateExportNames.length > 0 ? " or one of: " + candidateExportNames.join(", ") : "")
+  );
+}
+
+const island = resolveIslandExport(islandModule);
 export default island;
 `;
+}
+
+function inferClientExportNameFromPath(clientModulePath: string): string | null {
+  const basename = path.basename(clientModulePath).replace(/\.[cm]?[jt]sx?$/, "");
+  const withoutClientSuffix = basename.replace(/\.(client|island)$/, "");
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(withoutClientSuffix) ? withoutClientSuffix : null;
+}
+
+function inferClientExportNameFromRouteId(routeId: string): string | null {
+  const pascal = routeId
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(pascal) ? pascal : null;
 }
 
 function generatePartialEntry(partialId: string, partialModulePath: string): string {
@@ -1911,7 +1954,7 @@ async function buildIsland(
   const isDev = isDevelopmentBuild(options);
   try {
     // 엔트리 래퍼 생성
-    await Bun.write(entryPath, generateIslandEntry(route.id, clientModulePath));
+    await Bun.write(entryPath, generateIslandEntry(route.id, clientModulePath, route.clientExportName));
 
     // 빌드
     // splitting 옵션: true면 공통 코드를 별도 청크로 추출
@@ -2572,8 +2615,7 @@ export async function buildClientBundles(
         const clientModule = r.route.clientModule || "";
         errors.push(
           `[${r.route.id}] ${errorStr}\n` +
-          `  💡 Hint: If your island imports from "@mandujs/core", change it to "@mandujs/core/client".\n` +
-          `     Client islands cannot use server-side modules. File: ${clientModule}`,
+          `  Hint: Check import paths and browser-compatible exports for this island. File: ${clientModule}`,
         );
       } else {
         errors.push(`[${r.route.id}] ${errorStr}`);

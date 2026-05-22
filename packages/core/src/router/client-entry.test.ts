@@ -43,6 +43,7 @@ describe("findClientComponentImports", () => {
     expect(routeClient).toEqual({
       module: "@/client/pages/login/LoginPage.client",
       localName: "LoginPage",
+      exportName: "default",
     });
   });
 
@@ -61,6 +62,7 @@ describe("findClientComponentImports", () => {
     expect(routeClient).toEqual({
       module: "@/client/pages/home/HomeApp.client",
       localName: "HomeApp",
+      exportName: "default",
     });
   });
 
@@ -76,6 +78,23 @@ describe("findClientComponentImports", () => {
     expect(routeClient).toEqual({
       module: "@/client/pages/notifications/NotificationsPage.client",
       localName: "NotificationsPage",
+      exportName: "NotificationsPage",
+    });
+  });
+
+  it("preserves the source export name for aliased named imports", () => {
+    const routeClient = findRouteLevelClientComponentImport(`
+      import { NotificationsPage as PageIsland } from "@/client/pages/notifications/NotificationsPage.client";
+
+      export default function Page() {
+        return <PageIsland />;
+      }
+    `);
+
+    expect(routeClient).toEqual({
+      module: "@/client/pages/notifications/NotificationsPage.client",
+      localName: "PageIsland",
+      exportName: "NotificationsPage",
     });
   });
 
@@ -94,6 +113,7 @@ describe("findClientComponentImports", () => {
     expect(routeClient).toEqual({
       module: "@/client/pages/home/HomeApp.client",
       localName: "HomeApp",
+      exportName: "default",
     });
   });
 
@@ -109,6 +129,7 @@ describe("findClientComponentImports", () => {
     expect(routeClient).toEqual({
       module: "@/client/pages/pledges/PledgePage.client",
       localName: "PledgePage",
+      exportName: "default",
     });
   });
 
@@ -133,10 +154,12 @@ describe("findClientComponentImports", () => {
       {
         module: "@/client/widgets/comments-section/CommentsSection.client",
         localName: "CommentsSection",
+        exportName: "CommentsSection",
       },
       {
         module: "@/client/widgets/pledge-actions/PledgeActions.client",
         localName: "PledgeActions",
+        exportName: "PledgeActions",
       },
     ]);
   });
@@ -153,6 +176,7 @@ describe("findClientComponentImports", () => {
     expect(routeClient).toEqual({
       module: "@/client/widgets/pledge-form/PledgeForm",
       localName: "PledgeForm",
+      exportName: "PledgeForm",
     });
   });
 

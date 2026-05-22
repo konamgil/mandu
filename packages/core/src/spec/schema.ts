@@ -74,6 +74,7 @@ const RouteSpecBase = {
   module: z.string().min(1, "module 경로는 필수입니다"),
   slotModule: z.string().optional(),
   clientModule: z.string().optional(),
+  clientExportName: z.string().optional(),
   contractModule: z.string().optional(),
   hydration: HydrationConfig.optional(),
   loader: LoaderConfig.optional(),

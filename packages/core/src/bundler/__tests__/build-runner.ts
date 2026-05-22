@@ -81,6 +81,7 @@ const manifest: RoutesManifest = mode === "server-page-client-module"
       ],
     }
   : mode === "server-page-route-client-import"
+    || mode === "server-page-route-named-client-import"
     ? {
         version: 1,
         routes: [

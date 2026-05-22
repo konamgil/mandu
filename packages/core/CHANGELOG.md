@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.13
+
+### Patch Changes
+
+- Fix route-level named client component islands so generated bundles resolve named exports instead of requiring default exports, and avoid the misleading server-module hint for generic island bundle failures.
+
 ## 0.54.12
 
 ### Patch Changes

@@ -120,6 +120,9 @@ export interface FSRouteConfig {
   /** Island 컴포넌트 모듈 경로 */
   clientModule?: string;
 
+  /** Named export used by the route-level client module, if not default. */
+  clientExportName?: string;
+
   /** 적용할 레이아웃 체인 */
   layoutChain: string[];
 
