@@ -174,14 +174,19 @@ describe("createManduHot — Vite-compat import.meta.hot runtime", () => {
  *
  * We pass `port: 0` ... almost. `createHMRServer` computes
  * `port + PORTS.HMR_OFFSET` internally, so if we want an ephemeral
- * listener we'd need to bind ahead of time. For these tests that would
- * complicate setup; we pick a random port in the high range instead
- * and accept the tiny risk of collision (test is < 1 s).
+ * listener we'd need to bind ahead of time. These tests instead use a
+ * process-local monotonic port allocator to avoid random collisions
+ * during the full parallel core suite.
  */
+const HMR_TEST_PORT_STATE = "__MANDU_HMR_TEST_PORT_STATE__";
+
 function pickPort(): number {
-  // 40000–49999 range — avoids common dev ports while staying well
-  // below ephemeral ranges Bun may pick for outbound sockets.
-  return 40000 + Math.floor(Math.random() * 10000);
+  const stateGlobal = globalThis as typeof globalThis & {
+    __MANDU_HMR_TEST_PORT_STATE__?: { next: number };
+  };
+  stateGlobal.__MANDU_HMR_TEST_PORT_STATE__ ??= { next: 0 };
+  const index = stateGlobal.__MANDU_HMR_TEST_PORT_STATE__.next++;
+  return 41000 + (((process.pid % 3500) * 2 + index * 2) % 7000);
 }
 
 /**

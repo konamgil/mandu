@@ -173,27 +173,30 @@ function compilePattern(pattern: string): CompiledPattern {
   if (cached) return cached;
 
   const paramNames: string[] = [];
-  const PARAM_PLACEHOLDER = "\x00PARAM\x00";
-  const paramMatches: string[] = [];
+  const normalized = pattern === "/" ? "/" : pattern.replace(/\/+$/, "") || "/";
+  const segments = normalized.split("/").filter(Boolean);
 
-  const withPlaceholders = pattern.replace(
-    /:([a-zA-Z_][a-zA-Z0-9_]*)/g,
-    (_, paramName) => {
-      paramMatches.push(paramName);
-      return PARAM_PLACEHOLDER;
-    }
-  );
+  const regexStr = segments.length === 0
+    ? "/"
+    : segments.map((segment) => {
+        if (segment === "*") {
+          return "/.+";
+        }
 
-  const escaped = withPlaceholders.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&");
+        const wildcardMatch = segment.match(/^:([a-zA-Z_][a-zA-Z0-9_]*)\*(\?)?$/);
+        if (wildcardMatch) {
+          paramNames.push(wildcardMatch[1]);
+          return wildcardMatch[2] === "?" ? "(?:/(.*))?" : "/(.+)";
+        }
 
-  let paramIndex = 0;
-  const regexStr = escaped.replace(
-    new RegExp(PARAM_PLACEHOLDER.replace(/\x00/g, "\\x00"), "g"),
-    () => {
-      paramNames.push(paramMatches[paramIndex++]);
-      return "([^/]+)";
-    }
-  );
+        const paramMatch = segment.match(/^:([a-zA-Z_][a-zA-Z0-9_]*)$/);
+        if (paramMatch) {
+          paramNames.push(paramMatch[1]);
+          return "/([^/]+)";
+        }
+
+        return `/${escapePatternSegment(segment)}`;
+      }).join("");
 
   const compiled = {
     regex: new RegExp(`^${regexStr}$`),
@@ -218,10 +221,14 @@ function extractParamsFromPath(
 
   const params: Record<string, string> = {};
   compiled.paramNames.forEach((name, index) => {
-    params[name] = match[index + 1];
+    params[name] = match[index + 1] ?? "";
   });
 
   return params;
+}
+
+function escapePatternSegment(segment: string): string {
+  return segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // ========== Navigation ==========

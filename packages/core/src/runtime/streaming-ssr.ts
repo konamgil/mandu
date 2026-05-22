@@ -403,9 +403,11 @@ export function SuspenseIsland({
   priority?: HydrationPriority;
   bundleSrc?: string;
 }): ReactElement {
+  const hydrate = priorityToHydrateStrategy(priority);
   const defaultFallback = React.createElement("div", {
     "data-mandu-island": routeId,
     "data-mandu-priority": priority,
+    "data-hydrate": hydrate,
     "data-mandu-src": bundleSrc ? `${bundleSrc}${bundleSrc.includes('?') ? '&' : '?'}t=${Date.now()}` : bundleSrc,
     "data-mandu-loading": "true",
     style: { display: "contents", minHeight: "50px" },
@@ -427,10 +429,15 @@ export function SuspenseIsland({
     React.createElement("div", {
       "data-mandu-island": routeId,
       "data-mandu-priority": priority,
+      "data-hydrate": hydrate,
       "data-mandu-src": bundleSrc ? `${bundleSrc}${bundleSrc.includes('?') ? '&' : '?'}t=${Date.now()}` : bundleSrc,
       style: { display: "contents" },
     }, children)
   );
+}
+
+function priorityToHydrateStrategy(priority: HydrationPriority): string {
+  return priority === "immediate" ? "load" : priority;
 }
 
 /**
@@ -619,8 +626,9 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     const bundle = bundleManifest.bundles[routeId];
     const bundleSrc = bundle?.js ? `${bundle.js}?t=${Date.now()}` : "";
     const priority = hydration.priority || "visible";
+    const hydrate = priorityToHydrateStrategy(priority);
     if (hasRouteBundle) {
-      islandOpenTag = `<div data-mandu-island="${escapeHtmlAttr(routeId)}" data-mandu-src="${escapeHtmlAttr(bundleSrc)}" data-mandu-priority="${escapeHtmlAttr(priority)}" style="display:contents">`;
+      islandOpenTag = `<div data-mandu-island="${escapeHtmlAttr(routeId)}" data-mandu-src="${escapeHtmlAttr(bundleSrc)}" data-mandu-priority="${escapeHtmlAttr(priority)}" data-hydrate="${escapeHtmlAttr(hydrate)}" style="display:contents">`;
     }
   }
 

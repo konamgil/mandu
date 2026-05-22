@@ -16,12 +16,14 @@ import {
   writeFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
 } from "node:fs";
 import { join } from "node:path";
 import { composePrompt } from "../../src/prompt-composer";
 import type { Exemplar } from "../../src/exemplar-scanner";
 
 const GOLDEN_DIR = join(__dirname);
+const PROMPT_DIR = join(__dirname, "..", "..", "prompts");
 const UPDATE = process.env.UPDATE_GOLDEN === "1";
 
 interface GoldenCase {
@@ -255,6 +257,17 @@ const CASES: GoldenCase[] = [
 ];
 
 describe("prompt goldens", () => {
+  test("prompt catalog does not teach localhost transport fetches", () => {
+    const bannedFetch = /\bfetch\(\s*[`'"]http:\/\/localhost:/;
+    for (const file of readdirSync(PROMPT_DIR)) {
+      if (!file.endsWith(".md")) continue;
+      const content = readFileSync(join(PROMPT_DIR, file), "utf8");
+      if (bannedFetch.test(content)) {
+        throw new Error(`${file} contains a localhost fetch example; use 127.0.0.1`);
+      }
+    }
+  });
+
   for (const c of CASES) {
     test(`${c.kind} composed prompt matches golden`, async () => {
       const composed = await composePrompt({

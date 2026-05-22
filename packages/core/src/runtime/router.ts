@@ -415,10 +415,8 @@ export class Router {
             route,
           };
 
-          // Optional wildcard: 현재 노드도 매칭 가능하게 route 설정
-          if (isOptional && !node.route) {
-            node.route = route;
-          }
+          // Optional wildcard base paths are matched from wildcardConfig so
+          // the named wildcard param is still materialized as an empty string.
           return;
         }
 
@@ -531,7 +529,7 @@ export class Router {
         }
         return {
           route: node.wildcardConfig.route,
-          params,
+          params: { ...params, [node.wildcardConfig.name]: "" },
         };
       }
       // Non-optional wildcard: /files/:path* does NOT match /files

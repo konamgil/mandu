@@ -38,6 +38,7 @@ bun.lockb
 # Temporary files
 *.log
 *.tmp
+.tmp-*/
 nul
 
 # Claude Code session state (local per-user)

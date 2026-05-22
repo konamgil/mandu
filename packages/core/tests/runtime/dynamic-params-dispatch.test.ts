@@ -315,6 +315,72 @@ describe("Issue #214 — runtime dynamicParams guard", () => {
     expect(miss.status).toBe(404);
   });
 
+  it("optional catch-all: base path must be explicitly declared when dynamicParams=false", async () => {
+    const manifest: RoutesManifest = {
+      version: 1,
+      routes: [
+        {
+          kind: "page",
+          id: "page-docs-optional",
+          pattern: "/docs/:slug*?",
+          module: ".mandu/generated/server/page-docs-optional.ts",
+          componentModule: "app/docs/[[...slug]]/page.tsx",
+          dynamicParams: false,
+          staticParams: [{ slug: ["intro"] }],
+        } as RouteSpec,
+      ],
+    };
+
+    const filling = new ManduFilling();
+    filling.loader(() => ({ ok: true }));
+    registry.registerPageHandler("page-docs-optional", async () => ({
+      component: LangPage,
+      filling,
+    }));
+
+    server = startServer(manifest, { port: 0, registry });
+    const port = server.server.port;
+
+    const base = await fetch(`http://localhost:${port}/docs`);
+    expect(base.status).toBe(404);
+
+    const declared = await fetch(`http://localhost:${port}/docs/intro`);
+    expect(declared.status).toBe(200);
+  });
+
+  it("optional catch-all: empty declarations allow the base path", async () => {
+    const manifest: RoutesManifest = {
+      version: 1,
+      routes: [
+        {
+          kind: "page",
+          id: "page-docs-optional-empty",
+          pattern: "/docs/:slug*?",
+          module: ".mandu/generated/server/page-docs-optional-empty.ts",
+          componentModule: "app/docs/[[...slug]]/page.tsx",
+          dynamicParams: false,
+          staticParams: [{ slug: [] }, {}],
+        } as RouteSpec,
+      ],
+    };
+
+    const filling = new ManduFilling();
+    filling.loader(() => ({ ok: true }));
+    registry.registerPageHandler("page-docs-optional-empty", async () => ({
+      component: LangPage,
+      filling,
+    }));
+
+    server = startServer(manifest, { port: 0, registry });
+    const port = server.server.port;
+
+    const base = await fetch(`http://localhost:${port}/docs`);
+    expect(base.status).toBe(200);
+
+    const miss = await fetch(`http://localhost:${port}/docs/intro`);
+    expect(miss.status).toBe(404);
+  });
+
   it("API routes are NEVER gated (dynamicParams is page-only)", async () => {
     // Even if user manually sets dynamicParams on an API route via manifest
     // edit, the guard must not apply — it's a page-only contract.

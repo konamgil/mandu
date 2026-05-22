@@ -12,7 +12,20 @@ const originalDocument = globalThis.document;
 const originalHistory = globalThis.history;
 const originalFetch = globalThis.fetch;
 
-function installMockBrowser(initialHref: string) {
+type MockRoute = {
+  id: string;
+  pattern: string;
+  params: Record<string, string>;
+};
+
+function installMockBrowser(
+  initialHref: string,
+  route: MockRoute = {
+    id: "posts",
+    pattern: "/posts/:id",
+    params: { id: "1" },
+  },
+) {
   const location = new URL(initialHref);
   const windowObject: any = {
     location,
@@ -20,17 +33,9 @@ function installMockBrowser(initialHref: string) {
     addEventListener() {},
     removeEventListener() {},
     __MANDU_DATA__: {},
-    __MANDU_ROUTE__: {
-      id: "posts",
-      pattern: "/posts/:id",
-      params: { id: "1" },
-    },
+    __MANDU_ROUTE__: route,
     __MANDU_ROUTER_STATE__: {
-      currentRoute: {
-        id: "posts",
-        pattern: "/posts/:id",
-        params: { id: "1" },
-      },
+      currentRoute: route,
       loaderData: { items: ["before"] },
       actionData: { stale: true },
       navigation: { state: "idle" },
@@ -86,6 +91,52 @@ describe("client router", () => {
     expect(getRouterState().loaderData).toEqual({ items: ["before"] });
     expect(getRouterState().actionData).toBeUndefined();
     expect(globalThis.window.location.href).toBe("http://localhost/posts/2?tab=summary");
+  });
+
+  it("extracts catch-all params when revalidation is skipped", async () => {
+    installMockBrowser("http://localhost/docs/guide/intro", {
+      id: "docs",
+      pattern: "/docs/:slug*",
+      params: { slug: "guide/intro" },
+    });
+    let fetchCalled = false;
+    globalThis.fetch = ((async () => {
+      fetchCalled = true;
+      return Response.json({});
+    }) as unknown) as typeof fetch;
+
+    setShouldRevalidate(() => false);
+    await navigate("/docs/advanced/hooks", { scroll: false });
+
+    expect(fetchCalled).toBe(false);
+    expect(getRouterState().currentRoute).toEqual({
+      id: "docs",
+      pattern: "/docs/:slug*",
+      params: { slug: "advanced/hooks" },
+    });
+  });
+
+  it("extracts empty optional catch-all params on base-path navigation", async () => {
+    installMockBrowser("http://localhost/docs/guide/intro", {
+      id: "docs",
+      pattern: "/docs/:slug*?",
+      params: { slug: "guide/intro" },
+    });
+    let fetchCalled = false;
+    globalThis.fetch = ((async () => {
+      fetchCalled = true;
+      return Response.json({});
+    }) as unknown) as typeof fetch;
+
+    setShouldRevalidate(() => false);
+    await navigate("/docs", { scroll: false });
+
+    expect(fetchCalled).toBe(false);
+    expect(getRouterState().currentRoute).toEqual({
+      id: "docs",
+      pattern: "/docs/:slug*?",
+      params: { slug: "" },
+    });
   });
 
   it("issue #253 — first click is not lost when startViewTransition aborts before its callback runs", async () => {

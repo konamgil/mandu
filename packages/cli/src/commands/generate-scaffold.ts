@@ -27,9 +27,15 @@ export async function generateScaffold(options: GenerateScaffoldOptions): Promis
             pageFile(routeName),
             apiFile(routeName, parseMethods(options.methods)),
           ];
+  const resolvedFiles: Array<{ file: GeneratedFile; abs: string }> = [];
 
   for (const file of files) {
-    const abs = path.join(cwd, file.relativePath);
+    const abs = resolveInsideApp(cwd, file.relativePath);
+    if (!abs) {
+      console.error(`Refusing to create outside app/: ${displayPath(file.relativePath)}`);
+      return false;
+    }
+
     if (!options.force && await exists(abs)) {
       console.error(`File already exists: ${displayPath(file.relativePath)}`);
       console.error(
@@ -39,9 +45,10 @@ export async function generateScaffold(options: GenerateScaffoldOptions): Promis
       );
       return false;
     }
+    resolvedFiles.push({ file, abs });
   }
 
-  for (const file of files) {
+  for (const { file, abs } of resolvedFiles) {
     const shownPath = displayPath(file.relativePath);
     if (options.dryRun) {
       console.log(`Would create ${shownPath}`);
@@ -51,7 +58,6 @@ export async function generateScaffold(options: GenerateScaffoldOptions): Promis
       continue;
     }
 
-    const abs = path.join(cwd, file.relativePath);
     await fs.mkdir(path.dirname(abs), { recursive: true });
     await fs.writeFile(abs, file.content);
     console.log(`Created ${shownPath}`);
@@ -152,6 +158,16 @@ function titleFromRoute(routePath: string): string {
 
 function displayPath(filePath: string): string {
   return filePath.replace(/\\/g, "/");
+}
+
+function resolveInsideApp(cwd: string, relativePath: string): string | null {
+  const segments = displayPath(relativePath).split("/").filter(Boolean);
+  if (segments.some((segment) => segment === "." || segment === ".." || segment.includes(":") || segment.includes("\0"))) {
+    return null;
+  }
+  const appRoot = path.resolve(cwd, "app");
+  const abs = path.resolve(cwd, relativePath);
+  return abs === appRoot || abs.startsWith(appRoot + path.sep) ? abs : null;
 }
 
 function printNewFileDiff(filePath: string, content: string): void {

@@ -1,5 +1,23 @@
 # @mandujs/core
 
+## 0.54.16
+
+### Patch Changes
+
+- Emit `data-mandu-props` payload scripts for inline client islands and hydrate generated client entries with serialized props.
+
+## 0.54.15
+
+### Patch Changes
+
+- Harden inline client component hydration by avoiding manual sync component invocation, preserving deterministic inline island IDs, and deserializing Mandu-serialized server data and island props in the browser runtime.
+
+## 0.54.14
+
+### Patch Changes
+
+- Fix server-rendered client component island hydration so SSR props are serialized into inline island markers, and stop preserving stale island hydration when a route returns to server-only rendering.
+
 ## 0.54.13
 
 ### Patch Changes

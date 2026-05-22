@@ -93,7 +93,7 @@ import {
 } from "./static-files";
 export { __clearStaticEtagCacheForTests } from "./static-files";
 import { extractShellHtml, createPPRResponse } from "./ppr";
-import { renderPageResponse } from "./page-render-response";
+import { renderPageResponse, type InlineClientHydrationTarget } from "./page-render-response";
 import { isRedirectResponse } from "./redirect";
 import { isNotFoundResponse } from "./not-found";
 import { newId } from "../id";
@@ -480,7 +480,11 @@ export type ErrorLoader = () => Promise<{ default: ErrorComponent }>;
  * - filling: Slot의 ManduFilling 인스턴스 (loader 포함)
  */
 export interface PageRegistration {
-  component: React.ComponentType<{ params: Record<string, string>; loaderData?: unknown }>;
+  component: React.ComponentType<{
+    params: Record<string, string>;
+    loaderData?: unknown;
+    __manduHydration?: InlineClientHydrationTarget;
+  }>;
   filling?: ManduFilling<unknown>;
   /** #186: page 모듈의 static `metadata` export (선택) */
   metadata?: Metadata;
@@ -508,9 +512,14 @@ export interface AppContext {
   params: Record<string, string>;
   /** SSR loader에서 로드한 데이터 */
   loaderData?: unknown;
+  __manduHydration?: InlineClientHydrationTarget;
 }
 
-type RouteComponent = (props: { params: Record<string, string>; loaderData?: unknown }) => React.ReactElement;
+type RouteComponent = (props: {
+  params: Record<string, string>;
+  loaderData?: unknown;
+  __manduHydration?: InlineClientHydrationTarget;
+}) => React.ReactElement;
 type CreateAppFn = (context: AppContext) => React.ReactElement;
 
 // ========== Server Registry (인스턴스별 분리) ==========
@@ -1100,8 +1109,47 @@ function createDefaultAppFactory(registry: ServerRegistry) {
     return React.createElement(Component, {
       params: context.params,
       loaderData: context.loaderData,
+      __manduHydration: context.__manduHydration,
     });
   };
+}
+
+async function resolveInlineClientHydrationTarget(
+  route: {
+    id: string;
+    clientModule?: string;
+    clientExportName?: string;
+    hydration?: HydrationConfig;
+  },
+  rootDir: string,
+  src: string,
+): Promise<InlineClientHydrationTarget | undefined> {
+  if (!route.clientModule || !route.clientExportName || !src) {
+    return undefined;
+  }
+
+  try {
+    const module = await import(path.join(rootDir, route.clientModule));
+    const exportName = route.clientExportName;
+    const component = exportName === "default"
+      ? module.default
+      : module[exportName] ?? module.default;
+
+    if (!component) return undefined;
+
+    return {
+      routeId: route.id,
+      src,
+      priority: route.hydration?.priority ?? "visible",
+      component,
+    };
+  } catch (error) {
+    console.warn(
+      `[Mandu] Failed to resolve inline client hydration target for "${route.id}":`,
+      error,
+    );
+    return undefined;
+  }
 }
 
 const INTERNAL_CACHE_ENDPOINT = "/_mandu/cache";
@@ -2018,7 +2066,18 @@ function extractTitleText(titleHtml: string): string | null {
  * SSR 렌더링 (Streaming/Non-streaming)
  */
 async function renderPageSSR(
-  route: { id: string; pattern: string; layoutChain?: string[]; streaming?: boolean; hydration?: HydrationConfig; errorModule?: string; loadingModule?: string; notFoundModule?: string },
+  route: {
+    id: string;
+    pattern: string;
+    layoutChain?: string[];
+    streaming?: boolean;
+    hydration?: HydrationConfig;
+    errorModule?: string;
+    loadingModule?: string;
+    notFoundModule?: string;
+    clientModule?: string;
+    clientExportName?: string;
+  },
   params: Record<string, string>,
   loaderData: unknown,
   url: string,
@@ -2031,11 +2090,26 @@ async function renderPageSSR(
   const appCreator = registry.createAppFn || defaultAppCreator;
 
   try {
+    const useStreaming = route.streaming !== undefined
+      ? route.streaming
+      : settings.streaming;
+    const needsIslandHydration = !!(
+      route.hydration &&
+      route.hydration.strategy !== "none" &&
+      settings.bundleManifest
+    );
+    const routeBundle = settings.bundleManifest?.bundles[route.id];
+    const bundleSrc = routeBundle?.js ? `${routeBundle.js}?t=${Date.now()}` : "";
+    const inlineClientHydration = needsIslandHydration && !useStreaming
+      ? await resolveInlineClientHydrationTarget(route, settings.rootDir, bundleSrc)
+      : undefined;
+
     let app = appCreator({
       routeId: route.id,
       url,
       params,
       loaderData,
+      __manduHydration: inlineClientHydration,
     });
 
     // Phase 18.β — per-route Suspense wrapper (Next.js `loading.tsx` parity).
@@ -2064,16 +2138,9 @@ async function renderPageSSR(
 
     // Island 래핑: 레이아웃 적용 전에 페이지 콘텐츠만 island div로 감쌈
     // 이렇게 하면 레이아웃은 island 바깥에 위치하여 하이드레이션 시 레이아웃이 유지됨
-    const needsIslandHydration = !!(
-      route.hydration &&
-      route.hydration.strategy !== "none" &&
-      settings.bundleManifest
-    );
-    const routeBundle = settings.bundleManifest?.bundles[route.id];
-    const bundleSrc = routeBundle?.js ? `${routeBundle.js}?t=${Date.now()}` : "";
-    const needsIslandWrap = needsIslandHydration && bundleSrc.length > 0;
+    const needsIslandWrap = needsIslandHydration && bundleSrc.length > 0 && !inlineClientHydration;
 
-    if (needsIslandHydration && !needsIslandWrap && settings.isDev) {
+    if (needsIslandHydration && bundleSrc.length === 0 && settings.isDev) {
       console.warn(
         `[Mandu] Hydration requested for route "${route.id}" but no client bundle was found. ` +
         `Run mandu build/generate and ensure the route has a clientModule.`,
@@ -2098,11 +2165,6 @@ async function renderPageSSR(
     // #186: layout chain + page metadata 병합
     const builtMeta = await buildSSRMetadata(route, params, url, registry);
 
-    // Streaming SSR 모드 결정
-    const useStreaming = route.streaming !== undefined
-      ? route.streaming
-      : settings.streaming;
-
     const pageResponse = await renderPageResponse({
       app,
       useStreaming,
@@ -2118,6 +2180,7 @@ async function renderPageSSR(
       loaderData,
       cssPath: settings.cssPath,
       islandPreWrapped: needsIslandWrap,
+      inlineClientHydration,
       transitions: settings.transitions,
       prefetch: settings.prefetch,
       spa: settings.spa,

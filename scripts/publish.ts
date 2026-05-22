@@ -15,18 +15,12 @@ import { $ } from "bun";
 import { readFile, writeFile, unlink } from "fs/promises";
 import { join } from "path";
 import { execSync } from "child_process";
+import { PUBLISHABLE_PACKAGE_DIRS } from "./publish-order";
 
 // Publish 순서: 의존성 위상 순서대로 (의존되는 것이 먼저)
 // core → ate (needs core at runtime) → skills (peerDep core) → mcp (deps core+ate+skills)
-//   → cli (deps core+mcp+skills) → edge (peerDep core, Workers adapter)
-const PACKAGES = [
-  "packages/core",
-  "packages/ate",
-  "packages/skills",
-  "packages/mcp",
-  "packages/cli",
-  "packages/edge",
-];
+//   → edge (deps core, Workers adapter) → cli (deps core+mcp+skills+edge)
+const PACKAGES = PUBLISHABLE_PACKAGE_DIRS;
 const ROOT = join(import.meta.dir, "..");
 const isDryRun = process.argv.includes("--dry-run");
 const skipCheck = process.argv.includes("--skip-check");

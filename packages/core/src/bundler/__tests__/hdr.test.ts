@@ -204,8 +204,15 @@ describe("Phase 7.2 Agent B — findRouteIdForSlot", () => {
 // Section B — HMR server broadcast of slot-refetch
 // -----------------------------------------------------------------------------
 
+const HMR_TEST_PORT_STATE = "__MANDU_HMR_TEST_PORT_STATE__";
+
 function pickPort(): number {
-  return 40000 + Math.floor(Math.random() * 10000);
+  const stateGlobal = globalThis as typeof globalThis & {
+    __MANDU_HMR_TEST_PORT_STATE__?: { next: number };
+  };
+  stateGlobal.__MANDU_HMR_TEST_PORT_STATE__ ??= { next: 0 };
+  const index = stateGlobal.__MANDU_HMR_TEST_PORT_STATE__.next++;
+  return 41000 + (((process.pid % 3500) * 2 + index * 2) % 7000);
 }
 
 describe("Phase 7.2 Agent B — slot-refetch broadcast", () => {

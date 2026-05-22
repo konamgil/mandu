@@ -229,7 +229,14 @@ export async function shouldPreserveExistingClientModule(
     if (hasUseClientDirective(source)) return true;
     return await routeComponentHasResolvableClientEntry(rootDir, clientModule, source);
   }
-  return true;
+
+  if (route.kind !== "page" || !route.componentModule) return false;
+
+  const routeSource = await readRouteModule(rootDir, route.componentModule);
+  if (routeSource === null) return false;
+
+  const currentEntry = await resolveRouteLevelClientEntry(rootDir, route.componentModule, routeSource);
+  return normalizeRouteModulePath(currentEntry?.modulePath) === normalizeRouteModulePath(clientModule);
 }
 
 function resolveImportBasePath(rootDir: string, importerModule: string, specifier: string): string | null {

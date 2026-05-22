@@ -47,6 +47,13 @@ import {
 } from "../../runtime/hmr-client";
 import { generateFastRefreshPreamble } from "../dev";
 
+const repoTempRoot = path.resolve(import.meta.dir, "../../../../..", ".tmp-test-artifacts");
+
+async function mkRepoTempDir(prefix: string): Promise<string> {
+  await mkdir(repoTempRoot, { recursive: true });
+  return mkdtemp(path.join(repoTempRoot, prefix));
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Section A — plugin pure unit tests
 // ═══════════════════════════════════════════════════════════════════
@@ -266,7 +273,7 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")(
     let rootDir: string;
 
     beforeAll(async () => {
-      rootDir = await mkdtemp(path.join(import.meta.dir, ".tmp-fr-build-"));
+      rootDir = await mkRepoTempDir("fr-build-");
       // Three source files — one boundary, one plain, one .island.tsx —
       // give us the minimal matrix for the plugin's include filter.
       await writeFile(
@@ -515,7 +522,7 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")(
     let rootDir: string;
 
     beforeAll(async () => {
-      rootDir = await mkdtemp(path.join(import.meta.dir, ".tmp-fr-vendor-"));
+      rootDir = await mkRepoTempDir("fr-vendor-");
       await mkdir(path.join(rootDir, "app"), { recursive: true });
       await writeFile(
         path.join(rootDir, "package.json"),

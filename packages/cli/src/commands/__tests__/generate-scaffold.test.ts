@@ -92,4 +92,25 @@ describe("generateScaffold", () => {
       console.error = originalError;
     }
   });
+
+  it("rejects route paths that resolve outside app", async () => {
+    const errors: string[] = [];
+    const originalError = console.error;
+    console.error = (message?: unknown) => {
+      errors.push(String(message ?? ""));
+    };
+
+    try {
+      const ok = await generateScaffold({
+        kind: "page",
+        name: "../outside",
+      });
+
+      expect(ok).toBe(false);
+      expect(errors.join("\n")).toContain("Refusing to create outside app/");
+      await expect(access(path.join(root, "outside", "page.tsx"))).rejects.toThrow();
+    } finally {
+      console.error = originalError;
+    }
+  });
 });

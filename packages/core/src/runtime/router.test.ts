@@ -159,7 +159,7 @@ describe("Wildcard Matching", () => {
 
     expect(result).not.toBeNull();
     expect(result!.route.id).toBe("docs");
-    expect(result!.params).toEqual({});
+    expect(result!.params).toEqual({ path: "" });
   });
 
   test("optional wildcard matches with remaining path", () => {

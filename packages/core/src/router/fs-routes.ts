@@ -97,7 +97,9 @@ export function fsRouteToRouteSpec(fsRoute: FSRouteConfig): RouteSpec {
               preload: false,
             },
           }
-        : {}),
+        : fsRoute.hydration
+          ? { hydration: fsRoute.hydration }
+          : {}),
       ...(fsRoute.layoutChain && fsRoute.layoutChain.length > 0
         ? { layoutChain: fsRoute.layoutChain.map(normalizePath) }
         : {}),
@@ -323,7 +325,11 @@ export async function generateManifest(
           route.clientExportName = prev.clientExportName;
         }
         if (prev.hydration && !route.hydration) {
-          route.hydration = prev.hydration;
+          const canPreserveHydration =
+            !!route.clientModule || prev.hydration.strategy === "none";
+          if (canPreserveHydration) {
+            route.hydration = prev.hydration;
+          }
         }
         // Issue #214 — preserve prerender-time fields (`dynamicParams`,
         // `staticParams`) across manifest rescans. `mandu build`'s prerender

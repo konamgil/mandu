@@ -12,6 +12,8 @@ import { join, resolve } from "path";
 import { checkPublicApiBoundary } from "./check-public-api-boundary";
 import { checkTargetBoundaries } from "./check-target-boundaries";
 import { checkDocsDrift } from "./check-docs-drift";
+import { collectTempArtifactDirs } from "./pre-publish-temp-artifacts";
+import { collectPublishOrderIssues, PUBLISHABLE_PACKAGE_DIRS } from "./publish-order";
 
 interface PackageJson {
   name: string;
@@ -22,15 +24,6 @@ interface PackageJson {
   peerDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
 }
-
-const PUBLISHABLE_PACKAGE_DIRS = [
-  "packages/core",
-  "packages/ate",
-  "packages/skills",
-  "packages/mcp",
-  "packages/cli",
-  "packages/edge",
-];
 
 function dependencyBlocks(pkg: PackageJson): Array<[string, Record<string, string> | undefined]> {
   return [
@@ -375,6 +368,9 @@ async function auditCrossPackageSubpaths(versionMap: Map<string, string>): Promi
 
 console.log("🔍 Pre-publish check: workspace 의존성 검증\n");
 
+const versions = loadVersionMap(PUBLISHABLE_PACKAGE_DIRS);
+let hasIssues = false;
+
 // 1. lockfile 업데이트 확인
 console.log("📦 Step 1: Lockfile 업데이트 확인...");
 try {
@@ -394,11 +390,38 @@ try {
   console.log("✅ Lockfile up-to-date\n");
 }
 
+// 1.5. publishable package 안에 남은 임시 테스트 산출물 차단
+console.log("🧹 Step 1.5: 임시 테스트 산출물 확인...\n");
+
+let tempArtifactIssues = false;
+for (const pkgDir of PUBLISHABLE_PACKAGE_DIRS) {
+  const abs = resolve(process.cwd(), pkgDir);
+  const tempIssues = await collectTempArtifactDirs(abs);
+  if (tempIssues.length > 0) {
+    hasIssues = true;
+    tempArtifactIssues = true;
+    tempIssues.forEach((issue) => console.log(`  ${issue}`));
+  }
+}
+if (!tempArtifactIssues) {
+  console.log("  ✅ No .tmp-* directories inside publishable packages");
+}
+console.log();
+
+// 1.6. publish 순서가 내부 의존성 위상을 따르는지 확인
+console.log("📚 Step 1.6: Publish order dependency graph 확인...\n");
+
+const publishOrderIssues = collectPublishOrderIssues(PUBLISHABLE_PACKAGE_DIRS, process.cwd());
+if (publishOrderIssues.length > 0) {
+  hasIssues = true;
+  publishOrderIssues.forEach((issue) => console.log(`  ${issue}`));
+} else {
+  console.log("  ✅ Publish order respects internal package dependencies");
+}
+console.log();
+
 // 2. workspace 의존성 검증
 console.log("🔗 Step 2: Workspace 의존성 검증...\n");
-
-const versions = loadVersionMap(PUBLISHABLE_PACKAGE_DIRS);
-let hasIssues = false;
 
 for (const pkgDir of PUBLISHABLE_PACKAGE_DIRS) {
   const pkgPath = resolve(process.cwd(), pkgDir, "package.json");

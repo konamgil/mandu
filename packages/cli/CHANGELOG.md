@@ -1,5 +1,14 @@
 # @mandujs/cli
 
+## 0.44.19
+
+### Patch Changes
+
+- Update internal Mandu dependency ranges for the hydration payload fix release.
+
+- Updated dependencies []:
+  - @mandujs/mcp@0.38.8
+
 ## 0.44.18
 
 ### Patch Changes

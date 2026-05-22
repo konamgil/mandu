@@ -8,6 +8,13 @@ import {
   resolveRouteLevelClientEntryPath,
 } from "./client-entry";
 
+const repoTempRoot = path.resolve(import.meta.dir, "../../../..", ".tmp-test-artifacts");
+
+async function mkRepoTempDir(prefix: string): Promise<string> {
+  await mkdir(repoTempRoot, { recursive: true });
+  return mkdtemp(path.join(repoTempRoot, prefix));
+}
+
 describe("findClientComponentImports", () => {
   it("detects named .client imports for diagnostics", () => {
     const imports = findClientComponentImports(`
@@ -193,7 +200,7 @@ describe("findClientComponentImports", () => {
   });
 
   it("resolves a route-level client entry by reading a use client target without .client in the path", async () => {
-    const rootDir = await mkdtemp(path.join(import.meta.dir, ".tmp-client-entry-"));
+    const rootDir = await mkRepoTempDir("client-entry-");
     try {
       await mkdir(path.join(rootDir, "app", "pledges", "new"), { recursive: true });
       await mkdir(path.join(rootDir, "src", "client", "widgets", "pledge-form"), { recursive: true });

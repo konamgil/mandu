@@ -118,6 +118,25 @@ const manifest: RoutesManifest = mode === "server-page-client-module"
           },
         ],
       }
+  : mode === "i18n-locale-route-id"
+    ? {
+        version: 1,
+        routes: [
+          {
+            id: "ko::demo",
+            kind: "page",
+            pattern: "/ko",
+            module: "app/page.tsx",
+            componentModule: "app/page.tsx",
+            clientModule: "app/demo.client.tsx",
+            hydration: {
+              strategy: "island",
+              priority: "visible",
+              preload: false,
+            },
+          },
+        ],
+      }
     : {
         version: 1,
         routes: [

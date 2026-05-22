@@ -3,7 +3,7 @@ import {
   loadManifest,
   generateManifest,
 } from "@mandujs/core";
-import { getProjectPaths } from "../utils/project.js";
+import { getProjectPaths, isInsideProject } from "../utils/project.js";
 import path from "path";
 import fs from "fs/promises";
 
@@ -154,10 +154,26 @@ export function specTools(projectRoot: string) {
       };
 
       const createdFiles: string[] = [];
+      const normalizedRoutePath = normalizeRoutePath(routePath);
+      if (!normalizedRoutePath) {
+        return {
+          error: "Route path must be a non-empty relative path inside app/",
+        };
+      }
 
       // Scaffold app/ file
       const fileName = kind === "api" ? "route.ts" : "page.tsx";
-      const appFilePath = path.join(paths.appDir, routePath, fileName);
+      const appFilePath = path.resolve(paths.appDir, normalizedRoutePath, fileName);
+      if (!isInsideProject(appFilePath, paths.appDir)) {
+        return {
+          error: "Route path resolves outside app/",
+        };
+      }
+      if (await Bun.file(appFilePath).exists()) {
+        return {
+          error: `Route source already exists: app/${normalizedRoutePath}/${fileName}`,
+        };
+      }
       const appFileDir = path.dirname(appFilePath);
 
       await fs.mkdir(appFileDir, { recursive: true });
@@ -167,10 +183,10 @@ export function specTools(projectRoot: string) {
       } else {
         await Bun.write(appFilePath, `export default function Page() {\n  return <div>Page</div>;\n}\n`);
       }
-      createdFiles.push(`app/${routePath}/${fileName}`);
+      createdFiles.push(`app/${normalizedRoutePath}/${fileName}`);
 
       // Derive route ID from path
-      const routeId = routePath.replace(/\//g, "-").replace(/[\[\]\.]/g, "");
+      const routeId = normalizedRoutePath.replace(/\//g, "-").replace(/[\[\]\.]/g, "");
 
       // Scaffold slot if requested
       if (withSlot) {
@@ -267,4 +283,20 @@ export function specTools(projectRoot: string) {
   handlers["mandu_validate_manifest"] = handlers["mandu.manifest.validate"];
 
   return handlers;
+}
+
+function normalizeRoutePath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().replace(/\\/g, "/");
+  const withoutAppPrefix = trimmed.replace(/^app\//, "");
+  const normalized = withoutAppPrefix.replace(/^\/+|\/+$/g, "");
+  if (!normalized) return null;
+
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.length === 0) return null;
+  if (segments.some((segment) => segment === "." || segment === ".." || segment.includes(":") || segment.includes("\0"))) {
+    return null;
+  }
+
+  return segments.join("/");
 }

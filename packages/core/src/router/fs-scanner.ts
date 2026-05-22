@@ -30,10 +30,49 @@ import {
 } from "./fs-patterns";
 import { mark, measure } from "../perf";
 import { METADATA_ROUTES } from "../routes/types";
+import type { HydrationConfig } from "../spec/schema";
 import {
   hasUseClientDirective,
   resolveRouteLevelClientEntry,
 } from "./client-entry";
+
+const HYDRATION_STRATEGIES = new Set(["none", "island", "full", "progressive"]);
+const HYDRATION_PRIORITIES = new Set(["immediate", "visible", "idle", "interaction"]);
+
+function parsePageHydrationConfig(source: string): HydrationConfig | undefined {
+  const stringMatch = source.match(
+    /export\s+const\s+hydration\s*(?::[^=]+)?=\s*["'](none|island|full|progressive)["']/m,
+  );
+  if (stringMatch?.[1]) {
+    return {
+      strategy: stringMatch[1] as HydrationConfig["strategy"],
+      priority: "visible",
+      preload: false,
+    };
+  }
+
+  const objectMatch = source.match(
+    /export\s+const\s+hydration\s*(?::[^=]+)?=\s*\{([\s\S]*?)\}\s*;?/m,
+  );
+  const body = objectMatch?.[1];
+  if (!body) return undefined;
+
+  const strategyMatch = body.match(/\bstrategy\s*:\s*["']([^"']+)["']/);
+  const strategy = strategyMatch?.[1];
+  if (!strategy || !HYDRATION_STRATEGIES.has(strategy)) return undefined;
+
+  const priorityMatch = body.match(/\bpriority\s*:\s*["']([^"']+)["']/);
+  const priority = priorityMatch?.[1];
+  const preloadMatch = body.match(/\bpreload\s*:\s*(true|false)\b/);
+
+  return {
+    strategy: strategy as HydrationConfig["strategy"],
+    priority: HYDRATION_PRIORITIES.has(priority ?? "")
+      ? (priority as HydrationConfig["priority"])
+      : "visible",
+    preload: preloadMatch?.[1] === "true",
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Scanner Class
@@ -367,6 +406,7 @@ export class FSScanner {
       // clientModule 결정: island 파일 또는 "use client"가 있는 page 자체
       let clientModule: string | undefined;
       let clientExportName: string | undefined;
+      let hydration: HydrationConfig | undefined;
       let pageFileContent: string | null = null;
 
       if (file.type === "page") {
@@ -374,6 +414,9 @@ export class FSScanner {
           pageFileContent = await Bun.file(file.absolutePath).text();
         } catch {
           pageFileContent = null;
+        }
+        if (pageFileContent) {
+          hydration = parsePageHydrationConfig(pageFileContent);
         }
       }
 
@@ -422,6 +465,7 @@ export class FSScanner {
         componentModule: file.type === "page" ? modulePath : undefined,
         clientModule,
         clientExportName,
+        hydration,
         layoutChain,
         loadingModule,
         errorModule,

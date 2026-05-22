@@ -1,8 +1,17 @@
-import type React from "react";
+import React from "react";
 import type { BundleManifest } from "../bundler/types";
 import type { HydrationConfig } from "../spec/schema";
 import type { CookieManager } from "../filling/context";
 import { renderSSR, renderStreamingResponse, resolveAsyncElement } from "./ssr";
+import { serializeProps } from "../client/serialize";
+import { escapeJsonForInlineScript } from "./escape";
+
+export interface InlineClientHydrationTarget {
+  routeId: string;
+  src: string;
+  priority: NonNullable<HydrationConfig["priority"]>;
+  component: unknown;
+}
 
 export interface PageRenderResponseOptions {
   app: React.ReactElement;
@@ -23,6 +32,7 @@ export interface PageRenderResponseOptions {
   spa?: boolean;
   devtools?: boolean;
   islandPreWrapped?: boolean;
+  inlineClientHydration?: InlineClientHydrationTarget;
   cookies?: CookieManager;
 }
 
@@ -30,16 +40,122 @@ export async function renderPageResponse(
   options: PageRenderResponseOptions
 ): Promise<Response> {
   let app = options.app;
+  let islandPreWrapped = !!options.islandPreWrapped;
 
   if (!options.useStreaming) {
-    app = (await resolveAsyncElement(app)) as React.ReactElement;
+    if (options.inlineClientHydration) {
+      const resolved = await resolveAndWrapInlineClientHydration(
+        app,
+        options.inlineClientHydration,
+      );
+      app = resolved.node as React.ReactElement;
+      islandPreWrapped = islandPreWrapped || resolved.didWrap;
+    } else {
+      app = (await resolveAsyncElement(app)) as React.ReactElement;
+    }
   }
 
+  const effectiveOptions = islandPreWrapped === !!options.islandPreWrapped
+    ? options
+    : { ...options, islandPreWrapped };
+
   const response = options.useStreaming
-    ? await renderStreamingPageResponse(app, options)
-    : renderNonStreamingPageResponse(app, options);
+    ? await renderStreamingPageResponse(app, effectiveOptions)
+    : renderNonStreamingPageResponse(app, effectiveOptions);
 
   return options.cookies ? options.cookies.applyToResponse(response) : response;
+}
+
+async function resolveAndWrapInlineClientHydration(
+  node: React.ReactNode,
+  target: InlineClientHydrationTarget,
+  counter = { value: 0 },
+): Promise<{ node: React.ReactNode; didWrap: boolean }> {
+  if (node == null || typeof node !== "object") {
+    return { node, didWrap: false };
+  }
+
+  if (Array.isArray(node)) {
+    let didWrap = false;
+    const children: React.ReactNode[] = [];
+    for (const child of node) {
+      const result = await resolveAndWrapInlineClientHydration(child, target, counter);
+      didWrap = didWrap || result.didWrap;
+      children.push(result.node);
+    }
+    return { node: children, didWrap };
+  }
+
+  if (!React.isValidElement(node)) {
+    return { node, didWrap: false };
+  }
+
+  const element = node as React.ReactElement<Record<string, unknown>>;
+  const type = element.type;
+
+  if (type === target.component) {
+    const id = `${target.routeId}--${counter.value++}`;
+    const props = element.props ?? {};
+    const serializedProps = serializeProps(props);
+    return {
+      node: React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(
+          "div",
+          {
+            "data-mandu-island": id,
+            "data-mandu-src": target.src,
+            "data-mandu-priority": target.priority,
+            "data-hydrate": priorityToHydrate(target.priority),
+            "data-props": serializedProps,
+            style: { display: "contents" },
+          },
+          element,
+        ),
+        React.createElement("script", {
+          type: "application/json",
+          "data-mandu-props": id,
+          dangerouslySetInnerHTML: {
+            __html: escapeJsonForInlineScript(serializedProps),
+          },
+        }),
+      ),
+      didWrap: true,
+    };
+  }
+
+  if (typeof type === "function" && isAsyncFunctionComponent(type)) {
+    const rendered = await (type as (props: Record<string, unknown>) => React.ReactNode | Promise<React.ReactNode>)(
+      element.props ?? {},
+    );
+    return resolveAndWrapInlineClientHydration(rendered, target, counter);
+  }
+
+  const props = element.props;
+  const rawChildren = props?.children as React.ReactNode | undefined;
+  if (rawChildren === undefined) {
+    return { node: element, didWrap: false };
+  }
+
+  const resolvedChildren = await resolveAndWrapInlineClientHydration(rawChildren, target, counter);
+  if (!resolvedChildren.didWrap && resolvedChildren.node === rawChildren) {
+    return { node: element, didWrap: false };
+  }
+
+  const cloned = Array.isArray(resolvedChildren.node)
+    ? React.cloneElement(element, undefined, ...resolvedChildren.node)
+    : React.cloneElement(element, undefined, resolvedChildren.node);
+  return { node: cloned, didWrap: resolvedChildren.didWrap };
+}
+
+function isAsyncFunctionComponent(type: Function): boolean {
+  return !type.prototype?.isReactComponent &&
+    (type as { constructor?: { name?: string } }).constructor?.name === "AsyncFunction";
+}
+
+function priorityToHydrate(priority: InlineClientHydrationTarget["priority"]): string {
+  return priority === "immediate" ? "load" : priority;
 }
 
 async function renderStreamingPageResponse(

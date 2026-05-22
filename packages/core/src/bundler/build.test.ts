@@ -6,6 +6,12 @@ import { pathToFileURL } from "url";
 // 모든 테스트가 하나의 빌드 결과를 공유 — 병렬 Bun.build 충돌 방지
 let rootDir: string;
 let result: { success: boolean; errors: string[] };
+const repoTempRoot = path.resolve(import.meta.dir, "../../../..", ".tmp-test-artifacts");
+
+async function mkRepoTempDir(prefix: string): Promise<string> {
+  await mkdir(repoTempRoot, { recursive: true });
+  return mkdtemp(path.join(repoTempRoot, prefix));
+}
 
 async function importBuiltModule(relativePath: string): Promise<Record<string, unknown>> {
   const fileUrl = pathToFileURL(path.join(rootDir, relativePath)).href;
@@ -27,6 +33,9 @@ async function importBuiltModule(relativePath: string): Promise<Record<string, u
 async function runBuildInSubprocess(root: string, mode?: string): Promise<{
   success: boolean;
   errors: string[];
+  manifest?: {
+    bundles?: Record<string, { js?: string }>;
+  } | null;
 }> {
   const runner = path.join(
     import.meta.dir,
@@ -55,6 +64,7 @@ async function runBuildInSubprocess(root: string, mode?: string): Promise<{
       return {
         success: parsed.success === true,
         errors: Array.isArray(parsed.errors) ? parsed.errors : [],
+        manifest: parsed.manifest ?? null,
       };
     } catch (e) {
       return {
@@ -62,15 +72,16 @@ async function runBuildInSubprocess(root: string, mode?: string): Promise<{
         errors: [
           `build-runner output could not be parsed as JSON: ${String(e)}\nLast stdout line: ${last}`,
         ],
+        manifest: null,
       };
     }
   } catch (err) {
-    return { success: false, errors: [`spawn failed: ${String(err)}`] };
+    return { success: false, errors: [`spawn failed: ${String(err)}`], manifest: null };
   }
 }
 
 beforeAll(async () => {
-  rootDir = await mkdtemp(path.join(import.meta.dir, ".tmp-bundler-"));
+  rootDir = await mkRepoTempDir("bundler-");
 
   await mkdir(path.join(rootDir, "app"), { recursive: true });
   await writeFile(
@@ -122,6 +133,18 @@ describe("buildClientBundles vendor shims", () => {
       console.error("[build.test] errors:", result.errors);
     }
     expect(result.success).toBe(true);
+  });
+
+  test("runtime reads canonical data-hydrate strategies", async () => {
+    const runtimePath = path.join(rootDir, ".mandu", "client", "_runtime.js");
+    const runtimeSource = await readFile(runtimePath, "utf-8");
+
+    expect(runtimeSource).toContain("data-hydrate");
+    expect(runtimeSource).toContain("matchMedia");
+    expect(runtimeSource).toContain("200px");
+    expect(runtimeSource).toContain('"click"');
+    expect(runtimeSource).not.toContain("mouseenter");
+    expect(runtimeSource).not.toContain("pointerdown");
   });
 
   test("re-exports modern React 19 APIs used by islands", async () => {
@@ -176,18 +199,23 @@ describe("buildClientBundles vendor shims", () => {
     expect(runtimeSource).toContain("data-mandu-hydrating");
     expect(runtimeSource).toContain("data-mandu-render-mode");
     expect(runtimeSource).toContain("data-mandu-recoverable-error");
-    expect(runtimeSource).toContain("pointerdown");
+    expect(runtimeSource).toContain('"click"');
+    expect(runtimeSource).not.toContain("pointerdown");
   });
 
   test("runtime parses SSR data script before island setup", async () => {
     const runtimeSource = await readFile(path.join(rootDir, ".mandu", "client", "_runtime.js"), "utf-8");
     expect(runtimeSource).toContain("function readManduData");
     expect(runtimeSource).toContain("document.getElementById(\"__MANDU_DATA__\")");
-    expect(runtimeSource).toContain("JSON.parse");
+    expect(runtimeSource).toContain("function parsePropsScript");
+    expect(runtimeSource).toContain("data-mandu-props");
+    expect(runtimeSource).toContain("deserializeManduProps");
+    expect(runtimeSource).toContain("new Date");
+    expect(runtimeSource).toContain("new Map");
   });
 
   test("does not bundle a server page when stale manifest marks page.tsx as clientModule", async () => {
-    const staleRoot = await mkdtemp(path.join(import.meta.dir, ".tmp-stale-client-module-"));
+    const staleRoot = await mkRepoTempDir("stale-client-module-");
     try {
       await mkdir(path.join(staleRoot, "app"), { recursive: true });
       await mkdir(path.join(staleRoot, "src", "shared", "contracts"), { recursive: true });
@@ -220,7 +248,7 @@ describe("buildClientBundles vendor shims", () => {
   });
 
   test("rewrites route-component clientModule to the real client import before bundling", async () => {
-    const routeClientRoot = await mkdtemp(path.join(import.meta.dir, ".tmp-route-client-import-"));
+    const routeClientRoot = await mkRepoTempDir("route-client-import-");
     try {
       await mkdir(path.join(routeClientRoot, "app", "login"), { recursive: true });
       await mkdir(path.join(routeClientRoot, "src", "client", "pages", "login"), { recursive: true });
@@ -267,7 +295,7 @@ describe("buildClientBundles vendor shims", () => {
   });
 
   test("bundles route-level named client exports without requiring a default export", async () => {
-    const routeClientRoot = await mkdtemp(path.join(import.meta.dir, ".tmp-route-named-client-import-"));
+    const routeClientRoot = await mkRepoTempDir("route-named-client-import-");
     try {
       await mkdir(path.join(routeClientRoot, "app", "login"), { recursive: true });
       await mkdir(path.join(routeClientRoot, "src", "client", "pages", "login"), { recursive: true });
@@ -317,8 +345,34 @@ describe("buildClientBundles vendor shims", () => {
     }
   });
 
+  test("uses Windows-safe asset filenames for locale-prefixed route ids", async () => {
+    const localeRoot = await mkRepoTempDir("i18n-locale-route-id-");
+    try {
+      await mkdir(path.join(localeRoot, "app"), { recursive: true });
+      await writeFile(
+        path.join(localeRoot, "package.json"),
+        JSON.stringify({ name: "mandu-i18n-route-id-test", type: "module" }, null, 2),
+        "utf-8",
+      );
+      await writeFile(
+        path.join(localeRoot, "app", "demo.client.tsx"),
+        "export default function DemoIsland() { return null; }\n",
+        "utf-8",
+      );
+
+      const localeResult = await runBuildInSubprocess(localeRoot, "i18n-locale-route-id");
+      expect(localeResult.success).toBe(true);
+      const bundle = localeResult.manifest?.bundles?.["ko::demo"];
+      expect(bundle?.js).toBe("/.mandu/client/ko_3a__3a_demo.island.js");
+      expect(bundle?.js).not.toContain(":");
+      expect(await Bun.file(path.join(localeRoot, ".mandu", "client", "ko_3a__3a_demo.island.js")).exists()).toBe(true);
+    } finally {
+      await rm(localeRoot, { recursive: true, force: true });
+    }
+  });
+
   test("fails when hydration is enabled but no clientModule can be resolved", async () => {
-    const missingRoot = await mkdtemp(path.join(import.meta.dir, ".tmp-hydration-no-client-"));
+    const missingRoot = await mkRepoTempDir("hydration-no-client-");
     try {
       await mkdir(path.join(missingRoot, "app", "login"), { recursive: true });
       await mkdir(path.join(missingRoot, "src", "client", "widgets", "login-form"), { recursive: true });

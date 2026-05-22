@@ -31,6 +31,8 @@ these is how we assert the stream shape.
 - Consume the stream with `await res.text()` and then assert on the
   full string. That defeats the "streaming" semantic — the ordering
   guarantee you care about is chunk-by-chunk.
+- Use `localhost` in transport URLs. Use `http://127.0.0.1:<port>` so
+  Windows CI does not hit an IPv6/IPv4 localhost mismatch.
 - Assume a specific `boundaryCount` without reading the page's Suspense
   boundaries — if the page adds one, the spec breaks. Pull the count
   from the route context (`mandu_ate_context({ scope: "route" })`).
@@ -60,7 +62,7 @@ import { test, expect } from "bun:test";
 import { assertStreamBoundary } from "@mandujs/core/testing";
 
 test("GET /dashboard streams shell → 2 boundaries → scripts", async () => {
-  const res = await fetch("http://localhost:3333/dashboard");
+  const res = await fetch("http://127.0.0.1:3333/dashboard");
   await assertStreamBoundary(res, {
     shellChunkContains: ["<!DOCTYPE", "<html"],
     boundaryCount: 2,
@@ -70,12 +72,12 @@ test("GET /dashboard streams shell → 2 boundaries → scripts", async () => {
 });
 
 test("shell fits under 20KB budget", async () => {
-  const res = await fetch("http://localhost:3333/dashboard");
+  const res = await fetch("http://127.0.0.1:3333/dashboard");
   await assertStreamBoundary(res, { firstChunkMaxSizeBytes: 20_480 });
 });
 
 test("no Suspense boundaries on a static page", async () => {
-  const res = await fetch("http://localhost:3333/about");
+  const res = await fetch("http://127.0.0.1:3333/about");
   await assertStreamBoundary(res, { boundaryCount: 0 });
 });
 ```

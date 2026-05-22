@@ -526,6 +526,84 @@ import { hydrateRoot, createRoot } from 'react-dom/client';
 window.__MANDU_ROOTS__ = window.__MANDU_ROOTS__ || new Map();
 const hydratedRoots = window.__MANDU_ROOTS__;
 
+const TYPE_MARKERS = {
+  UNDEFINED: "\\u0000_",
+  DATE: "\\u0000D",
+  URL: "\\u0000U",
+  REGEXP: "\\u0000R",
+  MAP: "\\u0000M",
+  SET: "\\u0000S",
+  REF: "\\u0000$",
+  BIGINT: "\\u0000B",
+  SYMBOL: "\\u0000Y",
+  ERROR: "\\u0000E",
+};
+
+function deserializeManduProps(json) {
+  const ctx = { refs: [] };
+  return deserializeManduValue(JSON.parse(json), ctx);
+}
+
+function deserializeManduValue(value, ctx) {
+  if (value === null) return null;
+  if (typeof value === 'string') {
+    if (value === TYPE_MARKERS.UNDEFINED) return undefined;
+    if (value.startsWith("\\u0000\\u0000")) return value.slice(2);
+    if (value.startsWith(TYPE_MARKERS.DATE)) return new Date(value.slice(2));
+    if (value.startsWith(TYPE_MARKERS.URL)) return new URL(value.slice(2));
+    if (value.startsWith(TYPE_MARKERS.REGEXP)) {
+      const str = value.slice(2);
+      const match = str.match(/^\\/(.*)\\/([gimsuy]*)$/);
+      return match ? new RegExp(match[1], match[2]) : str;
+    }
+    if (value.startsWith(TYPE_MARKERS.BIGINT)) return BigInt(value.slice(2));
+    if (value.startsWith(TYPE_MARKERS.SYMBOL)) return Symbol(value.slice(2));
+    if (value.startsWith(TYPE_MARKERS.REF)) return ctx.refs[parseInt(value.slice(2), 10)];
+    return value;
+  }
+  if (typeof value === 'boolean' || typeof value === 'number') return value;
+  if (Array.isArray(value)) {
+    const marker = value[0];
+    if (marker === TYPE_MARKERS.ERROR) {
+      const error = new Error(value[2]);
+      error.name = value[1];
+      if (value[3]) error.stack = value[3];
+      ctx.refs.push(error);
+      return error;
+    }
+    if (marker === TYPE_MARKERS.MAP) {
+      const map = new Map();
+      ctx.refs.push(map);
+      for (let i = 1; i < value.length; i++) {
+        const entry = value[i];
+        map.set(deserializeManduValue(entry[0], ctx), deserializeManduValue(entry[1], ctx));
+      }
+      return map;
+    }
+    if (marker === TYPE_MARKERS.SET) {
+      const set = new Set();
+      ctx.refs.push(set);
+      for (let i = 1; i < value.length; i++) {
+        set.add(deserializeManduValue(value[i], ctx));
+      }
+      return set;
+    }
+    const arr = [];
+    ctx.refs.push(arr);
+    for (const item of value) arr.push(deserializeManduValue(item, ctx));
+    return arr;
+  }
+  if (typeof value === 'object') {
+    const obj = {};
+    ctx.refs.push(obj);
+    for (const [key, nested] of Object.entries(value)) {
+      obj[key] = deserializeManduValue(nested, ctx);
+    }
+    return obj;
+  }
+  return value;
+}
+
 // 서버 데이터
 function readManduData() {
   if (window.__MANDU_DATA__) return window.__MANDU_DATA__;
@@ -537,7 +615,7 @@ function readManduData() {
   }
 
   try {
-    window.__MANDU_DATA__ = JSON.parse(raw);
+    window.__MANDU_DATA__ = deserializeManduProps(raw);
   } catch (error) {
     console.warn('[Mandu] Failed to parse server data:', error);
     window.__MANDU_DATA__ = {};
@@ -547,6 +625,44 @@ function readManduData() {
 }
 
 const getServerData = (id) => readManduData()[id]?.serverData || {};
+
+function findPropsScript(id) {
+  const scripts = document.querySelectorAll('script[data-mandu-props]');
+  for (const script of scripts) {
+    if (script.getAttribute('data-mandu-props') === id) {
+      return script;
+    }
+  }
+  return null;
+}
+
+function parsePropsScript(id) {
+  const script = findPropsScript(id);
+  if (!script || !script.textContent) return null;
+  try {
+    return deserializeManduProps(script.textContent);
+  } catch (error) {
+    console.warn('[Mandu] Failed to parse data-mandu-props for island ' + id + ':', error);
+    return null;
+  }
+}
+
+function readDataProps(element) {
+  const propsEl = element.hasAttribute('data-props')
+    ? element
+    : element.querySelector('[data-props]');
+  if (!propsEl) return null;
+  try {
+    return deserializeManduProps(propsEl.getAttribute('data-props') || '{}');
+  } catch (error) {
+    console.warn('[Mandu] Failed to parse data-props fallback:', error);
+    return null;
+  }
+}
+
+function getIslandProps(id, element) {
+  return parsePropsScript(id) || readDataProps(element) || getServerData(id);
+}
 
 /**
  * Error Boundary 컴포넌트 (Class Component)
@@ -684,8 +800,44 @@ function createHydrationOptions(element, id, mode) {
 /**
  * Hydration 스케줄러
  */
-function scheduleHydration(element, src, priority) {
-  switch (priority) {
+function priorityToHydrateStrategy(priority) {
+  return priority === 'immediate' ? 'load' : priority;
+}
+
+function scheduleHydration(element, src, strategy) {
+  if (!strategy) strategy = 'load';
+  if (strategy === 'immediate') strategy = 'load';
+
+  if (strategy.startsWith('media(') && strategy.endsWith(')')) {
+    const query = strategy.slice('media('.length, -1).trim();
+    if (!query || !window.matchMedia) {
+      loadAndHydrate(element, src);
+      return;
+    }
+    const mql = window.matchMedia(query);
+    if (mql.matches) {
+      loadAndHydrate(element, src);
+      return;
+    }
+    const onChange = (event) => {
+      if (!event.matches) return;
+      if (mql.removeEventListener) {
+        mql.removeEventListener('change', onChange);
+      } else if (mql.removeListener) {
+        mql.removeListener(onChange);
+      }
+      loadAndHydrate(element, src);
+    };
+    if (mql.addEventListener) {
+      mql.addEventListener('change', onChange);
+    } else if (mql.addListener) {
+      mql.addListener(onChange);
+    }
+    return;
+  }
+
+  switch (strategy) {
+    case 'load':
     case 'immediate':
       loadAndHydrate(element, src);
       break;
@@ -697,7 +849,7 @@ function scheduleHydration(element, src, priority) {
             observer.disconnect();
             loadAndHydrate(element, src);
           }
-        }, { rootMargin: '50px' });
+        }, { rootMargin: '200px' });
         const target = resolveHydrationTarget(element);
         observer.observe(target);
       } else {
@@ -716,20 +868,20 @@ function scheduleHydration(element, src, priority) {
     case 'interaction': {
       const target = resolveHydrationTarget(element);
       const hydrate = () => {
-        target.removeEventListener('mouseenter', hydrate);
-        target.removeEventListener('focusin', hydrate);
         target.removeEventListener('touchstart', hydrate);
-        target.removeEventListener('pointerdown', hydrate);
+        target.removeEventListener('click', hydrate);
         target.removeEventListener('keydown', hydrate);
         loadAndHydrate(element, src);
       };
-      target.addEventListener('mouseenter', hydrate, { once: true, passive: true });
-      target.addEventListener('focusin', hydrate, { once: true });
       target.addEventListener('touchstart', hydrate, { once: true, passive: true });
-      target.addEventListener('pointerdown', hydrate, { once: true, passive: true });
+      target.addEventListener('click', hydrate, { once: true });
       target.addEventListener('keydown', hydrate, { once: true });
       break;
     }
+
+    default:
+      console.warn('[Mandu] Unknown hydrate strategy "' + strategy + '", falling back to load.');
+      loadAndHydrate(element, src);
   }
 }
 
@@ -758,23 +910,7 @@ async function loadAndHydrate(element, src) {
     // Dynamic import - 이 시점에 Island 모듈 로드
     const module = await import(src);
     const island = module.default;
-    let data = getServerData(id);
-
-    // Fallback: read data-props from the island root or a child element if
-    // __MANDU_DATA__ is empty. Inline partials put their serialized props on
-    // the root marker itself.
-    if (!data || Object.keys(data).length === 0) {
-      const propsEl = element.hasAttribute('data-props')
-        ? element
-        : element.querySelector('[data-props]');
-      if (propsEl) {
-        try {
-          data = JSON.parse(propsEl.getAttribute('data-props'));
-        } catch (e) {
-          console.warn('[Mandu] Failed to parse data-props fallback:', e);
-        }
-      }
-    }
+    const data = getIslandProps(id, element);
 
     // Mandu Island (preferred)
     if (island && island.__mandu_island === true) {
@@ -919,6 +1055,7 @@ function hydrateIslands() {
     const id = el.getAttribute('data-mandu-island');
     const src = el.getAttribute('data-mandu-src');
     const priority = el.getAttribute('data-mandu-priority') || '${HYDRATION.DEFAULT_PRIORITY}';
+    const hydrateStrategy = el.getAttribute('data-hydrate') || priorityToHydrateStrategy(priority);
 
     if (!id || !src) {
       console.warn('[Mandu] Island missing id or src:', el);
@@ -932,7 +1069,7 @@ function hydrateIslands() {
     }
     seenIds.add(id);
 
-    scheduleHydration(el, src, priority);
+    scheduleHydration(el, src, hydrateStrategy);
   }
 }
 
@@ -1173,19 +1310,24 @@ function compilePattern(pattern) {
   if (cached) return cached;
 
   const paramNames = [];
-  let paramIndex = 0;
-  const paramMatches = [];
-
-  const withPlaceholders = pattern.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, name) => {
-    paramMatches.push(name);
-    return '%%PARAM%%';
-  });
-
-  const escaped = withPlaceholders.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
-  const regexStr = escaped.replace(/%%PARAM%%/g, () => {
-    paramNames.push(paramMatches[paramIndex++]);
-    return '([^/]+)';
-  });
+  const normalized = pattern === '/' ? '/' : pattern.replace(/\\/+$/, '') || '/';
+  const segments = normalized.split('/').filter(Boolean);
+  const regexStr = segments.length === 0
+    ? '/'
+    : segments.map((segment) => {
+        if (segment === '*') return '/.+';
+        const wildcardMatch = segment.match(/^:([a-zA-Z_][a-zA-Z0-9_]*)\\*(\\?)?$/);
+        if (wildcardMatch) {
+          paramNames.push(wildcardMatch[1]);
+          return wildcardMatch[2] === '?' ? '(?:/(.*))?' : '/(.+)';
+        }
+        const paramMatch = segment.match(/^:([a-zA-Z_][a-zA-Z0-9_]*)$/);
+        if (paramMatch) {
+          paramNames.push(paramMatch[1]);
+          return '/([^/]+)';
+        }
+        return '/' + segment.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
+      }).join('');
 
   const compiled = { regex: new RegExp('^' + regexStr + '$'), paramNames };
   patternCacheSet(pattern, compiled);
@@ -1198,7 +1340,7 @@ function extractParams(pattern, pathname) {
   if (!match) return {};
 
   const params = {};
-  compiled.paramNames.forEach((name, i) => { params[name] = match[i + 1]; });
+  compiled.paramNames.forEach((name, i) => { params[name] = match[i + 1] || ''; });
   return params;
 }
 
@@ -1462,6 +1604,7 @@ function generateIslandEntry(routeId: string, clientModulePath: string, exportNa
  * Mandu Island: ${commentRouteId} (Generated)
  * Pure export - no side effects
  */
+import React from "react";
 import * as islandModule from ${importSpecifier};
 
 const candidateExportNames = ${JSON.stringify(candidates)};
@@ -1480,7 +1623,13 @@ function resolveIslandExport(mod) {
 }
 
 const island = resolveIslandExport(islandModule);
-export default island;
+const exportedIsland = island && island.__mandu_island === true
+  ? island
+  : function ManduGeneratedIsland(props) {
+      return React.createElement(island, props || {});
+    };
+
+export default exportedIsland;
 `;
 }
 
@@ -1936,6 +2085,13 @@ function vendorShimFailureHint(shimName: string): string {
   return "Hint: check the import paths and ensure the vendor package is installed.";
 }
 
+function routeIdToAssetStem(routeId: string): string {
+  const safe = routeId.replace(/[<>:"/\\|?*\x00-\x1F]/g, (ch) =>
+    `_${ch.codePointAt(0)!.toString(16)}_`
+  );
+  return safe.replace(/[. ]+$/g, "") || "route";
+}
+
 /**
  * 단일 Island 번들 빌드
  */
@@ -1946,8 +2102,10 @@ async function buildIsland(
   options: BundlerOptions
 ): Promise<BundleOutput> {
   const clientModulePath = path.join(rootDir, route.clientModule!);
-  const entryPath = path.join(outDir, `_entry_${route.id}.js`);
-  const outputName = `${route.id}.island.js`;
+  const assetStem = routeIdToAssetStem(route.id);
+  const entryStem = `_entry_${assetStem}`;
+  const entryPath = path.join(outDir, `${entryStem}.js`);
+  const outputName = `${assetStem}.island.js`;
 
   // Phase 7.1 B-1/B-4: wire native Fast Refresh transform + Mandu's
   // boundary injection plugin. Dev-only; prod bundles remain clean.
@@ -1991,7 +2149,7 @@ async function buildIsland(
     if (options.splitting && result.outputs.length > 0) {
       // splitting 모드: 결과에서 엔트리 파일 찾기
       const entryOutput = result.outputs.find(
-        (o) => o.kind === "entry-point" || o.path.includes(route.id)
+        (o) => o.kind === "entry-point" || o.path.includes(entryStem) || o.path.includes(assetStem)
       );
       if (entryOutput) {
         actualOutputPath = entryOutput.path;
