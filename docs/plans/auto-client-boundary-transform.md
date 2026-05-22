@@ -395,9 +395,9 @@ Checklist:
 - [x] Targeted F42/F45 regression suite passes.
 - [x] `git diff --check`
 - [x] Changeset added for affected packages.
-- [ ] Version updated.
+- [x] Version updated.
 - [x] Publish dry checks pass.
-- [ ] npm publish completed.
+- [x] npm publish completed.
 - [ ] GitHub issue comment explains the architectural fix and validation.
 - [ ] Related issue closed.
 
@@ -412,6 +412,7 @@ Validation log:
 - [x] 2026-05-23: `bun run test:packages` passed, including `test:core`, CLI, MCP, ATE, Edge, Skills, and Playground Runner package gates.
 - [x] 2026-05-23: `party-pledge-mandu` at `D:\workspace\party-pledge-mandu` built with local Mandu sources and verified `/pledges/:id`, `/me`, `/notifications`, `/pledges/new`, and `/search`: boundary count matched props count, `.boundary.js` sources were present, and legacy route `.island.js` wrappers were absent.
 - [x] 2026-05-23: `bun run publish:dry` passed; current published versions already exist on npm, so real publish requires `bun run version` before `bun run publish`.
+- [x] 2026-05-23: `bun run version` applied the changeset, then `bun run publish` published `@mandujs/core@0.54.18`, `@mandujs/mcp@0.38.10`, `@mandujs/edge@0.4.66`, and `@mandujs/cli@0.44.21` to npm; release tags and `main` were pushed.
 
 ## F43 Benchmark, Build Graph, and Incremental Cache
 
@@ -832,13 +833,13 @@ Exit criteria:
 - [x] Run full gates.
 - [x] Run focused F42/F45 regression gates.
 - [x] Add changeset.
-- [ ] Version and publish.
+- [x] Version and publish.
 - [ ] Comment and close related GitHub issue.
 
 Exit criteria:
 
-- [ ] Published package includes F42.
-- [ ] Real app hydration path is verified.
+- [x] Published package includes F42.
+- [x] Real app hydration path is verified.
 - [ ] GitHub issue has an explanation of what changed and how it was validated.
 
 ## Acceptance Criteria
@@ -922,7 +923,7 @@ Exit criteria:
 | Phase 3 runtime and manifest | Done | Internal boundary runtime, route metadata, manifest id replay, unique instance ids, streaming boundary context, bundle manifest delivery, and boundary rebuild paths are in place |
 | Phase 4 hydration integration | Done | Boundary-local props, route data fallback warning, named/default export resolution, and route-level island suppression are supported in generated runtime |
 | Phase 5 guardrails and tooling | In progress | Boundary transform diagnostics now fail unsupported children, refs, inline function props, visible non-serializable prop values, unresolved client exports, server-only client imports, and duplicate boundary ids; runtime boundary props fail strict serialization; MCP boundary inspection and diagnose boundary-manifest checks exist |
-| Phase 6 dogfood and release | In progress | Real app routes, full gates, and dry publish passed; version and npm publish remain |
+| Phase 6 dogfood and release | In progress | Real app routes, full gates, versioning, npm publish, release tags, and main push are complete; GitHub issue comment/close remains |
 | F43 benchmark harness | Not started | Add repeatable performance measurements |
 | F43 build graph | Not started | Track route/layout/client dependency invalidation |
 | F43 incremental cache | Not started | Avoid regenerating unaffected routes and manifests |
