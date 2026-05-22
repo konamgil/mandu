@@ -1,5 +1,14 @@
 # @mandujs/mcp
 
+## 0.38.9
+
+### Patch Changes
+
+- Capture inline client component props through SSR server wrappers and infer missing client export names at runtime.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.17
+
 ## 0.38.8
 
 ### Patch Changes

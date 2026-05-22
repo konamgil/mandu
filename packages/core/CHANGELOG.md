@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.17
+
+### Patch Changes
+
+- Capture inline client component props through SSR server wrappers and infer missing client export names at runtime.
+
 ## 0.54.16
 
 ### Patch Changes

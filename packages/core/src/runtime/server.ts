@@ -1124,16 +1124,13 @@ async function resolveInlineClientHydrationTarget(
   rootDir: string,
   src: string,
 ): Promise<InlineClientHydrationTarget | undefined> {
-  if (!route.clientModule || !route.clientExportName || !src) {
+  if (!route.clientModule || !src) {
     return undefined;
   }
 
   try {
     const module = await import(path.join(rootDir, route.clientModule));
-    const exportName = route.clientExportName;
-    const component = exportName === "default"
-      ? module.default
-      : module[exportName] ?? module.default;
+    const component = resolveInlineClientHydrationComponent(module, route);
 
     if (!component) return undefined;
 
@@ -1150,6 +1147,46 @@ async function resolveInlineClientHydrationTarget(
     );
     return undefined;
   }
+}
+
+function resolveInlineClientHydrationComponent(
+  module: Record<string, unknown>,
+  route: { id: string; clientModule?: string; clientExportName?: string },
+): unknown {
+  if (module.default) return module.default;
+
+  const candidates = [
+    route.clientExportName && route.clientExportName !== "default" ? route.clientExportName : undefined,
+    inferInlineClientExportNameFromPath(route.clientModule),
+    inferInlineClientExportNameFromRouteId(route.id),
+  ].filter((candidate, index, values): candidate is string =>
+    !!candidate && values.indexOf(candidate) === index
+  );
+
+  for (const candidate of candidates) {
+    if (module[candidate]) return module[candidate];
+  }
+
+  const runtimeExports = Object.keys(module).filter((name) => name !== "__esModule");
+  return runtimeExports.length === 1 ? module[runtimeExports[0]] : undefined;
+}
+
+function inferInlineClientExportNameFromPath(clientModulePath: string | undefined): string | undefined {
+  if (!clientModulePath) return undefined;
+  const basename = path.basename(clientModulePath).replace(/\.[cm]?[jt]sx?$/, "");
+  const withoutClientSuffix = basename.replace(/\.(client|island)$/, "");
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(withoutClientSuffix)
+    ? withoutClientSuffix
+    : undefined;
+}
+
+function inferInlineClientExportNameFromRouteId(routeId: string): string | undefined {
+  const pascal = routeId
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(pascal) ? pascal : undefined;
 }
 
 const INTERNAL_CACHE_ENDPOINT = "/_mandu/cache";

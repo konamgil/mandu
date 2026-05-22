@@ -125,11 +125,14 @@ async function resolveAndWrapInlineClientHydration(
     };
   }
 
-  if (typeof type === "function" && isAsyncFunctionComponent(type)) {
-    const rendered = await (type as (props: Record<string, unknown>) => React.ReactNode | Promise<React.ReactNode>)(
+  if (typeof type === "function" && !isClassComponent(type)) {
+    const rendered = await renderFunctionComponentForInlineHydration(
+      type,
       element.props ?? {},
     );
-    return resolveAndWrapInlineClientHydration(rendered, target, counter);
+    if (rendered.ok) {
+      return resolveAndWrapInlineClientHydration(rendered.node, target, counter);
+    }
   }
 
   const props = element.props;
@@ -152,6 +155,42 @@ async function resolveAndWrapInlineClientHydration(
 function isAsyncFunctionComponent(type: Function): boolean {
   return !type.prototype?.isReactComponent &&
     (type as { constructor?: { name?: string } }).constructor?.name === "AsyncFunction";
+}
+
+function isClassComponent(type: Function): boolean {
+  return !!type.prototype?.isReactComponent;
+}
+
+async function renderFunctionComponentForInlineHydration(
+  type: Function,
+  props: Record<string, unknown>,
+): Promise<{ ok: true; node: React.ReactNode } | { ok: false }> {
+  const render = type as (props: Record<string, unknown>) => React.ReactNode | Promise<React.ReactNode>;
+  if (isAsyncFunctionComponent(type)) {
+    return { ok: true, node: await render(props) };
+  }
+
+  if (functionComponentLooksHookDependent(type)) {
+    return { ok: false };
+  }
+
+  try {
+    return { ok: true, node: await render(props) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function functionComponentLooksHookDependent(type: Function): boolean {
+  let source = "";
+  try {
+    source = Function.prototype.toString.call(type);
+  } catch {
+    return true;
+  }
+
+  return /\bReact\.use[A-Za-z0-9_$]*\s*\(/.test(source) ||
+    /\buse[A-Z][A-Za-z0-9_$]*\s*\(/.test(source);
 }
 
 function priorityToHydrate(priority: InlineClientHydrationTarget["priority"]): string {
