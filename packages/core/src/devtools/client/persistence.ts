@@ -142,6 +142,12 @@ export class PersistenceManager {
           activeTab: 'unknown',
         },
       });
+      // A repeatedly-failing flush (e.g. a non-quota storage error) must not
+      // let pendingEvents grow unbounded. Keep only the most recent batch.
+      const cap = this.config.maxPersistEvents;
+      if (this.pendingEvents.length > cap) {
+        this.pendingEvents = this.pendingEvents.slice(-cap);
+      }
     }
   }
 

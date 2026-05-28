@@ -195,7 +195,20 @@ export function ErrorOverlay({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
-      } else if (e.key === 'i' || e.key === 'I') {
+        return;
+      }
+      // Don't hijack single-letter shortcuts while the user is typing in an
+      // editable element, or when a modifier is held (e.g. real Ctrl/Cmd+C).
+      const target = e.target as HTMLElement | null;
+      const isEditable = !!target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      );
+      if (isEditable || e.ctrlKey || e.metaKey || e.altKey) {
+        return;
+      }
+      if (e.key === 'i' || e.key === 'I') {
         onIgnore();
       } else if (e.key === 'c' || e.key === 'C') {
         onCopy();
