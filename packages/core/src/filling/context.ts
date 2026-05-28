@@ -549,7 +549,16 @@ export class ManduContext {
     let data: unknown;
 
     if (contentType.includes("application/json")) {
-      data = await this.request.json();
+      try {
+        data = await this.request.json();
+      } catch (cause) {
+        // Empty or malformed JSON body is a client error (400),
+        // not a framework bug (500). See issue #318.
+        throw new BadRequestError(
+          "Invalid or empty JSON request body",
+          cause
+        );
+      }
     } else if (contentType.includes("application/x-www-form-urlencoded")) {
       const formData = await this.request.formData();
       data = Object.fromEntries(formData.entries());
@@ -886,5 +895,21 @@ export class ValidationError extends Error {
   ) {
     super("Validation failed");
     this.name = "ValidationError";
+  }
+}
+
+/**
+ * Bad request error (400 Bad Request)
+ *
+ * Raised when client-supplied input cannot be processed, e.g. an empty or
+ * malformed JSON request body in {@link ManduContext.body}. This is the
+ * client's fault and must never be classified as a framework bug (500).
+ */
+export class BadRequestError extends Error {
+  readonly statusCode = 400;
+
+  constructor(message: string = "Bad request", cause?: unknown) {
+    super(message, { cause });
+    this.name = "BadRequestError";
   }
 }

@@ -1328,7 +1328,7 @@ async function handleRequestObserved(
   const result = await handleRequestInternal(req, router, registry);
 
   if (!result.ok) {
-    const errorResponse = errorToResponse(result.error, registry.settings.isDev);
+    const errorResponse = errorToResponse(result.error, registry.settings.isDev, req);
     if (registry.settings.isDev) {
       // #177: dev 모드 에러 응답도 캐시 방지
       if (!errorResponse.headers.has("Cache-Control")) {
@@ -2394,14 +2394,14 @@ async function renderNotFoundPage(
   if (!registration) {
     const handler = registry.notFoundHandler;
     if (!handler) {
-      return errorToResponse(createNotFoundResponse(new URL(req.url).pathname), settings.isDev);
+      return errorToResponse(createNotFoundResponse(new URL(req.url).pathname), settings.isDev, req);
     }
     try {
       const globalReg = await handler();
       registration = { component: globalReg.component as React.ComponentType<Record<string, unknown>>, filling: globalReg.filling };
     } catch (handlerError) {
       console.error(`[Mandu] global notFoundHandler failed; falling back to built-in 404:`, handlerError);
-      return errorToResponse(createNotFoundResponse(new URL(req.url).pathname), settings.isDev);
+      return errorToResponse(createNotFoundResponse(new URL(req.url).pathname), settings.isDev, req);
     }
   }
 
@@ -2460,7 +2460,7 @@ async function renderNotFoundPage(
     return response;
   } catch (renderError) {
     console.error(`[Mandu] app/not-found.tsx render failed; falling back to built-in 404:`, renderError);
-    return errorToResponse(createNotFoundResponse(new URL(req.url).pathname), settings.isDev);
+    return errorToResponse(createNotFoundResponse(new URL(req.url).pathname), settings.isDev, req);
   }
 }
 
@@ -3394,7 +3394,7 @@ async function handleRequestInternal(
       // Surface error-path responses to the chain so logging / metrics
       // layers see the final status. The outer `handleRequest` still owns
       // dev-mode Cache-Control stamping + observability lifecycle emission.
-      return errorToResponse(result.error, settings.isDev);
+      return errorToResponse(result.error, settings.isDev, finalReq);
     },
   });
   if (middlewareResponse) {

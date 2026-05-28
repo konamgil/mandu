@@ -62,11 +62,20 @@ function hasHttpMethodHandlers(module: RouteModule): boolean {
 function createMethodDispatcher(module: RouteModule, routeId: string) {
   return async (req: Request, params: Record<string, string> = {}) => {
     const method = req.method.toUpperCase();
-    const handler = (isHttpMethod(method) ? module[method] : undefined) as
+    // RFC 7231 §4.3.2: HEAD is GET without a body. When no explicit HEAD
+    // export exists, dispatch to GET and strip the body — preserving the
+    // status + headers GET produced. An explicit HEAD export wins.
+    const stripBody = method === "HEAD" && typeof module.HEAD !== "function";
+    const lookup = stripBody ? "GET" : method;
+    const handler = (isHttpMethod(lookup) ? module[lookup] : undefined) as
       | ((request: Request, context?: { params: Record<string, string> }) => Response | Promise<Response>)
       | undefined;
 
     if (!handler) {
+      const allow = HTTP_METHODS.filter((m) => typeof module[m] === "function");
+      if (typeof module.GET === "function" && !allow.includes("HEAD")) {
+        allow.push("HEAD");
+      }
       return Response.json(
         {
           error: `Method ${method} not allowed for route ${routeId}`,
@@ -74,13 +83,21 @@ function createMethodDispatcher(module: RouteModule, routeId: string) {
         {
           status: 405,
           headers: {
-            Allow: HTTP_METHODS.filter((m) => typeof module[m] === "function").join(", "),
+            Allow: allow.join(", "),
           },
         }
       );
     }
 
-    return handler(req, { params });
+    const response = await handler(req, { params });
+    if (stripBody) {
+      return new Response(null, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    }
+    return response;
   };
 }
 

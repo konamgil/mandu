@@ -5,7 +5,7 @@
  * DNA-002: 의존성 주입 패턴 지원
  */
 
-import { ManduContext, ValidationError } from "./context";
+import { ManduContext, ValidationError, BadRequestError } from "./context";
 import { AuthenticationError, AuthorizationError } from "./auth";
 import { type FillingDeps, globalDeps } from "./deps";
 import { ErrorClassifier, formatErrorResponse, ErrorCode } from "../error";
@@ -595,9 +595,18 @@ export class ManduFilling<TLoaderData = unknown> {
       if (actionResult) return actionResult;
     }
 
-    const handler = this.config.handlers.get(method);
+    // RFC 7231 §4.3.2: HEAD is GET without a body. A route that only
+    // registers a GET handler must still serve HEAD — run GET, then strip
+    // the body while preserving status + headers. An explicit HEAD handler
+    // takes precedence when present.
+    const stripBody = method === "HEAD" && !this.config.handlers.has("HEAD");
+    const handler = this.config.handlers.get(method) ?? (stripBody ? this.config.handlers.get("GET") : undefined);
     if (!handler) {
-      return ctx.json({ status: "error", message: `Method ${method} not allowed`, allowed: Array.from(this.config.handlers.keys()) }, 405);
+      const allowed = Array.from(this.config.handlers.keys());
+      if (this.config.handlers.has("GET") && !allowed.includes("HEAD")) {
+        allowed.push("HEAD");
+      }
+      return ctx.json({ status: "error", message: `Method ${method} not allowed`, allowed }, 405);
     }
     const lifecycleWithDefaults = this.createLifecycleWithDefaults(routeContext);
     const runHandler = async () => {
@@ -615,7 +624,17 @@ export class ManduFilling<TLoaderData = unknown> {
       const composed = compose(chain);
       return composed(ctx);
     };
-    return executeLifecycle(lifecycleWithDefaults, ctx, runHandler, options);
+    const response = await executeLifecycle(lifecycleWithDefaults, ctx, runHandler, options);
+    if (stripBody) {
+      // Preserve status + headers (incl. Content-Type / Content-Length the
+      // GET handler set), drop the body. A null-body Response keeps headers.
+      return new Response(null, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    }
+    return response;
   }
 
   /**
@@ -744,6 +763,9 @@ export class ManduFilling<TLoaderData = unknown> {
       }
       if (error instanceof ValidationError) {
         return ctx.json({ errorType: "LOGIC_ERROR", code: ErrorCode.SLOT_VALIDATION_ERROR, message: "Validation failed", summary: "입력 검증 실패 - 요청 데이터 확인 필요", fix: { file: routeContext ? `spec/slots/${routeContext.routeId}.slot.ts` : "spec/slots/", suggestion: "요청 데이터가 스키마와 일치하는지 확인하세요" }, route: routeContext, errors: error.errors, timestamp: new Date().toISOString() }, 400);
+      }
+      if (error instanceof BadRequestError) {
+        return ctx.json({ errorType: "CLIENT_ERROR", code: "MANDU_C400", message: error.message, summary: "잘못된 요청 본문 - 클라이언트 입력 확인 필요", route: routeContext, timestamp: new Date().toISOString() }, 400);
       }
       const classifier = new ErrorClassifier(null, routeContext ? { id: routeContext.routeId, pattern: routeContext.pattern } : undefined);
       const manduError = classifier.classify(error);
