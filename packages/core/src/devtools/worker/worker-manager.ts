@@ -245,6 +245,8 @@ export class WorkerManager {
         { source: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}', label: 'EMAIL' },
         { source: '\\\\+?[1-9]\\\\d{1,14}', label: 'PHONE' },
         { source: '\\\\b(?:\\\\d{1,3}\\\\.){3}\\\\d{1,3}\\\\b', label: 'IP' },
+        { source: '\\\\b(?:\\\\d{4}[- ]?){3}\\\\d{4}\\\\b', label: 'CARD' },
+        { source: '\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b', label: 'SSN' },
       ];
 
       function applyPattern(text, pattern) {

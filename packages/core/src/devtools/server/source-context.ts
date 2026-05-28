@@ -174,11 +174,22 @@ export class SourceContextProvider {
    * 안전한 경로 확인 (Path Traversal 방지)
    */
   private resolveSafePath(file: string): string | null {
+    // Reject absolute inputs outright: path.resolve(root, "/etc/passwd")
+    // returns "/etc/passwd", escaping the project root.
+    if (path.isAbsolute(file)) {
+      return null;
+    }
+
     const absolutePath = path.resolve(this.options.projectRoot, file);
     const normalizedRoot = path.normalize(this.options.projectRoot);
+    // Compare with a trailing separator so a sibling sharing the root's
+    // prefix (e.g. "/app/project-secrets" vs root "/app/project") is NOT
+    // treated as inside the root. Allow the root itself.
+    const rootWithSep = normalizedRoot.endsWith(path.sep)
+      ? normalizedRoot
+      : normalizedRoot + path.sep;
 
-    // 확인된 경로가 프로젝트 루트 내에 있는지 확인
-    if (!absolutePath.startsWith(normalizedRoot)) {
+    if (absolutePath !== normalizedRoot && !absolutePath.startsWith(rootWithSep)) {
       return null;
     }
 

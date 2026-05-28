@@ -56,6 +56,8 @@ const DEFAULT_OPTIONS: Required<NetworkProxyOptions> = {
   ignorePatterns: [
     // DevTools 자체 요청
     /__mandu/,
+    // DevTools 에러 리포트 엔드포인트 (자기추적/피드백 루프 방지)
+    /__kitchen/,
     // HMR
     /__vite/,
     /\.hot-update\./,
