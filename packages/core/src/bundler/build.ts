@@ -633,11 +633,13 @@ function generateJsxRuntimeShimSource(): string {
 /**
  * Mandu JSX Runtime Shim (Generated)
  * Production JSX 변환용
- * jsx/jsxs/Fragment는 'react/jsx-runtime' 원본에서 직접 가져온다.
- * import map의 'react/jsx-runtime'이 다시 이 셰임을 가리키므로,
- * 셰임 내부는 실제 원본 경로를 직접 참조해야 순환/누락이 생기지 않는다.
+ *
+ * #323: import map의 'react/jsx-runtime'이 다시 이 셰임을 가리키므로
+ * 'react/jsx-runtime'에서 import하면 순환 self-import가 된다. 대신
+ * 'react'(→ _react.js, external 없이 react 전체를 인라인하며 jsx/jsxs/
+ * Fragment를 re-export하는 vendor 번들)에서 가져와 순환을 끊는다.
  */
-import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
+import { jsx, jsxs, Fragment } from 'react';
 
 // Named exports
 export { jsx, jsxs, Fragment };
@@ -656,11 +658,14 @@ function generateJsxDevRuntimeShimSource(): string {
 /**
  * Mandu JSX Dev Runtime Shim (Generated)
  * Development JSX 변환용
- * jsxDEV/Fragment는 'react'가 아니라 'react/jsx-dev-runtime'에서만 export된다.
- * import map의 'react/jsx-dev-runtime'이 다시 이 셰임을 가리키므로,
- * 셰임 내부는 실제 원본 경로를 직접 참조해야 순환/누락(jsxDEV undefined)이 생기지 않는다.
+ *
+ * #323: import map의 'react/jsx-dev-runtime'이 다시 이 셰임을 가리키므로
+ * 'react/jsx-dev-runtime'에서 import하면 순환 self-import가 되어 jsxDEV가
+ * undefined가 된다. 대신 'react'(→ _react.js, external 없이 react 전체를
+ * 인라인하며 jsxDEV/Fragment를 re-export하는 vendor 번들)에서 가져와
+ * 순환을 끊는다.
  */
-import { jsxDEV, Fragment } from 'react/jsx-dev-runtime';
+import { jsxDEV, Fragment } from 'react';
 
 // Named exports
 export { jsxDEV, Fragment };
