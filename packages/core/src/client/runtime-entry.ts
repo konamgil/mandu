@@ -160,6 +160,7 @@ class IslandErrorBoundary extends Component<IslandErrorBoundaryProps, IslandErro
 
   componentDidCatch(error: Error, errorInfo: unknown): void {
     console.error("[Mandu] Island error:", this.props.islandId, error, errorInfo);
+    emitIslandHydrationError(this.props.islandId, error);
   }
 
   reset = (): void => {
@@ -371,6 +372,35 @@ function isManduIslandExport(value: unknown): value is ManduIslandExport {
     "definition" in value;
 }
 
+// #324: surface island hydration/render failures to the in-page DevTools so
+// its health badge and Issues counter reflect them instead of staying
+// "HEALTHY". Render-time errors are swallowed by IslandErrorBoundary and never
+// reach the global error listener, so we emit them to the devtools hook here.
+function emitIslandHydrationError(islandId: string, error: unknown): void {
+  const devtoolsHook = (window as Window & {
+    __MANDU_DEVTOOLS_HOOK__?: RuntimeDevtoolsHook;
+  }).__MANDU_DEVTOOLS_HOOK__;
+  if (!devtoolsHook) return;
+  try {
+    devtoolsHook.emit({
+      type: "error",
+      timestamp: Date.now(),
+      data: {
+        id: "island-" + islandId + "-" + Date.now(),
+        type: "runtime",
+        severity: "error",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: Date.now(),
+        url: location.href,
+        islandId,
+      },
+    });
+  } catch {
+    // DevTools must never break hydration.
+  }
+}
+
 async function loadAndHydrate(element: HTMLElement, src: string): Promise<void> {
   const id = element.getAttribute("data-mandu-island");
   if (!id) {
@@ -490,6 +520,7 @@ async function loadAndHydrate(element: HTMLElement, src: string): Promise<void> 
   } catch (error) {
     console.error("[Mandu] Hydration failed for", islandId, error);
     element.setAttribute("data-mandu-error", "true");
+    emitIslandHydrationError(islandId, error);
 
     element.dispatchEvent(new CustomEvent("mandu:hydration-error", {
       bubbles: true,

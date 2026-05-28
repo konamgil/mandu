@@ -362,6 +362,40 @@ describe("buildClientBundles vendor shims", () => {
     expect((globalThis as typeof globalThis & { __MANDU_TEST_DEFAULT_PROPS__?: unknown }).__MANDU_TEST_DEFAULT_PROPS__).toBeUndefined();
   });
 
+  test("surfaces an island hydration failure to the DevTools hook (#324)", async () => {
+    const modulePath = path.join(rootDir, ".mandu", "client", "runtime-failing-boundary.js");
+    // A module that throws at import time → loadAndHydrate's catch runs.
+    await writeFile(modulePath, `throw new Error("boom at import");`, "utf-8");
+
+    const emitted: Array<{ type?: string; data?: { message?: string; islandId?: string } }> = [];
+    (window as unknown as { __MANDU_DEVTOOLS_HOOK__?: { emit: (e: unknown) => void } }).__MANDU_DEVTOOLS_HOOK__ = {
+      emit: (e: unknown) => {
+        emitted.push(e as { type?: string });
+      },
+    };
+
+    document.body.innerHTML = `
+      <div
+        data-mandu-island="failing--0"
+        data-mandu-src="${pathToFileURL(modulePath).href}?t=${Date.now()}"
+        data-hydrate="load"
+      ></div>
+    `;
+    (window as typeof window & { __MANDU_ROOTS__?: Map<string, unknown> }).__MANDU_ROOTS__ = new Map();
+
+    try {
+      const runtime = await evaluateGeneratedHydrationRuntime();
+      runtime.hydrateIslands();
+
+      await waitForRuntimeAssertion(() => emitted.some((e) => e.type === "error"));
+      const errorEvent = emitted.find((e) => e.type === "error");
+      expect(errorEvent?.data?.islandId).toBe("failing--0");
+      expect(errorEvent?.data?.message).toContain("boom at import");
+    } finally {
+      delete (window as unknown as { __MANDU_DEVTOOLS_HOOK__?: unknown }).__MANDU_DEVTOOLS_HOOK__;
+    }
+  });
+
   test("runtime hydrates default client boundary from boundary-local props", async () => {
     const modulePath = path.join(rootDir, ".mandu", "client", "runtime-default-boundary.js");
     await writeFile(
