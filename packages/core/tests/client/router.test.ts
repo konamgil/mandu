@@ -207,4 +207,60 @@ describe("client router", () => {
     expect(getActionData<{ created: boolean }>()).toEqual({ created: true });
     expect(getRouterState().loaderData).toEqual({ items: ["after"] });
   });
+
+  it("issue #316 — falls back to full navigation when target is server-only (clientRenderable: false)", async () => {
+    installMockBrowser("http://localhost/posts/1");
+    globalThis.fetch = ((async () =>
+      Response.json({
+        routeId: "candidates-$id",
+        pattern: "/candidates/:id",
+        params: { id: "nec-1" },
+        loaderData: null,
+        clientRenderable: false,
+      })) as unknown) as typeof fetch;
+
+    await navigate("/candidates/nec-1", { scroll: false });
+
+    // Full document navigation: URL changed via location.href, but the SPA
+    // router state was NOT swapped to the un-renderable route.
+    expect(globalThis.window.location.href).toBe("http://localhost/candidates/nec-1");
+    expect(getRouterState().currentRoute?.id).toBe("posts");
+  });
+
+  it("issue #316 — keeps SPA navigation when target is client-renderable (clientRenderable: true)", async () => {
+    installMockBrowser("http://localhost/posts/1");
+    globalThis.fetch = ((async () =>
+      Response.json({
+        routeId: "posts",
+        pattern: "/posts/:id",
+        params: { id: "2" },
+        loaderData: { items: ["after"] },
+        clientRenderable: true,
+      })) as unknown) as typeof fetch;
+
+    await navigate("/posts/2", { scroll: false });
+
+    expect(globalThis.window.location.href).toBe("http://localhost/posts/2");
+    expect(getRouterState().currentRoute).toEqual({
+      id: "posts",
+      pattern: "/posts/:id",
+      params: { id: "2" },
+    });
+  });
+
+  it("issue #316 — older server (no clientRenderable flag) keeps SPA navigation", async () => {
+    installMockBrowser("http://localhost/posts/1");
+    globalThis.fetch = ((async () =>
+      Response.json({
+        routeId: "posts",
+        pattern: "/posts/:id",
+        params: { id: "3" },
+        loaderData: { items: ["after"] },
+      })) as unknown) as typeof fetch;
+
+    await navigate("/posts/3", { scroll: false });
+
+    expect(globalThis.window.location.href).toBe("http://localhost/posts/3");
+    expect(getRouterState().currentRoute?.params).toEqual({ id: "3" });
+  });
 });

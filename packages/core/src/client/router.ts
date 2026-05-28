@@ -324,6 +324,16 @@ export async function navigate(
     // json 파싱 사이에 새 네비게이션이 시작됐을 수 있음
     if (controller.signal.aborted) return;
 
+    // #316: server-only target (no client-renderable route component). A
+    // client-side state update would change the URL but not the content
+    // ("click does nothing / goes back"). Fall back to a full document
+    // navigation so the server SSRs the page. `=== false` is intentional:
+    // older servers omit the flag, and we must not regress those.
+    if (data.clientRenderable === false) {
+      window.location.href = url.href;
+      return;
+    }
+
     // 상태 + History + 스크롤을 한 번에 적용하는 함수
     const applyUpdate = () => {
       const historyState = { routeId: data.routeId, params: data.params };

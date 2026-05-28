@@ -2638,11 +2638,22 @@ async function handlePageRoute(
     // in prod is zero-value attack surface (request-triggered response
     // header reflection). Silently ignore the request header instead.
     const isHDR = settings.isDev && req.headers.get("x-mandu-hdr") === "1";
+    // #316: tell the full SPA router whether it can render this route on the
+    // client. Server-only pages (no route-level client hydration bundle) have
+    // no client component, so a pushState + state update leaves the URL changed
+    // but the content stale. When false, the router must fall back to a full
+    // document navigation so the server re-renders the page.
+    const clientRenderable = !!(
+      route.hydration &&
+      route.hydration.strategy !== "none" &&
+      settings.bundleManifest?.bundles[route.id]?.js
+    );
     const jsonResponse = Response.json({
       routeId: route.id,
       pattern: route.pattern,
       params,
       loaderData: loaderData ?? null,
+      clientRenderable,
       timestamp: Date.now(),
     });
     if (isHDR) {

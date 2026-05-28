@@ -262,6 +262,72 @@ describe("renderToHTML — link hoisting (#179)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 4b. Meta / JSON-LD hoisting (#317)
+// ---------------------------------------------------------------------------
+
+describe("renderToHTML — meta/JSON-LD hoisting (#317)", () => {
+  const head = (html: string): string =>
+    html.split("<head>")[1]?.split("</head>")[0] ?? "";
+  const body = (html: string): string =>
+    html.split("<body>")[1]?.split("</body>")[0] ?? "";
+
+  it("hoists og:/twitter <meta> from body to head", () => {
+    const el = React.createElement("main", {
+      dangerouslySetInnerHTML: {
+        __html:
+          '<meta property="og:title" content="Hello"><meta name="twitter:card" content="summary">',
+      },
+    });
+
+    const html = renderToHTML(el, { title: "og-test" });
+
+    expect(head(html)).toContain('property="og:title"');
+    expect(head(html)).toContain('name="twitter:card"');
+    expect(body(html)).not.toContain('property="og:title"');
+    expect(body(html)).not.toContain('name="twitter:card"');
+  });
+
+  it("hoists <meta name='description'> from body to head", () => {
+    const el = React.createElement("main", {
+      dangerouslySetInnerHTML: {
+        __html: '<meta name="description" content="A page about pledges">',
+      },
+    });
+
+    const html = renderToHTML(el, { title: "desc-test" });
+    expect(head(html)).toContain('content="A page about pledges"');
+    expect(body(html)).not.toContain('content="A page about pledges"');
+  });
+
+  it("hoists <script type='application/ld+json'> from body to head", () => {
+    const el = React.createElement("main", {
+      dangerouslySetInnerHTML: {
+        __html:
+          '<script type="application/ld+json">{"@context":"https://schema.org"}</script>',
+      },
+    });
+
+    const html = renderToHTML(el, { title: "ldjson-test" });
+    expect(head(html)).toContain('type="application/ld+json"');
+    expect(head(html)).toContain('"@context":"https://schema.org"');
+    expect(body(html)).not.toContain('type="application/ld+json"');
+  });
+
+  it("does NOT hoist microdata <meta itemprop=...> (stays in body)", () => {
+    const el = React.createElement("main", {
+      dangerouslySetInnerHTML: {
+        __html: '<meta itemprop="price" content="9.99">',
+      },
+    });
+
+    const html = renderToHTML(el, { title: "microdata-test" });
+    // itemprop metas are content, not document metadata — must stay in body.
+    expect(body(html)).toContain('itemprop="price"');
+    expect(head(html)).not.toContain('itemprop="price"');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. HMR script injection
 // ---------------------------------------------------------------------------
 

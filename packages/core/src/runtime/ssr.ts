@@ -819,11 +819,35 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   // 폰트/스타일시트는 <head>에 있어야 FOUT 없이 로드됨
   const linkTagPattern = /<link\s[^>]*(?:rel=["'](?:stylesheet|preconnect|preload|icon|dns-prefetch)["'][^>]*|href=["'][^"']+["'][^>]*)\/?\s*>/gi;
   const hoistedLinks: string[] = [];
-  const bodyContent = content.replace(linkTagPattern, (match) => {
+  const bodyAfterLinks = content.replace(linkTagPattern, (match) => {
     hoistedLinks.push(match);
     return "";
   });
   const hoistedLinkTags = hoistedLinks.join("\n  ");
+
+  // #317: hoist body <meta> (og:*, twitter:*, description, …) and JSON-LD into
+  // <head>. The legacy renderToString path does not perform React 19's
+  // document-metadata hoisting, so without this og/twitter cards land in the
+  // body where crawlers ignore them. Mirrors React 19's rule: <meta> is
+  // hoistable document metadata EXCEPT microdata (`itemprop`), which is
+  // content and must stay where it was authored.
+  const metaTagPattern = /<meta\s[^>]*?\/?>/gi;
+  const hoistedMetas: string[] = [];
+  const bodyAfterMeta = bodyAfterLinks.replace(metaTagPattern, (match) => {
+    if (/\bitemprop[\s=]/i.test(match)) return match;
+    hoistedMetas.push(match);
+    return "";
+  });
+  const hoistedMetaTags = hoistedMetas.join("\n  ");
+
+  const ldJsonPattern =
+    /<script\s[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi;
+  const hoistedLdJson: string[] = [];
+  const bodyContent = bodyAfterMeta.replace(ldJsonPattern, (match) => {
+    hoistedLdJson.push(match);
+    return "";
+  });
+  const hoistedLdJsonTags = hoistedLdJson.join("\n  ");
 
   // #273 F15 — React 19 renders document metadata such as <title> from a
   // page component into the body string in this SSR path. Hoist the first
@@ -859,6 +883,8 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
   ${prefetchScriptTag}
   ${spaNavHelperTag}
   ${hoistedLinkTags}
+  ${hoistedMetaTags}
+  ${hoistedLdJsonTags}
   ${headTags}
   ${collectedHeadTags}
   ${fastRefreshPreamble}
