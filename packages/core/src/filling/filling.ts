@@ -606,7 +606,13 @@ export class ManduFilling<TLoaderData = unknown> {
       if (this.config.handlers.has("GET") && !allowed.includes("HEAD")) {
         allowed.push("HEAD");
       }
-      return ctx.json({ status: "error", message: `Method ${method} not allowed`, allowed }, 405);
+      // RFC 7231 §6.5.5: a 405 response MUST include an `Allow` header listing
+      // every supported method (not just the body field). ctx.json() cannot
+      // attach headers, so build the response directly here.
+      return Response.json(
+        { status: "error", message: `Method ${method} not allowed`, allowed },
+        { status: 405, headers: { Allow: allowed.join(", ") } },
+      );
     }
     const lifecycleWithDefaults = this.createLifecycleWithDefaults(routeContext);
     const runHandler = async () => {

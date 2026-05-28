@@ -69,4 +69,39 @@ describe("Filling HEAD handling (#319)", () => {
     expect(body.allowed).toContain("GET");
     expect(body.allowed).toContain("HEAD");
   });
+
+  // Issue #321: 405 responses MUST carry an `Allow` header listing every
+  // supported method — for multi-method routes too, not just single-method.
+  it("sets the Allow header to a single method route's methods", async () => {
+    const filling = ManduFillingFactory.filling().get((ctx) => ctx.json({ ok: true }));
+
+    const putRes = await filling.handle(
+      new Request("http://localhost/api/health", { method: "PUT" }),
+    );
+
+    expect(putRes.status).toBe(405);
+    const allow = putRes.headers.get("Allow") ?? "";
+    expect(allow.split(", ")).toContain("GET");
+    expect(allow.split(", ")).toContain("HEAD");
+  });
+
+  it("sets the Allow header to ALL methods for a multi-method route (#321)", async () => {
+    const filling = ManduFillingFactory.filling()
+      .get((ctx) => ctx.json({ ok: true }))
+      .post((ctx) => ctx.json({ ok: true }))
+      .delete((ctx) => ctx.json({ ok: true }));
+
+    const putRes = await filling.handle(
+      new Request("http://localhost/api/pledges", { method: "PUT" }),
+    );
+
+    expect(putRes.status).toBe(405);
+    const allow = putRes.headers.get("Allow") ?? "";
+    const methods = allow.split(", ");
+    expect(methods).toContain("GET");
+    expect(methods).toContain("POST");
+    expect(methods).toContain("DELETE");
+    // HEAD is implied by GET.
+    expect(methods).toContain("HEAD");
+  });
 });

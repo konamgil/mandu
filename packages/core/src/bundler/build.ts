@@ -633,9 +633,11 @@ function generateJsxRuntimeShimSource(): string {
 /**
  * Mandu JSX Runtime Shim (Generated)
  * Production JSX 변환용
- * 순환 참조 방지: 'react'에서 import (import map이 _react.js로 매핑)
+ * jsx/jsxs/Fragment는 'react/jsx-runtime' 원본에서 직접 가져온다.
+ * import map의 'react/jsx-runtime'이 다시 이 셰임을 가리키므로,
+ * 셰임 내부는 실제 원본 경로를 직접 참조해야 순환/누락이 생기지 않는다.
  */
-import { jsx, jsxs, Fragment } from 'react';
+import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
 
 // Named exports
 export { jsx, jsxs, Fragment };
@@ -654,9 +656,11 @@ function generateJsxDevRuntimeShimSource(): string {
 /**
  * Mandu JSX Dev Runtime Shim (Generated)
  * Development JSX 변환용
- * 순환 참조 방지: 'react'에서 import (import map이 _react.js로 매핑)
+ * jsxDEV/Fragment는 'react'가 아니라 'react/jsx-dev-runtime'에서만 export된다.
+ * import map의 'react/jsx-dev-runtime'이 다시 이 셰임을 가리키므로,
+ * 셰임 내부는 실제 원본 경로를 직접 참조해야 순환/누락(jsxDEV undefined)이 생기지 않는다.
  */
-import { jsxDEV, Fragment } from 'react';
+import { jsxDEV, Fragment } from 'react/jsx-dev-runtime';
 
 // Named exports
 export { jsxDEV, Fragment };
@@ -665,6 +669,18 @@ export { jsxDEV, Fragment };
 export default { jsxDEV, Fragment };
 `;
 }
+
+/**
+ * Test-only access to the JSX runtime shim generators so tests can assert
+ * that jsx/jsxDEV/Fragment are sourced from the correct React subpaths
+ * (regression guard for #322: jsxDEV must come from 'react/jsx-dev-runtime',
+ * never from bare 'react' which does not export it).
+ *
+ * @internal
+ */
+export const _testOnly_generateJsxRuntimeShimSource = generateJsxRuntimeShimSource;
+/** @internal */
+export const _testOnly_generateJsxDevRuntimeShimSource = generateJsxDevRuntimeShimSource;
 
 /**
  * Client-side Router 런타임 소스 생성
