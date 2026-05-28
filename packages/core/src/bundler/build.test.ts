@@ -42,7 +42,11 @@ async function evaluateGeneratedHydrationRuntime(): Promise<{ hydrateIslands: ()
     );
 
   const reactStub = {
-    Component: class {},
+    Component: class {
+      render() {
+        return null;
+      }
+    },
     createElement(type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) {
       if (
         typeof type === "function" &&
