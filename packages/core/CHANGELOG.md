@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.20
+
+### Patch Changes
+
+- [`0abfe0a`](https://github.com/konamgil/mandu/commit/0abfe0a3466cfddc70049bc211ee4ca8d020097a) Thanks [@konamgil](https://github.com/konamgil)! - Pass `searchParams` (query string) to server page components, matching the value `generateMetadata` already receives. Previously only `params` was injected, so query-driven pages (search/filter/compare) rendered empty without any error.
+
 ## 0.54.19
 
 ### Patch Changes

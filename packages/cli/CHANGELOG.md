@@ -1,5 +1,14 @@
 # @mandujs/cli
 
+## 0.44.23
+
+### Patch Changes
+
+- Track the @mandujs/core 0.54.20 release (server page `searchParams` prop fix) by refreshing internal Mandu dependency ranges.
+
+- Updated dependencies []:
+  - @mandujs/mcp@0.38.12
+
 ## 0.44.22
 
 ### Patch Changes
