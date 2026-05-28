@@ -660,12 +660,24 @@ function generateJsxDevRuntimeShimSource(): string {
  * Development JSX 변환용
  *
  * #323: import map의 'react/jsx-dev-runtime'이 다시 이 셰임을 가리키므로
- * 'react/jsx-dev-runtime'에서 import하면 순환 self-import가 되어 jsxDEV가
- * undefined가 된다. 대신 'react'(→ _react.js, external 없이 react 전체를
- * 인라인하며 jsxDEV/Fragment를 re-export하는 vendor 번들)에서 가져와
- * 순환을 끊는다.
+ * 'react/jsx-dev-runtime'에서 import하면 순환 self-import가 된다. 대신
+ * 'react'(→ _react.js, react 전체를 인라인하는 vendor 번들)에서 가져온다.
+ *
+ * #323 재발(0.54.30): jsxDEV는 React의 **dev 전용** export다. _react.js가
+ * production NODE_ENV로 번들되면 'react/jsx-dev-runtime'이 production 변형으로
+ * 해소되어 jsxDEV 값이 undefined가 된다(jsx/jsxs는 둘 다 존재). 그 결과 dev
+ * island가 'jsxDEV is not a function'으로 전멸했다. _react.js가 어떤 NODE_ENV로
+ * 빌드되든 안전하도록, jsxDEV가 함수가 아니면 jsx/jsxs로 폴백한다(dev 경고만
+ * 잃고 렌더는 정상). isStaticChildren일 때는 jsxs로 라우팅한다.
  */
-import { jsxDEV, Fragment } from 'react';
+import { jsx, jsxs, jsxDEV as __manduReactJsxDEV, Fragment } from 'react';
+
+const jsxDEV =
+  typeof __manduReactJsxDEV === 'function'
+    ? __manduReactJsxDEV
+    : function jsxDEV(type, config, key, isStaticChildren) {
+        return (isStaticChildren ? jsxs : jsx)(type, config, key);
+      };
 
 // Named exports
 export { jsxDEV, Fragment };

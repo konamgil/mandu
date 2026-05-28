@@ -18,6 +18,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   _testOnly_generateJsxDevRuntimeShimSource,
   _testOnly_generateJsxRuntimeShimSource,
@@ -32,10 +33,9 @@ describe("JSX runtime shim sources (issues #322 / #323)", () => {
     // the import statement, not comment mentions of the path.)
     expect(source).not.toMatch(/from\s*['"]react\/jsx-dev-runtime['"]/);
 
-    // Correct: jsxDEV + Fragment come from bare 'react' (→ _react.js).
-    expect(source).toMatch(
-      /import\s*\{\s*jsxDEV\s*,\s*Fragment\s*\}\s*from\s*['"]react['"]/,
-    );
+    // Correct: jsxDEV (+ jsx/jsxs fallback inputs) come from bare 'react'
+    // (→ _react.js). Import includes jsxDEV and resolves from "react".
+    expect(source).toMatch(/import\s*\{[^}]*\bjsxDEV\b[^}]*\}\s*from\s*['"]react['"]/);
 
     // Shim still re-exports what the import map expects.
     expect(source).toContain("export { jsxDEV, Fragment }");
@@ -79,6 +79,60 @@ describe("JSX runtime shim sources (issues #322 / #323)", () => {
       expect(out).not.toMatch(/from\s*["']react\/jsx-dev-runtime["']/);
       expect(out).toMatch(/from\s*["']react["']/);
       expect(out).toContain("jsxDEV");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  // #323 re-regression (0.54.30): a SOURCE/static check passed but at RUNTIME
+  // `_react.js`'s jsxDEV was `undefined` (jsxDEV is a React dev-only export;
+  // a production-built _react.js drops it while keeping jsx/jsxs). The shim
+  // re-exported that undefined → "jsxDEV is not a function". Guard the VALUE:
+  // build the dev shim against a `react` stub whose jsxDEV is undefined (the
+  // exact failing condition) and assert the shim still exposes a callable
+  // jsxDEV via its jsx/jsxs fallback.
+  test("dev shim exposes a callable jsxDEV even when react.jsxDEV is undefined (runtime value)", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mandu-jsx-shim-rt-"));
+    try {
+      // Stub for bare 'react' = a production-built _react.js: jsx/jsxs are real
+      // functions, jsxDEV is missing.
+      const reactStub = path.join(dir, "react-stub.js");
+      await writeFile(
+        reactStub,
+        [
+          "export const jsx = (type) => ({ type, runtime: 'jsx' });",
+          "export const jsxs = (type) => ({ type, runtime: 'jsxs' });",
+          "export const Fragment = Symbol.for('react.fragment');",
+          "export const jsxDEV = undefined;",
+        ].join("\n"),
+        "utf-8",
+      );
+
+      // Generate the real shim source, but resolve its bare `react` import to
+      // the stub so we can drive the undefined-jsxDEV condition.
+      const shimSource = _testOnly_generateJsxDevRuntimeShimSource().replace(
+        /from\s*['"]react['"]/g,
+        `from ${JSON.stringify(reactStub.replace(/\\/g, "/"))}`,
+      );
+      const shimSrc = path.join(dir, "_jsx-dev-runtime.src.js");
+      await writeFile(shimSrc, shimSource, "utf-8");
+
+      const result = await Bun.build({
+        entrypoints: [shimSrc],
+        target: "browser",
+        define: { "process.env.NODE_ENV": JSON.stringify("production") },
+      });
+      expect(result.success).toBe(true);
+
+      const outPath = path.join(dir, "_jsx-dev-runtime.built.js");
+      await writeFile(outPath, await result.outputs[0]!.text(), "utf-8");
+      const mod = await import(`${pathToFileURL(outPath).href}?t=${Date.now()}`);
+
+      // The whole point of #323's re-regression: jsxDEV must be CALLABLE.
+      expect(typeof mod.jsxDEV).toBe("function");
+      // Fallback routes static-children to jsxs, otherwise jsx.
+      expect(mod.jsxDEV("div", {}, undefined, false).runtime).toBe("jsx");
+      expect(mod.jsxDEV("div", {}, undefined, true).runtime).toBe("jsxs");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
