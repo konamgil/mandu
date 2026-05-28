@@ -256,3 +256,92 @@ describeIfBunSql("@mandujs/core/db — SQLite file + concurrent handles", () => 
     }
   });
 });
+
+// ─── Composable fragments against real Bun.SQL (#315) ────────────────────────
+
+describeIfBunSql("@mandujs/core/db — SQLite fragment composition", () => {
+  let db: Db;
+
+  beforeEach(async () => {
+    db = createDb({ url: "sqlite::memory:" });
+    await db`
+      CREATE TABLE pledges (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        party TEXT NOT NULL,
+        region TEXT NOT NULL
+      )
+    `;
+    const seed: Array<[string, string, string]> = [
+      ["climate action", "green", "seoul"],
+      ["housing reform", "green", "busan"],
+      ["tax cut", "blue", "seoul"],
+      ["transit plan", "blue", "busan"],
+    ];
+    for (const [title, party, region] of seed) {
+      await db`INSERT INTO pledges (title, party, region) VALUES (${title}, ${party}, ${region})`;
+    }
+  });
+
+  afterEach(async () => {
+    await db.close();
+  });
+
+  // Builds the same dynamic list query the dogfooding app needed: N optional
+  // filters joined with AND, all values bound. Proves the synthetic
+  // TemplateStringsArray works against the REAL Bun.SQL adapter.
+  async function listPledges(filters: {
+    party?: string;
+    region?: string;
+    search?: string;
+  }): Promise<Array<{ title: string }>> {
+    const conds = [];
+    if (filters.party) conds.push(db.sql`party = ${filters.party}`);
+    if (filters.region) conds.push(db.sql`region = ${filters.region}`);
+    if (filters.search) conds.push(db.sql`title LIKE ${"%" + filters.search + "%"}`);
+    const where = conds.length
+      ? db.sql`WHERE ${db.join(conds, " AND ")}`
+      : db.sql``;
+    return await db<{ title: string }>`
+      SELECT title FROM pledges ${where} ORDER BY id
+    `;
+  }
+
+  it("no filters → returns every row", async () => {
+    const rows = await listPledges({});
+    expect(rows).toHaveLength(4);
+  });
+
+  it("single filter → binds the value and filters correctly", async () => {
+    const rows = await listPledges({ party: "green" });
+    expect(rows.map((r) => r.title).sort()).toEqual(["climate action", "housing reform"]);
+  });
+
+  it("multiple filters → AND-composed with every value bound", async () => {
+    const rows = await listPledges({ party: "green", region: "seoul" });
+    expect(rows.map((r) => r.title)).toEqual(["climate action"]);
+  });
+
+  it("LIKE filter with metacharacters stays a bound parameter", async () => {
+    const rows = await listPledges({ search: "reform" });
+    expect(rows.map((r) => r.title)).toEqual(["housing reform"]);
+
+    // An injection attempt routed through a fragment must not execute.
+    const evil = await listPledges({ search: "%'; DROP TABLE pledges; --" });
+    expect(evil).toHaveLength(0);
+    const stillThere = await db<{ n: number }>`SELECT COUNT(*) AS n FROM pledges`;
+    expect(Number(stillThere[0]!.n)).toBe(4);
+  });
+
+  it("nested fragment composes within a WHERE group", async () => {
+    const partyOrRegion = db.sql`(party = ${"blue"} OR region = ${"seoul"})`;
+    const rows = await db<{ title: string }>`
+      SELECT title FROM pledges WHERE ${partyOrRegion} ORDER BY id
+    `;
+    expect(rows.map((r) => r.title)).toEqual([
+      "climate action",
+      "tax cut",
+      "transit plan",
+    ]);
+  });
+});

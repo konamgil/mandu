@@ -45,6 +45,22 @@
  * escape hatch on the public surface — use Bun.SQL directly if you need
  * `sql.unsafe()` semantics.
  *
+ * ## Dynamic queries
+ *
+ * For runtime-variable filters (optional `WHERE` conditions, sort direction,
+ * pagination) compose {@link SqlFragment}s with `db.sql` and `db.join`
+ * instead of branching whole queries or hand-synthesising a
+ * `TemplateStringsArray`. Fragments are inert until embedded in an executing
+ * call, at which point their static text inlines and their values stay bound:
+ *
+ * ```ts
+ * const conds = [];
+ * if (party)  conds.push(db.sql`party = ${party}`);
+ * if (search) conds.push(db.sql`title ILIKE ${"%" + search + "%"}`);
+ * const where = conds.length ? db.sql`WHERE ${db.join(conds, " AND ")}` : db.sql``;
+ * const rows = await db`SELECT * FROM pledges ${where} LIMIT ${limit}`;
+ * ```
+ *
  * @example
  * ```ts
  * import { createDb } from "@mandujs/core/db";
@@ -159,6 +175,36 @@ export interface Db {
    * "pool closed" error. Calling `close()` twice is a no-op (idempotent).
    */
   close(options?: DbCloseOptions): Promise<void>;
+
+  /**
+   * Builds a composable, not-yet-executed SQL {@link SqlFragment}. Embed it
+   * inside another `db`/`db.one` tagged-template call to assemble dynamic
+   * queries (optional filters, conditional `WHERE`, sort direction) while
+   * keeping every interpolated value a bound parameter.
+   *
+   * Static text in the fragment template is merged into the surrounding SQL;
+   * `${value}` placeholders stay bound — never string-interpolated.
+   *
+   * @example
+   * ```ts
+   * const conds = [];
+   * if (party)  conds.push(db.sql`party = ${party}`);
+   * if (region) conds.push(db.sql`region = ${region}`);
+   * const where = conds.length ? db.sql`WHERE ${db.join(conds, " AND ")}` : db.sql``;
+   * const rows = await db`SELECT * FROM pledges ${where} ORDER BY created_at DESC`;
+   * ```
+   */
+  sql(strings: TemplateStringsArray, ...values: unknown[]): SqlFragment;
+
+  /**
+   * Joins fragments with a separator into a single {@link SqlFragment}.
+   * Empty list → an empty fragment. The separator is static text (default
+   * `", "`); pass a fragment if you need a bound value inside it.
+   */
+  join(
+    fragments: readonly SqlFragment[],
+    separator?: SqlFragment | string,
+  ): SqlFragment;
 }
 
 /** Options forwarded to Bun.SQL pool shutdown. */
@@ -168,6 +214,128 @@ export interface DbCloseOptions {
    * `0` asks Bun.SQL to close immediately.
    */
   timeout?: number;
+}
+
+// ─── Composable SQL fragments (dynamic WHERE / filters) ─────────────────────
+
+const SQL_FRAGMENT_MARKER = "__manduSqlFragment";
+
+/**
+ * A composable, not-yet-executed SQL fragment produced by {@link sql} (or
+ * `db.sql`). Holds the static template `strings` and the interpolated
+ * `values` (which may themselves be nested fragments). Flattened into the
+ * surrounding query at execution time so values stay bound parameters.
+ */
+export interface SqlFragment {
+  readonly [SQL_FRAGMENT_MARKER]: true;
+  readonly strings: readonly string[];
+  readonly values: readonly unknown[];
+}
+
+/** Structural check for a {@link SqlFragment}. */
+export function isSqlFragment(value: unknown): value is SqlFragment {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<string, unknown>)[SQL_FRAGMENT_MARKER] === true
+  );
+}
+
+/**
+ * Tagged-template builder for a {@link SqlFragment}. Also exposed as
+ * `db.sql`. The fragment is inert until embedded in an executing
+ * `db`/`db.one` call.
+ */
+export function sql(
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+): SqlFragment {
+  return { [SQL_FRAGMENT_MARKER]: true, strings: Array.from(strings), values };
+}
+
+/** A fragment carrying only static text and no bound values. */
+function staticFragment(text: string): SqlFragment {
+  return { [SQL_FRAGMENT_MARKER]: true, strings: [text], values: [] };
+}
+
+/**
+ * Joins fragments with a separator. Also exposed as `db.join`. An empty list
+ * yields an empty fragment; a single-element list returns that element.
+ */
+export function join(
+  fragments: readonly SqlFragment[],
+  separator: SqlFragment | string = ", ",
+): SqlFragment {
+  if (fragments.length === 0) return staticFragment("");
+  if (fragments.length === 1) return fragments[0]!;
+  const sep = typeof separator === "string" ? staticFragment(separator) : separator;
+  const values: unknown[] = [];
+  for (let i = 0; i < fragments.length; i++) {
+    if (i > 0) values.push(sep);
+    values.push(fragments[i]);
+  }
+  return {
+    [SQL_FRAGMENT_MARKER]: true,
+    strings: new Array<string>(values.length + 1).fill(""),
+    values,
+  };
+}
+
+interface FlatSql {
+  parts: string[];
+  binds: unknown[];
+}
+
+/**
+ * Recursively flattens a (possibly fragment-bearing) template into a single
+ * `{ parts, binds }` pair. Static text from nested fragments is merged into
+ * `parts`; every non-fragment value becomes one bound parameter in `binds`.
+ * Invariant: `parts.length === binds.length + 1`.
+ */
+function flattenSqlTemplate(
+  strings: readonly string[],
+  values: readonly unknown[],
+): FlatSql {
+  const parts: string[] = [strings[0] ?? ""];
+  const binds: unknown[] = [];
+
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+    const tail = strings[i + 1] ?? "";
+
+    if (isSqlFragment(value)) {
+      const inner = flattenSqlTemplate(value.strings, value.values);
+      parts[parts.length - 1] += inner.parts[0] ?? "";
+      for (let j = 0; j < inner.binds.length; j++) {
+        binds.push(inner.binds[j]);
+        parts.push(inner.parts[j + 1] ?? "");
+      }
+      parts[parts.length - 1] += tail;
+    } else {
+      binds.push(value);
+      parts.push(tail);
+    }
+  }
+
+  return { parts, binds };
+}
+
+/** True when any value needs fragment flattening before reaching Bun.SQL. */
+function hasSqlFragment(values: readonly unknown[]): boolean {
+  for (const value of values) {
+    if (isSqlFragment(value)) return true;
+  }
+  return false;
+}
+
+/**
+ * Rebuilds a synthetic `TemplateStringsArray` from flattened parts so the
+ * merged query can be handed back to Bun.SQL's tagged-template entry point.
+ * `raw` mirrors the cooked strings — we never expose a raw-interpolation path.
+ */
+function toTemplateStringsArray(parts: readonly string[]): TemplateStringsArray {
+  const arr = parts.slice();
+  return Object.assign(arr, { raw: parts.slice() }) as unknown as TemplateStringsArray;
 }
 
 // ─── Bun runtime surface (structural; no `any`) ─────────────────────────────
@@ -405,9 +573,18 @@ function buildDbHandle(bunSql: BunSqlInstance, provider: SqlProvider): Db {
     if (closed) {
       throw new Error(POOL_CLOSED_MESSAGE);
     }
+    // Flatten any composable fragments into a single merged template so
+    // their static text inlines and their values stay bound parameters.
+    let tsa: TemplateStringsArray = strings;
+    let binds: unknown[] = values;
+    if (hasSqlFragment(values)) {
+      const flat = flattenSqlTemplate(strings, values);
+      tsa = toTemplateStringsArray(flat.parts);
+      binds = flat.binds;
+    }
     try {
       // `bunSql` is itself a tagged-template callable; pass through verbatim.
-      const result = await bunSql<T>(strings, ...values);
+      const result = await bunSql<T>(tsa, ...binds);
       // Bun.SQL returns an array-like with metadata props (count/command/…).
       // Coerce to a plain array so consumers don't accidentally couple to
       // those fields through this wrapper's public surface.
@@ -473,6 +650,9 @@ function buildDbHandle(bunSql: BunSqlInstance, provider: SqlProvider): Db {
       throw err;
     }
   };
+
+  (db as { sql: Db["sql"] }).sql = sql;
+  (db as { join: Db["join"] }).join = join;
 
   return db;
 }
@@ -581,6 +761,8 @@ export function createDb(config: DbConfig): Db {
     real = null;
     await db.close(options);
   };
+  (forward as { sql: Db["sql"] }).sql = sql;
+  (forward as { join: Db["join"] }).join = join;
   Object.defineProperty(forward, PIN_DB_HANDLE, {
     value: async function withPinnedHandle<R>(fn: () => Promise<R>): Promise<R> {
       pinDepth += 1;

@@ -20,6 +20,9 @@ import {
   _createDbWith,
   createDb,
   detectProvider,
+  isSqlFragment,
+  join,
+  sql,
   type BunSqlCtor,
   type SqlProvider,
 } from "../index";
@@ -478,5 +481,135 @@ describe("@mandujs/core/db — public createDb lazy probe", () => {
     // We haven't called anything, so no Bun.SQL instance was constructed.
     // close() should succeed without materializing one.
     await expect(db.close()).resolves.toBeUndefined();
+  });
+});
+
+// ─── Composable SQL fragments (#315) ─────────────────────────────────────────
+
+describe("@mandujs/core/db — sql fragments", () => {
+  it("sql`` produces an inert fragment; isSqlFragment recognizes it", () => {
+    const frag = sql`x = ${1}`;
+    expect(isSqlFragment(frag)).toBe(true);
+    expect(isSqlFragment({})).toBe(false);
+    expect(isSqlFragment(null)).toBe(false);
+    expect(isSqlFragment("x = 1")).toBe(false);
+    // A fragment must NOT be a Promise — it should not be executed on its own.
+    expect(typeof (frag as unknown as { then?: unknown }).then).toBe("undefined");
+  });
+
+  it("flattens a fragment into merged static text + bound values", async () => {
+    const { Ctor, state } = createFakeCtor();
+    state.nextRowsQueue.push([]);
+    const db = _createDbWith(Ctor, { url: "sqlite::memory:" });
+
+    const where = db.sql`WHERE party = ${"green"}`;
+    await db`SELECT * FROM pledges ${where} ORDER BY id`;
+
+    const call = state.calls[0]!;
+    // Static text merged; the value stays a bound parameter (placeholder gap).
+    expect(Array.from(call.strings).join("?")).toBe(
+      "SELECT * FROM pledges WHERE party = ? ORDER BY id",
+    );
+    expect(call.values).toEqual(["green"]);
+  });
+
+  it("composes optional filters with join and keeps every value bound", async () => {
+    const { Ctor, state } = createFakeCtor();
+    state.nextRowsQueue.push([]);
+    const db = _createDbWith(Ctor, { url: "sqlite::memory:" });
+
+    const party = "green";
+    const region: string | null = "seoul";
+    const search = "climate";
+    const conds = [];
+    if (party) conds.push(db.sql`party = ${party}`);
+    if (region) conds.push(db.sql`region = ${region}`);
+    if (search) conds.push(db.sql`title ILIKE ${"%" + search + "%"}`);
+
+    const where = conds.length
+      ? db.sql`WHERE ${db.join(conds, " AND ")}`
+      : db.sql``;
+    const limit = 20;
+    await db`SELECT * FROM pledges ${where} ORDER BY created_at DESC LIMIT ${limit}`;
+
+    const call = state.calls[0]!;
+    // Values bind left-to-right across the whole assembled query.
+    expect(call.values).toEqual(["green", "seoul", "%climate%", 20]);
+    // No interpolated value leaked into the SQL text.
+    const joined = Array.from(call.strings).join("");
+    expect(joined).toContain("WHERE party = ");
+    expect(joined).toContain(" AND region = ");
+    expect(joined).toContain(" AND title ILIKE ");
+    expect(joined).toContain("LIMIT ");
+    expect(joined).not.toContain("green");
+    expect(joined).not.toContain("%climate%");
+  });
+
+  it("empty join / empty fragment collapse to no-op text and bind nothing", async () => {
+    const { Ctor, state } = createFakeCtor();
+    state.nextRowsQueue.push([]);
+    const db = _createDbWith(Ctor, { url: "sqlite::memory:" });
+
+    const conds: ReturnType<typeof sql>[] = [];
+    const where = conds.length ? db.sql`WHERE ${db.join(conds, " AND ")}` : db.sql``;
+    await db`SELECT * FROM pledges ${where} ORDER BY id`;
+
+    const call = state.calls[0]!;
+    expect(Array.from(call.strings).join("")).toBe(
+      "SELECT * FROM pledges  ORDER BY id",
+    );
+    expect(call.values).toEqual([]);
+  });
+
+  it("flattens nested fragments recursively with correct bind order", async () => {
+    const { Ctor, state } = createFakeCtor();
+    state.nextRowsQueue.push([]);
+    const db = _createDbWith(Ctor, { url: "sqlite::memory:" });
+
+    const inner = sql`b = ${2} AND c = ${3}`;
+    const outer = sql`a = ${1} AND (${inner})`;
+    await db`SELECT * FROM t WHERE ${outer}`;
+
+    const call = state.calls[0]!;
+    expect(call.values).toEqual([1, 2, 3]);
+    expect(Array.from(call.strings).join("?")).toBe(
+      "SELECT * FROM t WHERE a = ? AND (b = ? AND c = ?)",
+    );
+  });
+
+  it("treats injection attempts inside a fragment value as a bound parameter", async () => {
+    const { Ctor, state } = createFakeCtor();
+    state.nextRowsQueue.push([]);
+    const db = _createDbWith(Ctor, { url: "sqlite::memory:" });
+
+    const evil = "'; DROP TABLE users; --";
+    const where = db.sql`name = ${evil}`;
+    await db`SELECT * FROM users WHERE ${where}`;
+
+    const call = state.calls[0]!;
+    for (const s of call.strings) {
+      expect(s).not.toContain("DROP TABLE");
+      expect(s).not.toContain(evil);
+    }
+    expect(call.values).toEqual([evil]);
+  });
+
+  it("fragments compose through .one() as well", async () => {
+    const { Ctor, state } = createFakeCtor();
+    state.nextRowsQueue.push([{ id: 7 }]);
+    const db = _createDbWith(Ctor, { url: "sqlite::memory:" });
+
+    const where = db.sql`id = ${7}`;
+    const row = await db.one`SELECT * FROM t WHERE ${where}`;
+
+    expect(row).toEqual({ id: 7 });
+    expect(state.calls[0]!.values).toEqual([7]);
+  });
+
+  it("exposes sql/join on the lazy createDb handle too", () => {
+    const db = createDb({ url: "sqlite::memory:" });
+    expect(typeof db.sql).toBe("function");
+    expect(typeof db.join).toBe("function");
+    expect(isSqlFragment(db.sql`x = ${1}`)).toBe(true);
   });
 });
