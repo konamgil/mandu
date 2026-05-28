@@ -451,6 +451,36 @@ try {
   console.log("✅ Lockfile up-to-date\n");
 }
 
+// 1.1. npm registry metadata drift 차단
+console.log("🧾 Step 1.1: npm version/metadata drift 확인...\n");
+
+try {
+  execSync("bun run check:npm-drift", { stdio: "inherit", cwd: process.cwd() });
+} catch {
+  hasIssues = true;
+  console.log();
+  console.log(
+    "  💡 Bump the package version, revert the local metadata change, or publish the unpublished newer version."
+  );
+}
+
+console.log();
+
+// 1.2. hydration runtime/browser regression gate
+console.log("🏝️ Step 1.2: Hydration runtime/browser gate...\n");
+
+try {
+  execSync("bun run check:hydration", { stdio: "inherit", cwd: process.cwd() });
+} catch {
+  hasIssues = true;
+  console.log();
+  console.log(
+    "  💡 Fix the hydration boundary/runtime regression before publishing."
+  );
+}
+
+console.log();
+
 // 1.5. publishable package 안에 남은 임시 테스트 산출물 차단
 console.log("🧹 Step 1.5: 임시 테스트 산출물 확인...\n");
 

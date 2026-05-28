@@ -1117,14 +1117,24 @@ function createDefaultAppFactory(registry: ServerRegistry) {
 async function resolveInlineClientHydrationTarget(
   route: {
     id: string;
+    componentModule?: string;
     clientModule?: string;
     clientExportName?: string;
     hydration?: HydrationConfig;
+    boundaries?: unknown[];
   },
   rootDir: string,
   src: string,
 ): Promise<InlineClientHydrationTarget | undefined> {
   if (!route.clientModule || !src) {
+    return undefined;
+  }
+  if (route.boundaries && route.boundaries.length > 0) {
+    return undefined;
+  }
+
+  const legacyRuntimeScan = process.env.MANDU_LEGACY_RUNTIME_PARTIAL_SCAN === "1";
+  if (!legacyRuntimeScan) {
     return undefined;
   }
 
@@ -1139,6 +1149,8 @@ async function resolveInlineClientHydrationTarget(
       src,
       priority: route.hydration?.priority ?? "visible",
       component,
+      legacyRuntimeScan,
+      sourceFile: route.componentModule ?? route.clientModule,
     };
   } catch (error) {
     console.warn(
@@ -2112,8 +2124,10 @@ async function renderPageSSR(
     errorModule?: string;
     loadingModule?: string;
     notFoundModule?: string;
+    componentModule?: string;
     clientModule?: string;
     clientExportName?: string;
+    boundaries?: unknown[];
   },
   params: Record<string, string>,
   loaderData: unknown,

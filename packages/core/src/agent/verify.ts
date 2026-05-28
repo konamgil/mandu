@@ -248,6 +248,11 @@ function commandSuggestions(
   if (files.some((file) => file.includes("package.json") || file === "bun.lock")) {
     add("bun run check:publish", "Package metadata or lockfile changed.", true);
   }
+  if (files.some(isHydrationSensitiveEdit)) {
+    add("bun run test:hydration-boundary", "Hydration-sensitive runtime/router/bundler files changed.", true);
+    add("bun run test:hydration-e2e", "Hydration-sensitive changes need browser-level validation.", true);
+    add("bun run check:publish", "Pre-publish hydration gates should pass before release.", true);
+  }
   if (changedFileReasons.some((entry) => entry.internalApi)) {
     add("bun run check:public-api && bun run check:target-boundaries", "Internal framework boundaries changed.", true);
   }
@@ -268,6 +273,24 @@ function isInternalApiEdit(file: string): boolean {
     "packages/core/src/router/",
     "packages/core/src/internal/",
   ].some((prefix) => file.startsWith(prefix));
+}
+
+function isHydrationSensitiveEdit(file: string): boolean {
+  return [
+    "packages/core/src/runtime/page-render-response.ts",
+    "packages/core/src/runtime/server.ts",
+    "packages/core/src/runtime/ssr.ts",
+    "packages/core/src/runtime/streaming-ssr.ts",
+    "packages/core/src/internal/client-boundary.ts",
+    "packages/core/src/bundler/build.ts",
+    "packages/core/src/bundler/client-boundary-transform.ts",
+    "packages/core/src/router/client-entry.ts",
+    "packages/core/src/router/fs-routes.ts",
+    "packages/core/src/router/fs-scanner.ts",
+    "packages/core/src/client/serialize.ts",
+    "packages/core/src/client/props-serialization.ts",
+    "packages/core/src/client/runtime-entry.ts",
+  ].includes(file);
 }
 
 function changedFileReason(file: string): AgentChangedFileReason {
@@ -298,6 +321,14 @@ function changedFileReason(file: string): AgentChangedFileReason {
   if (normalized === "package.json" || normalized === "bun.lock" || normalized.endsWith("/package.json")) {
     reasons.push("Package metadata or dependency graph changed.");
     recommendedChecks.push("bun run check:publish");
+  }
+  if (isHydrationSensitiveEdit(normalized)) {
+    reasons.push("Hydration/runtime/client boundary behavior changed.");
+    recommendedChecks.push(
+      "bun run test:hydration-boundary",
+      "bun run test:hydration-e2e",
+      "bun run check:publish",
+    );
   }
 
   const internalApi = isInternalApiEdit(normalized);

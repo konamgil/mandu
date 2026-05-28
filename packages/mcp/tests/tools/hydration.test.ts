@@ -125,24 +125,89 @@ describe("hydration MCP tools", () => {
               priority: "visible",
               preload: false,
             },
+            boundaries: [
+              {
+                id: "home--0",
+                routeId: "home",
+                module: "src/client/Counter.client.tsx",
+                importSpecifier: "@/client/Counter.client",
+                exportName: "Counter",
+                localName: "Counter",
+                hydrate: "visible",
+                ordinal: 0,
+                propsSource: "inline",
+                propsKeys: ["count"],
+                hasSpreadProps: false,
+                source: {
+                  file: "app/page.tsx",
+                  line: 4,
+                  column: 8,
+                },
+              },
+            ],
           },
         ],
+      }, null, 2),
+    );
+    await writeFile(
+      root,
+      ".mandu/manifest.json",
+      JSON.stringify({
+        version: 1,
+        buildTime: "2026-05-23T00:00:00.000Z",
+        env: "production",
+        bundles: {},
+        partials: {
+          "legacy-partial": {
+            js: "/.mandu/client/legacy-partial.js",
+            priority: "visible",
+          },
+        },
+        shared: {
+          runtime: "/.mandu/client/_runtime.js",
+          vendor: "/.mandu/client/_react.js",
+        },
       }, null, 2),
     );
 
     const handlers = hydrationTools(root);
     const result = await handlers["mandu.pageClientMount.list"]({}) as {
       pageClientMountCount?: number;
-      pageClientMounts?: Array<{ routeId: string; status: string; isIsland: boolean }>;
+      clientBoundaryCount?: number;
+      partialBoundaryCount?: number;
+      boundarySummary?: {
+        clientBoundaryCount: number;
+        partialBoundaryCount: number;
+        pageClientMountCount: number;
+      };
+      pageClientMounts?: Array<{
+        routeId: string;
+        status: string;
+        isIsland: boolean;
+        hasRouteLevelClientMount: boolean;
+        clientBoundaryCount: number;
+      }>;
       islandCount?: number;
+      terminology?: { clientBoundary?: string; partialBoundary?: string };
     };
 
     expect(result.pageClientMountCount).toBe(1);
     expect(result.islandCount).toBe(1);
+    expect(result.clientBoundaryCount).toBe(1);
+    expect(result.partialBoundaryCount).toBe(1);
+    expect(result.boundarySummary).toEqual({
+      clientBoundaryCount: 1,
+      partialBoundaryCount: 1,
+      pageClientMountCount: 1,
+    });
     expect(result.pageClientMounts?.[0]).toMatchObject({
       routeId: "home",
       status: "ready",
       isIsland: true,
+      hasRouteLevelClientMount: true,
+      clientBoundaryCount: 1,
     });
+    expect(result.terminology?.clientBoundary).toContain("RouteSpec.boundaries");
+    expect(result.terminology?.partialBoundary).toContain("partials");
   });
 });

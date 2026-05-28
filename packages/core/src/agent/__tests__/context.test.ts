@@ -269,6 +269,37 @@ describe("agent context", () => {
     );
   });
 
+  it("recommends hydration gates for hydration-sensitive runtime edits", async () => {
+    const version = await runGit(root, ["--version"]);
+    if (!version.ok) return;
+
+    expect((await runGit(root, ["init"])).ok).toBe(true);
+    await runGit(root, ["config", "user.email", "agent@example.com"]);
+    await runGit(root, ["config", "user.name", "Agent"]);
+    expect((await runGit(root, ["add", "."])).ok).toBe(true);
+    expect((await runGit(root, ["commit", "-m", "initial"])).ok).toBe(true);
+
+    await writeFile(root, "packages/core/src/bundler/build.ts", "export const changed = true;\n");
+
+    const report = await buildAgentVerifyReport(root, {
+      includeDiagnose: false,
+      includeGuard: false,
+      includeContract: false,
+    });
+
+    const reason = report.changedFileReasons.find(
+      (entry) => entry.file === "packages/core/src/bundler/build.ts",
+    );
+    expect(reason?.recommendedChecks).toContain("bun run test:hydration-boundary");
+    expect(reason?.recommendedChecks).toContain("bun run test:hydration-e2e");
+    expect(reason?.recommendedChecks).toContain("bun run check:publish");
+
+    const suggestedCommands = report.suggestedCommands.map((cmd) => cmd.command);
+    expect(suggestedCommands).toContain("bun run test:hydration-boundary");
+    expect(suggestedCommands).toContain("bun run test:hydration-e2e");
+    expect(suggestedCommands).toContain("bun run check:publish");
+  });
+
   it("turns a verify report into repair actions", async () => {
     await writeAgentVerifyReport(root, {
       schemaVersion: 1,

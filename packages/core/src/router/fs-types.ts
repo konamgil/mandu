@@ -226,7 +226,13 @@ export interface ScanResult {
  */
 export interface ScanError {
   /** 에러 타입 */
-  type: "invalid_segment" | "duplicate_route" | "file_read_error" | "pattern_conflict" | "hydration_shell_mismatch_risk";
+  type:
+    | "invalid_segment"
+    | "duplicate_route"
+    | "file_read_error"
+    | "pattern_conflict"
+    | "hydration_shell_mismatch_risk"
+    | "route_source_diagnostic";
 
   /** 에러 메시지 */
   message: string;

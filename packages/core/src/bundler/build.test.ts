@@ -29,11 +29,11 @@ async function evaluateGeneratedHydrationRuntime(): Promise<{ hydrateIslands: ()
   const runtimeSource = await readFile(await Bun.file(sourcePath).exists() ? sourcePath : bundledPath, "utf-8");
   const instrumented = runtimeSource
     .replace(
-      /import\s+React,\s*\{\s*useState,\s*useEffect,\s*Component\s*\}\s+from\s+['"]react['"];?/,
+      /import\s+React,\s*\{[^}]*\}\s+from\s+['"]react['"];?/,
       "const React = globalThis.__MANDU_TEST_REACT__; const { useState, useEffect, Component } = React;",
     )
     .replace(
-      /import\s+\{\s*hydrateRoot,\s*createRoot\s*\}\s+from\s+['"]react-dom\/client['"];?/,
+      /import\s+\{[^}]*\}\s+from\s+['"]react-dom\/client['"];?/,
       "const { hydrateRoot, createRoot } = globalThis.__MANDU_TEST_REACT_DOM_CLIENT__;",
     )
     .replace(
@@ -308,7 +308,7 @@ describe("buildClientBundles vendor shims", () => {
     expect(runtimeSource).toContain("data-mandu-props");
     expect(runtimeSource).toContain("Missing boundary-local props for transformed client boundary");
     expect(runtimeSource).toContain("warnedBoundaryPropFallbacks");
-    expect(runtimeSource).toContain("deserializeManduProps");
+    expect(runtimeSource).toContain("deserializeProps");
     expect(runtimeSource).toContain("new Date");
     expect(runtimeSource).toContain("new Map");
   });
@@ -434,6 +434,43 @@ describe("buildClientBundles vendor shims", () => {
 
     await waitForRuntimeAssertion(() =>
       (globalThis as typeof globalThis & { __MANDU_TEST_EXPLICIT_ISLAND_DATA__?: { label?: string } }).__MANDU_TEST_EXPLICIT_ISLAND_DATA__?.label === "data-props"
+    );
+  });
+
+  test("runtime falls back to route-level server data when boundary-local props are absent", async () => {
+    const modulePath = path.join(rootDir, ".mandu", "client", "runtime-route-data-fallback.js");
+    await writeFile(
+      modulePath,
+      `
+        export default function RouteFallbackBoundary(props) {
+          globalThis.__MANDU_TEST_ROUTE_DATA_FALLBACK_PROPS__ = props;
+          return null;
+        }
+      `,
+      "utf-8",
+    );
+    Object.assign(globalThis, {
+      __MANDU_TEST_ROUTE_DATA_FALLBACK_PROPS__: undefined,
+    });
+    document.body.innerHTML = `
+      <div
+        data-mandu-island="route-fallback--0"
+        data-mandu-boundary-id="route-fallback--0"
+        data-mandu-route-id="route-fallback"
+        data-mandu-src="${pathToFileURL(modulePath).href}?t=${Date.now()}"
+        data-hydrate="load"
+      ></div>
+    `;
+    (window as typeof window & { __MANDU_DATA__?: unknown; __MANDU_ROOTS__?: Map<string, unknown> }).__MANDU_DATA__ = {
+      "route-fallback": { serverData: { label: "route-level" } },
+    };
+    (window as typeof window & { __MANDU_ROOTS__?: Map<string, unknown> }).__MANDU_ROOTS__ = new Map();
+
+    const runtime = await evaluateGeneratedHydrationRuntime();
+    runtime.hydrateIslands();
+
+    await waitForRuntimeAssertion(() =>
+      (globalThis as typeof globalThis & { __MANDU_TEST_ROUTE_DATA_FALLBACK_PROPS__?: { label?: string } }).__MANDU_TEST_ROUTE_DATA_FALLBACK_PROPS__?.label === "route-level"
     );
   });
 

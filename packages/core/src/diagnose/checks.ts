@@ -964,7 +964,7 @@ export async function checkClientBoundaryManifests(rootDir: string): Promise<Dia
     return {
       ok: false,
       rule: "client_boundary_manifests",
-      severity: "warning",
+      severity: "error",
       message: `Routes manifest declares ${boundaries.length} client boundary record(s), but bundle manifest is missing.`,
       suggestion: "Run `mandu build` before deploy so boundary bundles are emitted and can be checked.",
       details: { boundaryCount: boundaries.length, bundleManifestPath: path.relative(rootDir, bundleManifestPath) },

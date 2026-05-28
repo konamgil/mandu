@@ -1,5 +1,11 @@
 # @mandujs/cli
 
+## 0.44.22
+
+### Patch Changes
+
+- Refresh internal Mandu package dependency ranges for the hydration runtime quality release.
+
 ## 0.44.21
 
 ### Patch Changes

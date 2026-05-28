@@ -1,5 +1,14 @@
 # @mandujs/mcp
 
+## 0.38.11
+
+### Patch Changes
+
+- Harden hydration runtime quality gates with compiler-owned boundary coverage, browser E2E matrix cases for default and async wrappers, interaction and streaming hydration, legacy props fallbacks, stale manifest diagnostics, shared props serialization, and agent/MCP hydration workflow reporting.
+
+- Updated dependencies []:
+  - @mandujs/core@0.54.19
+
 ## 0.38.10
 
 ### Patch Changes

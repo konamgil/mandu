@@ -168,7 +168,7 @@ import { Link, NavLink } from "./Link";
 
 /**
  * Mandu Client namespace
- * v0.8.0: Hydration is handled automatically (generateRuntimeSource)
+ * v0.8.0: Hydration is handled automatically (runtime-entry)
  * Note: Use `ManduClient` to avoid conflict with other Mandu exports
  */
 export const ManduClient = {

@@ -36,6 +36,7 @@ import {
   resolveClientImportModulePath,
   resolveRouteLevelClientEntry,
 } from "./client-entry";
+import { analyzeRouteSource } from "./route-source-analyzer";
 import {
   assertNoClientBoundaryDiagnostics,
   collectStaticImportSpecifiers,
@@ -44,44 +45,6 @@ import {
   validateClientBoundaryExport,
   validateClientBoundaryServerOnlyImports,
 } from "../bundler/client-boundary-transform";
-
-const HYDRATION_STRATEGIES = new Set(["none", "island", "full", "progressive"]);
-const HYDRATION_PRIORITIES = new Set(["immediate", "visible", "idle", "interaction"]);
-
-function parsePageHydrationConfig(source: string): HydrationConfig | undefined {
-  const stringMatch = source.match(
-    /export\s+const\s+hydration\s*(?::[^=]+)?=\s*["'](none|island|full|progressive)["']/m,
-  );
-  if (stringMatch?.[1]) {
-    return {
-      strategy: stringMatch[1] as HydrationConfig["strategy"],
-      priority: "visible",
-      preload: false,
-    };
-  }
-
-  const objectMatch = source.match(
-    /export\s+const\s+hydration\s*(?::[^=]+)?=\s*\{([\s\S]*?)\}\s*;?/m,
-  );
-  const body = objectMatch?.[1];
-  if (!body) return undefined;
-
-  const strategyMatch = body.match(/\bstrategy\s*:\s*["']([^"']+)["']/);
-  const strategy = strategyMatch?.[1];
-  if (!strategy || !HYDRATION_STRATEGIES.has(strategy)) return undefined;
-
-  const priorityMatch = body.match(/\bpriority\s*:\s*["']([^"']+)["']/);
-  const priority = priorityMatch?.[1];
-  const preloadMatch = body.match(/\bpreload\s*:\s*(true|false)\b/);
-
-  return {
-    strategy: strategy as HydrationConfig["strategy"],
-    priority: HYDRATION_PRIORITIES.has(priority ?? "")
-      ? (priority as HydrationConfig["priority"])
-      : "visible",
-    preload: preloadMatch?.[1] === "true",
-  };
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Scanner Class
@@ -427,8 +390,16 @@ export class FSScanner {
           pageFileContent = null;
         }
         if (pageFileContent) {
-          hydration = parsePageHydrationConfig(pageFileContent);
-          pageHasUseClient = hasUseClientDirective(pageFileContent);
+          const analysis = analyzeRouteSource(pageFileContent, modulePath);
+          hydration = analysis.hydrationConfig;
+          pageHasUseClient = analysis.directives.useClient;
+          for (const diagnostic of analysis.diagnostics) {
+            routeErrors.push({
+              type: "route_source_diagnostic",
+              message: `${diagnostic.code}: ${diagnostic.message}`,
+              filePath: file.absolutePath,
+            });
+          }
           if (!pageHasUseClient) {
             boundaries = await this.resolveClientBoundaries(
               rootDir,

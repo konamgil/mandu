@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
 import path from "path";
 import { generateManifest } from "./fs-routes";
+import { scanRoutes } from "./fs-scanner";
 
 const repoTempRoot = path.resolve(import.meta.dir, "../../../..", ".tmp-test-artifacts");
 
@@ -470,6 +471,60 @@ describe("generateManifest hydration config", () => {
         priority: "idle",
         preload: true,
       });
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores hydration exports inside comments and strings", async () => {
+    const rootDir = await mkRepoTempDir("routes-hydration-ast-");
+    try {
+      await mkdir(path.join(rootDir, "app", "comment"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "app", "comment", "page.tsx"),
+        `
+          // export const hydration = { strategy: "island", priority: "immediate", preload: true };
+          const example = "export const hydration = 'full'";
+
+          export default function Page() {
+            return <main>{example}</main>;
+          }
+        `,
+        "utf-8",
+      );
+
+      const result = await generateManifest(rootDir);
+      const route = result.manifest.routes.find((entry) => entry.id === "comment");
+
+      expect(route?.hydration).toBeUndefined();
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports analyzer diagnostics for unsupported hydration initializers", async () => {
+    const rootDir = await mkRepoTempDir("routes-hydration-diagnostic-");
+    try {
+      await mkdir(path.join(rootDir, "app", "diagnostic"), { recursive: true });
+      await writeFile(
+        path.join(rootDir, "app", "diagnostic", "page.tsx"),
+        `
+          const getHydration = () => ({ strategy: "island" });
+          export const hydration = getHydration();
+
+          export default function Page() {
+            return <main>Diagnostic</main>;
+          }
+        `,
+        "utf-8",
+      );
+
+      const result = await scanRoutes(rootDir);
+
+      expect(result.errors).toContainEqual(expect.objectContaining({
+        type: "route_source_diagnostic",
+        message: expect.stringContaining("MANDU_ROUTE_HYDRATION_UNSUPPORTED_INITIALIZER"),
+      }));
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }

@@ -12,7 +12,7 @@
  */
 
 import { $ } from "bun";
-import { readFile, writeFile, unlink } from "fs/promises";
+import { mkdir, readFile, writeFile, unlink } from "fs/promises";
 import { join } from "path";
 import { execSync } from "child_process";
 import { PUBLISHABLE_PACKAGE_DIRS } from "./publish-order";
@@ -55,6 +55,20 @@ interface PackageJson {
   optionalDependencies?: Record<string, string>;
 }
 
+interface PublishPlanEntry {
+  packageDir: string;
+  name: string;
+  version: string;
+  npmLatest: string | null;
+  npmAction:
+    | "publish"
+    | "skip-existing"
+    | "dry-run-publish"
+    | "dry-run-validate-existing";
+  gprAction: "publish" | "skip" | "dry-run-publish";
+  reason: string;
+}
+
 async function getPublishedVersion(name: string): Promise<string | null> {
   try {
     // ~/.npmrc의 registry=가 verdaccio로 설정돼 있어도 public npm에서 조회
@@ -63,6 +77,27 @@ async function getPublishedVersion(name: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+async function writePublishPlan(entries: PublishPlanEntry[]): Promise<void> {
+  const outputDir = join(ROOT, ".mandu", "release");
+  const outputPath = join(outputDir, "publish-plan.json");
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(
+    outputPath,
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        mode: isDryRun ? "dry-run" : "publish",
+        npmRegistry: NPM_REGISTRY,
+        githubPackages: Boolean(GITHUB_TOKEN),
+        packages: entries,
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+  console.log(`\n🧾 Wrote publish plan: ${outputPath}`);
 }
 
 /**
@@ -246,6 +281,7 @@ async function main() {
   // binary gets cut, and the install.ps1 / install.sh one-liners
   // 404 on first download. See issue #257.
   const publishedPackages: Array<{ name: string; version: string }> = [];
+  const publishPlan: PublishPlanEntry[] = [];
 
   for (const pkg of PACKAGES) {
     const pkgPath = join(ROOT, pkg);
@@ -255,9 +291,31 @@ async function main() {
 
     const published = await getPublishedVersion(pkgJson.name);
     const alreadyOnNpm = published === pkgJson.version;
+    const npmAction: PublishPlanEntry["npmAction"] = isDryRun
+      ? alreadyOnNpm
+        ? "dry-run-validate-existing"
+        : "dry-run-publish"
+      : alreadyOnNpm
+        ? "skip-existing"
+        : "publish";
+    publishPlan.push({
+      packageDir: pkg,
+      name: pkgJson.name,
+      version: pkgJson.version,
+      npmLatest: published,
+      npmAction,
+      gprAction: GITHUB_TOKEN ? (isDryRun ? "dry-run-publish" : "publish") : "skip",
+      reason: alreadyOnNpm
+        ? "same version already exists on npm; local metadata will not be published"
+        : published
+          ? `local version differs from npm latest ${published}`
+          : "package not found on npm registry",
+    });
 
     if (!isDryRun && alreadyOnNpm && !GITHUB_TOKEN) {
-      console.log(`⏭️  ${pkgJson.name}@${pkgJson.version} — already on npm, skipping`);
+      console.log(
+        `⏭️  ${pkgJson.name}@${pkgJson.version} — already on npm, skipping; local metadata was not published. Run \`bun run check:npm-drift\` if this package changed.`
+      );
       continue;
     }
 
@@ -278,7 +336,9 @@ async function main() {
         const result = await $`cd ${pkgPath} && bun publish --dry-run --registry=${NPM_REGISTRY}`.text();
         console.log(result);
       } else if (alreadyOnNpm) {
-        console.log(`   ⏭️  npm: already published, skipping`);
+        console.log(
+          `   ⏭️  npm: already published, skipping; local metadata was not published. Run \`bun run check:npm-drift\` if this package changed.`
+        );
       } else {
         // --tag latest 명시: orphan/squatted 상위 버전이 npm에 있을 때 (skills 16.0.0
         // 등 외부 점유) npm은 implicit latest tagging을 거부함. 명시하면 강제 적용.
@@ -314,6 +374,8 @@ async function main() {
       console.log(`   🔄 Restored workspace:* in package.json`);
     }
   }
+
+  await writePublishPlan(publishPlan);
 
   // Push annotated git tags for every package we just published.
   //

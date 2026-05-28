@@ -43,7 +43,112 @@ afterEach(async () => {
 });
 
 describe("startServer inline client hydration", () => {
-  it("captures component props through sync server pages and inferred named client exports", async () => {
+  it("captures component props through sync server pages only under the legacy runtime scan flag", async () => {
+    await resetTestRoot();
+
+    const routeId = "pledges-$id";
+    const clientModule = "src/client/widgets/comments-section/CommentsSection.client.tsx";
+    const clientPath = path.join(TEST_ROOT, clientModule);
+    await mkdir(path.dirname(clientPath), { recursive: true });
+    await writeFile(
+      clientPath,
+      `
+import React from "react";
+
+export function CommentsSection({ pledgeId, initialComments }) {
+  return React.createElement(
+    "section",
+    { "data-pledge-id": pledgeId },
+    initialComments.map((comment) =>
+      React.createElement("p", { key: comment.id }, comment.body)
+    )
+  );
+}
+`,
+      "utf-8",
+    );
+
+    const imported = await import(`${pathToFileURL(clientPath).href}?t=${Date.now()}`);
+    const CommentsSection = imported.CommentsSection as React.ComponentType<{
+      pledgeId: string;
+      initialComments: Array<{ id: string; body: string }>;
+    }>;
+
+    function PledgePage(): React.ReactElement {
+      return React.createElement(
+        "main",
+        null,
+        React.createElement(CommentsSection, {
+          pledgeId: "pledge-1",
+          initialComments: [{ id: "c1", body: "serialized comment" }],
+        }),
+      );
+    }
+
+    const registry = createServerRegistry();
+    registry.registerRouteComponent(routeId, PledgePage);
+
+    const manifest: RoutesManifest = {
+      version: 1,
+      routes: [
+        {
+          id: routeId,
+          kind: "page",
+          pattern: "/pledges/:id",
+          module: "app/pledges/[id]/page.tsx",
+          componentModule: "app/pledges/[id]/page.tsx",
+          clientModule,
+          hydration: { strategy: "island", priority: "visible", preload: false },
+        },
+      ],
+    };
+
+    let server: ManduServer | undefined;
+    const originalFlag = process.env.MANDU_LEGACY_RUNTIME_PARTIAL_SCAN;
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    try {
+      process.env.MANDU_LEGACY_RUNTIME_PARTIAL_SCAN = "1";
+      console.warn = (...args: unknown[]) => {
+        warnings.push(args.map((arg) => String(arg)).join(" "));
+      };
+      server = startServer(manifest, {
+        port: 0,
+        registry,
+        rootDir: TEST_ROOT,
+        bundleManifest: hydratedManifest(routeId),
+        transitions: false,
+        prefetch: false,
+        spa: false,
+        devtools: false,
+        silent: true,
+      });
+
+      const response = await fetch(`http://127.0.0.1:${server.server.port}/pledges/pledge-1`);
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(html).toContain('data-mandu-island="pledges-$id--0"');
+      expect(html).toContain('type="application/json" data-mandu-props="pledges-$id--0"');
+      expect(html).toContain('"pledgeId":"pledge-1"');
+      expect(html).toContain('"initialComments"');
+      expect(html).toContain("serialized comment");
+      expect(html).not.toContain('data-mandu-island="pledges-$id"');
+      expect(warnings.some((warning) => warning.includes("MANDU_LEGACY_RUNTIME_PARTIAL_SCAN"))).toBe(true);
+      expect(warnings.some((warning) => warning.includes(`route="${routeId}"`))).toBe(true);
+      expect(warnings.some((warning) => warning.includes('file="app/pledges/[id]/page.tsx"'))).toBe(true);
+    } finally {
+      server?.stop();
+      console.warn = originalWarn;
+      if (originalFlag === undefined) {
+        delete process.env.MANDU_LEGACY_RUNTIME_PARTIAL_SCAN;
+      } else {
+        process.env.MANDU_LEGACY_RUNTIME_PARTIAL_SCAN = originalFlag;
+      }
+    }
+  });
+
+  it("uses route-level hydration by default instead of runtime-scanning sync server wrappers", async () => {
     await resetTestRoot();
 
     const routeId = "pledges-$id";
@@ -121,12 +226,10 @@ export function CommentsSection({ pledgeId, initialComments }) {
       const html = await response.text();
 
       expect(response.status).toBe(200);
-      expect(html).toContain('data-mandu-island="pledges-$id--0"');
-      expect(html).toContain('type="application/json" data-mandu-props="pledges-$id--0"');
-      expect(html).toContain('"pledgeId":"pledge-1"');
-      expect(html).toContain('"initialComments"');
+      expect(html).toContain('data-mandu-island="pledges-$id"');
+      expect(html).not.toContain('data-mandu-island="pledges-$id--0"');
+      expect(html).not.toContain('type="application/json" data-mandu-props="pledges-$id--0"');
       expect(html).toContain("serialized comment");
-      expect(html).not.toContain('data-mandu-island="pledges-$id"');
     } finally {
       server?.stop();
     }

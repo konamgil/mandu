@@ -8,6 +8,7 @@ import {
   resolveRouteLevelClientEntryPath,
   validateClientModuleForBrowserBundle,
 } from "./client-entry";
+import { analyzeRouteSource } from "./route-source-analyzer";
 
 const repoTempRoot = path.resolve(import.meta.dir, "../../../..", ".tmp-test-artifacts");
 
@@ -35,6 +36,31 @@ describe("findClientComponentImports", () => {
         names: ["Header"],
       },
     ]);
+  });
+
+  it("ignores import syntax inside string literals", () => {
+    const imports = findClientComponentImports(`
+      const example = "import Fake from './Fake.client'";
+
+      export default function Page() {
+        return <main>{example}</main>;
+      }
+    `);
+
+    expect(imports).toEqual([]);
+  });
+
+  it("ignores type-only client imports", () => {
+    const imports = findClientComponentImports(`
+      import type { LoginForm } from "@/client/widgets/login-form/LoginForm.client";
+      import { type SubmitButton } from "@/client/widgets/login-form/LoginForm.client";
+
+      export default function Page() {
+        return <main />;
+      }
+    `);
+
+    expect(imports).toEqual([]);
   });
 
   it("detects a default-imported client component when the page returns only that component", () => {
@@ -141,6 +167,22 @@ describe("findClientComponentImports", () => {
     });
   });
 
+  it("detects client entries rendered by an identifier default export", () => {
+    const routeClient = findRouteLevelClientComponentImport(`
+      import PledgePage from "@/client/pages/pledges/PledgePage.client";
+
+      const Page = ({ params }) => <PledgePage id={params.id} />;
+
+      export default Page;
+    `);
+
+    expect(routeClient).toEqual({
+      module: "@/client/pages/pledges/PledgePage.client",
+      localName: "PledgePage",
+      exportName: "default",
+    });
+  });
+
   it("detects multiple rendered client imports in a server shell", () => {
     const routeClients = findRouteLevelClientComponentImports(`
       import { CommentsSection } from "@/client/widgets/comments-section/CommentsSection.client";
@@ -198,6 +240,52 @@ describe("findClientComponentImports", () => {
     `);
 
     expect(routeClient).toBeNull();
+  });
+
+  it("classifies default re-exports without treating them as rendered JSX", () => {
+    const analysis = analyzeRouteSource(`
+      export { default } from "./Page";
+    `);
+
+    expect(analysis.defaultExport).toMatchObject({
+      kind: "identifier",
+      localName: "default",
+      source: "./Page",
+      referencesJsx: false,
+      renderedJsxNames: [],
+    });
+  });
+
+  it("diagnoses default export wrapper calls conservatively", () => {
+    const analysis = analyzeRouteSource(`
+      import { memo } from "react";
+
+      const Page = () => <main />;
+
+      export default memo(Page);
+    `);
+
+    expect(analysis.defaultExport.kind).toBe("call");
+    expect(analysis.diagnostics.some((diagnostic) =>
+      diagnostic.code === "MANDU_ROUTE_DEFAULT_EXPORT_WRAPPER"
+    )).toBe(true);
+  });
+
+  it("records namespace imports without promoting member JSX as a route-level client entry", () => {
+    const source = `
+      import * as Widgets from "@/client/widgets/Widget.client";
+
+      export default function Page() {
+        return <Widgets.Panel />;
+      }
+    `;
+    const analysis = analyzeRouteSource(source);
+
+    expect(analysis.imports[0]).toMatchObject({
+      source: "@/client/widgets/Widget.client",
+      namespaceName: "Widgets",
+    });
+    expect(findRouteLevelClientComponentImport(source)).toBeNull();
   });
 
   it("resolves a route-level client entry by reading a use client target without .client in the path", async () => {

@@ -238,12 +238,18 @@ export function hydrationTools(projectRoot: string) {
       if (!manifestResult.success || !manifestResult.data) {
         return { error: manifestResult.errors };
       }
+      const bundleManifest = await readJsonFile<BundleManifest>(
+        path.join(projectRoot, ".mandu", "manifest.json"),
+      );
+      const partialBoundaryCount = Object.keys(bundleManifest?.partials ?? {}).length;
 
       const pageClientMounts = manifestResult.data.routes
         .filter((route) => route.kind === "page")
         .map((route) => {
           const hydration = getRouteHydration(route);
           const needsClientMount = needsHydration(route);
+          const clientBoundaryCount = route.boundaries?.length ?? 0;
+          const hasRouteLevelClientMount = needsClientMount && !!route.clientModule;
           const warning = needsClientMount && !route.clientModule
             ? `Route has hydration strategy '${hydration.strategy}' but no clientModule; build would emit no route bundle.`
             : null;
@@ -254,6 +260,8 @@ export function hydrationTools(projectRoot: string) {
             hasClientModule: !!route.clientModule,
             clientModule: route.clientModule || null,
             needsClientMount,
+            hasRouteLevelClientMount,
+            clientBoundaryCount,
             // Backward compatibility for older agents that read `isIsland`.
             isIsland: needsClientMount,
             status: needsClientMount ? (route.clientModule ? "ready" : "broken") : "static",
@@ -270,16 +278,31 @@ export function hydrationTools(projectRoot: string) {
       const staticCount = pageClientMounts.filter((i) => !i.needsClientMount).length;
       const activeMounts = pageClientMounts.filter((i) => i.needsClientMount);
       const staticPages = pageClientMounts.filter((i) => !i.needsClientMount);
+      const clientBoundaryCount = pageClientMounts.reduce(
+        (count, route) => count + route.clientBoundaryCount,
+        0,
+      );
 
       return {
         terminology: {
           pageClientMount:
             "A page route whose whole page is hydrated from a route-level clientModule and route bundle.",
+          clientBoundary:
+            "A compiler-discovered nested client component marker recorded on RouteSpec.boundaries.",
+          partialBoundary:
+            "A legacy/runtime partial bundle listed in .mandu/manifest.json partials.",
           island:
-            "A nested or route-local island bundle, distinct from page client mounts. Use mandu.runtime.status for both collections.",
+            "Legacy umbrella term. Prefer pageClientMount, clientBoundary, or partialBoundary for precise reports.",
+        },
+        boundarySummary: {
+          clientBoundaryCount,
+          partialBoundaryCount,
+          pageClientMountCount,
         },
         totalPages: pageClientMounts.length,
         pageClientMountCount,
+        clientBoundaryCount,
+        partialBoundaryCount,
         staticCount,
         pageClientMounts: activeMounts,
         staticPages,

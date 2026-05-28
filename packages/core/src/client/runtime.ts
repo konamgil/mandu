@@ -3,7 +3,7 @@
  * v0.8.0: Dynamic Import 기반 아키텍처
  *
  * 이 파일은 타입 정의와 유틸리티 함수를 제공합니다.
- * 실제 Hydration Runtime은 bundler/build.ts의 generateRuntimeSource()에서 생성됩니다.
+ * 실제 Hydration Runtime은 client/runtime-entry.ts에서 번들링됩니다.
  */
 
 import { getHydratedRoots, getServerData as getGlobalServerData } from "./window-state";

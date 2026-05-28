@@ -16,7 +16,7 @@
  *   2. Unit tests can import it under happy-dom/JSDOM without triggering
  *      global mutation (no `document.querySelectorAll` on module eval).
  *
- * The bundler-generated runtime (`bundler/build.ts::generateRuntimeSource`)
+ * The bundled runtime entry (`client/runtime-entry.ts`)
  * delegates strategy selection to `scheduleHydration()` here — SSR emits the
  * `data-hydrate` attribute, the runtime reads it and dispatches.
  *

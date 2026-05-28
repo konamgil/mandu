@@ -334,6 +334,8 @@ describe("runtime page render response orchestration", () => {
         src: "/.mandu/client/candidates-$id.island.js",
         priority: "immediate",
         component: PledgeAccordion,
+        legacyRuntimeScan: true,
+        sourceFile: "app/candidates/[id]/page.tsx",
       },
     });
 
@@ -389,6 +391,8 @@ describe("runtime page render response orchestration", () => {
         src: "/.mandu/client/wrapped-fallback.island.js",
         priority: "visible",
         component: ClientWidget,
+        legacyRuntimeScan: true,
+        sourceFile: "app/wrapped/page.tsx",
       },
     });
 
@@ -499,6 +503,8 @@ describe("runtime page render response orchestration", () => {
         src: "/.mandu/client/ordered.island.js",
         priority: "visible",
         component: ClientWidget,
+        legacyRuntimeScan: true,
+        sourceFile: "app/ordered/page.tsx",
       },
     });
 

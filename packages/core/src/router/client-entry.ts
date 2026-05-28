@@ -5,6 +5,7 @@ import {
   formatClientBoundaryDiagnostics,
   validateClientBoundaryServerOnlyImports,
 } from "../bundler/client-boundary-transform";
+import { analyzeRouteSource, type RouteSourceImportRecord } from "./route-source-analyzer";
 
 export interface ClientComponentImport {
   module: string;
@@ -35,11 +36,11 @@ export function normalizeRouteModulePath(value: string | undefined): string {
 }
 
 export function hasUseClientDirective(source: string): boolean {
-  return /^(?:\uFEFF)?\s*(?:(?:\/\/[^\r\n]*(?:\r?\n|$))|(?:\/\*[\s\S]*?\*\/\s*))*["']use client["']\s*;?/.test(source);
+  return analyzeRouteSource(source).directives.useClient;
 }
 
 export function hasUseServerDirective(source: string): boolean {
-  return /^(?:\uFEFF)?\s*(?:(?:\/\/[^\r\n]*(?:\r?\n|$))|(?:\/\*[\s\S]*?\*\/\s*))*["']use server["']\s*;?/.test(source);
+  return analyzeRouteSource(source).directives.useServer;
 }
 
 export function clientModuleIsRouteComponent(route: RouteSpec, clientModule = route.clientModule): boolean {
@@ -75,69 +76,56 @@ function toPublicClientComponentImport(entry: ComponentImportRecord): ClientComp
 }
 
 function findComponentImportRecords(source: string): ComponentImportRecord[] {
-  const imports: ComponentImportRecord[] = [];
-  const importFromPattern = /import\s+(?!type\b)([\s\S]*?)\s+from\s+["']([^"']+)["']/g;
-  const sideEffectPattern = /import\s+["']([^"']+)["']/g;
+  return findComponentImportRecordsFromAnalysis(analyzeRouteSource(source).imports);
+}
 
-  for (const match of source.matchAll(importFromPattern)) {
-    const clause = (match[1] ?? "").trim();
-    const module = match[2] ?? "";
-    const names: string[] = [];
-    const specifiers: ComponentImportSpecifier[] = [];
-    let hasDefault = false;
-    let hasNamed = false;
-    let hasNamespace = false;
+function findComponentImportRecordsFromAnalysis(imports: RouteSourceImportRecord[]): ComponentImportRecord[] {
+  return imports.flatMap(toComponentImportRecord);
+}
 
-    const namedMatch = clause.match(/\{([^}]*)\}/);
-    if (namedMatch) {
-      hasNamed = true;
-      for (const rawName of namedMatch[1].split(",")) {
-        const name = rawName.trim();
-        if (!name) continue;
-        const parts = name.split(/\s+as\s+/i).map((part) => part.trim()).filter(Boolean);
-        const importedName = parts[0] ?? "";
-        const localName = parts[1] ?? importedName;
-        names.push(localName);
-        specifiers.push({ importedName, localName });
-      }
-    }
+function toComponentImportRecord(entry: RouteSourceImportRecord): ComponentImportRecord[] {
+  if (entry.isSideEffectOnly) {
+    return [{ module: entry.source, kind: "side-effect", names: [], specifiers: [] }];
+  }
+  if (entry.isTypeOnly) return [];
 
-    if (/\*\s+as\s+/.test(clause)) {
-      hasNamespace = true;
-      const namespaceMatch = clause.match(/\*\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)/);
-      if (namespaceMatch?.[1]) {
-        names.push(namespaceMatch[1]);
-        specifiers.push({ importedName: "*", localName: namespaceMatch[1] });
-      }
-    }
+  const names: string[] = [];
+  const specifiers: ComponentImportSpecifier[] = [];
+  let hasDefault = false;
+  let hasNamed = false;
+  let hasNamespace = false;
 
-    const beforeNamed = clause.split("{")[0]?.replace(/,\s*$/, "").trim() ?? "";
-    if (beforeNamed && !beforeNamed.startsWith("*")) {
-      hasDefault = true;
-      const localName = beforeNamed.split(",")[0].trim();
-      names.push(localName);
-      specifiers.push({ importedName: DEFAULT_EXPORT_NAME, localName });
-    }
-
-    const kind =
-      (hasDefault && (hasNamed || hasNamespace))
-        ? "mixed"
-        : hasNamed
-          ? "named"
-          : hasNamespace
-            ? "namespace"
-            : "default";
-
-    imports.push({ module, kind, names, specifiers });
+  if (entry.defaultName) {
+    hasDefault = true;
+    names.push(entry.defaultName);
+    specifiers.push({ importedName: DEFAULT_EXPORT_NAME, localName: entry.defaultName });
   }
 
-  for (const match of source.matchAll(sideEffectPattern)) {
-    const module = match[1] ?? "";
-    if (imports.some((entry) => entry.module === module)) continue;
-    imports.push({ module, kind: "side-effect", names: [], specifiers: [] });
+  if (entry.namespaceName) {
+    hasNamespace = true;
+    names.push(entry.namespaceName);
+    specifiers.push({ importedName: "*", localName: entry.namespaceName });
   }
 
-  return imports;
+  for (const named of entry.named) {
+    if (named.isTypeOnly) continue;
+    hasNamed = true;
+    names.push(named.local);
+    specifiers.push({ importedName: named.imported, localName: named.local });
+  }
+
+  if (names.length === 0) return [];
+
+  const kind =
+    (hasDefault && (hasNamed || hasNamespace))
+      ? "mixed"
+      : hasNamed
+        ? "named"
+        : hasNamespace
+          ? "namespace"
+          : "default";
+
+  return [{ module: entry.source, kind, names, specifiers }];
 }
 
 export function findRouteLevelClientComponentImport(source: string): RouteLevelClientComponentImport | null {
@@ -145,7 +133,8 @@ export function findRouteLevelClientComponentImport(source: string): RouteLevelC
 }
 
 export function findRouteLevelClientComponentImports(source: string): RouteLevelClientComponentImport[] {
-  const candidates = findComponentImportRecords(source).flatMap((entry) =>
+  const analysis = analyzeRouteSource(source);
+  const candidates = findComponentImportRecordsFromAnalysis(analysis.imports).flatMap((entry) =>
     isRouteLevelClientEntrySpecifier(entry.module)
       ? entry.specifiers
           .filter((specifier) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(specifier.localName))
@@ -158,7 +147,7 @@ export function findRouteLevelClientComponentImports(source: string): RouteLevel
   );
 
   if (candidates.length === 0) return [];
-  return defaultExportRendersClientComponents(source, candidates);
+  return defaultExportRendersClientComponents(analysis.defaultExport.renderedJsxNames, candidates);
 }
 
 function isRouteLevelClientEntrySpecifier(specifier: string): boolean {
@@ -273,234 +262,22 @@ function clientSpecifierLooksBrowserOnly(specifier: string): boolean {
 }
 
 function defaultExportRendersClientComponents(
-  source: string,
+  renderedJsxNames: string[],
   candidates: RouteLevelClientComponentImport[],
 ): RouteLevelClientComponentImport[] {
-  const functionBody = extractDefaultExportFunctionBody(source);
-  if (functionBody !== null) {
-    const returned = extractTopLevelReturnExpression(functionBody);
-    return returned !== null ? jsxExpressionRendersClientComponents(returned, candidates) : [];
-  }
-
-  const arrowExpression = extractDefaultExportArrowExpression(source);
-  if (arrowExpression !== null) {
-    return jsxExpressionRendersClientComponents(arrowExpression, candidates);
-  }
-
-  const arrowBody = extractDefaultExportArrowFunctionBody(source);
-  if (arrowBody !== null) {
-    const returned = extractTopLevelReturnExpression(arrowBody);
-    return returned !== null ? jsxExpressionRendersClientComponents(returned, candidates) : [];
-  }
-
-  return [];
-}
-
-function extractDefaultExportFunctionBody(source: string): string | null {
-  const match = /export\s+default\s+(?:async\s+)?function(?:\s+[A-Za-z_$][A-Za-z0-9_$]*)?\s*\([^)]*\)\s*(?::\s*[^{=]+)?\{/m.exec(source);
-  if (!match) return null;
-
-  const openBrace = match.index + match[0].lastIndexOf("{");
-  const closeBrace = findMatchingBrace(source, openBrace);
-  if (closeBrace === -1) return null;
-  return source.slice(openBrace + 1, closeBrace);
-}
-
-function extractDefaultExportArrowExpression(source: string): string | null {
-  const match = /export\s+default\s+(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][A-Za-z0-9_$]*)\s*=>\s*/m.exec(source);
-  if (!match) return null;
-
-  const start = match.index + match[0].length;
-  const rest = source.slice(start).trim();
-  if (rest.startsWith("{")) return null;
-
-  const semicolon = rest.indexOf(";");
-  return semicolon === -1 ? rest : rest.slice(0, semicolon);
-}
-
-function extractDefaultExportArrowFunctionBody(source: string): string | null {
-  const match = /export\s+default\s+(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][A-Za-z0-9_$]*)\s*=>\s*\{/m.exec(source);
-  if (!match) return null;
-
-  const openBrace = match.index + match[0].lastIndexOf("{");
-  const closeBrace = findMatchingBrace(source, openBrace);
-  if (closeBrace === -1) return null;
-  return source.slice(openBrace + 1, closeBrace);
-}
-
-function extractTopLevelReturnExpression(body: string): string | null {
-  let quote: '"' | "'" | "`" | null = null;
-  let lineComment = false;
-  let blockComment = false;
-  let braceDepth = 0;
-  let parenDepth = 0;
-  let bracketDepth = 0;
-
-  for (let i = 0; i < body.length; i++) {
-    const char = body[i];
-    const next = body[i + 1];
-    const prev = body[i - 1];
-
-    if (lineComment) {
-      if (char === "\n" || char === "\r") lineComment = false;
-      continue;
-    }
-
-    if (blockComment) {
-      if (char === "*" && next === "/") {
-        blockComment = false;
-        i++;
-      }
-      continue;
-    }
-
-    if (quote) {
-      if (char === quote && prev !== "\\") quote = null;
-      continue;
-    }
-
-    if (char === "/" && next === "/") {
-      lineComment = true;
-      i++;
-      continue;
-    }
-    if (char === "/" && next === "*") {
-      blockComment = true;
-      i++;
-      continue;
-    }
-    if (char === '"' || char === "'" || char === "`") {
-      quote = char;
-      continue;
-    }
-
-    if (braceDepth === 0 && parenDepth === 0 && bracketDepth === 0 && body.startsWith("return", i)) {
-      const before = body[i - 1] ?? "";
-      const after = body[i + "return".length] ?? "";
-      if (!isIdentifierChar(before) && !isIdentifierChar(after)) {
-        const expr = body.slice(i + "return".length).trim();
-        return trimTrailingSemicolon(expr);
-      }
-    }
-
-    if (char === "{") braceDepth++;
-    if (char === "}") braceDepth = Math.max(0, braceDepth - 1);
-    if (char === "(") parenDepth++;
-    if (char === ")") parenDepth = Math.max(0, parenDepth - 1);
-    if (char === "[") bracketDepth++;
-    if (char === "]") bracketDepth = Math.max(0, bracketDepth - 1);
-  }
-
-  return null;
-}
-
-function trimTrailingSemicolon(value: string): string {
-  const trimmed = value.trim();
-  return trimmed.endsWith(";") ? trimmed.slice(0, -1).trim() : trimmed;
-}
-
-function jsxExpressionRendersClientComponents(
-  expression: string,
-  candidates: RouteLevelClientComponentImport[],
-): RouteLevelClientComponentImport[] {
-  const expr = stripWrappingParentheses(expression.trim());
+  const renderedNames = new Set(renderedJsxNames);
   const seen = new Set<string>();
   const rendered: RouteLevelClientComponentImport[] = [];
 
   for (const candidate of candidates) {
     const key = `${candidate.module}\0${candidate.localName}`;
     if (seen.has(key)) continue;
-    if (!jsxExpressionContainsClientElement(expr, candidate.localName)) continue;
+    if (!renderedNames.has(candidate.localName)) continue;
     seen.add(key);
     rendered.push(candidate);
   }
 
   return rendered;
-}
-
-function jsxExpressionContainsClientElement(expression: string, localName: string): boolean {
-  const escaped = escapeRegExp(localName);
-  return new RegExp(`<${escaped}(?:\\s|/|>)`).test(expression);
-}
-
-function stripWrappingParentheses(value: string): string {
-  let current = value.trim();
-  while (current.startsWith("(") && current.endsWith(")")) {
-    const close = findMatchingParen(current, 0);
-    if (close !== current.length - 1) break;
-    current = current.slice(1, -1).trim();
-  }
-  return current;
-}
-
-function findMatchingBrace(source: string, openIndex: number): number {
-  return findMatchingDelimiter(source, openIndex, "{", "}");
-}
-
-function findMatchingParen(source: string, openIndex: number): number {
-  return findMatchingDelimiter(source, openIndex, "(", ")");
-}
-
-function findMatchingDelimiter(source: string, openIndex: number, open: string, close: string): number {
-  let depth = 0;
-  let quote: '"' | "'" | "`" | null = null;
-  let lineComment = false;
-  let blockComment = false;
-
-  for (let i = openIndex; i < source.length; i++) {
-    const char = source[i];
-    const next = source[i + 1];
-    const prev = source[i - 1];
-
-    if (lineComment) {
-      if (char === "\n" || char === "\r") lineComment = false;
-      continue;
-    }
-
-    if (blockComment) {
-      if (char === "*" && next === "/") {
-        blockComment = false;
-        i++;
-      }
-      continue;
-    }
-
-    if (quote) {
-      if (char === quote && prev !== "\\") quote = null;
-      continue;
-    }
-
-    if (char === "/" && next === "/") {
-      lineComment = true;
-      i++;
-      continue;
-    }
-    if (char === "/" && next === "*") {
-      blockComment = true;
-      i++;
-      continue;
-    }
-    if (char === '"' || char === "'" || char === "`") {
-      quote = char;
-      continue;
-    }
-
-    if (char === open) depth++;
-    if (char === close) {
-      depth--;
-      if (depth === 0) return i;
-    }
-  }
-
-  return -1;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function isIdentifierChar(value: string): boolean {
-  return /[A-Za-z0-9_$]/.test(value);
 }
 
 export async function validateClientModuleForBrowserBundle(

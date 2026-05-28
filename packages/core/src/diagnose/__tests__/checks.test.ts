@@ -457,6 +457,21 @@ describe("checkClientBoundaryManifests", () => {
     expect(result.details?.missingEntries).toEqual(["home--0"]);
   });
 
+  it("treats a missing bundle manifest as an error when routes declare compiler-owned boundaries", async () => {
+    await writeFile(rootDir, ".mandu/routes.manifest.json", JSON.stringify({
+      routes: [
+        {
+          id: "home",
+          boundaries: [{ id: "home--0", routeId: "home", module: "src/client/Home.client.tsx", exportName: "Home" }],
+        },
+      ],
+    }));
+    const result = await checkClientBoundaryManifests(rootDir);
+    expect(result.ok).toBe(false);
+    expect(result.severity).toBe("error");
+    expect(result.message).toMatch(/bundle manifest is missing/);
+  });
+
   it("passes when route and bundle boundary manifests line up", async () => {
     await writeFile(rootDir, ".mandu/routes.manifest.json", JSON.stringify({
       routes: [

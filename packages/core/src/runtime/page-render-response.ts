@@ -11,6 +11,13 @@ export interface InlineClientHydrationTarget {
   src: string;
   priority: NonNullable<HydrationConfig["priority"]>;
   component: unknown;
+  /**
+   * Compatibility path for pre-F42 route-level client modules where the
+   * client component is hidden behind a server wrapper. Disabled by default
+   * because it invokes user function components outside React's renderer.
+   */
+  legacyRuntimeScan?: boolean;
+  sourceFile?: string;
 }
 
 export interface PageRenderResponseOptions {
@@ -125,7 +132,8 @@ async function resolveAndWrapInlineClientHydration(
     };
   }
 
-  if (typeof type === "function" && !isClassComponent(type)) {
+  if (target.legacyRuntimeScan && typeof type === "function" && !isClassComponent(type)) {
+    warnLegacyRuntimePartialScan(target);
     const rendered = await renderFunctionComponentForInlineHydration(
       type,
       element.props ?? {},
@@ -150,6 +158,20 @@ async function resolveAndWrapInlineClientHydration(
     ? React.cloneElement(element, undefined, ...resolvedChildren.node)
     : React.cloneElement(element, undefined, resolvedChildren.node);
   return { node: cloned, didWrap: resolvedChildren.didWrap };
+}
+
+const warnedLegacyRuntimePartialScanRoutes = new Set<string>();
+
+function warnLegacyRuntimePartialScan(target: InlineClientHydrationTarget): void {
+  if (warnedLegacyRuntimePartialScanRoutes.has(target.routeId)) return;
+  warnedLegacyRuntimePartialScanRoutes.add(target.routeId);
+
+  const file = target.sourceFile ? ` file="${target.sourceFile}"` : "";
+  console.warn(
+    `[MANDU_LEGACY_RUNTIME_PARTIAL_SCAN] route="${target.routeId}"${file}: ` +
+    "runtime client component discovery is running under the compatibility flag. " +
+    "Migrate this route to compiler-owned client boundaries so SSR does not invoke user components during discovery.",
+  );
 }
 
 function isAsyncFunctionComponent(type: Function): boolean {
