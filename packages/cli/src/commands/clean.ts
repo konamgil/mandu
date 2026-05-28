@@ -1,7 +1,9 @@
 /**
  * mandu clean - Remove build artifacts
  *
- * Deletes .mandu/client/ and .mandu/static/ directories.
+ * Deletes .mandu/client/, .mandu/static/, and the .mandu/vendor-cache/
+ * (cached React vendor shims — must be cleared too, otherwise a stale
+ * `_react.js` survives `mandu clean` and is restored on the next dev build).
  * With --all: also removes .mandu/generated/ and .mandu/manifest.json.
  */
 
@@ -28,6 +30,11 @@ export async function clean(options: CleanOptions = {}): Promise<boolean> {
   const targets = [
     path.join(manduDir, "client"),
     path.join(manduDir, "static"),
+    // Cached React vendor shims (_react.js, _jsx-dev-runtime.js, …). A stale
+    // entry here survives a client/ wipe and gets restored on the next dev
+    // build, so a broken vendor bundle can't be fixed by `mandu clean`
+    // unless this is cleared too.
+    path.join(manduDir, "vendor-cache"),
   ];
 
   if (options.all) {
