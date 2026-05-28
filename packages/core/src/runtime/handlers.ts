@@ -76,6 +76,16 @@ function createMethodDispatcher(module: RouteModule, routeId: string) {
       if (typeof module.GET === "function" && !allow.includes("HEAD")) {
         allow.push("HEAD");
       }
+      // RFC 7231 §4.3.7: auto-respond to a plain OPTIONS request (no explicit
+      // OPTIONS export) with 204 + an `Allow` header. CORS preflights (which
+      // carry `Access-Control-Request-Method`) are left to the normal flow.
+      if (method === "OPTIONS" && !req.headers.get("access-control-request-method")) {
+        const optionsAllow = allow.includes("OPTIONS") ? allow : [...allow, "OPTIONS"];
+        return new Response(null, {
+          status: 204,
+          headers: { Allow: optionsAllow.join(", ") },
+        });
+      }
       return Response.json(
         {
           error: `Method ${method} not allowed for route ${routeId}`,

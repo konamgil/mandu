@@ -104,4 +104,51 @@ describe("Filling HEAD handling (#319)", () => {
     // HEAD is implied by GET.
     expect(methods).toContain("HEAD");
   });
+
+  // RFC 7231 §4.3.7: a plain OPTIONS request (no explicit OPTIONS handler)
+  // should return 204 with an Allow header, not 405.
+  it("auto-responds to a plain OPTIONS request with 204 + Allow", async () => {
+    const filling = ManduFillingFactory.filling()
+      .get((ctx) => ctx.json({ ok: true }))
+      .post((ctx) => ctx.json({ ok: true }));
+
+    const res = await filling.handle(
+      new Request("http://localhost/api/pledges", { method: "OPTIONS" }),
+    );
+
+    expect(res.status).toBe(204);
+    const methods = (res.headers.get("Allow") ?? "").split(", ");
+    expect(methods).toContain("GET");
+    expect(methods).toContain("POST");
+    expect(methods).toContain("HEAD");
+    expect(methods).toContain("OPTIONS");
+  });
+
+  it("defers CORS preflight OPTIONS (Access-Control-Request-Method) instead of auto-answering", async () => {
+    const filling = ManduFillingFactory.filling().get((ctx) => ctx.json({ ok: true }));
+
+    const res = await filling.handle(
+      new Request("http://localhost/api/pledges", {
+        method: "OPTIONS",
+        headers: { "Access-Control-Request-Method": "GET", Origin: "https://x" },
+      }),
+    );
+
+    // No CORS middleware registered → falls through to 405 (not the 204
+    // auto-OPTIONS path), leaving preflight handling to CORS middleware.
+    expect(res.status).toBe(405);
+  });
+
+  it("an explicit OPTIONS handler still takes precedence", async () => {
+    const filling = ManduFillingFactory.filling()
+      .get((ctx) => ctx.json({ ok: true }))
+      .options((ctx) => ctx.json({ custom: true }));
+
+    const res = await filling.handle(
+      new Request("http://localhost/api/pledges", { method: "OPTIONS" }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ custom: true });
+  });
 });

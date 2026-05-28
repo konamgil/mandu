@@ -606,6 +606,20 @@ export class ManduFilling<TLoaderData = unknown> {
       if (this.config.handlers.has("GET") && !allowed.includes("HEAD")) {
         allowed.push("HEAD");
       }
+      // RFC 7231 §4.3.7: auto-respond to a plain OPTIONS request (no explicit
+      // OPTIONS handler) with 204 + an `Allow` header. CORS preflights — which
+      // carry `Access-Control-Request-Method` — are left to the normal flow so
+      // CORS middleware can attach its Access-Control-* headers.
+      if (
+        method === "OPTIONS" &&
+        !normalizedRequest.headers.get("access-control-request-method")
+      ) {
+        const optionsAllowed = allowed.includes("OPTIONS") ? allowed : [...allowed, "OPTIONS"];
+        return new Response(null, {
+          status: 204,
+          headers: { Allow: optionsAllowed.join(", ") },
+        });
+      }
       // RFC 7231 §6.5.5: a 405 response MUST include an `Allow` header listing
       // every supported method (not just the body field). ctx.json() cannot
       // attach headers, so build the response directly here.
