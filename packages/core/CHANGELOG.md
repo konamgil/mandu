@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.29
+
+### Patch Changes
+
+- [`24476fc`](https://github.com/konamgil/mandu/commit/24476fcf7d859d6d119da463475dee7c75376d72) Thanks [@konamgil](https://github.com/konamgil)! - Align the DevTools ("Kitchen") design tokens with the mandujs.com brand. The panel now uses Mandu's signature warm palette instead of the previous cool-indigo theme: peach-orange accent `#FF8C66`, dark-brown surfaces (`#1F1B16`/`#2A2520`/`#3E3028`), warm cream text, the docs-grade semantic colors (info `#4A90C2`, success `#6B9E47`, warn `#E8A93A`, danger `#C85450`), warm-tinted shadows, and the Pretendard/Consolas font stacks — all taken from mandujs.com's `app/globals.css` and `styles/tokens.css`. Values only; component structure is unchanged (every component reads the tokens via CSS variables).
+
 ## 0.54.28
 
 ### Patch Changes
