@@ -1,5 +1,11 @@
 # @mandujs/core
 
+## 0.54.25
+
+### Patch Changes
+
+- [`53d3b6a`](https://github.com/konamgil/mandu/commit/53d3b6ac50fd91a6f5845057e3235e6b8aba58af) Thanks [@konamgil](https://github.com/konamgil)! - Auto-respond to plain `OPTIONS` requests with `204 No Content` + an `Allow` header (RFC 7231 §4.3.7) when no explicit OPTIONS handler is registered — for both `Mandu.filling()` routes and `route.ts` method-export modules. Previously a plain OPTIONS request returned `405`. CORS preflight requests (carrying `Access-Control-Request-Method`) are left to the normal flow so CORS middleware can attach its `Access-Control-*` headers. Proactive follow-up to the HTTP method-handling cluster (#319 HEAD-as-GET, #321 Allow header).
+
 ## 0.54.24
 
 ### Patch Changes

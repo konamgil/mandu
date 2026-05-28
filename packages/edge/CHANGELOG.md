@@ -1,5 +1,12 @@
 # @mandujs/edge
 
+## 0.4.73
+
+### Patch Changes
+
+- Updated dependencies [[`53d3b6a`](https://github.com/konamgil/mandu/commit/53d3b6ac50fd91a6f5845057e3235e6b8aba58af)]:
+  - @mandujs/core@0.54.25
+
 ## 0.4.72
 
 ### Patch Changes
