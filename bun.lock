@@ -48,7 +48,7 @@
     },
     "demo/auth-starter": {
       "name": "mandu-auth-starter",
-      "version": "0.1.80",
+      "version": "0.1.81",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -67,7 +67,7 @@
     },
     "demo/desktop-starter": {
       "name": "mandu-desktop-starter",
-      "version": "0.1.79",
+      "version": "0.1.80",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "react": "^19.2.0",
@@ -83,7 +83,7 @@
     },
     "demo/edge-workers-starter": {
       "name": "mandu-edge-workers-starter",
-      "version": "0.1.80",
+      "version": "0.1.81",
       "dependencies": {
         "@mandujs/core": "workspace:*",
         "@mandujs/edge": "workspace:*",
@@ -163,7 +163,7 @@
     },
     "packages/core": {
       "name": "@mandujs/core",
-      "version": "0.54.29",
+      "version": "0.54.30",
       "dependencies": {
         "chokidar": "^5.0.0",
         "fast-glob": "^3.3.2",
@@ -204,7 +204,7 @@
     },
     "packages/edge": {
       "name": "@mandujs/edge",
-      "version": "0.4.77",
+      "version": "0.4.78",
       "dependencies": {
         "@mandujs/core": "workspace:*",
       },
@@ -234,7 +234,7 @@
     },
     "packages/playground-runner": {
       "name": "@mandujs/playground-runner",
-      "version": "25.0.27",
+      "version": "25.0.28",
       "devDependencies": {
         "@cloudflare/sandbox": "^0.1.0",
         "@cloudflare/workers-types": "^4.20250101.0",
