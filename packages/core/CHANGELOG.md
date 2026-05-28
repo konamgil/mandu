@@ -1,5 +1,14 @@
 # @mandujs/core
 
+## 0.54.22
+
+### Patch Changes
+
+- [`babc537`](https://github.com/konamgil/mandu/commit/babc5374912a0fb2b9a6bdbd1e39a7e54722bd15) Thanks [@konamgil](https://github.com/konamgil)! - Fix two SSR/navigation correctness bugs:
+
+  - **#316 router**: the full SPA router now falls back to a real document navigation when the target route is server-only (no client-renderable bundle). Previously such links changed the URL but left the page content stale. The `_data` response carries a `clientRenderable` flag the router checks before a client-side state swap.
+  - **#317 SEO**: body-rendered `<meta property="og:*">` / `<meta name="twitter:*">` / `<meta name="description">` and `<script type="application/ld+json">` are now hoisted into `<head>` during SSR (matching the existing `<link>`/`<title>` hoisting). Microdata `<meta itemprop>` correctly stays in the body.
+
 ## 0.54.21
 
 ### Patch Changes
