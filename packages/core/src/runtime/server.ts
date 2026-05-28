@@ -482,6 +482,7 @@ export type ErrorLoader = () => Promise<{ default: ErrorComponent }>;
 export interface PageRegistration {
   component: React.ComponentType<{
     params: Record<string, string>;
+    searchParams: Record<string, string>;
     loaderData?: unknown;
     __manduHydration?: InlineClientHydrationTarget;
   }>;
@@ -510,6 +511,8 @@ export interface AppContext {
   routeId: string;
   url: string;
   params: Record<string, string>;
+  /** 요청 URL의 쿼리스트링 (generateMetadata와 동일한 값) */
+  searchParams: Record<string, string>;
   /** SSR loader에서 로드한 데이터 */
   loaderData?: unknown;
   __manduHydration?: InlineClientHydrationTarget;
@@ -517,6 +520,7 @@ export interface AppContext {
 
 type RouteComponent = (props: {
   params: Record<string, string>;
+  searchParams: Record<string, string>;
   loaderData?: unknown;
   __manduHydration?: InlineClientHydrationTarget;
 }) => React.ReactElement;
@@ -1108,6 +1112,7 @@ function createDefaultAppFactory(registry: ServerRegistry) {
 
     return React.createElement(Component, {
       params: context.params,
+      searchParams: context.searchParams,
       loaderData: context.loaderData,
       __manduHydration: context.__manduHydration,
     });
@@ -2159,6 +2164,7 @@ async function renderPageSSR(
       routeId: route.id,
       url,
       params,
+      searchParams: extractSearchParams(url),
       loaderData,
       __manduHydration: inlineClientHydration,
     });
@@ -2422,6 +2428,7 @@ async function renderNotFoundPage(
     // streaming, no island bundling — a 404 page is plain).
     let app: React.ReactElement = React.createElement(NotFoundComponent, {
       params,
+      searchParams: extractSearchParams(req.url),
       loaderData,
     });
     if (route.layoutChain && route.layoutChain.length > 0) {
@@ -3450,6 +3457,7 @@ async function handleRequestInternal(
         }
         const rawApp = React.createElement(registration.component, {
           params: {},
+          searchParams: extractSearchParams(req.url),
           loaderData,
         });
         // Issue #198 — pre-resolve in case the not-found component is async.
