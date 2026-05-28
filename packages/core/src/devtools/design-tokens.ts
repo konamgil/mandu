@@ -7,28 +7,31 @@
 // Color Tokens
 // ============================================================================
 
+// Aligned with mandujs.com brand tokens (app/globals.css + styles/tokens.css):
+// primary peach #FF8C66, secondary dark-brown #4A3222, warm-brown dark surfaces
+// (#1F1B16/#2A2520/#3E3028), cream text, and the docs-grade semantic palette.
 export const colors = {
   brand: {
-    primary: '#F5E6D3',      // 만두피 베이지
-    secondary: '#8B4513',    // 구운 갈색
-    accent: '#E8967A',       // 새우 만두 분홍
+    primary: '#F5EDE0',      // 만두피 크림 (mandujs cream surface)
+    secondary: '#4A3222',    // 구운 다크 브라운 (mandujs --color-secondary)
+    accent: '#FF8C66',       // 만두 시그니처 피치 오렌지 (mandujs --color-primary)
   },
   semantic: {
-    success: '#7EC8A0',      // 세이지 그린 (따뜻한 톤)
-    warning: '#E8B84D',      // 앰버 (부드러운 경고)
-    error: '#E86464',        // 소프트 레드
-    info: '#7AAFC8',         // 스틸 블루 (차분한 정보)
+    success: '#6B9E47',      // 올리브 그린 (mandujs --color-success)
+    warning: '#E8A93A',      // 웜 앰버 (mandujs --color-warn)
+    error: '#C85450',        // 머티드 레드-브라운 (mandujs --color-danger)
+    info: '#4A90C2',         // 차분한 블루 (mandujs --color-info)
   },
   background: {
-    dark: '#1C1B2E',         // 따뜻한 다크 인디고
-    medium: '#2A2940',       // 따뜻한 미디엄
-    light: '#3A3854',        // 따뜻한 라이트
-    overlay: 'rgba(10, 8, 20, 0.88)',
+    dark: '#1F1B16',         // 딥 브라운 (mandujs --color-background-dark)
+    medium: '#2A2520',       // 웜 서피스 (mandujs --color-surface-dark)
+    light: '#3E3028',        // 웜 라이트 서피스 (mandujs --color-dark-surface)
+    overlay: 'rgba(20, 14, 8, 0.88)',
   },
   text: {
-    primary: '#F0EDE8',      // 크림 화이트 (따뜻한 톤)
-    secondary: '#A8A4A0',    // 따뜻한 그레이
-    muted: '#6B6866',        // 따뜻한 뮤트
+    primary: '#FFF0E6',      // 웜 크림 화이트 (mandujs --color-dark-text)
+    secondary: '#C9BCAD',    // 웜 베이지 그레이
+    muted: '#7A6B5D',        // 웜 뮤트 브라운 (mandujs --color-dark-muted)
   },
 } as const;
 
@@ -38,8 +41,9 @@ export const colors = {
 
 export const typography = {
   fontFamily: {
-    mono: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
-    sans: "'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    // Aligned with mandujs.com (app/globals.css --font-mono / --font-sans).
+    mono: "'Consolas', 'Monaco', 'Ubuntu Mono', 'JetBrains Mono', ui-monospace, monospace",
+    sans: "'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   fontSize: {
     xs: '10px',
@@ -99,11 +103,12 @@ export const borderWidth = {
 // ============================================================================
 
 export const shadows = {
-  sm: '0 1px 3px rgba(8, 6, 18, 0.12)',
-  md: '0 4px 8px rgba(8, 6, 18, 0.18)',
-  lg: '0 10px 20px rgba(8, 6, 18, 0.24)',
-  xl: '0 20px 30px rgba(8, 6, 18, 0.32)',
-  overlay: '0 25px 50px rgba(8, 6, 18, 0.5)',
+  // Warm-tinted shadows to match the brown-toned dark surfaces.
+  sm: '0 1px 3px rgba(20, 12, 4, 0.14)',
+  md: '0 4px 8px rgba(20, 12, 4, 0.20)',
+  lg: '0 10px 20px rgba(20, 12, 4, 0.26)',
+  xl: '0 20px 30px rgba(20, 12, 4, 0.34)',
+  overlay: '0 25px 50px rgba(20, 12, 4, 0.5)',
 } as const;
 
 // ============================================================================
