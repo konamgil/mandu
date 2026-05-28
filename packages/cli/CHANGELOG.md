@@ -1,5 +1,11 @@
 # @mandujs/cli
 
+## 0.44.24
+
+### Patch Changes
+
+- [`1a30f27`](https://github.com/konamgil/mandu/commit/1a30f275a937524641475b1bbac3cc00a4e1b765) Thanks [@konamgil](https://github.com/konamgil)! - `mandu clean` now also removes `.mandu/vendor-cache/` (the cached React vendor shims: `_react.js`, `_jsx-dev-runtime.js`, …). Previously it only wiped `.mandu/client/` and `.mandu/static/`, so a stale or broken vendor bundle survived a clean and was restored on the next dev build — meaning `mandu clean && mandu dev` could not actually recover from a bad `_react.js` (a contributing factor to the #322/#323 "fix didn't take effect after upgrade" reports).
+
 ## 0.44.23
 
 ### Patch Changes
