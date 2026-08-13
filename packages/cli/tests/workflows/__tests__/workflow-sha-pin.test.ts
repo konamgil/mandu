@@ -189,6 +189,22 @@ describe("Phase 11.A SLSA provenance wiring (M-01 first cut)", () => {
   });
 });
 
+describe("npm trusted publishing", () => {
+  it("publish.yml uses GitHub OIDC without a long-lived npm token", () => {
+    const text = readFileSync(
+      path.join(WORKFLOWS_DIR, "publish.yml"),
+      "utf-8"
+    );
+
+    expect(text).toContain("id-token: write");
+    expect(text).toMatch(/actions\/setup-node@[0-9a-f]{40}/);
+    expect(text).toContain('node-version: "24"');
+    expect(text).toContain('registry-url: "https://registry.npmjs.org"');
+    expect(text).not.toContain("secrets.NPM_TOKEN");
+    expect(text).not.toContain("registry.npmjs.org/:_authToken");
+  });
+});
+
 describe("Phase 11.A workflow YAML shape (structural sanity)", () => {
   it("every workflow file declares a top-level `on:` trigger", () => {
     for (const wf of WORKFLOW_FILES) {

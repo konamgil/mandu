@@ -10,6 +10,7 @@ on:
         type: string
 
 permissions:
+  id-token: write
   contents: write
   packages: write
 
@@ -26,6 +27,12 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
       - run: bun install --frozen-lockfile
 
@@ -61,10 +68,8 @@ jobs:
 
       - name: Setup registry auth
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> ~/.npmrc
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure git
@@ -98,6 +103,5 @@ jobs:
       - name: Publish to npm + GitHub Packages
         run: bun run publish:product
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_DIST_TAG: ${{ inputs.dist_tag }}
