@@ -9,10 +9,10 @@
  * Walks `packages/cli/templates/{default,realtime-chat,auth-starter}/`
  * and emits two files into `packages/cli/generated/`:
  *
- *   1. `templates-manifest.js` — plain JavaScript containing one static
- *      `import … with { type: "file" }` per scaffold file (so
- *      `bun build --compile` embeds the bytes into the binary) plus a
- *      `TEMPLATE_MANIFEST` Map for O(1) lookup.
+ *   1. `templates-manifest.js` — plain JavaScript containing every scaffold
+ *      as an inline base64 string plus a `TEMPLATE_MANIFEST` Map for O(1)
+ *      lookup. Literal payloads work in dev, tests, and compiled binaries
+ *      without asking Bun's module loader to parse template source files.
  *   2. `templates-manifest.d.ts` — TypeScript type surface for the Map,
  *      consumed by `src/util/templates.ts`.
  *
@@ -42,21 +42,15 @@
  *   6. `skills-manifest.d.ts` — type surface for (5).
  *
  * Why `.js` rather than `.ts`? The CLI tsconfig has `allowJs` off by
- * default, so `tsc` ignores the real manifest file entirely and never
- * has to resolve its `.ts` / `.tsx` / `.md` / `.css` file imports. That
- * keeps all ~110 template source files out of the TypeScript compilation
- * graph. Both `bun run` and `bun build --compile` resolve `.js` normally
- * and process the `with { type: "file" }` attribute, so the runtime
- * behavior is unchanged.
+ * default, so `tsc` ignores the large generated payload module. This keeps
+ * all ~110 template source files out of the TypeScript compilation graph.
  *
  * The generated files are committed (source, not build artifacts). Re-run
  * this script whenever `packages/cli/templates/` contents change.
  *
  * Why code-gen instead of a dynamic glob?
- *   - Bun's `with { type: "file" }` / `type: "text"` only embed statically
- *     resolvable imports. Dynamic `fs.readdirSync` does NOT survive
- *     `--compile`.
- *   - Hand-writing ~110 imports is not maintainable.
+ *   - Runtime filesystem walks do not survive `--compile`.
+ *   - Hand-writing ~110 payload entries is not maintainable.
  *
  * See also:
  *   docs/bun/phase-9-diagnostics/compile-binary.md §3.1 (the blocker this
@@ -73,16 +67,8 @@ const SKILLS_PACKAGE_ROOT = path.resolve(CLI_ROOT, "..", "skills");
 const OFFICIAL_SKILLS_ROOT = path.join(REPO_ROOT, "skills", "official");
 const SKILLS_TEMPLATES_DIR = path.join(SKILLS_PACKAGE_ROOT, "templates");
 // Generated files live OUTSIDE `src/` so the CLI tsconfig (`include:
-// ["src/**/*"]`) does not pull their `with { type: "file" }` imports into
-// the TypeScript compilation graph. We also emit the manifest as a
-// **JavaScript** (`.js`) file — `tsc` does not typecheck `.js` sources
-// by default (no `allowJs`), which is exactly what we want. A companion
-// `.d.ts` gives `src/util/templates.ts` a typed surface without forcing
-// `tsc` to resolve the file imports.
-//
-// Runtime (`bun run`) and `bun build --compile` both resolve the `.js`
-// entry normally and process the `with { type: "file" }` imports; the
-// templates are therefore embedded correctly in the compiled binary.
+// ["src/**/*"]`) does not typecheck their large inline payloads. We emit
+// JavaScript plus a small companion `.d.ts` surface for callers.
 const OUTPUT_JS = path.join(CLI_ROOT, "generated", "templates-manifest.js");
 const OUTPUT_DTS = path.join(CLI_ROOT, "generated", "templates-manifest.d.ts");
 const OUTPUT_UX_JS = path.join(CLI_ROOT, "generated", "cli-ux-manifest.js");
@@ -149,10 +135,8 @@ interface TemplateFile {
   template: string;
   /** POSIX-normalized path relative to the template root. */
   relPath: string;
-  /** Filesystem path relative to `src/util/` (used in the `import` stmt). */
-  importSpecifier: string;
-  /** Unique TypeScript identifier for the `import` binding. */
-  identifier: string;
+  /** Base64-encoded file bytes emitted directly into the generated module. */
+  contentsBase64: string;
 }
 
 interface CliUxTextFile {
@@ -193,16 +177,6 @@ function walk(dir: string, base: string, out: string[] = []): string[] {
   return out;
 }
 
-function makeIdentifier(template: string, relPath: string, counter: Map<string, number>): string {
-  // Convert "default/app/page.tsx" -> "tpl_default_app_page_tsx"
-  // Collisions (unlikely but possible after sanitization) get a numeric suffix.
-  const raw = `tpl_${template}_${relPath}`;
-  const sanitized = raw.replace(/[^a-zA-Z0-9_]/g, "_").replace(/__+/g, "_");
-  const count = (counter.get(sanitized) ?? 0) + 1;
-  counter.set(sanitized, count);
-  return count === 1 ? sanitized : `${sanitized}_${count}`;
-}
-
 function makeUxIdentifier(relPath: string, counter: Map<string, number>): string {
   const raw = `uxtpl_${relPath}`;
   const sanitized = raw.replace(/[^a-zA-Z0-9_]/g, "_").replace(/__+/g, "_");
@@ -213,7 +187,6 @@ function makeUxIdentifier(relPath: string, counter: Map<string, number>): string
 
 function collectTemplateFiles(): TemplateFile[] {
   const files: TemplateFile[] = [];
-  const idCounter = new Map<string, number>();
 
   for (const name of TEMPLATE_NAMES) {
     const absTemplateDir = path.join(TEMPLATES_DIR, name);
@@ -225,16 +198,13 @@ function collectTemplateFiles(): TemplateFile[] {
     }
     const relFiles = walk(absTemplateDir, "").sort();
     for (const rel of relFiles) {
-      // relPath normalizes to POSIX form; importSpecifier is relative to
-      // `packages/cli/generated/` (the directory of templates-manifest.ts).
       const normalizedRel = rel.replace(/^\//, "");
-      const importSpecifier = `../templates/${name}/${normalizedRel}`;
-      const identifier = makeIdentifier(name, normalizedRel, idCounter);
       files.push({
         template: name,
         relPath: normalizedRel,
-        importSpecifier,
-        identifier,
+        contentsBase64: fs
+          .readFileSync(path.join(absTemplateDir, normalizedRel))
+          .toString("base64"),
       });
     }
   }
@@ -343,38 +313,30 @@ function generateSources(files: TemplateFile[]): GeneratedSources {
 // contents change: \`bun run packages/cli/scripts/generate-template-manifest.ts\`.
 //
 // This file is intentionally JavaScript (not TypeScript). The CLI tsconfig
-// has no \`allowJs\`, so \`tsc\` skips it entirely — keeping the
-// \`with { type: "file" }\` imports (and the ~110 template files they
-// reference) out of the compilation graph. A companion \`.d.ts\` gives
-// \`src/util/templates.ts\` the public surface it needs.
+// has no \`allowJs\`, so \`tsc\` skips its large inline payloads. A companion
+// \`.d.ts\` gives \`src/util/templates.ts\` the public surface it needs.
 //
-// Static \`with { type: "file" }\` imports are what cause \`bun build --compile\`
-// to embed the template bytes into the resulting binary. At dev-time each
-// import returns the on-disk absolute path; inside a compiled binary it
-// returns a \`$bunfs/root/...\` virtual path. Both forms are consumable via
-// \`Bun.file(path)\`.
+// Payloads are emitted as string literals so Bun 1.3.x never parses template
+// \`.ts\` / \`.tsx\` files as modules while loading tests. The same literals
+// are embedded directly by \`bun build --compile\`.
 //
 // Consumers: src/util/templates.ts (loadTemplate, listTemplates, readTemplateFile).
 
 `;
 
-  const imports = files
-    .map((f) => `import ${f.identifier} from "${f.importSpecifier}" with { type: "file" };`)
-    .join("\n");
-
   const manifestEntries: string[] = [];
   for (const [template, list] of byTemplate) {
     const lines = list
-      .map((f) => `    ["${f.relPath}", ${f.identifier}],`)
+      .map((f) =>
+        `    [${JSON.stringify(f.relPath)}, ${JSON.stringify(f.contentsBase64)}],`
+      )
       .join("\n");
-    manifestEntries.push(`  ["${template}", new Map([\n${lines}\n  ])],`);
+    manifestEntries.push(`  [${JSON.stringify(template)}, new Map([\n${lines}\n  ])],`);
   }
 
   const manifestBody = `
 /**
- * Map from template name to a map of (relative POSIX path → embedded file path).
- * The inner value is the string returned by each \`import … with { type: "file" }\`
- * declaration, which is passed directly to \`Bun.file(path)\`.
+ * Map from template name to a map of (relative POSIX path → base64 file bytes).
  */
 export const TEMPLATE_MANIFEST = new Map([
 ${manifestEntries.join("\n")}
@@ -384,16 +346,16 @@ ${manifestEntries.join("\n")}
 export const EMBEDDED_FILE_COUNT = ${files.length};
 `;
 
-  const js = `${jsHeader}${imports}\n${manifestBody}`;
+  const js = `${jsHeader}${manifestBody}`;
 
   const dts = `// AUTO-GENERATED by packages/cli/scripts/generate-template-manifest.ts.
 // DO NOT EDIT MANUALLY. Provides the type surface for templates-manifest.js
-// so \`src/util/templates.ts\` can import it without \`tsc\` ever processing
-// the underlying \`with { type: "file" }\` declarations.
+// so \`src/util/templates.ts\` can import it without \`tsc\` processing the
+// large inline payload module.
 
 /**
  * Map from template name (e.g. \`"default"\`) to a map of
- * (POSIX relative path → embedded file path usable with \`Bun.file\`).
+ * (POSIX relative path → base64-encoded file bytes).
  */
 export const TEMPLATE_MANIFEST: ReadonlyMap<string, ReadonlyMap<string, string>>;
 
@@ -421,9 +383,7 @@ function generateUxSources(files: CliUxTextFile[]): GeneratedSources {
 // \`init-landing.md\` or \`errors/*.md\` change:
 //   bun run packages/cli/scripts/generate-template-manifest.ts
 //
-// Unlike templates-manifest.js (which embeds file bytes via
-// \`with { type: "file" }\` for async \`Bun.file()\` reads), this manifest
-// uses \`with { type: "text" }\` so the markdown **string payload** is
+// CLI UX payloads use \`with { type: "text" }\` so the markdown string is
 // inlined at compile-time. That gives \`formatCLIError()\` (called from
 // the \`CLIError\` constructor — cannot be async) and
 // \`renderInitLanding()\` (synchronous console output) a synchronous
@@ -557,9 +517,8 @@ export const SKILLS_PAYLOAD_COUNT = ${files.length};
 
 /**
  * Map from skill key to raw UTF-8 text payload. Synchronously accessible
- * in dev and compiled binaries because the imports use
- * \`with { type: "text" }\` (string inlining), not
- * \`with { type: "file" }\` (embedded path).
+ * in dev and compiled binaries because payloads are emitted as string
+ * literals.
  */
 export const SKILLS_MANIFEST: ReadonlyMap<string, string>;
 

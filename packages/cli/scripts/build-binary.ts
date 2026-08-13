@@ -149,6 +149,13 @@ async function resolveCliVersion(): Promise<string> {
   }
 }
 
+/** Convert SemVer (including prereleases) to Bun's numeric Windows format. */
+export function toWindowsVersion(version: string): string {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?/.exec(version.trim());
+  if (!match) return "0.0.0.0";
+  return [match[1], match[2], match[3], match[4] ?? "0"].join(".");
+}
+
 async function main(): Promise<void> {
   const target = process.env.BUN_TARGET;
   const outfile = resolveOutfile(target);
@@ -156,7 +163,7 @@ async function main(): Promise<void> {
   await regenerateTemplateManifest();
 
   const version = await resolveCliVersion();
-  const versionParts = `${version}.0`.split(".").slice(0, 4).join(".");
+  const versionParts = toWindowsVersion(version);
 
   await runBuild({
     target,

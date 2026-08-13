@@ -995,6 +995,9 @@ registerCommand({
 registerCommand({
   id: "lock",
   description: "Lockfile management",
+  // Config loading can retain runtime handles on some platforms. `lock` is
+  // a one-shot command, so terminate after the result has been flushed.
+  exitOnSuccess: true,
   async run(ctx) {
     const { runLockCommand } = await import("./lock");
     return runLockCommand(ctx.args.slice(1));

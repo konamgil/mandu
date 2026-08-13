@@ -4,13 +4,8 @@
  * Public API for reading `packages/cli/templates/*` scaffolds at runtime.
  * The underlying storage is `packages/cli/generated/templates-manifest.js`
  * (plus a companion `.d.ts`), emitted by `scripts/generate-template-manifest.ts`
- * from static `import … with { type: "file" }` declarations — those imports
- * are what drive `bun build --compile` to embed the bytes into the binary.
- *
- * Both execution modes resolve identically via `Bun.file(path)`:
- *   - Dev (`bun run src/main.ts`): path is the real on-disk location.
- *   - Compiled (`mandu.exe`): path is a `$bunfs/root/...` virtual entry
- *     that Bun satisfies from `Bun.embeddedFiles`.
+ * from inline base64 string literals. This avoids runtime filesystem access
+ * and behaves identically in dev, tests, and compiled binaries.
  *
  * Call sites: `src/commands/init.ts` (copyEmbeddedTemplate, setupCiWorkflows).
  *
@@ -24,10 +19,9 @@
 // The physical module lives at `packages/cli/generated/templates-manifest.js`
 // (plain JavaScript — `tsc` ignores `.js` files when `allowJs` is off, which
 // it is here) with a companion `.d.ts` that supplies the type surface. The
-// `.js` file contains ~110 static `with { type: "file" }` imports that drive
-// `bun build --compile` to embed every template byte; none of those imports
-// ever reach the TypeScript compiler, so none of the template `.ts` / `.tsx`
-// files get pulled into the compilation graph.
+// `.js` file contains inline string payloads, so template `.ts` / `.tsx`
+// files never enter Bun's runtime module graph or TypeScript's compilation
+// graph.
 //
 // We use the `.js` specifier explicitly so `bun` prefers the real runtime
 // module over the `.d.ts` (which has no side effects).
@@ -35,6 +29,7 @@ import {
   TEMPLATE_MANIFEST,
   EMBEDDED_FILE_COUNT,
 } from "../../generated/templates-manifest.js";
+import { Buffer } from "node:buffer";
 // Phase 11.A — Skills manifest (I-03 fix). Unlike the template manifest
 // above, this one uses `with { type: "text" }` so the payloads are
 // **strings** inlined at compile time. That makes every lookup
@@ -48,11 +43,12 @@ import {
 export interface EmbeddedTemplateFile {
   /** POSIX-normalized path relative to the template root. */
   readonly relPath: string;
-  /**
-   * Embedded path consumable by `Bun.file(path)`. In dev this is an on-disk
-   * absolute path; in a compiled binary it is a virtual `$bunfs` path.
-   */
-  readonly embeddedPath: string;
+  /** Raw scaffold bytes. */
+  readonly bytes: Uint8Array;
+}
+
+function decodeTemplateBytes(encoded: string): Uint8Array {
+  return new Uint8Array(Buffer.from(encoded, "base64"));
 }
 
 /**
@@ -85,8 +81,8 @@ export function loadTemplate(name: string): readonly EmbeddedTemplateFile[] | nu
   if (!inner) return null;
 
   const out: EmbeddedTemplateFile[] = [];
-  for (const [relPath, embeddedPath] of inner) {
-    out.push({ relPath, embeddedPath });
+  for (const [relPath, encoded] of inner) {
+    out.push({ relPath, bytes: decodeTemplateBytes(encoded) });
   }
   // Map iteration order already matches generator output (sorted), but we
   // re-sort defensively so downstream copy loops are guaranteed deterministic
@@ -97,49 +93,43 @@ export function loadTemplate(name: string): readonly EmbeddedTemplateFile[] | nu
 
 /**
  * Read the contents of a single template file as UTF-8 text. Returns `null`
- * when either the template or the relative path is unknown. Binary files
- * (none currently shipped, but reserved for future use) should prefer
- * `readTemplateFileBytes` to avoid UTF-8 corruption.
+ * when either the template or the relative path is unknown.
  */
 export async function readTemplateFile(
   name: string,
   relPath: string
 ): Promise<string | null> {
-  const embeddedPath = resolveEmbeddedPath(name, relPath);
-  if (!embeddedPath) return null;
-  const file = Bun.file(embeddedPath);
-  if (!(await file.exists())) return null;
-  return file.text();
+  const bytes = resolveTemplateBytes(name, relPath);
+  return bytes === null ? null : new TextDecoder().decode(bytes);
 }
 
 /**
  * Read the raw bytes of a single template file. Same null semantics as
- * `readTemplateFile`. Callers that need to write to disk should use this
- * variant to preserve exact byte sequences (e.g. binary assets, files with
- * non-UTF-8 encodings in future templates).
+ * `readTemplateFile`.
  */
 export async function readTemplateFileBytes(
   name: string,
   relPath: string
 ): Promise<Uint8Array | null> {
-  const embeddedPath = resolveEmbeddedPath(name, relPath);
-  if (!embeddedPath) return null;
-  const file = Bun.file(embeddedPath);
-  if (!(await file.exists())) return null;
-  const buf = await file.arrayBuffer();
-  return new Uint8Array(buf);
+  return resolveTemplateBytes(name, relPath);
 }
 
 /**
- * Resolve a (template, relPath) pair to the embedded path string, or `null`
- * when either lookup misses. Exposed for callers that want their own read
- * semantics (e.g. streaming).
+ * Resolve a (template, relPath) pair to its raw bytes, or `null` when
+ * either lookup misses.
  */
-export function resolveEmbeddedPath(name: string, relPath: string): string | null {
+export function resolveTemplateBytes(name: string, relPath: string): Uint8Array | null {
   const inner = TEMPLATE_MANIFEST.get(name);
   if (!inner) return null;
   const normalized = normalizeRelPath(relPath);
-  return inner.get(normalized) ?? null;
+  const encoded = inner.get(normalized);
+  return encoded === undefined ? null : decodeTemplateBytes(encoded);
+}
+
+/** Resolve a template payload as UTF-8 text. */
+export function resolveTemplateContents(name: string, relPath: string): string | null {
+  const bytes = resolveTemplateBytes(name, relPath);
+  return bytes === null ? null : new TextDecoder().decode(bytes);
 }
 
 /** Total file count — useful for sanity checks in tests and CLI diagnostics. */

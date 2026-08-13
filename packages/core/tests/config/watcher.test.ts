@@ -205,12 +205,26 @@ describe("DNA-006: Config Hot Reload", () => {
       await writeFile(configPath, "{}");
 
       const onChange = mock();
-      const stop = watchConfigFile(configPath, onChange, 10);
+      let resolveChange!: (changedPath: string) => void;
+      const changed = new Promise<string>((resolve) => {
+        resolveChange = resolve;
+      });
+      const stop = watchConfigFile(configPath, (changedPath) => {
+        onChange(changedPath);
+        resolveChange(changedPath);
+      }, 10);
 
       try {
-        await writeFile(configPath, '{"updated": true}');
+        // macOS FSEvents registration is asynchronous even though fs.watch()
+        // returns synchronously. Let the watcher settle before mutating.
         await new Promise((resolve) => setTimeout(resolve, 50));
+        await writeFile(configPath, '{"updated": true}');
+        const changedPath = await Promise.race([
+          changed,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2_000)),
+        ]);
 
+        expect(changedPath).toBe(configPath);
         expect(onChange).toHaveBeenCalledWith(configPath);
       } finally {
         stop();

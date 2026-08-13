@@ -3,9 +3,7 @@
 // `init-landing.md` or `errors/*.md` change:
 //   bun run packages/cli/scripts/generate-template-manifest.ts
 //
-// Unlike templates-manifest.js (which embeds file bytes via
-// `with { type: "file" }` for async `Bun.file()` reads), this manifest
-// uses `with { type: "text" }` so the markdown **string payload** is
+// CLI UX payloads use `with { type: "text" }` so the markdown string is
 // inlined at compile-time. That gives `formatCLIError()` (called from
 // the `CLIError` constructor — cannot be async) and
 // `renderInitLanding()` (synchronous console output) a synchronous

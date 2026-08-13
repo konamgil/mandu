@@ -70,6 +70,7 @@ describe("CommandRegistration.aliases", () => {
   test("one-shot guardrail commands exit after successful completion", () => {
     expect(getCommand("guard")?.exitOnSuccess).toBe(true);
     expect(getCommand("check")?.exitOnSuccess).toBe(true);
+    expect(getCommand("lock")?.exitOnSuccess).toBe(true);
   });
 
   test("registerCommand throws when an alias collides with an existing command", () => {

@@ -368,6 +368,8 @@ async function stageTemplateApp(reference: ReferenceApp, runRoot: string, appDir
 }
 
 async function verifyReference(reference: ReferenceApp, appDir: string): Promise<void> {
+  console.log(`  lock   ${reference.id}`);
+  await runCommand(["bun", "run", cliEntry, "lock"], appDir);
   if (reference.prepare) {
     console.log(`  setup  ${reference.id}`);
     await reference.prepare(appDir);

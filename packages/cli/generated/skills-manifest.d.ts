@@ -3,9 +3,8 @@
 
 /**
  * Map from skill key to raw UTF-8 text payload. Synchronously accessible
- * in dev and compiled binaries because the imports use
- * `with { type: "text" }` (string inlining), not
- * `with { type: "file" }` (embedded path).
+ * in dev and compiled binaries because payloads are emitted as string
+ * literals.
  */
 export const SKILLS_MANIFEST: ReadonlyMap<string, string>;
 

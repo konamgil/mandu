@@ -1,7 +1,7 @@
 /**
  * Phase B.2 — `mandu_ate_recall` + `mandu_ate_remember` MCP tool tests.
  */
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -18,11 +18,11 @@ import { memoryFilePath } from "@mandujs/ate";
 describe("mandu_ate_remember + mandu_ate_recall", () => {
   let root: string;
 
-  beforeAll(() => {
+  beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "mcp-ate-memory-"));
   });
 
-  afterAll(() => {
+  afterEach(() => {
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -58,6 +58,17 @@ describe("mandu_ate_remember + mandu_ate_recall", () => {
   });
 
   test("recall finds the remembered event via intent match", async () => {
+    const remember = ateRememberTools(root);
+    await remember.mandu_ate_remember({
+      repoRoot: root,
+      event: {
+        kind: "intent_history",
+        intent: "write signup boundary",
+        agent: "unit-test",
+        resulting: { saved: ["tests/e2e/signup.spec.ts"] },
+      },
+    });
+
     const h = ateRecallTools(root);
     const res = (await h.mandu_ate_recall({
       repoRoot: root,

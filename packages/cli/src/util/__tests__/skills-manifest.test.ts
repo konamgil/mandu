@@ -142,7 +142,7 @@ describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
     expect(src).toContain(
       'import {\n' +
       '  loadTemplate as loadEmbeddedTemplate,\n' +
-      '  resolveEmbeddedPath,\n' +
+      '  resolveTemplateContents,\n' +
       '  getEmbeddedSkillIds,\n' +
       '  resolveSkillPayload,\n' +
       '} from "../util/templates";'

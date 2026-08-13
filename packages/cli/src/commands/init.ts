@@ -5,13 +5,11 @@ import { CLI_ERROR_CODES, printCLIError } from "../errors";
 import { renderMarkdown } from "../cli-ux/markdown.js";
 import { startSpinner, runSteps } from "../terminal/progress";
 import { theme } from "../terminal/theme";
-// Phase 9b B — template bytes are embedded at compile-time via static
-// `with { type: "file" }` imports. In dev, these resolve to on-disk paths;
-// in a `bun build --compile` binary, to `$bunfs/root/...` virtual paths.
-// Both forms are readable via `Bun.file(path)`.
+// Phase 9b B — template payloads are embedded at compile-time as strings.
+// This keeps dev, test, and compiled-binary behavior identical.
 import {
   loadTemplate as loadEmbeddedTemplate,
-  resolveEmbeddedPath,
+  resolveTemplateContents,
   getEmbeddedSkillIds,
   resolveSkillPayload,
 } from "../util/templates";
@@ -271,9 +269,7 @@ function applyPlaceholders(content: string, options: CopyOptions): string {
  * directory. That approach broke under `bun build --compile` because
  * `import.meta.dir + ../../templates` does not exist inside the binary's
  * `$bunfs` virtual root. We now iterate the static manifest produced by
- * `scripts/generate-template-manifest.ts` and read each file through
- * `Bun.file(path)` — a form that Bun satisfies identically in dev and
- * compiled modes.
+ * `scripts/generate-template-manifest.ts` and consume its inline payloads.
  *
  * Skip/transform semantics are preserved:
  *   - `shouldSkipFile` still respects `--css none` / `--ui none`.
@@ -310,25 +306,15 @@ async function copyEmbeddedTemplate(
     const destPath = path.join(dest, destRelPath);
     await fs.mkdir(path.dirname(destPath), { recursive: true });
 
-    const bunFile = Bun.file(entry.embeddedPath);
-    if (!(await bunFile.exists())) {
-      throw new Error(
-        `Embedded file missing at runtime: ${entry.relPath} ` +
-          `(expected at ${entry.embeddedPath}). ` +
-          `Re-run scripts/generate-template-manifest.ts and rebuild.`
-      );
-    }
-
     if (looksLikeText(entry.relPath)) {
-      let content = await bunFile.text();
+      let content = new TextDecoder().decode(entry.bytes);
       content = applyPlaceholders(content, options);
       if (options.theme && entry.relPath === "app/globals.css") {
         content = addDarkModeCSS(content);
       }
       await fs.writeFile(destPath, content);
     } else {
-      const bytes = new Uint8Array(await bunFile.arrayBuffer());
-      await fs.writeFile(destPath, bytes);
+      await fs.writeFile(destPath, entry.bytes);
     }
   }
 }
@@ -559,8 +545,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
 
   // Template existence is verified against the embedded manifest — this
   // works identically in `bun run` dev mode and in a `--compile` binary,
-  // because both resolve `Bun.file(path)` to something readable (either
-  // on-disk or via `Bun.embeddedFiles`).
+  // because both consume the same inline string payloads.
   const embeddedFiles = loadEmbeddedTemplate(template);
   if (!embeddedFiles || embeddedFiles.length === 0) {
     printCLIError(CLI_ERROR_CODES.INIT_TEMPLATE_NOT_FOUND, { template });
@@ -1190,21 +1175,19 @@ async function setupCiWorkflows(targetDir: string): Promise<void> {
     for (const entry of workflowEntries) {
       const destPath = path.join(targetDir, entry.relPath);
       await fs.mkdir(path.dirname(destPath), { recursive: true });
-      const content = await Bun.file(entry.embeddedPath).text();
-      await fs.writeFile(destPath, content);
+      await fs.writeFile(destPath, new TextDecoder().decode(entry.bytes));
     }
 
     // Copy the impact-analysis script (used by the workflow's `on: pull_request` job).
-    const analyzeImpactPath = resolveEmbeddedPath(
+    const analyzeImpactContents = resolveTemplateContents(
       "default",
       "scripts/analyze-impact.ts"
     );
-    if (analyzeImpactPath) {
+    if (analyzeImpactContents) {
       const scriptsDir = path.join(targetDir, "scripts");
       await fs.mkdir(scriptsDir, { recursive: true });
       const analyzeImpactDest = path.join(scriptsDir, "analyze-impact.ts");
-      const content = await Bun.file(analyzeImpactPath).text();
-      await fs.writeFile(analyzeImpactDest, content);
+      await fs.writeFile(analyzeImpactDest, analyzeImpactContents);
     }
   } catch (error) {
     console.warn(`⚠️  CI/CD workflow setup warning:`, error);

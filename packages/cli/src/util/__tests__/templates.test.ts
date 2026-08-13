@@ -9,7 +9,7 @@
  *   1. `listTemplates()` returns the three canonical names in the
  *      generator-defined order.
  *   2. `loadTemplate("default")` returns a non-empty, sorted-by-path
- *      file list whose entries all resolve to readable Bun files.
+ *      file list whose entries all contain inline payloads.
  *   3. `loadTemplate("nonexistent")` returns null (fails closed — the
  *      init command relies on this for its error branch).
  *   4. Embedded file byte count matches the on-disk `templates/default/`
@@ -35,7 +35,7 @@ import {
   loadTemplate,
   readTemplateFile,
   readTemplateFileBytes,
-  resolveEmbeddedPath,
+  resolveTemplateContents,
   getEmbeddedFileCount,
 } from "../templates";
 
@@ -53,12 +53,12 @@ describe("templates.ts — embedded template access", () => {
     expect(files).not.toBeNull();
     expect(files!.length).toBeGreaterThan(0);
 
-    // Every entry has both a relPath and an embeddedPath.
+    // Every entry has both a relPath and inline contents.
     for (const entry of files!) {
       expect(typeof entry.relPath).toBe("string");
       expect(entry.relPath.length).toBeGreaterThan(0);
-      expect(typeof entry.embeddedPath).toBe("string");
-      expect(entry.embeddedPath.length).toBeGreaterThan(0);
+      expect(entry.bytes).toBeInstanceOf(Uint8Array);
+      expect(entry.bytes.length).toBeGreaterThan(0);
     }
 
     // Iteration order must be stable (POSIX string sort on relPath).
@@ -129,10 +129,10 @@ describe("templates.ts — embedded template access", () => {
   });
 
   it("normalizes Windows-style backslash paths to the same POSIX key", () => {
-    const posixHit = resolveEmbeddedPath("default", "app/page.tsx");
-    const winHit = resolveEmbeddedPath("default", "app\\page.tsx");
-    const leadingSlash = resolveEmbeddedPath("default", "/app/page.tsx");
-    const dotSlash = resolveEmbeddedPath("default", "./app/page.tsx");
+    const posixHit = resolveTemplateContents("default", "app/page.tsx");
+    const winHit = resolveTemplateContents("default", "app\\page.tsx");
+    const leadingSlash = resolveTemplateContents("default", "/app/page.tsx");
+    const dotSlash = resolveTemplateContents("default", "./app/page.tsx");
 
     expect(posixHit).not.toBeNull();
     expect(winHit).toBe(posixHit);
@@ -150,14 +150,13 @@ describe("templates.ts — embedded template access", () => {
     }
   });
 
-  it("all embedded paths resolve to readable Bun files", async () => {
+  it("all embedded entries expose inline payloads", () => {
     const files = loadTemplate("default");
     expect(files).not.toBeNull();
     // Spot-check first 3 entries to keep the test fast.
     for (const entry of files!.slice(0, 3)) {
-      const file = Bun.file(entry.embeddedPath);
-      expect(await file.exists()).toBe(true);
-      expect(file.size).toBeGreaterThanOrEqual(0);
+      expect(entry.bytes).toBeInstanceOf(Uint8Array);
+      expect(entry.bytes.length).toBeGreaterThan(0);
     }
   });
 });
