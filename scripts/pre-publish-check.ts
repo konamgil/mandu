@@ -497,23 +497,21 @@ console.log(
 const versions = loadVersionMap(releasePackageDirs);
 let hasIssues = false;
 
-// 1. lockfile 업데이트 확인
-console.log("📦 Step 1: Lockfile 업데이트 확인...");
+// 1. lockfile consistency 확인
+console.log("📦 Step 1: Frozen lockfile consistency 확인...");
 try {
   const lockfiles = ["bun.lock", "bun.lockb"].filter((file) =>
     existsSync(resolve(process.cwd(), file))
   );
-  const status = lockfiles.length > 0
-    ? execSync(`git status --porcelain -- ${lockfiles.join(" ")}`, { encoding: "utf-8" })
-    : "";
-
-  if (status.trim()) {
-    console.log("⚠️  lockfile이 변경되었습니다. 커밋하시겠습니까?");
-  } else {
-    console.log("✅ Lockfile up-to-date\n");
-  }
+  if (lockfiles.length === 0) throw new Error("No Bun lockfile found");
+  execSync("bun install --frozen-lockfile --lockfile-only --ignore-scripts", {
+    stdio: "inherit",
+    cwd: process.cwd(),
+  });
+  console.log("✅ Frozen lockfile is internally consistent\n");
 } catch {
-  console.log("✅ Lockfile up-to-date\n");
+  hasIssues = true;
+  console.log("❌ Frozen lockfile validation failed\n");
 }
 
 // 1.1. npm registry metadata drift 차단

@@ -59,7 +59,6 @@ import tpl_default_tsconfig_json from "../templates/default/tsconfig.json" with 
 import tpl_realtime_chat_github_README_md from "../templates/realtime-chat/.github/README.md" with { type: "file" };
 import tpl_realtime_chat_github_workflows_ate_e2e_subset_yml from "../templates/realtime-chat/.github/workflows/ate-e2e-subset.yml" with { type: "file" };
 import tpl_realtime_chat_github_workflows_ate_e2e_yml from "../templates/realtime-chat/.github/workflows/ate-e2e.yml" with { type: "file" };
-import tpl_realtime_chat_mandu_routes_manifest_json from "../templates/realtime-chat/.mandu/routes.manifest.json" with { type: "file" };
 import tpl_realtime_chat_oxlintrc_json from "../templates/realtime-chat/.oxlintrc.json" with { type: "file" };
 import tpl_realtime_chat_AGENTS_md from "../templates/realtime-chat/AGENTS.md" with { type: "file" };
 import tpl_realtime_chat_app_api_chat_messages_route_ts from "../templates/realtime-chat/app/api/chat/messages/route.ts" with { type: "file" };
@@ -187,7 +186,6 @@ export const TEMPLATE_MANIFEST = new Map([
     [".github/README.md", tpl_realtime_chat_github_README_md],
     [".github/workflows/ate-e2e-subset.yml", tpl_realtime_chat_github_workflows_ate_e2e_subset_yml],
     [".github/workflows/ate-e2e.yml", tpl_realtime_chat_github_workflows_ate_e2e_yml],
-    [".mandu/routes.manifest.json", tpl_realtime_chat_mandu_routes_manifest_json],
     [".oxlintrc.json", tpl_realtime_chat_oxlintrc_json],
     ["AGENTS.md", tpl_realtime_chat_AGENTS_md],
     ["app/api/chat/messages/route.ts", tpl_realtime_chat_app_api_chat_messages_route_ts],
@@ -268,4 +266,4 @@ export const TEMPLATE_MANIFEST = new Map([
 ]);
 
 /** Total number of embedded template files (sanity check). */
-export const EMBEDDED_FILE_COUNT = 118;
+export const EMBEDDED_FILE_COUNT = 117;

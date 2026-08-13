@@ -128,6 +128,21 @@ const SKILL_IDS = (
  * `../../skills/templates/.claude/settings.json`).
  */
 const SKILL_SETTINGS_REL = path.posix.join(".claude", "settings.json");
+const TEMPLATE_ARTIFACT_DIRECTORIES = new Set([
+  ".mandu",
+  "coverage",
+  "dist",
+  "node_modules",
+  "test-results",
+]);
+
+export function isTemplateArtifactDirectory(name: string): boolean {
+  return TEMPLATE_ARTIFACT_DIRECTORIES.has(name);
+}
+
+export function normalizeEmbeddedText(contents: string): string {
+  return contents.replace(/\r\n?/g, "\n");
+}
 
 interface TemplateFile {
   /** Template name (e.g. "default"). */
@@ -169,6 +184,7 @@ function walk(dir: string, base: string, out: string[] = []): string[] {
     const abs = path.join(dir, entry.name);
     const rel = path.posix.join(base, entry.name.replace(/\\/g, "/"));
     if (entry.isDirectory()) {
+      if (isTemplateArtifactDirectory(entry.name)) continue;
       walk(abs, rel, out);
     } else if (entry.isFile()) {
       out.push(rel);
@@ -288,7 +304,7 @@ function collectSkillsFiles(): SkillsTextFile[] {
     }
     out.push({
       key: skillId,
-      contents: fs.readFileSync(abs, "utf8"),
+      contents: normalizeEmbeddedText(fs.readFileSync(abs, "utf8")),
     });
   }
 
@@ -303,7 +319,7 @@ function collectSkillsFiles(): SkillsTextFile[] {
   }
   out.push({
     key: `settings/${SKILL_SETTINGS_REL}`,
-    contents: fs.readFileSync(settingsAbs, "utf8"),
+    contents: normalizeEmbeddedText(fs.readFileSync(settingsAbs, "utf8")),
   });
 
   return out;

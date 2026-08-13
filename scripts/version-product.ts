@@ -133,6 +133,11 @@ async function main(): Promise<void> {
       env: process.env,
       stdio: "inherit",
     });
+    execFileSync(process.execPath, ["run", "generate:official-skills"], {
+      cwd: ROOT,
+      env: process.env,
+      stdio: "inherit",
+    });
   }
 }
 
