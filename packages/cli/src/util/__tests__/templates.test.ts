@@ -100,19 +100,20 @@ describe("templates.ts — embedded template access", () => {
     expect(embedded!.length).toBe(onDisk.length);
   });
 
-  it("readTemplateFile returns byte-identical content to on-disk source", async () => {
+  it("readTemplateFile returns checkout-independent normalized text", async () => {
     // Pick a stable, small, text file that ships with every release.
     const relPath = "package.json";
     const onDiskPath = path.join(ON_DISK_TEMPLATES, "default", relPath);
-    const expected = await fs.readFile(onDiskPath, "utf-8");
+    const expected = (await fs.readFile(onDiskPath, "utf-8")).replace(/\r\n?/g, "\n");
     const actual = await readTemplateFile("default", relPath);
     expect(actual).toBe(expected);
   });
 
-  it("readTemplateFileBytes preserves bytes verbatim", async () => {
+  it("readTemplateFileBytes preserves normalized UTF-8 bytes", async () => {
     const relPath = "app/page.tsx";
     const onDiskPath = path.join(ON_DISK_TEMPLATES, "default", relPath);
-    const expected = new Uint8Array(await fs.readFile(onDiskPath));
+    const source = (await fs.readFile(onDiskPath, "utf-8")).replace(/\r\n?/g, "\n");
+    const expected = new TextEncoder().encode(source);
     const actual = await readTemplateFileBytes("default", relPath);
     expect(actual).not.toBeNull();
     expect(actual!.length).toBe(expected.length);

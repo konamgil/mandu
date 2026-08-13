@@ -130,6 +130,19 @@ export function normalizeEmbeddedText(contents: string): string {
   return contents.replace(/\r\n?/g, "\n");
 }
 
+/**
+ * Make UTF-8 template payloads reproducible across Git checkout settings while
+ * preserving arbitrary binary files byte-for-byte.
+ */
+export function normalizeTemplateFileBytes(contents: Uint8Array): Uint8Array {
+  const input = Buffer.from(contents);
+  const decoded = input.toString("utf8");
+  if (!Buffer.from(decoded, "utf8").equals(input)) {
+    return new Uint8Array(input);
+  }
+  return new Uint8Array(Buffer.from(normalizeEmbeddedText(decoded), "utf8"));
+}
+
 interface TemplateFile {
   /** Template name (e.g. "default"). */
   template: string;
@@ -202,9 +215,11 @@ function collectTemplateFiles(): TemplateFile[] {
       files.push({
         template: name,
         relPath: normalizedRel,
-        contentsBase64: fs
-          .readFileSync(path.join(absTemplateDir, normalizedRel))
-          .toString("base64"),
+        contentsBase64: Buffer.from(
+          normalizeTemplateFileBytes(
+            fs.readFileSync(path.join(absTemplateDir, normalizedRel))
+          )
+        ).toString("base64"),
       });
     }
   }
