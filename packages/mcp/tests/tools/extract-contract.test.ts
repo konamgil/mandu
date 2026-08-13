@@ -10,7 +10,7 @@
  *   • Input validation
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
@@ -97,7 +97,7 @@ describe("renderContractModule", () => {
 describe("extractContractTools — filesystem integration", () => {
   let root: string;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), "mandu-contract-"));
     await mkdir(path.join(root, "app", "api", "posts"), { recursive: true });
     await writeFile(
@@ -117,7 +117,7 @@ describe("extractContractTools — filesystem integration", () => {
     );
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await rm(root, { recursive: true, force: true });
   });
 

@@ -136,11 +136,14 @@ export default function Page() { return middle(); }
     await importBundled(pagePath);
 
     const fs = await import("fs/promises");
-    const entries = await fs.readdir(path.join(rootDir, ".mandu/dev-cache/ssr"));
+    const cacheDir = path.join(rootDir, ".mandu/dev-cache/ssr");
+    const entries = await fs.readdir(cacheDir);
     // After GC, only the most recent bundle for `pagePath` should remain on disk.
-    // (Pre-GC behavior had ≥3 files. With GC, exactly 1 file per source path.)
+    // (Pre-GC behavior had ≥3 entries. With GC, exactly 1 directory per source.)
     expect(entries.length).toBe(1);
-    expect(entries[0]).toMatch(/\.mjs$/);
+    const bundles = await fs.readdir(path.join(cacheDir, entries[0]!));
+    expect(bundles).toHaveLength(1);
+    expect(bundles[0]).toMatch(/\.mjs$/);
   });
 
   it("per-source GC keeps separate entries for different source modules", async () => {

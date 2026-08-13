@@ -112,8 +112,10 @@ export default function render() { return bar(); }
       expect(mod.default()).toBe("FOO-V1-bar");
 
       // A bundle file must exist on disk (sanity — the cold path writes one).
-      const files = readdirSync(cacheDir(rootDir));
-      expect(files.length).toBe(1);
+      const bundleDirs = readdirSync(cacheDir(rootDir));
+      expect(bundleDirs.length).toBe(1);
+      const files = readdirSync(path.join(cacheDir(rootDir), bundleDirs[0]!));
+      expect(files).toHaveLength(1);
       expect(files[0]).toMatch(/\.mjs$/);
     });
 
@@ -605,10 +607,8 @@ export default function r() { return bval; }
       // entry-7, then require that a follow-up `import(changedFile)` with
       // each of the 10 entries triggers a build only for those two.
       //
-      // We count rebuilds indirectly via the on-disk bundle filename
-      // counter embedded in the file stem (`<stem>-<ts>-<seq>.mjs`): a
-      // rebuild adds a new `.mjs` file, then GC unlinks the prior one.
-      // So every root that rebuilds has its bundle filename advance.
+      // Every root owns one versioned bundle directory. A rebuild replaces
+      // that directory, while a cache hit keeps the module object unchanged.
       const numRoots = 10;
       const sharedDepPath = path.join(rootDir, "src/shared-dep.ts");
       writeFileSync(sharedDepPath, 'export const v = "SHARED-V1";\n');

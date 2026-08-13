@@ -712,11 +712,10 @@ interface CachedImport {
  * Create a module importer that bundles each entry via `Bun.build` before
  * importing it. See the file header for the rationale.
  *
- * Bundles accumulate under `.mandu/dev-cache/ssr/`. The directory is wiped
- * on importer creation (i.e., once per dev-server start) to avoid leaking
- * old bundles across sessions; bundles created during a single session
- * intentionally persist so that in-flight requests can still resolve their
- * module by URL after a reload has already produced a newer bundle.
+ * Bundles live in versioned child directories under `.mandu/dev-cache/ssr/`.
+ * The cache is wiped on importer creation (i.e., once per dev-server start),
+ * and the previous child directory for each source is removed after a
+ * successful replacement build.
  */
 export function createBundledImporter(
   options: BundledImporterOptions,
@@ -803,16 +802,11 @@ export function createBundledImporter(
     const seq = ++counter;
     const ts = Date.now();
     const stem = path.basename(rootPathAbs).replace(/[^a-zA-Z0-9._-]/g, "_");
-    const standaloneRuntime = !isBunExecutable(process.execPath);
-    // Bun standalone caches directory lookups during dynamic import. Put each
-    // child-built SSR bundle in a fresh directory so newly-created files are
-    // visible after the first import in the process.
-    const outputDir = standaloneRuntime
-      ? path.join(cacheDir, `${ts}-${seq}`)
-      : cacheDir;
-    const naming = standaloneRuntime
-      ? `${stem}.mjs`
-      : `${stem}-${ts}-${seq}.mjs`;
+    // Bun 1.3 can cache directory lookups during dynamic import (standalone
+    // builds and macOS are both affected). A fresh child directory makes each
+    // replacement bundle visible without restarting the dev server.
+    const outputDir = path.join(cacheDir, `${ts}-${seq}`);
+    const naming = `${stem}.mjs`;
 
     const externalList = await ensureExternalList();
     await mkdir(outputDir, { recursive: true });

@@ -10,7 +10,7 @@
  *   • Input validation (bad dryRun, bad routes)
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
@@ -64,7 +64,7 @@ describe("detectConventions", () => {
 describe("migrateRouteConventionsTools — filesystem integration", () => {
   let root: string;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), "mandu-routes-"));
     await mkdir(path.join(root, "app", "dashboard"), { recursive: true });
     await writeFile(
@@ -88,7 +88,7 @@ describe("migrateRouteConventionsTools — filesystem integration", () => {
     );
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await rm(root, { recursive: true, force: true });
   });
 

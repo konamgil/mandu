@@ -13,7 +13,7 @@
  * safe under `bun test --randomize`.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -122,6 +122,10 @@ describe("matchSnapshot", () => {
 
   beforeEach(() => {
     // Ensure UPDATE_SNAPSHOTS does not leak between cases.
+    delete process.env.UPDATE_SNAPSHOTS;
+  });
+
+  afterEach(() => {
     delete process.env.UPDATE_SNAPSHOTS;
   });
 
@@ -249,6 +253,14 @@ describe("toMatchSnapshot", () => {
     await fs.promises.rm(dir, { recursive: true, force: true });
   });
 
+  beforeEach(() => {
+    delete process.env.UPDATE_SNAPSHOTS;
+  });
+
+  afterEach(() => {
+    delete process.env.UPDATE_SNAPSHOTS;
+  });
+
   it("returns on match, throws on mismatch", () => {
     const snapshotPath = path.join(dir, "throw.snap");
     toMatchSnapshot({ value: 1 }, { snapshotPath });
@@ -270,6 +282,10 @@ describe("toMatchSnapshot", () => {
 
 describe("isUpdateMode", () => {
   beforeEach(() => {
+    delete process.env.UPDATE_SNAPSHOTS;
+  });
+
+  afterEach(() => {
     delete process.env.UPDATE_SNAPSHOTS;
   });
 

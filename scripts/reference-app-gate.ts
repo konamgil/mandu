@@ -1,10 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const cliEntry = path.join(repoRoot, "packages", "cli", "src", "main.ts");
-const scratchRoot = path.join(repoRoot, ".reference-apps");
+// Keep staged consumers outside the monorepo so `bun install` creates their
+// own lockfile instead of inheriting the repository workspace on Windows.
+const scratchRoot = path.join(tmpdir(), "mandu-reference-apps");
 
 interface CompletedCommand {
   args: string[];
