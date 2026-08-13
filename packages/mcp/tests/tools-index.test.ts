@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mcpToolRegistry } from "../src/registry/mcp-tool-registry.js";
 import {
   TOOL_MODULES,
@@ -8,6 +8,10 @@ import {
 } from "../src/tools/index.js";
 
 describe("builtin MCP tool module registry", () => {
+  beforeEach(() => {
+    mcpToolRegistry.clear();
+  });
+
   afterEach(() => {
     mcpToolRegistry.clear();
   });

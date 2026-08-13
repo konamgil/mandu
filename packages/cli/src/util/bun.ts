@@ -927,7 +927,7 @@ export function createBundledImporter(
     // still resolving — file deletion only removes the on-disk artifact.
     const previous = cacheByRoot.get(rootPathAbs);
     if (previous && previous.bundlePath !== output.path) {
-      removeBundlePath(previous.bundlePath).catch(() => {});
+      await removeBundlePath(previous.bundlePath);
     }
 
     await Bun.write(output.path, bundleContents);
