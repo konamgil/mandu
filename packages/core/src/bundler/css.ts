@@ -15,11 +15,13 @@
 import { spawn } from "bun";
 import path from "path";
 import fs from "fs/promises";
-import { watch as fsWatch, type FSWatcher } from "fs";
+import { existsSync, watch as fsWatch, type FSWatcher } from "fs";
 import { withPerf } from "../perf";
 
 /**
- * Tailwind CLI 실행 명령어를 결정한다.
+ * Tailwind CLI 실행 명령어를 결정한다. 프로젝트에 설치된 CLI 엔트리가
+ * 있으면 직접 실행해 `bun x`의 네트워크 조회와 전역 캐시 잠금을 피한다.
+ * 로컬 엔트리가 없을 때만 `bun x`로 fallback한다.
  * Windows에서 Bun.spawn은 PATH 기반 명령어 해석이 불안정하므로 (#152)
  * `bun run mandu` 환경에서는 process.execPath (bun 절대 경로)를 사용한다.
  * Standalone Mandu binary에서는 process.execPath가 mandu.exe를 가리키므로
@@ -50,8 +52,24 @@ function getTailwindCommand(
   args: string[],
   execPath = process.execPath,
   which?: WhichExecutable,
+  rootDir?: string,
+  fileExists: (candidate: string) => boolean = existsSync,
 ): string[] {
-  return [resolveBunExecutable(execPath, which), "x", ...args];
+  const bunExecutable = resolveBunExecutable(execPath, which);
+  if (rootDir && args[0] === "@tailwindcss/cli") {
+    const localEntry = path.join(
+      rootDir,
+      "node_modules",
+      "@tailwindcss",
+      "cli",
+      "dist",
+      "index.mjs",
+    );
+    if (fileExists(localEntry)) {
+      return [bunExecutable, localEntry, ...args.slice(1)];
+    }
+  }
+  return [bunExecutable, "x", ...args];
 }
 
 // ========== Types ==========
@@ -147,7 +165,7 @@ async function runCSSBuild(
   if (minify) args.push("--minify");
 
   try {
-    const proc = spawn(getTailwindCommand(args), {
+    const proc = spawn(getTailwindCommand(args, process.execPath, undefined, rootDir), {
       cwd: rootDir,
       stdout: "pipe",
       stderr: "pipe",

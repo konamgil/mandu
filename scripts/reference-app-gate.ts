@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
+import { fetchWithTimeout } from "./lib/fetch-with-timeout";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const cliEntry = path.join(repoRoot, "packages", "cli", "src", "main.ts");
@@ -161,10 +162,7 @@ export function fetchReferenceApp(
   init?: RequestInit,
   timeoutMs = referenceFetchTimeoutMs,
 ): Promise<Response> {
-  return fetch(input, {
-    ...init,
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  return fetchWithTimeout(input, init, timeoutMs);
 }
 
 async function assertText(url: string, expected: string): Promise<void> {

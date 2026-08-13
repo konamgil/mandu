@@ -1,10 +1,12 @@
 import fs from "fs/promises";
 import path from "path";
 import { createServer } from "node:net";
+import { fetchWithTimeout } from "./lib/fetch-with-timeout";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const cliEntry = path.join(repoRoot, "packages", "cli", "src", "main.ts");
 const projectName = "mandu-smoke-app";
+const smokeFetchTimeoutMs = 10_000;
 
 interface CompletedCommand {
   args: string[];
@@ -172,7 +174,7 @@ async function waitForHttp(
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const response = await fetch(url);
+      const response = await fetchWithTimeout(url, undefined, smokeFetchTimeoutMs);
       await assertResponse(response);
       return;
     } catch (error) {
@@ -382,6 +384,7 @@ async function main(): Promise<void> {
           "Dev server logs",
           result,
         )}`,
+        { cause: error },
       );
     }
 
@@ -409,6 +412,7 @@ async function main(): Promise<void> {
           "Production server logs",
           result,
         )}`,
+        { cause: error },
       );
     }
 
@@ -428,4 +432,4 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+if (import.meta.main) await main();
