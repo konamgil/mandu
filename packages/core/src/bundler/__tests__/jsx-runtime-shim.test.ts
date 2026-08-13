@@ -24,7 +24,11 @@ import {
   _testOnly_generateJsxRuntimeShimSource,
 } from "../build";
 
-describe("JSX runtime shim sources (issues #322 / #323)", () => {
+const describeBundler = describe.skipIf(
+  process.env.MANDU_SKIP_BUNDLER_TESTS === "1",
+);
+
+describeBundler("JSX runtime shim sources (issues #322 / #323)", () => {
   test("dev shim imports jsxDEV/Fragment from bare 'react', never the self-aliased subpath", () => {
     const source = _testOnly_generateJsxDevRuntimeShimSource();
 
@@ -126,7 +130,9 @@ describe("JSX runtime shim sources (issues #322 / #323)", () => {
 
       const outPath = path.join(dir, "_jsx-dev-runtime.built.js");
       await writeFile(outPath, await result.outputs[0]!.text(), "utf-8");
-      const mod = await import(`${pathToFileURL(outPath).href}?t=${Date.now()}`);
+      // Each test owns a unique temp directory, so cache busting is unnecessary
+      // and avoiding a query keeps Bun 1.3's macOS file-URL resolver stable.
+      const mod = await import(pathToFileURL(outPath).href);
 
       // The whole point of #323's re-regression: jsxDEV must be CALLABLE.
       expect(typeof mod.jsxDEV).toBe("function");

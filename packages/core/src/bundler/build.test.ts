@@ -8,6 +8,8 @@ import { setupHappyDom } from "../../tests/setup";
 
 setupHappyDom();
 
+const skipBundlerTests = process.env.MANDU_SKIP_BUNDLER_TESTS === "1";
+
 // 모든 테스트가 하나의 빌드 결과를 공유 — 병렬 Bun.build 충돌 방지
 let rootDir: string;
 let result: { success: boolean; errors: string[] };
@@ -182,6 +184,7 @@ async function runBuildInSubprocess(root: string, mode?: string): Promise<{
 }
 
 beforeAll(async () => {
+  if (skipBundlerTests) return;
   rootDir = await mkRepoTempDir("bundler-");
 
   await mkdir(path.join(rootDir, "app"), { recursive: true });
@@ -205,30 +208,10 @@ afterAll(async () => {
   }
 });
 
-// Historical note — `MANDU_SKIP_BUNDLER_TESTS` gate REMOVED.
-//
-// A previous revision gated this describe block behind
-// `describe.skipIf(MANDU_SKIP_BUNDLER_TESTS === "1")` because running
-// `bun test src/bundler/` without the gate hung indefinitely on Windows
-// (see Phase 0.6 and `docs/qa/wave-R2-integration-report.md`). Root cause
-// was NOT actually in THIS file — it was a deadlock in `safe-build.test.ts`'s
-// "slot handoff" regression test, which drove Bun's microtask queue with a
-// `while (!stop) { await Promise.resolve() }` sampler. That starved libuv
-// I/O callbacks, so the 7 parallel `safeBuild()` calls never completed, the
-// whole test process hung, and downstream test files (including this one
-// when run in the same invocation) looked flaky when they were simply
-// never reached. The handoff sampler now yields via `setImmediate`, which
-// unblocks Bun.build completion and makes `bun test src/bundler/` finish
-// deterministically in ~35s on Windows. Confirmed green 3/3 runs without
-// the gate on 2026-04-20. If you are tempted to re-introduce the skip here,
-// first check whether a sibling test is starving the event loop.
-//
-// A second, independent flake — Bun.build `AggregateError: Bundle failed`
-// when another test file in the same invocation has imported `react` —
-// is now sidestepped by running `buildClientBundles` in a spawned `bun`
-// subprocess via `__tests__/build-runner.ts`. In-process retry does not
-// recover from that one; a fresh module graph does.
-describe("buildClientBundles vendor shims", () => {
+// Bun 1.3.x still serializes parts of Bun.build across concurrent test files.
+// The product test runner gates this file in the main process and executes it
+// alone, while direct `bun test build.test.ts` keeps the complete coverage.
+describe.skipIf(skipBundlerTests)("buildClientBundles vendor shims", () => {
   test("build succeeds", () => {
     if (!result.success) {
       console.error("[build.test] errors:", result.errors);
@@ -705,7 +688,7 @@ describe("buildClientBundles vendor shims", () => {
   });
 });
 
-describe("buildClientBundles client boundaries", () => {
+describe.skipIf(skipBundlerTests)("buildClientBundles client boundaries", () => {
   async function createBoundaryFixture(prefix: string): Promise<string> {
     const boundaryRoot = await mkRepoTempDir(prefix);
     await mkdir(path.join(boundaryRoot, "app", "boundary"), { recursive: true });

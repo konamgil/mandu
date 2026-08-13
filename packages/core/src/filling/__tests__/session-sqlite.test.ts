@@ -45,6 +45,10 @@ const hasBunSql = (() => {
 })();
 
 const describeIfBunSql = hasBunSql ? describe : describe.skip;
+const describeFileBackedIfBunSql =
+  hasBunSql && process.env.MANDU_SKIP_CORE_ISOLATED_TESTS !== "1"
+    ? describe
+    : describe.skip;
 
 // ─── Shared helpers ────────────────────────────────────────────────────────
 
@@ -294,7 +298,7 @@ describeIfBunSql("createSqliteSessionStorage — in-memory", () => {
 
 // ─── Fixtures: file-backed (for WAL + concurrency tests) ────────────────────
 
-describeIfBunSql("createSqliteSessionStorage — file-backed", () => {
+describeFileBackedIfBunSql("createSqliteSessionStorage — file-backed", () => {
   const scratchDir = mkdtempSync(join(tmpdir(), "mandu-sess-sqlite-"));
 
   afterAll(() => {

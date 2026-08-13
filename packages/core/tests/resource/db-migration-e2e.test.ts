@@ -47,6 +47,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { createDb, type Db } from "@mandujs/core/compat/db/index";
 import {
@@ -631,8 +632,12 @@ for (const c of cases) {
       const now: string | Date = c.provider === "mysql" ? new Date() : new Date().toISOString();
 
       const stripped = source!.replace(/import type \{ Db \} from "[^"]+";\s*/m, "");
-      const dataUrl = `data:text/tsx;base64,${Buffer.from(stripped, "utf8").toString("base64")}`;
-      const mod = (await import(dataUrl)) as Record<string, unknown>;
+      // Import through a real scratch file. Bun 1.3 resolves a long data URL
+      // as a package name on POSIX and trips the filesystem name limit before
+      // evaluating the generated TypeScript.
+      const repoModulePath = join(f.scratchDir, `generated-${f.ns}-repo.ts`);
+      await writeFile(repoModulePath, stripped, "utf8");
+      const mod = (await import(pathToFileURL(repoModulePath).href)) as Record<string, unknown>;
       const repoFactoryKey = Object.keys(mod).find((k) => /^create.*Repo$/.test(k));
       expect(repoFactoryKey).toBeDefined();
       const factory = mod[repoFactoryKey!] as (db: Db) => {

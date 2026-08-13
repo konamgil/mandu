@@ -13,7 +13,11 @@ import {
   getDb,
 } from "../../src/observability/sqlite-store";
 
-describe("Phase 6: SQLite Observability Store", () => {
+const describeCoreIsolated = describe.skipIf(
+  process.env.MANDU_SKIP_CORE_ISOLATED_TESTS === "1",
+);
+
+describeCoreIsolated("Phase 6: SQLite Observability Store", () => {
   let tmpRoot: string;
 
   beforeEach(async () => {

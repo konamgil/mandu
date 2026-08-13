@@ -63,9 +63,10 @@ async function runScript(label: string, args: string[], env: Record<string, stri
 
 await runTest(
   "Core tests (bundler race-prone tests gated)",
-  ["packages/core/src", "packages/core/tests", ...forwardedArgs],
+  ["--timeout", "20000", "packages/core/src", "packages/core/tests", ...forwardedArgs],
   {
     MANDU_SKIP_BUNDLER_TESTS: "1",
+    MANDU_SKIP_CORE_ISOLATED_TESTS: "1",
     DB_TEST_MYSQL_URL: "",
   }
 );
@@ -73,6 +74,64 @@ await runTest(
 await runScript(
   "Core MySQL resource e2e tests (isolated)",
   ["scripts/test-mysql-resource-e2e.ts"]
+);
+
+await runTest(
+  "Core client bundle tests (isolated)",
+  [
+    "packages/core/src/bundler/build.test.ts",
+    ...bundlerArgsFrom(forwardedArgs),
+  ],
+);
+
+await runTest(
+  "Core file-backed SQLite session tests (isolated)",
+  [
+    "packages/core/src/filling/__tests__/session-sqlite.test.ts",
+    ...bundlerArgsFrom(forwardedArgs),
+  ],
+);
+
+await runTest(
+  "Core SQLite observability tests (isolated)",
+  [
+    "packages/core/tests/observability/sqlite-store.test.ts",
+    ...bundlerArgsFrom(forwardedArgs),
+  ],
+);
+
+await runTest(
+  "Core HMR server tests (isolated)",
+  [
+    "packages/core/src/bundler/__tests__/hmr-client.test.ts",
+    "packages/core/src/bundler/__tests__/hdr.test.ts",
+    ...bundlerArgsFrom(forwardedArgs),
+  ],
+);
+
+await runTest(
+  "Core HMR regression tests (isolated)",
+  [
+    "packages/core/tests/hmr-matrix/regression.spec.ts",
+    ...bundlerArgsFrom(forwardedArgs),
+  ],
+  { MANDU_SKIP_BUNDLER_TESTS: "1" },
+);
+
+await runTest(
+  "Core build semaphore tests (isolated)",
+  [
+    "packages/core/src/bundler/safe-build.test.ts",
+    ...bundlerArgsFrom(forwardedArgs),
+  ],
+);
+
+await runTest(
+  "Core JSX runtime shim tests (isolated)",
+  [
+    "packages/core/src/bundler/__tests__/jsx-runtime-shim.test.ts",
+    ...bundlerArgsFrom(forwardedArgs),
+  ],
 );
 
 await runTest(

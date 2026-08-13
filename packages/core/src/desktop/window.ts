@@ -113,6 +113,13 @@ export function _resetWebviewBunCache(): void {
   webviewBunCache = null;
 }
 
+/** Resolve the opt-in FFI branch without performing any native loading. */
+export function _shouldUseInlineFFI(
+  value = process.env.MANDU_DESKTOP_INLINE_FFI,
+): boolean {
+  return value === "1";
+}
+
 // ─── Size hint mapping ──────────────────────────────────────────────────────
 
 /**
@@ -296,7 +303,7 @@ export async function createWindow(
   //   succeeds: log a one-time hint, use fallback.
   //   Both fail: rethrow the webview-bun "install me" error (the original
   //   actionable hint).
-  const forceFFI = process.env.MANDU_DESKTOP_INLINE_FFI === "1";
+  const forceFFI = _shouldUseInlineFFI();
   if (forceFFI) {
     const { createFallbackWebview } = await import("./webview-fallback.js");
     return createFallbackWebview(options);

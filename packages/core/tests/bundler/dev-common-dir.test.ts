@@ -179,7 +179,7 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")("buildClientBundle
       .then(() => true)
       .catch(() => false);
     expect(exists).toBe(true);
-  });
+  }, 20_000);
 
   it("island이 있을 때 skipFrameworkBundles=true는 framework 경로를 보존하고 island만 재빌드한다", async () => {
     // 1단계: full build로 실제 framework 번들 생성
@@ -242,7 +242,7 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")("buildClientBundle
     // island bundle은 manifest에 남아있음 (재빌드됨)
     expect(skipBuild.manifest.bundles.demo).toBeDefined();
     expect(skipBuild.manifest.bundles.demo.js).toBeTruthy();
-  });
+  }, 20_000);
 
   it("corrupt manifest JSON이면 full build로 fallback (#186 hardening)", async () => {
     const fs = await import("fs/promises");
@@ -273,7 +273,7 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")("buildClientBundle
       "utf-8",
     );
     expect(() => JSON.parse(written)).not.toThrow();
-  });
+  }, 20_000);
 
   it("필수 필드 누락된 manifest면 full build로 fallback", async () => {
     const fs = await import("fs/promises");
@@ -300,7 +300,7 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")("buildClientBundle
       await fs.readFile(path.join(rootDir, ".mandu/manifest.json"), "utf-8"),
     );
     expect(written.shared).toBeDefined();
-  });
+  }, 20_000);
 
   it("island이 0개면 skipFrameworkBundles=true는 기존 manifest를 유지한다", async () => {
     const manifest: RoutesManifest = {
@@ -334,5 +334,5 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")("buildClientBundle
 
     // framework 경로가 그대로 유지되어야 함 (재빌드 안 됨)
     expect(result.manifest.shared.runtime).toBe(seededPath);
-  });
+  }, 20_000);
 });

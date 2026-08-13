@@ -41,11 +41,16 @@ import {
 import { createHMRServer, type HMRServer } from "../dev";
 import { PORTS } from "../../constants";
 
+const describeCoreIsolated =
+  process.env.MANDU_SKIP_CORE_ISOLATED_TESTS === "1"
+    ? describe.skip
+    : describe;
+
 // ═══════════════════════════════════════════════════════════════════
 // Section A — `ManduHot` runtime
 // ═══════════════════════════════════════════════════════════════════
 
-describe("createManduHot — Vite-compat import.meta.hot runtime", () => {
+describeCoreIsolated("createManduHot — Vite-compat import.meta.hot runtime", () => {
   beforeEach(() => {
     _resetRegistryForTests();
   });
@@ -206,7 +211,7 @@ interface MessageClient {
 
 async function connectWS(hmrPort: number, since?: number): Promise<MessageClient> {
   const qs = since !== undefined ? `?since=${since}` : "";
-  const ws = new WebSocket(`ws://localhost:${hmrPort}${qs ? "/" + qs : ""}`);
+  const ws = new WebSocket(`ws://127.0.0.1:${hmrPort}${qs ? "/" + qs : ""}`);
   const messages: unknown[] = [];
   const waiters: Array<{ idx: number; resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }> = [];
 
@@ -262,14 +267,14 @@ function waitFor(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-describe("createHMRServer — replay buffer semantics", () => {
+describeCoreIsolated("createHMRServer — replay buffer semantics", () => {
   let server: HMRServer | null = null;
   let hmrPort = 0;
 
   beforeEach(() => {
     const basePort = pickPort();
     hmrPort = basePort + PORTS.HMR_OFFSET;
-    server = createHMRServer(basePort);
+    server = createHMRServer(basePort, { hostname: "127.0.0.1" });
   });
 
   afterEach(() => {
@@ -366,14 +371,14 @@ describe("createHMRServer — replay buffer semantics", () => {
 // Section C — Wire-format + layout-update + invalidate upstream
 // ═══════════════════════════════════════════════════════════════════
 
-describe("createHMRServer — wire format + event dispatch", () => {
+describeCoreIsolated("createHMRServer — wire format + event dispatch", () => {
   let server: HMRServer | null = null;
   let hmrPort = 0;
 
   beforeEach(() => {
     const basePort = pickPort();
     hmrPort = basePort + PORTS.HMR_OFFSET;
-    server = createHMRServer(basePort);
+    server = createHMRServer(basePort, { hostname: "127.0.0.1" });
   });
 
   afterEach(() => {
@@ -523,7 +528,7 @@ describe("createHMRServer — wire format + event dispatch", () => {
 // Section D — Integration: runtime + envelope produced by server
 // ═══════════════════════════════════════════════════════════════════
 
-describe("integration — ManduHot + broadcastVite envelope shape", () => {
+describeCoreIsolated("integration — ManduHot + broadcastVite envelope shape", () => {
   beforeEach(() => {
     _resetRegistryForTests();
   });
@@ -554,7 +559,7 @@ describe("integration — ManduHot + broadcastVite envelope shape", () => {
 
   test("[17] HMRReplayEnvelope id is monotonic even across size eviction (ids don't reset)", () => {
     const envelopes: HMRReplayEnvelope[] = [];
-    const server = createHMRServer(pickPort());
+    const server = createHMRServer(pickPort(), { hostname: "127.0.0.1" });
     try {
       for (let i = 0; i < MAX_REPLAY_BUFFER + 3; i++) {
         envelopes.push(server.broadcastVite({ type: "full-reload", path: `/p-${i}` }));

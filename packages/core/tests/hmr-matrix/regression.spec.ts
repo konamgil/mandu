@@ -41,6 +41,10 @@ import {
   type ViteHMRPayload,
 } from "../../src/bundler/hmr-types";
 
+const describeCoreIsolated = describe.skipIf(
+  process.env.MANDU_SKIP_CORE_ISOLATED_TESTS === "1",
+);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Test 1 — #188 reproduction
 // ═══════════════════════════════════════════════════════════════════════════
@@ -165,7 +169,7 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")(
 // Test 3 — WS reconnect with ?since=<id> replays missed envelopes
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe("regression WS reconnect — ?since=<id> replays missed events", () => {
+describeCoreIsolated("regression WS reconnect — ?since=<id> replays missed events", () => {
   let server: HMRServer | null = null;
   let hmrPort = 0;
 
@@ -174,7 +178,7 @@ describe("regression WS reconnect — ?since=<id> replays missed events", () => 
     // common dev services.
     const basePort = 40000 + Math.floor(Math.random() * 10000);
     hmrPort = basePort + PORTS.HMR_OFFSET;
-    server = createHMRServer(basePort);
+    server = createHMRServer(basePort, { hostname: "127.0.0.1" });
   });
 
   afterEach(() => {
@@ -195,7 +199,7 @@ describe("regression WS reconnect — ?since=<id> replays missed events", () => 
     // Client "reconnects" claiming it saw envelope id=1 — so 2 and 3
     // should replay.
     const messages: unknown[] = [];
-    const ws = new WebSocket(`ws://localhost:${hmrPort}/?since=1`);
+    const ws = new WebSocket(`ws://127.0.0.1:${hmrPort}/?since=1`);
     ws.addEventListener("message", (ev) => {
       try {
         messages.push(JSON.parse(String((ev as MessageEvent).data)));
@@ -235,7 +239,7 @@ describe("regression WS reconnect — ?since=<id> replays missed events", () => 
     }
 
     const messages: unknown[] = [];
-    const ws = new WebSocket(`ws://localhost:${hmrPort}/?since=0`);
+    const ws = new WebSocket(`ws://127.0.0.1:${hmrPort}/?since=0`);
     ws.addEventListener("message", (ev) => {
       try {
         messages.push(JSON.parse(String((ev as MessageEvent).data)));
@@ -328,14 +332,14 @@ describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")(
 // Test 5 — layout-update broadcast + replay buffer entry
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe("regression layout-update — broadcast enters replay buffer", () => {
+describeCoreIsolated("regression layout-update — broadcast enters replay buffer", () => {
   let server: HMRServer | null = null;
   let hmrPort = 0;
 
   beforeEach(() => {
     const basePort = 40000 + Math.floor(Math.random() * 10000);
     hmrPort = basePort + PORTS.HMR_OFFSET;
-    server = createHMRServer(basePort);
+    server = createHMRServer(basePort, { hostname: "127.0.0.1" });
   });
 
   afterEach(() => {
@@ -345,7 +349,7 @@ describe("regression layout-update — broadcast enters replay buffer", () => {
 
   test("broadcast({ type: 'layout-update' }) is received live AND kept in replay buffer", async () => {
     const messages: unknown[] = [];
-    const ws = new WebSocket(`ws://localhost:${hmrPort}`);
+    const ws = new WebSocket(`ws://127.0.0.1:${hmrPort}`);
     ws.addEventListener("message", (ev) => {
       try {
         messages.push(JSON.parse(String((ev as MessageEvent).data)));

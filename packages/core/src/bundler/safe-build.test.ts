@@ -31,7 +31,7 @@ async function makeEntry(name: string, body = "export const x = 1;\n"): Promise<
   return file;
 }
 
-describe("safeBuild", () => {
+describe.skipIf(process.env.MANDU_SKIP_BUNDLER_TESTS === "1")("safeBuild", () => {
   it("returns the same BuildOutput shape as Bun.build", async () => {
     const entry = await makeEntry("a");
     const result = await safeBuild({

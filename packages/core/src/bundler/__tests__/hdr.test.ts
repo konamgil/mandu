@@ -40,6 +40,11 @@ import type { RoutesManifest } from "../../spec/schema";
 import type { HDRPayload, ViteHMRPayload } from "../hmr-types";
 import { PORTS } from "../../constants";
 
+const describeCoreIsolated =
+  process.env.MANDU_SKIP_CORE_ISOLATED_TESTS === "1"
+    ? describe.skip
+    : describe;
+
 // -----------------------------------------------------------------------------
 // Mirrored helpers — we reproduce the CLI helper logic here so the test
 // file doesn't have to import from `@mandujs/cli` (circular package
@@ -115,7 +120,7 @@ function buildManifest(): RoutesManifest {
 // Section A — Slot detection + routeId mapping
 // -----------------------------------------------------------------------------
 
-describe("Phase 7.2 Agent B — slot detection", () => {
+describeCoreIsolated("Phase 7.2 Agent B — slot detection", () => {
   test("[1] isSlotFile accepts .slot.ts and .slot.tsx", () => {
     expect(isSlotFile("app/page.slot.ts")).toBe(true);
     expect(isSlotFile("app/page.slot.tsx")).toBe(true);
@@ -136,7 +141,7 @@ describe("Phase 7.2 Agent B — slot detection", () => {
   });
 });
 
-describe("Phase 7.2 Agent B — findRouteIdForSlot", () => {
+describeCoreIsolated("Phase 7.2 Agent B — findRouteIdForSlot", () => {
   test("[2] returns the owning routeId when the slot path matches exactly", () => {
     const rootDir = path.join(tmpdir(), "mandu-hdr-fixture-1");
     const manifest = buildManifest();
@@ -216,14 +221,14 @@ function pickPort(): number {
   return 41000 + (((process.pid % 3500) * 2 + index * 2) % 7000);
 }
 
-describe("Phase 7.2 Agent B — slot-refetch broadcast", () => {
+describeCoreIsolated("Phase 7.2 Agent B — slot-refetch broadcast", () => {
   let server: HMRServer | null = null;
   let hmrPort = 0;
 
   beforeEach(() => {
     const basePort = pickPort();
     hmrPort = basePort + PORTS.HMR_OFFSET;
-    server = createHMRServer(basePort);
+    server = createHMRServer(basePort, { hostname: "127.0.0.1" });
   });
 
   afterEach(() => {
@@ -246,7 +251,7 @@ describe("Phase 7.2 Agent B — slot-refetch broadcast", () => {
   });
 
   test("[5] custom slot-refetch reaches the client with expected shape", async () => {
-    const ws = new WebSocket(`ws://localhost:${hmrPort}/`);
+    const ws = new WebSocket(`ws://127.0.0.1:${hmrPort}/`);
     await new Promise<void>((resolve, reject) => {
       ws.addEventListener("open", () => resolve(), { once: true });
       ws.addEventListener("error", (e) => reject(e as unknown as Error), {
@@ -325,7 +330,7 @@ describe("Phase 7.2 Agent B — slot-refetch broadcast", () => {
 // Section C — HDRPayload shape contract
 // -----------------------------------------------------------------------------
 
-describe("Phase 7.2 Agent B — HDRPayload shape", () => {
+describeCoreIsolated("Phase 7.2 Agent B — HDRPayload shape", () => {
   test("[7] HDRPayload type includes routeId / slotPath / rebuildId / timestamp", () => {
     // Compile-time assertion: if the HDRPayload type shape changes in
     // hmr-types.ts without updating this test, TypeScript compilation
