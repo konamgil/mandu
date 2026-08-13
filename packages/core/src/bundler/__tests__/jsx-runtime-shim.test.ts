@@ -18,7 +18,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   _testOnly_generateJsxDevRuntimeShimSource,
   _testOnly_generateJsxRuntimeShimSource,
@@ -130,15 +129,49 @@ describeBundler("JSX runtime shim sources (issues #322 / #323)", () => {
 
       const outPath = path.join(dir, "_jsx-dev-runtime.built.js");
       await writeFile(outPath, await result.outputs[0]!.text(), "utf-8");
-      // Each test owns a unique temp directory, so cache busting is unnecessary
-      // and avoiding a query keeps Bun 1.3's macOS file-URL resolver stable.
-      const mod = await import(pathToFileURL(outPath).href);
+
+      // Import through a relative specifier in a fresh Bun process. This
+      // exercises the public export while avoiding Bun 1.3's unreliable
+      // in-process resolution of temporary absolute file URLs on macOS.
+      const probePath = path.join(dir, "probe.js");
+      await writeFile(
+        probePath,
+        [
+          "import * as runtime from './_jsx-dev-runtime.built.js';",
+          "console.log(JSON.stringify({",
+          "  type: typeof runtime.jsxDEV,",
+          "  single: runtime.jsxDEV('div', {}, undefined, false).runtime,",
+          "  multi: runtime.jsxDEV('div', {}, undefined, true).runtime,",
+          "}));",
+        ].join("\n"),
+        "utf-8",
+      );
+
+      const proc = Bun.spawn([process.execPath, "run", probePath], {
+        cwd: dir,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      if (exitCode !== 0) {
+        throw new Error(`Built JSX runtime probe failed (${exitCode}): ${stderr}`);
+      }
+      const probe = JSON.parse(stdout.trim()) as {
+        type: string;
+        single: string;
+        multi: string;
+      };
 
       // The whole point of #323's re-regression: jsxDEV must be CALLABLE.
-      expect(typeof mod.jsxDEV).toBe("function");
+      expect(probe.type).toBe("function");
       // Fallback routes static-children to jsxs, otherwise jsx.
-      expect(mod.jsxDEV("div", {}, undefined, false).runtime).toBe("jsx");
-      expect(mod.jsxDEV("div", {}, undefined, true).runtime).toBe("jsxs");
+      expect(probe.single).toBe("jsx");
+      expect(probe.multi).toBe("jsxs");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

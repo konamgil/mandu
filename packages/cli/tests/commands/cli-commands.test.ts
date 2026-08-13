@@ -213,6 +213,7 @@ describe("CLI aliases", () => {
   });
 
   it("ws command creates a WebSocket route", async () => {
+    await fs.mkdir(tmpDir, { recursive: true });
     const output = await runCLI("ws chat", tmpDir);
     expect(output).toContain("app/api/chat/route.ts");
     const exists = await Bun.file(path.join(tmpDir, "app", "api", "chat", "route.ts")).exists();

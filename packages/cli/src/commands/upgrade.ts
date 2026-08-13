@@ -169,7 +169,9 @@ export async function upgradeRun(options: UpgradeOptions = {}): Promise<number> 
 export function isBinaryMode(options: UpgradeOptions = {}): boolean {
   const execPath = options.execPath ?? process.execPath;
   if (!execPath) return false;
-  const base = path.basename(execPath).toLowerCase();
+  // Normalize Windows separators explicitly so detection is stable even when
+  // a Windows binary path is inspected from a POSIX host (for example in CI).
+  const base = path.posix.basename(execPath.replace(/\\/g, "/")).toLowerCase();
   // When someone invokes `bun run mandu` the execPath is `bun` itself —
   // we're not in binary mode. Bun embedded files signal is authoritative
   // but only runs once Bun is loaded; we use filename heuristic first.

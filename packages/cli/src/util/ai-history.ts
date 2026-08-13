@@ -78,7 +78,7 @@ export function resolveAiChatPath(
   const raw = userInput.trim();
 
   // Reject absolute paths eagerly — Windows drive-rooted, POSIX `/`, UNC forms.
-  if (path.isAbsolute(raw)) {
+  if (path.isAbsolute(raw) || path.win32.isAbsolute(raw)) {
     throw new PathEscapeError(raw);
   }
   // Additional defense on Windows where `path.isAbsolute` accepts only
