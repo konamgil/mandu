@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const cliEntry = path.join(repoRoot, "packages", "cli", "src", "main.ts");
+const referenceFetchTimeoutMs = 10_000;
 // Keep staged consumers outside the monorepo so `bun install` creates their
 // own lockfile instead of inheriting the repository workspace on Windows.
 const scratchRoot = path.join(tmpdir(), "mandu-reference-apps");
@@ -150,8 +151,24 @@ async function waitForContract(
   );
 }
 
+/**
+ * Bound every individual probe so one stalled socket cannot outlive the
+ * retry deadline in waitForContract. Bun's default fetch timeout is several
+ * minutes, which previously made a 60-second release gate hang for five.
+ */
+export function fetchReferenceApp(
+  input: string | URL,
+  init?: RequestInit,
+  timeoutMs = referenceFetchTimeoutMs,
+): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+}
+
 async function assertText(url: string, expected: string): Promise<void> {
-  const response = await fetch(url);
+  const response = await fetchReferenceApp(url);
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
   const body = await response.text();
   if (!body.includes(expected)) throw new Error(`${url} did not contain ${JSON.stringify(expected)}`);
@@ -162,14 +179,14 @@ async function assertJson(
   predicate: (value: unknown) => boolean,
   init?: RequestInit,
 ): Promise<void> {
-  const response = await fetch(url, init);
+  const response = await fetchReferenceApp(url, init);
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
   const value: unknown = await response.json();
   if (!predicate(value)) throw new Error(`${url} returned an unexpected body: ${JSON.stringify(value)}`);
 }
 
 async function assertProtectedRedirect(url: string): Promise<void> {
-  const response = await fetch(url, { redirect: "manual" });
+  const response = await fetchReferenceApp(url, { redirect: "manual" });
   const location = response.headers.get("location");
   if (response.status !== 302 || !location?.endsWith("/login")) {
     throw new Error(`${url} expected 302 -> /login, got ${response.status} -> ${location ?? "<none>"}`);
@@ -198,7 +215,7 @@ function updateCookieHeader(cookieHeader: string, setCookies: string[]): string 
 }
 
 async function assertSignupDashboard(baseUrl: string): Promise<string> {
-  const signupPage = await fetch(`${baseUrl}/signup`);
+  const signupPage = await fetchReferenceApp(`${baseUrl}/signup`);
   if (!signupPage.ok) throw new Error(`/signup returned ${signupPage.status}`);
   const html = await signupPage.text();
   const csrfToken = html.match(/name="_csrf" value="([^"]+)"/)?.[1];
@@ -207,7 +224,7 @@ async function assertSignupDashboard(baseUrl: string): Promise<string> {
   const email = `reference-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   const password = "reference-correct-horse";
   const initialCookies = getSetCookies(signupPage);
-  const signup = await fetch(`${baseUrl}/api/signup`, {
+  const signup = await fetchReferenceApp(`${baseUrl}/api/signup`, {
     method: "POST",
     redirect: "manual",
     headers: {
@@ -227,7 +244,7 @@ async function assertSignupDashboard(baseUrl: string): Promise<string> {
   }
 
   const cookie = mergeCookies(initialCookies, getSetCookies(signup));
-  const dashboard = await fetch(`${baseUrl}/dashboard`, { headers: { cookie } });
+  const dashboard = await fetchReferenceApp(`${baseUrl}/dashboard`, { headers: { cookie } });
   if (!dashboard.ok) throw new Error(`authenticated /dashboard returned ${dashboard.status}`);
   const dashboardHtml = await dashboard.text();
   if (!dashboardHtml.includes(email)) throw new Error("authenticated dashboard did not render the signed-up user");
@@ -235,14 +252,14 @@ async function assertSignupDashboard(baseUrl: string): Promise<string> {
 }
 
 async function assertPersistentPost(baseUrl: string, cookie: string): Promise<void> {
-  const postsPage = await fetch(`${baseUrl}/posts`, { headers: { cookie } });
+  const postsPage = await fetchReferenceApp(`${baseUrl}/posts`, { headers: { cookie } });
   if (!postsPage.ok) throw new Error(`/posts returned ${postsPage.status}`);
   const html = await postsPage.text();
   const csrfToken = html.match(/name="_csrf" value="([^"]+)"/)?.[1];
   if (!csrfToken) throw new Error("/posts did not render a CSRF token");
   const currentCookie = updateCookieHeader(cookie, getSetCookies(postsPage));
   const title = `reference-post-${Date.now()}`;
-  const create = await fetch(`${baseUrl}/api/posts`, {
+  const create = await fetchReferenceApp(`${baseUrl}/api/posts`, {
     method: "POST",
     redirect: "manual",
     headers: {
@@ -254,7 +271,7 @@ async function assertPersistentPost(baseUrl: string, cookie: string): Promise<vo
   if (![302, 303].includes(create.status) || !create.headers.get("location")?.endsWith("/posts")) {
     throw new Error(`post creation expected redirect to /posts, got ${create.status}`);
   }
-  const persisted = await fetch(`${baseUrl}/posts`, {
+  const persisted = await fetchReferenceApp(`${baseUrl}/posts`, {
     headers: { cookie: updateCookieHeader(currentCookie, getSetCookies(create)) },
   });
   if (!persisted.ok || !(await persisted.text()).includes(title)) {
@@ -385,10 +402,13 @@ async function verifyReference(reference: ReferenceApp, appDir: string): Promise
     await waitForContract(server, () => reference.assert(`http://127.0.0.1:${port}`));
   } catch (error) {
     const result = await stopCommand(server);
-    throw new Error([
-      error instanceof Error ? error.message : String(error),
-      formatCommandFailure(`${reference.id} server logs`, result),
-    ].join("\n\n"));
+    throw new Error(
+      [
+        error instanceof Error ? error.message : String(error),
+        formatCommandFailure(`${reference.id} server logs`, result),
+      ].join("\n\n"),
+      { cause: error },
+    );
   }
   await stopCommand(server);
   console.log(`  pass   ${reference.id}`);
@@ -417,4 +437,4 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+if (import.meta.main) await main();
