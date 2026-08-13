@@ -16,6 +16,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { createBundledImporter, importFresh } from "../src/util/bun";
+import { canonicalizeFsPath } from "../src/util/import-graph";
 
 interface PageModule {
   default: () => string;
@@ -268,7 +269,7 @@ export default function Page() {
     });
 
     await expect(importBundled(pagePath)).rejects.toThrow();
-    expect(receivedPath).toBe(path.resolve(pagePath));
+    expect(receivedPath).toBe(canonicalizeFsPath(pagePath));
   });
 
   it("wipes stale bundles from a prior session on first call", async () => {

@@ -40,21 +40,53 @@
  *   then lowercased on win32 so Windows case-insensitive fs events
  *   match regardless of the drive-letter casing the watcher emitted.
  *
- * # What this does NOT do
+ * # Path behavior and boundaries
  *
  * - Does not compute adjacency from source — pure consumer of the
  *   sourcemap output.
- * - Does not handle symlink equivalence classes. If the same file is
- *   imported via two different paths (realpath vs symlink) Bun reports
- *   them under distinct entries and we treat them as distinct.
+ * - Canonicalizes filesystem aliases through the nearest existing ancestor,
+ *   so watcher paths and Bun.build paths remain equivalent even after a file
+ *   is deleted. This is required on macOS where `/var` aliases `/private/var`.
  * - Does not persist across dev-server restarts. In-memory only.
  */
 
 import path from "path";
+import { realpathSync } from "fs";
+
+/**
+ * Resolve filesystem aliases (for example macOS `/var` -> `/private/var`).
+ *
+ * Watchers can report a path after the file was deleted, so resolving only the
+ * complete path is not enough. Walk upward to the nearest existing ancestor,
+ * canonicalize that ancestor, then append the missing suffix again.
+ */
+export function canonicalizeFsPath(p: string): string {
+  const abs = path.resolve(p);
+  const suffix: string[] = [];
+  let candidate = abs;
+
+  while (true) {
+    try {
+      const canonicalParent = realpathSync.native(candidate);
+      if (suffix.length === 0) return canonicalParent;
+
+      const orderedSuffix: string[] = [];
+      for (let index = suffix.length - 1; index >= 0; index--) {
+        orderedSuffix.push(suffix[index]);
+      }
+      return path.join(canonicalParent, ...orderedSuffix);
+    } catch {
+      const parent = path.dirname(candidate);
+      if (parent === candidate) return abs;
+      suffix.push(path.basename(candidate));
+      candidate = parent;
+    }
+  }
+}
 
 /** Normalize a path the way fs.watch emits on this OS. */
 function normalize(p: string): string {
-  const abs = path.resolve(p);
+  const abs = canonicalizeFsPath(p);
   return process.platform === "win32" ? abs.toLowerCase() : abs;
 }
 
@@ -204,7 +236,7 @@ export function extractSourcesFromInlineSourcemap(
     // Bun emits paths like "..\\src\\foo.ts" on win32, "../src/foo.ts"
     // on posix. `path.resolve` handles both separators correctly.
     const combined = rootPrefix ? path.join(rootPrefix, entry) : entry;
-    out.push(path.resolve(bundleDir, combined));
+    out.push(canonicalizeFsPath(path.resolve(bundleDir, combined)));
   }
   return out;
 }

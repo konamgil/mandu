@@ -17,7 +17,16 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, symlinkSync } from "fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  existsSync,
+  readdirSync,
+  symlinkSync,
+  realpathSync,
+} from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import React from "react";
@@ -29,6 +38,7 @@ import {
 } from "../bun";
 import {
   ImportGraph,
+  canonicalizeFsPath,
   extractSourcesFromInlineSourcemap,
 } from "../import-graph";
 
@@ -666,6 +676,31 @@ export default function r() { return "E${i}-" + v; }
 // ─────────────────────────────────────────────────────────────────────────
 
 describe("ImportGraph", () => {
+  it.skipIf(process.platform === "win32")(
+    "canonicalizes symlinked ancestors for existing and deleted paths",
+    () => {
+      const fixture = mkdtempSync(path.join(tmpdir(), "mandu-path-alias-"));
+      try {
+        const realDir = path.join(fixture, "real");
+        const aliasDir = path.join(fixture, "alias");
+        mkdirSync(realDir);
+        symlinkSync(realDir, aliasDir, "dir");
+
+        const existing = path.join(realDir, "existing.ts");
+        writeFileSync(existing, "export {};\n");
+
+        expect(canonicalizeFsPath(path.join(aliasDir, "existing.ts"))).toBe(
+          realpathSync.native(existing),
+        );
+        expect(canonicalizeFsPath(path.join(aliasDir, "deleted.ts"))).toBe(
+          path.join(realpathSync.native(realDir), "deleted.ts"),
+        );
+      } finally {
+        rmSync(fixture, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("tracks descendants per root + cross-checks reverse index", () => {
     const g = new ImportGraph();
     // Use absolute paths that `path.resolve` won't rewrite — on Windows
@@ -751,8 +786,12 @@ describe("ImportGraph", () => {
     const bundlePath = path.resolve("/tmp/out/bundle.mjs");
     const sources = extractSourcesFromInlineSourcemap(bundlePath, contents);
     expect(sources.length).toBe(2);
-    expect(sources[0]).toBe(path.resolve("/tmp/out/../src/foo.ts"));
-    expect(sources[1]).toBe(path.resolve("/tmp/out/../src/bar.ts"));
+    expect(sources[0]).toBe(
+      canonicalizeFsPath(path.resolve("/tmp/out/../src/foo.ts")),
+    );
+    expect(sources[1]).toBe(
+      canonicalizeFsPath(path.resolve("/tmp/out/../src/bar.ts")),
+    );
   });
 
   it("clear(): drops all state", () => {

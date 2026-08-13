@@ -71,6 +71,7 @@ import { HMR_PERF } from "@mandujs/core/compat/perf/hmr-markers";
 import { isPerfEnabled, mark, measure } from "@mandujs/core/compat/perf/index";
 import {
   ImportGraph,
+  canonicalizeFsPath,
   extractSourcesFromInlineSourcemap,
 } from "./import-graph";
 
@@ -381,8 +382,12 @@ function createClientBoundaryTransformPlugin(
   const transformOptions = options?.clientBoundaryTransform;
   if (!transformOptions) return null;
 
-  const target = path.resolve(rootPathAbs);
-  const sourceReplays = createBoundarySourceReplays(rootDir, transformOptions.boundaries);
+  const canonicalRootDir = canonicalizeFsPath(rootDir);
+  const target = canonicalizeFsPath(rootPathAbs);
+  const sourceReplays = createBoundarySourceReplays(
+    canonicalRootDir,
+    transformOptions.boundaries,
+  );
   return {
     name: "mandu:client-boundary-transform",
     setup(build) {
@@ -400,7 +405,9 @@ function createClientBoundaryTransformPlugin(
         const source = await Bun.file(args.path).text();
         const result = transformClientBoundaries(source, {
           routeId: transformOptions.routeId,
-          fileName: path.relative(rootDir, args.path).replace(/\\/g, "/"),
+          fileName: path
+            .relative(canonicalRootDir, canonicalizeFsPath(args.path))
+            .replace(/\\/g, "/"),
           hydrate: normalizeClientBoundaryHydrate(transformOptions.hydrate),
           ordinalOffset,
           boundaryReplay,
@@ -459,7 +466,7 @@ function createBoundarySourceReplays(
 }
 
 function normalizeFsPathKey(filePath: string): string {
-  const resolved = path.resolve(filePath);
+  const resolved = canonicalizeFsPath(filePath);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
@@ -720,7 +727,8 @@ interface CachedImport {
 export function createBundledImporter(
   options: BundledImporterOptions,
 ): BundledImporter {
-  const { rootDir, onError } = options;
+  const rootDir = canonicalizeFsPath(options.rootDir);
+  const { onError } = options;
   const cacheDir = path.resolve(rootDir, SSR_BUNDLE_DIR);
   let counter = 0;
   let cleanupPromise: Promise<void> | null = null;
@@ -952,7 +960,7 @@ export function createBundledImporter(
     const perfEnabled = isPerfEnabled();
     if (perfEnabled) mark(HMR_PERF.SSR_BUNDLED_IMPORT);
 
-    const absPath = path.resolve(modulePath);
+    const absPath = canonicalizeFsPath(modulePath);
     const cached = cacheByRoot.get(absPath);
 
     // Cache-hit fast path: we have a cached import AND the caller told us
