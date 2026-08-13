@@ -45,6 +45,39 @@ const describeCoreIsolated = describe.skipIf(
   process.env.MANDU_SKIP_CORE_ISOLATED_TESTS === "1",
 );
 
+const REGRESSION_HMR_PORT_STATE = "__MANDU_REGRESSION_HMR_PORT_STATE__";
+
+function startRegressionHMRServer(): {
+  server: HMRServer;
+  hmrPort: number;
+} {
+  const stateGlobal = globalThis as typeof globalThis & {
+    [REGRESSION_HMR_PORT_STATE]?: { next: number };
+  };
+  stateGlobal[REGRESSION_HMR_PORT_STATE] ??= { next: 0 };
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const index = stateGlobal[REGRESSION_HMR_PORT_STATE].next++;
+    // Stay below Windows' default dynamic TCP range (49152-65535). The
+    // previous randomized 40k-50k range occasionally selected a client
+    // socket still in use by an earlier WebSocket test.
+    const basePort = 32000 + (((process.pid % 3000) * 2 + index * 2) % 6000);
+    try {
+      return {
+        server: createHMRServer(basePort, { hostname: "127.0.0.1" }),
+        hmrPort: basePort + PORTS.HMR_OFFSET,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Unable to allocate an HMR regression test port");
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Test 1 — #188 reproduction
 // ═══════════════════════════════════════════════════════════════════════════
@@ -174,11 +207,7 @@ describeCoreIsolated("regression WS reconnect — ?since=<id> replays missed eve
   let hmrPort = 0;
 
   beforeEach(() => {
-    // Pick an ephemeral-ish port. 40k-50k range avoids collisions with
-    // common dev services.
-    const basePort = 40000 + Math.floor(Math.random() * 10000);
-    hmrPort = basePort + PORTS.HMR_OFFSET;
-    server = createHMRServer(basePort, { hostname: "127.0.0.1" });
+    ({ server, hmrPort } = startRegressionHMRServer());
   });
 
   afterEach(() => {
@@ -337,9 +366,7 @@ describeCoreIsolated("regression layout-update — broadcast enters replay buffe
   let hmrPort = 0;
 
   beforeEach(() => {
-    const basePort = 40000 + Math.floor(Math.random() * 10000);
-    hmrPort = basePort + PORTS.HMR_OFFSET;
-    server = createHMRServer(basePort, { hostname: "127.0.0.1" });
+    ({ server, hmrPort } = startRegressionHMRServer());
   });
 
   afterEach(() => {
