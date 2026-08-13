@@ -86,7 +86,7 @@ describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
     expect([...EMBEDDED_SKILL_IDS]).toEqual([...EXPECTED_SKILL_IDS]);
   });
 
-  it("each SKILL.md payload is byte-identical to the on-disk source", async () => {
+  it("each embedded payload matches its source after line-ending normalization", async () => {
     const { SKILLS_MANIFEST } = (await import(
       path.join(CLI_ROOT, "generated", "skills-manifest.js")
     )) as { SKILLS_MANIFEST: ReadonlyMap<string, string> };
@@ -95,8 +95,8 @@ describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
       const embedded = SKILLS_MANIFEST.get(skillId);
       expect(embedded).toBeTruthy();
       const sourcePath = path.join(OFFICIAL_SKILLS_ROOT, skillId, "SKILL.md");
-      const onDisk = readFileSync(sourcePath, "utf-8");
-      expect(embedded).toBe(onDisk);
+      const onDisk = readFileSync(sourcePath, "utf-8").replace(/\r\n/g, "\n");
+      expect(embedded?.replace(/\r\n/g, "\n")).toBe(onDisk);
     }
 
     // settings.json payload parity too.
@@ -107,8 +107,8 @@ describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
     const settingsOnDisk = readFileSync(
       path.join(REPO_ROOT, "packages", "skills", "templates", ".claude", "settings.json"),
       "utf-8"
-    );
-    expect(settingsEmbedded).toBe(settingsOnDisk);
+    ).replace(/\r\n/g, "\n");
+    expect(settingsEmbedded?.replace(/\r\n/g, "\n")).toBe(settingsOnDisk);
   });
 
   it("resolveSkillPayload() fails closed on unknown keys and succeeds on known ones", async () => {

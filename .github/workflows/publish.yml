@@ -48,7 +48,7 @@ jobs:
           bun run typecheck:labs
           bun run scripts/typecheck.ts skills
           bun run lint:labs
-          oxlint packages/skills
+          bunx oxlint packages/skills
           bun run test:generated
           bun run test:labs
 

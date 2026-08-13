@@ -85,6 +85,7 @@ describe("createSecretBridge — fallback file backend", () => {
   });
 
   it("selects fallback backend when forced", () => {
+    __resetFallbackWarningForTests();
     const warnings: string[] = [];
     const bridge = createSecretBridge({
       target: "vercel",

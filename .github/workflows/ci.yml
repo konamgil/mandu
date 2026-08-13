@@ -83,9 +83,12 @@ jobs:
       - run: bun run check:package-boundaries
       - run: bun run check:target-boundaries
       - run: bun run check:docs-drift
-      - run: bun run test:core -- --randomize --seed=${{ github.run_id }}
-      - run: bun run test:cli -- --randomize --seed=${{ github.run_id }}
-      - run: bun run test:mcp -- --randomize --seed=${{ github.run_id }}
+      # Bun's test seed is a 32-bit integer. GitHub run IDs have already
+      # grown beyond that range, while run_number remains a compact,
+      # reproducible seed for this repository.
+      - run: bun run test:core -- --randomize --seed=${{ github.run_number }}
+      - run: bun run test:cli -- --randomize --seed=${{ github.run_number }}
+      - run: bun run test:mcp -- --randomize --seed=${{ github.run_number }}
       - run: bun run test:agent-apply-gate
       - run: bun run test:smoke
       - run: bun run test:reference-apps
@@ -103,7 +106,7 @@ jobs:
       - run: bun run typecheck:labs
       - run: bun run scripts/typecheck.ts skills
       - run: bun run lint:labs
-      - run: oxlint packages/skills
+      - run: bunx oxlint packages/skills
       - run: bun run test:generated
       - run: bun run test:labs
 
@@ -125,8 +128,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck:product
       - run: bun run check:package-boundaries
-      - run: bun run test:core -- --randomize --seed=${{ github.run_id }}
-      - run: bun run test:cli -- --randomize --seed=${{ github.run_id }}
+      - run: bun run test:core -- --randomize --seed=${{ github.run_number }}
+      - run: bun run test:cli -- --randomize --seed=${{ github.run_number }}
       - run: bun run test:smoke
       - run: bun run test:reference-apps
 
@@ -152,10 +155,11 @@ jobs:
       - name: Wait for databases to report healthy
         run: |
           for i in $(seq 1 90); do
-            status=$(docker compose -f packages/core/tests/fixtures/db/docker-compose.yml ps --format json | tr -d '\r' || true)
-            pg_ok=$(echo "$status" | grep -c '"Service":"postgres".*"Health":"healthy"' || true)
-            mysql_ok=$(echo "$status" | grep -c '"Service":"mysql".*"Health":"healthy"' || true)
-            if [ "$pg_ok" = "1" ] && [ "$mysql_ok" = "1" ]; then
+            pg_id=$(docker compose -f packages/core/tests/fixtures/db/docker-compose.yml ps -q postgres)
+            mysql_id=$(docker compose -f packages/core/tests/fixtures/db/docker-compose.yml ps -q mysql)
+            pg_health=$(docker inspect --format='{{.State.Health.Status}}' "$pg_id" 2>/dev/null || true)
+            mysql_health=$(docker inspect --format='{{.State.Health.Status}}' "$mysql_id" 2>/dev/null || true)
+            if [ "$pg_health" = "healthy" ] && [ "$mysql_health" = "healthy" ]; then
               echo "Both databases healthy after ${i}s"
               exit 0
             fi

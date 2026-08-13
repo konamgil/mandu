@@ -367,7 +367,7 @@ function scheduleHydration(element: HTMLElement, src: string, strategy: string):
 
 function isManduIslandExport(value: unknown): value is ManduIslandExport {
   return !!value &&
-    typeof value === "object" &&
+    (typeof value === "object" || typeof value === "function") &&
     (value as { __mandu_island?: unknown }).__mandu_island === true &&
     "definition" in value;
 }

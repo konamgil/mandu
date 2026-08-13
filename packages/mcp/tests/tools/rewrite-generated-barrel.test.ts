@@ -12,7 +12,7 @@
  *   • Files without `__generated__` references are ignored
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "bun:test";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
@@ -117,7 +117,11 @@ describe("rewriteGeneratedBarrelTools handler — filesystem integration", () =>
 
   beforeAll(async () => {
     root = await mkdtemp(path.join(tmpdir(), "mandu-barrel-"));
-    // Create one barrel that matches and one that doesn't
+  });
+
+  beforeEach(async () => {
+    // Reset every fixture because randomized test order may run the mutating
+    // rewrite case before the dry-run case.
     await mkdir(path.join(root, "src"), { recursive: true });
     await writeFile(
       path.join(root, "src", "data.ts"),

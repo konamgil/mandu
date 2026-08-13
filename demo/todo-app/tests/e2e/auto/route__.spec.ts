@@ -13,7 +13,7 @@ test.describe("route:/", () => {
     // L1: Domain-aware structure signals (generic)
     await expect(page.locator("main, [role='main']")).toBeVisible();
     await expect(page.locator("h1")).toBeVisible();
-    await expect(page.locator("a, button")).toHaveCount({ min: 1 });
+    expect(await page.locator("a, button").count()).toBeGreaterThanOrEqual(1);
     await expect(page).toHaveTitle(/.+/);
     // L2: behavior signals (placeholder - extend per app)
     await expect(page).toHaveURL(/.*/);

@@ -185,32 +185,12 @@ describe("@mandujs/core/compat/desktop/webview-fallback — createFallbackWebvie
 });
 
 describe("@mandujs/core/compat/desktop/webview-fallback — loadFFILibwebview failure surface", () => {
-  const ORIGINAL_ENV = process.env.MANDU_LIBWEBVIEW_PATH;
-
-  beforeEach(async () => {
-    // Force an unreachable path so the loader's failure hint is
-    // exercised without depending on the actual libwebview install
-    // state of the CI runner.
-    process.env.MANDU_LIBWEBVIEW_PATH =
-      "/path/that/definitely/does/not/exist/libwebview.so";
-    const mod = await import("../webview-fallback");
-    mod._resetFFICache();
-  });
-
-  afterEach(async () => {
-    if (ORIGINAL_ENV !== undefined) {
-      process.env.MANDU_LIBWEBVIEW_PATH = ORIGINAL_ENV;
-    } else {
-      delete process.env.MANDU_LIBWEBVIEW_PATH;
-    }
-    const mod = await import("../webview-fallback");
-    mod._resetFFICache();
-  });
-
   it("throws an actionable error enumerating every probed path", async () => {
-    const { loadFFILibwebview } = await import("../webview-fallback");
+    const { _loadFFILibwebviewCandidates } = await import("../webview-fallback");
+    const missingLibrary =
+      "/path/that/definitely/does/not/exist/libwebview.so";
     try {
-      await loadFFILibwebview();
+      await _loadFFILibwebviewCandidates([missingLibrary]);
       throw new Error("unreachable — loadFFILibwebview should have thrown");
     } catch (err) {
       expect(err).toBeInstanceOf(Error);
@@ -220,7 +200,7 @@ describe("@mandujs/core/compat/desktop/webview-fallback — loadFFILibwebview fa
       expect(msg).toContain("MANDU_LIBWEBVIEW_PATH");
       expect(msg).toContain("webview/webview");
       // Should enumerate the failing candidate we injected.
-      expect(msg).toContain("libwebview.so");
+      expect(msg).toContain(missingLibrary);
     }
   });
 });

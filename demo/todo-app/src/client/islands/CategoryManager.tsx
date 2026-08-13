@@ -72,6 +72,15 @@ export default island<CategoryManagerData>({
 
     return (
       <div>
+        <h1
+          className="text-4xl mb-1"
+          style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic' }}
+        >
+          Categories
+        </h1>
+        <p className="text-sm mb-8" style={{ color: 'var(--color-ink-muted)' }}>
+          {categories.length} categories to organize your work
+        </p>
         {/* Add form */}
         <form
           onSubmit={(e) => { e.preventDefault(); addCategory(); }}

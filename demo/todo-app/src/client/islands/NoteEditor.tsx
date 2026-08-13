@@ -97,6 +97,15 @@ export default island<NoteEditorData>({
 
     return (
       <div>
+        <h1
+          className="text-4xl mb-1"
+          style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic' }}
+        >
+          Notes
+        </h1>
+        <p className="text-sm mb-8" style={{ color: 'var(--color-ink-muted)' }}>
+          {notes.length} notes, {notes.filter((note) => note.pinned).length} pinned
+        </p>
         {/* Add form */}
         <form onSubmit={(e) => { e.preventDefault(); addNote(); }} className="card p-5 mb-6">
           <input

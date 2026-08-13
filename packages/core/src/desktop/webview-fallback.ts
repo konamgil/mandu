@@ -303,6 +303,21 @@ let loadedFFICache: LoadedFFI | null = null;
 export async function loadFFILibwebview(): Promise<LoadedFFI> {
   if (loadedFFICache) return loadedFFICache;
 
+  loadedFFICache = await _loadFFILibwebviewCandidates(_getLibraryCandidates());
+  return loadedFFICache;
+}
+
+/**
+ * Attempt an explicit candidate list without reading or mutating the module
+ * cache. This keeps the failure contract deterministic in tests even when a
+ * different desktop test has already loaded libwebview into the process.
+ *
+ * @internal
+ */
+export async function _loadFFILibwebviewCandidates(
+  candidates: readonly string[],
+): Promise<LoadedFFI> {
+
   // Lazy-import `bun:ffi` so a `bun test` in an environment where `bun:ffi`
   // isn't available (e.g. a Deno test runner, or a future isolated
   // sandbox) still lets the module load.
@@ -326,7 +341,6 @@ export async function loadFFILibwebview(): Promise<LoadedFFI> {
     );
   }
 
-  const candidates = _getLibraryCandidates();
   const errors: string[] = [];
 
   for (const libPath of candidates) {
@@ -334,8 +348,7 @@ export async function loadFFILibwebview(): Promise<LoadedFFI> {
       const loaded = (dlopen as (p: string, s: typeof _ffiSymbols) => {
         symbols: Record<string, unknown>;
       })(libPath, _ffiSymbols);
-      loadedFFICache = { symbols: loaded.symbols, libraryPath: libPath };
-      return loadedFFICache;
+      return { symbols: loaded.symbols, libraryPath: libPath };
     } catch (err) {
       errors.push(
         `  ${libPath}: ${err instanceof Error ? err.message : String(err)}`,

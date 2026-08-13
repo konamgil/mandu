@@ -112,6 +112,15 @@ export default island<TodoListData>({
 
     return (
       <div>
+        <h1
+          className="text-4xl mb-1"
+          style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic' }}
+        >
+          Todos
+        </h1>
+        <p className="text-sm mb-8" style={{ color: 'var(--color-ink-muted)' }}>
+          {stats.active} active, {stats.completed} completed
+        </p>
         {/* Add form */}
         <form
           onSubmit={(e) => { e.preventDefault(); addTodo(); }}

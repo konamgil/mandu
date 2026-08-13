@@ -180,6 +180,8 @@ describe("mandu scaffold", () => {
   });
 
   it("does not overwrite existing files", async () => {
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(path.join(tmpDir, "middleware.ts"), "// existing\n");
     const output = await runCLI("scaffold middleware", tmpDir);
     expect(output).toContain("already exists");
   });
@@ -201,6 +203,7 @@ describe("CLI aliases", () => {
   });
 
   it("session init creates a session helper", async () => {
+    await fs.mkdir(tmpDir, { recursive: true });
     const output = await runCLI("session init", tmpDir);
     expect(output).toContain("src/server/session.ts");
     const exists = await Bun.file(path.join(tmpDir, "src", "server", "session.ts")).exists();

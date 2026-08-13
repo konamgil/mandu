@@ -1,11 +1,10 @@
 name: smoke-cli
 
 # Why this workflow exists:
-#   8 issues (#263-#270) and 2 follow-ups (#271/#272) all reproduced
-#   inside the first 5 minutes of a fresh `mandu create demo` session.
-#   This job rehearses that exact path on every PR so a regression in
-#   the newbie experience fails CI before merge — replacing user-filed
-#   bug reports with green/red CI checks.
+#   The stable Mandu product is intentionally small: create, dev, build,
+#   start, check, and agent. This job rehearses the first five minutes of
+#   that product path so Labs/compatibility commands cannot silently become
+#   release requirements again.
 
 on:
   push:
@@ -36,10 +35,14 @@ jobs:
           set -e
           CLI="bun packages/cli/src/main.ts"
           $CLI create --help | grep -q "create"
-          $CLI db --help | grep -q "plan"
-          $CLI db plan --help | grep -q "plan"
-          $CLI generate --help | grep -q "resource"
-          $CLI generate resource --help | grep -q "generate"
+          $CLI dev --help | grep -q "dev"
+          $CLI build --help | grep -q "build"
+          $CLI start --help | grep -q "start"
+          $CLI check --help | grep -q "check"
+          $CLI agent --help | grep -q "context"
+          $CLI agent --help | grep -q "plan"
+          $CLI agent --help | grep -q "apply"
+          $CLI agent --help | grep -q "verify"
 
       - name: Smoke — create a fresh project (#267 — must not emit tsconfig warnings)
         run: |
@@ -57,43 +60,32 @@ jobs:
             exit 1
           fi
 
-      - name: Smoke — generate resource lands at the right path (#263/#264)
+      - name: Smoke — fresh project passes the stable safety check
         run: |
           set -e
           cd /tmp/mandu-smoke/demo
           CLI="bun $GITHUB_WORKSPACE/packages/cli/src/main.ts"
-          $CLI generate resource party --fields="name:string!,color:string!" --ci || true
-          # #263 — must NOT be `schema.ts`
-          if [ -f spec/resources/party/schema.ts ]; then
-            echo "❌ #263 regression: generated schema.ts in subfolder"
-            exit 1
-          fi
-          # #264 — must be flat at spec/resources/<name>.resource.ts
-          test -f spec/resources/party.resource.ts
+          $CLI check --json > check.json
+          grep -q '"ok": true' check.json
 
-      - name: Smoke — generated file is `export default` (#265)
-        run: |
-          cd /tmp/mandu-smoke/demo
-          grep -q "export default defineResource" spec/resources/party.resource.ts
-
-      - name: Smoke — generated file declares persistence (#266)
-        run: |
-          cd /tmp/mandu-smoke/demo
-          grep -q "persistence:" spec/resources/party.resource.ts
-          grep -q 'primaryKey: "id"' spec/resources/party.resource.ts
-
-      - name: Smoke — DATABASE_URL scheme drives provider (#270)
+      - name: Smoke — agent context is machine-readable
         run: |
           set -e
           cd /tmp/mandu-smoke/demo
           CLI="bun $GITHUB_WORKSPACE/packages/cli/src/main.ts"
-          OUT=$(DATABASE_URL="sqlite://./test.db" $CLI db plan --ci --json 2>&1 || true)
-          echo "$OUT"
-          # #270 — provider field must reflect URL scheme (sqlite), not hardcoded postgres
-          echo "$OUT" | grep -q '"provider": *"sqlite"' || {
-            echo "❌ #270 regression: provider not derived from DATABASE_URL"
-            exit 1
-          }
+          $CLI agent context --json --no-diagnose > agent-context.json
+          grep -q '"framework": "mandu"' agent-context.json
+          grep -q '"canonical"' agent-context.json
+
+      - name: Smoke — agent plan is conservative and writable
+        run: |
+          set -e
+          cd /tmp/mandu-smoke/demo
+          CLI="bun $GITHUB_WORKSPACE/packages/cli/src/main.ts"
+          $CLI agent plan "add a party page" --json --write > agent-plan.json
+          test -f .mandu/agent-plan.json
+          grep -q '"domains"' agent-plan.json
+          grep -q '"executable": false' agent-plan.json
 
   npm-drift:
     name: npm registry drift check
@@ -111,4 +103,4 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - name: Compare local vs npm
-        run: bun run scripts/check-npm-drift.ts
+        run: bun run scripts/check-npm-drift.ts --product
