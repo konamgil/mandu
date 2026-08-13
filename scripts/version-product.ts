@@ -78,15 +78,20 @@ async function main(): Promise<void> {
   }
 
   const rootPackagePath = join(ROOT, "package.json");
+  const changesetConfigPath = join(CHANGESET_DIR, "config.json");
   const originalRootPackage = await readFile(rootPackagePath, "utf8");
+  const originalChangesetConfig = await readFile(changesetConfigPath, "utf8");
   const rootPackage = JSON.parse(originalRootPackage) as {
     workspaces: string[] | { packages: string[]; catalog?: Record<string, string> };
   };
+  const changesetConfig = JSON.parse(originalChangesetConfig) as { ignore?: string[] };
   if (Array.isArray(rootPackage.workspaces)) {
     rootPackage.workspaces = [...PRODUCT_PACKAGE_DIRS];
   } else {
     rootPackage.workspaces.packages = [...PRODUCT_PACKAGE_DIRS];
   }
+  changesetConfig.ignore = (changesetConfig.ignore ?? [])
+    .filter((name) => PRODUCT_PACKAGE_NAMES.has(name));
 
   const holdingDir = await mkdtemp(join(tmpdir(), "mandu-product-version-"));
   const movedFiles: string[] = [];
@@ -98,6 +103,7 @@ async function main(): Promise<void> {
       movedFiles.push(file);
     }
     await writeFile(rootPackagePath, `${JSON.stringify(rootPackage, null, 2)}\n`);
+    await writeFile(changesetConfigPath, `${JSON.stringify(changesetConfig, null, 2)}\n`);
 
     if (preTag) {
       const prePath = join(CHANGESET_DIR, "pre.json");
@@ -114,6 +120,7 @@ async function main(): Promise<void> {
     versioned = true;
   } finally {
     await writeFile(rootPackagePath, originalRootPackage);
+    await writeFile(changesetConfigPath, originalChangesetConfig);
     for (const file of movedFiles) {
       await rename(join(holdingDir, file), join(CHANGESET_DIR, file));
     }
