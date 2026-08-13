@@ -37,7 +37,7 @@ import {
   type AteMonitorEvent,
   type FailureV1,
 } from "@mandujs/ate";
-import { eventBus } from "@mandujs/core/observability";
+import { eventBus } from "@mandujs/core/compat/observability/index";
 
 export const ateRunToolDefinitions: Tool[] = [
   {

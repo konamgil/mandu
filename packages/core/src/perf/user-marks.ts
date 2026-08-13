@@ -9,7 +9,7 @@
  * that close the ergonomic gap identified in user feedback:
  *
  * ```ts
- * import { time, timeAsync, createPerf } from "@mandujs/core/perf";
+ * import { time, timeAsync, createPerf } from "@mandujs/core/compat/perf/index";
  *
  * // 1. Basic scoped timing — returns a close-over end() function.
  * const end = time("db-query");

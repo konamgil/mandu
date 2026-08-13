@@ -543,7 +543,7 @@ describe("generateRepoSource — emission shape", () => {
   test("imports Db type from @mandujs/core/db by default", () => {
     const parsed = persistentResource("user");
     const src = generateRepoSource(parsed)!;
-    expect(src).toContain(`import type { Db } from "@mandujs/core/db"`);
+    expect(src).toContain(`import type { Db } from "@mandujs/core/compat/db/index"`);
   });
 
   test("honors custom dbImport", () => {

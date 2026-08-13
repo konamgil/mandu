@@ -12,7 +12,7 @@
  * read/update/delete paths are still exercised on other routes.
  */
 import { Mandu } from "@mandujs/core";
-import { currentUserId } from "@mandujs/core/auth";
+import { currentUserId } from "@mandujs/core/compat/auth/index";
 import { withSession, withCsrf } from "../../../src/lib/auth";
 import { db } from "../../../src/lib/db";
 

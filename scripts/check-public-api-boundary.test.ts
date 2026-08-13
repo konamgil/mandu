@@ -3,32 +3,26 @@ import {
   checkPublicApiBoundary,
   classifyCoreExport,
   findRootStarExports,
+  V1_CORE_EXPORTS,
 } from "./check-public-api-boundary";
 
 describe("check-public-api-boundary", () => {
-  test("classifies representative stable, experimental, and internal exports", () => {
+  test("classifies the v1 surface and compatibility namespace", () => {
     expect(classifyCoreExport(".")).toBe("stable");
-    expect(classifyCoreExport("./contract/rpc")).toBe("stable");
-    expect(classifyCoreExport("./a11y")).toBe("experimental");
-    expect(classifyCoreExport("./brain")).toBe("experimental");
-    expect(classifyCoreExport("./experimental")).toBe("experimental");
-    expect(classifyCoreExport("./change")).toBe("internal");
-    expect(classifyCoreExport("./generator")).toBe("internal");
-    expect(classifyCoreExport("./internal")).toBe("internal");
-    expect(classifyCoreExport("./internal/client-boundary")).toBe("internal");
-    expect(classifyCoreExport("./lockfile")).toBe("internal");
-    expect(classifyCoreExport("./paths")).toBe("internal");
-    expect(classifyCoreExport("./runtime/server")).toBe("internal");
-    expect(classifyCoreExport("./watcher")).toBe("internal");
+    expect(classifyCoreExport("./contract")).toBe("stable");
+    expect(classifyCoreExport("./compat/*")).toBe("compatibility");
+    expect(classifyCoreExport("./contract/rpc")).toBeNull();
+    expect(classifyCoreExport("./a11y")).toBeNull();
     expect(classifyCoreExport("./unknown")).toBeNull();
   });
 
   test("current @mandujs/core export map has no unclassified subpaths", () => {
     const result = checkPublicApiBoundary();
     expect(result.issues).toEqual([]);
-    expect(result.classified.stable.length).toBeGreaterThan(0);
-    expect(result.classified.experimental.length).toBeGreaterThan(0);
-    expect(result.classified.internal.length).toBeGreaterThan(0);
+    expect(result.classified.stable).toEqual([...V1_CORE_EXPORTS].sort());
+    expect(result.classified.compatibility).toEqual(["./compat/*"]);
+    expect(result.classified.experimental).toEqual([]);
+    expect(result.classified.internal).toEqual([]);
   });
 
   test("root export star surface only includes stable modules", () => {

@@ -28,10 +28,10 @@
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 
-import { createMigrationRunner } from "@mandujs/core/db/migrations/runner";
-import { quoteIdent } from "@mandujs/core/resource/ddl/emit";
-import { parseSnapshot } from "@mandujs/core/resource/ddl/snapshot";
-import type { Snapshot } from "@mandujs/core/resource/ddl/types";
+import { createMigrationRunner } from "@mandujs/core/compat/db/migrations/runner";
+import { quoteIdent } from "@mandujs/core/compat/resource/ddl/emit";
+import { parseSnapshot } from "@mandujs/core/compat/resource/ddl/snapshot";
+import type { Snapshot } from "@mandujs/core/compat/resource/ddl/types";
 import { existsSync, promises as fs } from "node:fs";
 
 import { resolveDb, DbResolutionError } from "./resolve-db";

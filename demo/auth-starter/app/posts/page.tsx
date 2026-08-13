@@ -4,14 +4,13 @@
  * create a new one. Unauthed callers are redirected to /login by the
  * loader before SSR runs.
  *
- * Data is read via the generated `createPostsRepo(db).findMany` —
- * specifically, its `Post` row type is the source of truth for the
- * rendered fields. Writes go through /api/posts (see route.ts).
+ * Data is read through the app-owned DB boundary. Generated repositories
+ * remain build artifacts and are never imported by application source.
+ * Writes go through /api/posts (see route.ts).
  */
 import { Mandu, redirect } from "@mandujs/core";
 import { attachAuthContext } from "../../src/lib/auth";
-import { postsRepo } from "../../src/lib/db";
-import type { Post } from "../../.mandu/generated/server/repos/post.repo";
+import { listPosts, type Post } from "../../src/lib/db";
 
 interface LoaderData {
   userId: string;
@@ -127,7 +126,7 @@ export const filling = Mandu.filling<LoaderData>().loader(async (ctx) => {
   if (!userId) {
     return redirect("/login");
   }
-  const all = await postsRepo.findMany(100, 0);
+  const all = await listPosts(100, 0);
   const mine = all.filter((p) => p.userId === userId).sort(
     (a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0),
   );

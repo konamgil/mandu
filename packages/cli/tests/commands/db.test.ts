@@ -28,7 +28,7 @@ import {
   formatPrompt,
 } from "../../src/commands/db/rename-prompt";
 import { resolveDb } from "../../src/commands/db/resolve-db";
-import type { Change, DdlFieldDef, Snapshot } from "@mandujs/core/resource/ddl/types";
+import type { Change, DdlFieldDef, Snapshot } from "@mandujs/core/compat/resource/ddl/types";
 
 // ─── Bun.SQL gate (runner-backed tests only) ────────────────────────────────
 
@@ -390,8 +390,8 @@ describeIfBunSql("dbPlan", () => {
     // must emit zero changes.
     await dbPlan({ cwd: f.root, ci: true });
     // Snapshot applied.json so next diff is a no-op.
-    const { snapshotFromResources, serializeSnapshot } = await import("@mandujs/core/resource/ddl/snapshot");
-    const { parseResourceSchemas } = await import("@mandujs/core/resource");
+    const { snapshotFromResources, serializeSnapshot } = await import("@mandujs/core/compat/resource/ddl/snapshot");
+    const { parseResourceSchemas } = await import("@mandujs/core/compat/resource/index");
     const files = [join(f.resourcesDir, "user.resource.ts")];
     const parsed = await parseResourceSchemas(files);
     const snap = snapshotFromResources(parsed);
@@ -405,7 +405,7 @@ describeIfBunSql("dbPlan", () => {
   });
 
   it("TC-4b: SQLite required add-column without default fails before writing a migration (#294)", async () => {
-    const { serializeSnapshot } = await import("@mandujs/core/resource/ddl/snapshot");
+    const { serializeSnapshot } = await import("@mandujs/core/compat/resource/ddl/snapshot");
     await fs.writeFile(
       f.appliedPath,
       serializeSnapshot(appliedUserSnapshot()),
@@ -439,7 +439,7 @@ describeIfBunSql("dbPlan", () => {
   });
 
   it("TC-4c: SQLite required add-column with scalar default emits an applyable migration", async () => {
-    const { serializeSnapshot } = await import("@mandujs/core/resource/ddl/snapshot");
+    const { serializeSnapshot } = await import("@mandujs/core/compat/resource/ddl/snapshot");
     await fs.writeFile(
       f.appliedPath,
       serializeSnapshot(appliedUserSnapshot()),
@@ -500,7 +500,7 @@ describeIfBunSql("dbApply", () => {
     expect(code).toBe(0);
 
     // Table should NOT exist post-dry-run.
-    const { createDb } = await import("@mandujs/core/db");
+    const { createDb } = await import("@mandujs/core/compat/db/index");
     const db = createDb({ url: `sqlite://${f.dbPath}` });
     const rows = await db<{ name: string }>`SELECT name FROM sqlite_master WHERE type='table' AND name='users'`;
     await db.close();
@@ -543,7 +543,7 @@ describeIfBunSql("dbApply", () => {
     // applied.json MUST now exist and be a valid snapshot with our user resource.
     expect(existsSync(f.appliedPath)).toBe(true);
     const raw = await fs.readFile(f.appliedPath, "utf8");
-    const { parseSnapshot } = await import("@mandujs/core/resource/ddl/snapshot");
+    const { parseSnapshot } = await import("@mandujs/core/compat/resource/ddl/snapshot");
     const snap = parseSnapshot(raw);
     expect(snap.provider).toBe("sqlite");
     expect(snap.resources.map((r) => r.name)).toContain("users");
@@ -581,7 +581,7 @@ describeIfBunSql("dbApply", () => {
     expect(code).toBe(1);
 
     // First table should still exist.
-    const { createDb } = await import("@mandujs/core/db");
+    const { createDb } = await import("@mandujs/core/compat/db/index");
     const db = createDb({ url: `sqlite://${f.dbPath}` });
     const rows = await db<{ name: string }>`SELECT name FROM sqlite_master WHERE type='table' AND name='good'`;
     await db.close();
@@ -717,7 +717,7 @@ describeIfBunSql("dbReset", () => {
     expect(code).toBe(0);
 
     // History gone.
-    const { createDb } = await import("@mandujs/core/db");
+    const { createDb } = await import("@mandujs/core/compat/db/index");
     const db = createDb({ url: `sqlite://${f.dbPath}` });
     const rows = await db<{ name: string }>`SELECT name FROM sqlite_master WHERE type='table' AND name='__mandu_migrations'`;
     await db.close();

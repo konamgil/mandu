@@ -48,7 +48,7 @@ function makeFixture(): Fixture {
   };
 }
 
-describeIfBun("@mandujs/core/auth/verification — createEmailVerification", () => {
+describeIfBun("@mandujs/core/compat/auth/verification — createEmailVerification", () => {
   let fx: Fixture;
 
   beforeEach(() => {

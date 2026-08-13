@@ -10,7 +10,7 @@ import {
   readLockfile,
   validateLockfile,
   writeLockfile,
-} from "@mandujs/core/lockfile";
+} from "@mandujs/core/compat/lockfile/index";
 import { guardArch } from "../guard-arch";
 
 let tmpRoot: string | null = null;

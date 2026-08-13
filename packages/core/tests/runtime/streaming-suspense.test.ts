@@ -22,6 +22,7 @@ import {
   renderToStream,
   renderStreamingResponse,
 } from "../../src/runtime/streaming-ssr";
+import type { BundleManifest } from "../../src/bundler/types";
 
 function delay<T>(ms: number, value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
@@ -332,5 +333,41 @@ describe("Streaming Suspense end-to-end", () => {
     expect(full).toContain("first");
     expect(full).toContain("second");
     expect(full).toContain("third");
+  });
+});
+
+describe("Streaming SSR build generations", () => {
+  it("pins shell and tail client assets to the same generation", async () => {
+    const manifest: BundleManifest = {
+      version: 1,
+      generationId: "generation-456",
+      buildTime: "2026-08-13T00:00:00.000Z",
+      env: "development",
+      bundles: {
+        home: {
+          js: "/.mandu/client/home.js",
+          dependencies: [],
+          priority: "visible",
+        },
+      },
+      shared: {
+        runtime: "/.mandu/client/runtime.js",
+        vendor: "/.mandu/client/vendor.js",
+      },
+    };
+    const stream = await renderToStream(React.createElement("main", null, "streamed"), {
+      routeId: "home",
+      isDev: true,
+      hmrPort: 3333,
+      hydration: { strategy: "island", priority: "visible", preload: false },
+      bundleManifest: manifest,
+    });
+    const { full } = await readChunks(stream);
+
+    expect(full).toContain("/.mandu/client/home.js?g=generation-456&amp;t=");
+    expect(full).toContain('src="/.mandu/client/runtime.js?g=generation-456"');
+    expect(full).toContain("_devtools.js?g=generation-456&v=");
+    expect(full).toContain("CustomEvent('__MANDU_ERROR__'");
+    expect(full).not.toContain("?g=generation-456?t=");
   });
 });

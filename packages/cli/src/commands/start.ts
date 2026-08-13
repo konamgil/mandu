@@ -13,8 +13,8 @@ import {
   runHook,
   type RoutesManifest,
 } from "@mandujs/core";
-import type { BundleManifest } from "@mandujs/core/bundler";
-import { newId } from "@mandujs/core/id";
+import type { BundleManifest } from "@mandujs/core/compat/bundler/index";
+import { newId } from "@mandujs/core/compat/id/index";
 import { resolveFromCwd } from "../util/fs";
 import { CLI_ERROR_CODES, printCLIError } from "../errors";
 import { resolveManifest } from "../util/manifest";
@@ -163,6 +163,7 @@ export async function start(options: StartOptions = {}): Promise<void> {
   await registerManifestHandlers(manifest, rootDir, {
     importFn: productionImport,
     registeredLayouts,
+    strict: true,
   });
   console.log("");
 

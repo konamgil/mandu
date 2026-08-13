@@ -1,4 +1,8 @@
-import { executeMcpTool } from "./mcp";
+import {
+  explainRule,
+  type GuardPreset,
+  type ViolationType,
+} from "@mandujs/core/guard";
 
 const EXPLAIN_TYPE_ALIASES: Record<string, string> = {
   circular: "circular-dependency",
@@ -23,13 +27,9 @@ export interface ExplainOptions {
   toLayer?: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function resolveExplainType(input?: string): string | null {
+function resolveExplainType(input?: string): ViolationType | null {
   if (!input) return null;
-  return EXPLAIN_TYPE_ALIASES[input.trim().toLowerCase()] ?? null;
+  return (EXPLAIN_TYPE_ALIASES[input.trim().toLowerCase()] as ViolationType | undefined) ?? null;
 }
 
 export async function explain(options: ExplainOptions = {}): Promise<boolean> {
@@ -41,33 +41,33 @@ export async function explain(options: ExplainOptions = {}): Promise<boolean> {
     return false;
   }
 
-  const result = await executeMcpTool("mandu.guard.explain", {
+  const explanation = explainRule(
     type,
-    fromLayer: options.fromLayer,
-    toLayer: options.toLayer,
-    preset: options.preset,
-  });
+    options.fromLayer,
+    options.toLayer,
+    (options.preset as GuardPreset | undefined) ?? "mandu",
+  );
+  const result = {
+    rule: explanation.rule,
+    explanation: { why: explanation.why, how: explanation.how },
+    documentation: explanation.documentation,
+    examples: explanation.examples,
+    preset: options.preset ?? "mandu",
+  };
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return true;
   }
 
-  if (!isRecord(result)) {
-    console.log(JSON.stringify(result, null, 2));
-    return true;
-  }
-
-  const rule = typeof result.rule === "string" ? result.rule : type;
+  const rule = result.rule;
   console.log(`📋 ${rule}`);
 
-  const explanation = isRecord(result.explanation) ? result.explanation : null;
-  const why = explanation && typeof explanation.why === "string" ? explanation.why : null;
-  const how = explanation && typeof explanation.how === "string" ? explanation.how : null;
-  const documentation = typeof result.documentation === "string" ? result.documentation : null;
-  const examples = isRecord(result.examples) ? result.examples : null;
-  const bad = examples && typeof examples.bad === "string" ? examples.bad : null;
-  const good = examples && typeof examples.good === "string" ? examples.good : null;
+  const why = result.explanation.why;
+  const how = result.explanation.how;
+  const documentation = result.documentation;
+  const bad = result.examples.bad;
+  const good = result.examples.good;
 
   if (why) {
     console.log(`\nWhy:\n${why}`);

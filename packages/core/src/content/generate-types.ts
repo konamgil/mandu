@@ -95,7 +95,7 @@ export function renderContentTypes(
   const lines: string[] = [];
   lines.push(DEFAULT_BANNER);
   lines.push("");
-  lines.push(`import type { Collection, CollectionEntry } from "@mandujs/core/content";`);
+  lines.push(`import type { Collection, CollectionEntry } from "@mandujs/core/compat/content/index";`);
   lines.push("");
   lines.push("// Per-collection entry aliases");
   for (const name of names) {

@@ -10,10 +10,9 @@ import { negotiateTools } from "./negotiate.js";
 import { contractTools } from "./contract.js";
 import { generateTools } from "./generate.js";
 import { kitchenTools } from "./kitchen.js";
-import { ateTools } from "./ate.js";
 import { requestRuntimeCache } from "../utils/runtime-control.js";
 import { requireLock } from "../tx-lock.js";
-import { runExtendedDiagnose, buildReport, type DiagnoseCheckResult } from "@mandujs/core/diagnose";
+import { runExtendedDiagnose, buildReport, type DiagnoseCheckResult } from "@mandujs/core/compat/diagnose/index";
 import path from "path";
 import fs from "fs/promises";
 
@@ -97,23 +96,6 @@ export const compositeToolDefinitions: Tool[] = [
     },
   },
   {
-    name: "mandu.test.route",
-    description:
-      "Run the ATE test pipeline on a single route: extract -> generate -> run -> report. " +
-      "Set quick=true to skip extraction and use cached data.",
-    annotations: {
-      readOnlyHint: false,
-    },
-    inputSchema: {
-      type: "object",
-      properties: {
-        routeId: { type: "string", description: "Route ID to test (e.g. 'api-users', 'blog-slug')" },
-        quick: { type: "boolean", description: "Skip extraction, reuse cached graph (default: false)" },
-      },
-      required: ["routeId"],
-    },
-  },
-  {
     name: "mandu.deploy.check",
     description:
       "Pre-deployment validation: runs guard, contract, and manifest checks in parallel. " +
@@ -167,7 +149,6 @@ export function compositeTools(projectRoot: string) {
   const contract = contractTools(projectRoot);
   const generate = generateTools(projectRoot);
   const kitchen = kitchenTools(projectRoot);
-  const ate = ateTools(projectRoot);
 
   return {
     "mandu.feature.create": async (args: Record<string, unknown>) => {
@@ -360,29 +341,6 @@ export function compositeTools(projectRoot: string) {
       await fs.mkdir(path.dirname(mwPath), { recursive: true });
       await Bun.write(mwPath, generateMiddlewareSource(preset, options));
       return { created: true, path: "app/middleware.ts", preset };
-    },
-
-    "mandu.test.route": async (args: Record<string, unknown>) => {
-      const { routeId, quick = false } = args as { routeId: string; quick?: boolean };
-      const steps: { step: string; result: unknown }[] = [];
-      if (!quick) {
-        steps.push({ step: "extract", result: await ate["mandu.ate.extract"]({ repoRoot: projectRoot, routeGlobs: [`app/${routeId.replace(/-/g, "/")}/**`] }) });
-      }
-      steps.push({ step: "generate", result: await ate["mandu.ate.generate"]({ repoRoot: projectRoot, oracleLevel: "L1", onlyRoutes: [routeId] }) });
-      const runResult = await ate["mandu.ate.run"]({ repoRoot: projectRoot }) as { runId?: string; startedAt?: string; finishedAt?: string; exitCode?: number };
-      steps.push({ step: "run", result: runResult });
-      const report = await ate["mandu.ate.report"]({
-        repoRoot: projectRoot, runId: runResult.runId ?? "unknown",
-        startedAt: runResult.startedAt ?? new Date().toISOString(), finishedAt: runResult.finishedAt ?? new Date().toISOString(),
-        exitCode: runResult.exitCode ?? 1,
-      });
-      steps.push({ step: "report", result: report });
-      const passed = runResult.exitCode === 0;
-      let healSuggestions: unknown | undefined;
-      if (!passed && runResult.runId) {
-        healSuggestions = await ate["mandu.ate.heal"]({ repoRoot: projectRoot, runId: runResult.runId }).catch(() => undefined);
-      }
-      return { passed, routeId, results: steps, ...(healSuggestions ? { healSuggestions } : {}) };
     },
 
     "mandu.deploy.check": async (args: Record<string, unknown>) => {

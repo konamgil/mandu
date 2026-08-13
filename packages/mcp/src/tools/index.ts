@@ -28,46 +28,14 @@ export { brainTools, brainToolDefinitions } from "./brain.js";
 export { runtimeTools, runtimeToolDefinitions } from "./runtime.js";
 export { seoTools, seoToolDefinitions } from "./seo.js";
 export { projectTools, projectToolDefinitions, getDevServerState } from "./project.js";
-export { ateTools, ateToolDefinitions, atePhase5ToolDefinitions, createAtePhase5Handlers } from "./ate.js";
-export { ateContextTools, ateContextToolDefinitions } from "./ate-context.js";
-export { ateRunTools, ateRunToolDefinitions } from "./ate-run.js";
-export { ateFlakesTools, ateFlakesToolDefinitions } from "./ate-flakes.js";
-export { atePromptTools, atePromptToolDefinitions } from "./ate-prompt.js";
-export { ateExemplarTools, ateExemplarToolDefinitions } from "./ate-exemplar.js";
-export { ateSaveTools, ateSaveToolDefinitions } from "./ate-save.js";
-export { ateBoundaryProbeTools, ateBoundaryProbeToolDefinitions } from "./ate-boundary-probe.js";
-export { ateRecallTools, ateRecallToolDefinitions } from "./ate-recall.js";
-export { ateRememberTools, ateRememberToolDefinitions } from "./ate-remember.js";
-export { ateCoverageTools, ateCoverageToolDefinitions } from "./ate-coverage.js";
-// Phase C tool suite
-export { ateMutateTools, ateMutateToolDefinitions } from "./ate-mutate.js";
-export {
-  ateMutationReportTools,
-  ateMutationReportToolDefinitions,
-} from "./ate-mutation-report.js";
-export {
-  ateOraclePendingTools,
-  ateOraclePendingToolDefinitions,
-} from "./ate-oracle-pending.js";
-export {
-  ateOracleVerdictTools,
-  ateOracleVerdictToolDefinitions,
-} from "./ate-oracle-verdict.js";
-export {
-  ateOracleReplayTools,
-  ateOracleReplayToolDefinitions,
-} from "./ate-oracle-replay.js";
 export { resourceTools, resourceToolDefinitions } from "./resource.js";
 export { componentTools, componentToolDefinitions } from "./component.js";
 export { kitchenTools, kitchenToolDefinitions } from "./kitchen.js";
 export { compositeTools, compositeToolDefinitions } from "./composite.js";
 // Phase 14.3 — AI/agent loop-closure tool suite
 export { runTestsTools, runTestsToolDefinitions } from "./run-tests.js";
-export { deployPreviewTools, deployPreviewToolDefinitions } from "./deploy-preview.js";
-export { deployPlanTools, deployPlanToolDefinitions } from "./deploy-plan.js";
 export { designTools, designToolDefinitions } from "./design.js";
 export { aiBriefTools, aiBriefToolDefinitions } from "./ai-brief.js";
-export { loopCloseTools, loopCloseToolDefinitions } from "./loop-close.js";
 // #243 — docs search/get for agents grounding answers in real framework docs
 export { docsTools, docsToolDefinitions } from "./docs.js";
 // #240 guardrail-default — lint run + setup for existing projects
@@ -103,48 +71,13 @@ import { brainTools, brainToolDefinitions } from "./brain.js";
 import { runtimeTools, runtimeToolDefinitions } from "./runtime.js";
 import { seoTools, seoToolDefinitions } from "./seo.js";
 import { projectTools, projectToolDefinitions } from "./project.js";
-import { ateTools, ateToolDefinitions, atePhase5ToolDefinitions, createAtePhase5Handlers } from "./ate.js";
-import { ateContextTools, ateContextToolDefinitions } from "./ate-context.js";
-import { ateRunTools, ateRunToolDefinitions } from "./ate-run.js";
-import { ateFlakesTools, ateFlakesToolDefinitions } from "./ate-flakes.js";
-import { atePromptTools, atePromptToolDefinitions } from "./ate-prompt.js";
-import { ateExemplarTools, ateExemplarToolDefinitions } from "./ate-exemplar.js";
-import { ateSaveTools, ateSaveToolDefinitions } from "./ate-save.js";
-import {
-  ateBoundaryProbeTools,
-  ateBoundaryProbeToolDefinitions,
-} from "./ate-boundary-probe.js";
-import { ateRecallTools, ateRecallToolDefinitions } from "./ate-recall.js";
-import { ateRememberTools, ateRememberToolDefinitions } from "./ate-remember.js";
-import { ateCoverageTools, ateCoverageToolDefinitions } from "./ate-coverage.js";
-// Phase C tool suite
-import { ateMutateTools, ateMutateToolDefinitions } from "./ate-mutate.js";
-import {
-  ateMutationReportTools,
-  ateMutationReportToolDefinitions,
-} from "./ate-mutation-report.js";
-import {
-  ateOraclePendingTools,
-  ateOraclePendingToolDefinitions,
-} from "./ate-oracle-pending.js";
-import {
-  ateOracleVerdictTools,
-  ateOracleVerdictToolDefinitions,
-} from "./ate-oracle-verdict.js";
-import {
-  ateOracleReplayTools,
-  ateOracleReplayToolDefinitions,
-} from "./ate-oracle-replay.js";
 import { resourceTools, resourceToolDefinitions } from "./resource.js";
 import { componentTools, componentToolDefinitions } from "./component.js";
 import { kitchenTools, kitchenToolDefinitions } from "./kitchen.js";
 import { compositeTools, compositeToolDefinitions } from "./composite.js";
 import { runTestsTools, runTestsToolDefinitions } from "./run-tests.js";
-import { deployPreviewTools, deployPreviewToolDefinitions } from "./deploy-preview.js";
-import { deployPlanTools, deployPlanToolDefinitions } from "./deploy-plan.js";
 import { designTools, designToolDefinitions } from "./design.js";
 import { aiBriefTools, aiBriefToolDefinitions } from "./ai-brief.js";
-import { loopCloseTools, loopCloseToolDefinitions } from "./loop-close.js";
 import { docsTools, docsToolDefinitions } from "./docs.js";
 import { lintTools, lintToolDefinitions } from "./lint.js";
 // Phase 18.ι — AI refactor MCP tools
@@ -207,66 +140,15 @@ export const TOOL_MODULES: ToolModule[] = [
   { category: "runtime", definitions: runtimeToolDefinitions, handlers: runtimeTools },
   { category: "seo", definitions: seoToolDefinitions, handlers: seoTools },
   { category: "project", definitions: projectToolDefinitions, handlers: projectTools, requiresServer: true },
-  // ate + ate-run accept an optional Server so notifications/progress
-  // can flow (issue #238). `acceptsServer: true` forwards the server
-  // when available but still registers when it isn't — callers that
-  // boot without an MCP transport get progress no-oped silently.
-  { category: "ate", definitions: ateToolDefinitions, handlers: ateTools, acceptsServer: true },
-  { category: "ate-phase5", definitions: atePhase5ToolDefinitions, handlers: createAtePhase5Handlers },
-  { category: "ate-context", definitions: ateContextToolDefinitions, handlers: ateContextTools },
-  { category: "ate-run", definitions: ateRunToolDefinitions, handlers: ateRunTools, acceptsServer: true },
-  { category: "ate-flakes", definitions: ateFlakesToolDefinitions, handlers: ateFlakesTools },
-  { category: "ate-prompt", definitions: atePromptToolDefinitions, handlers: atePromptTools },
-  { category: "ate-exemplar", definitions: ateExemplarToolDefinitions, handlers: ateExemplarTools },
-  { category: "ate-save", definitions: ateSaveToolDefinitions, handlers: ateSaveTools },
-  // Phase B tool suite
-  {
-    category: "ate-boundary-probe",
-    definitions: ateBoundaryProbeToolDefinitions,
-    handlers: ateBoundaryProbeTools,
-  },
-  { category: "ate-recall", definitions: ateRecallToolDefinitions, handlers: ateRecallTools },
-  { category: "ate-remember", definitions: ateRememberToolDefinitions, handlers: ateRememberTools },
-  {
-    category: "ate-coverage",
-    definitions: ateCoverageToolDefinitions,
-    handlers: ateCoverageTools,
-  },
-  // Phase C tool suite
-  { category: "ate-mutate", definitions: ateMutateToolDefinitions, handlers: ateMutateTools },
-  {
-    category: "ate-mutation-report",
-    definitions: ateMutationReportToolDefinitions,
-    handlers: ateMutationReportTools,
-  },
-  {
-    category: "ate-oracle-pending",
-    definitions: ateOraclePendingToolDefinitions,
-    handlers: ateOraclePendingTools,
-  },
-  {
-    category: "ate-oracle-verdict",
-    definitions: ateOracleVerdictToolDefinitions,
-    handlers: ateOracleVerdictTools,
-  },
-  {
-    category: "ate-oracle-replay",
-    definitions: ateOracleReplayToolDefinitions,
-    handlers: ateOracleReplayTools,
-  },
   { category: "resource", definitions: resourceToolDefinitions, handlers: resourceTools },
   { category: "component", definitions: componentToolDefinitions, handlers: componentTools },
   { category: "kitchen", definitions: kitchenToolDefinitions, handlers: kitchenTools },
   { category: "composite", definitions: compositeToolDefinitions, handlers: compositeTools },
   // Phase 14.3 — AI/agent loop-closure suite
   { category: "run-tests", definitions: runTestsToolDefinitions, handlers: runTestsTools },
-  { category: "deploy-preview", definitions: deployPreviewToolDefinitions, handlers: deployPreviewTools },
-  // #250 — DeployIntent inspection / compile (Phase 1)
-  { category: "deploy-plan", definitions: deployPlanToolDefinitions, handlers: deployPlanTools },
   // #245 M4 — Design system discovery (DESIGN.md / Guard / component inventory)
   { category: "design", definitions: designToolDefinitions, handlers: designTools },
   { category: "ai-brief", definitions: aiBriefToolDefinitions, handlers: aiBriefTools },
-  { category: "loop-close", definitions: loopCloseToolDefinitions, handlers: loopCloseTools },
   { category: "docs", definitions: docsToolDefinitions, handlers: docsTools },
   { category: "lint", definitions: lintToolDefinitions, handlers: lintTools },
   // Phase 18.ι — AI refactor tools (destructive writes; dry-run by default)

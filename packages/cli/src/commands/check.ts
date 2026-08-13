@@ -27,8 +27,8 @@ import {
   runReactCompilerLint,
   formatCompilerReport,
   type ReactCompilerDiagnostic,
-} from "@mandujs/core/bundler";
-import { resolveReactCompilerConfig } from "@mandujs/core/bundler/plugins";
+} from "@mandujs/core/compat/bundler/index";
+import { resolveReactCompilerConfig } from "@mandujs/core/compat/bundler/plugins/index";
 import path from "path";
 import { resolveFromCwd, isDirectory, pathExists } from "../util/fs";
 import { getFsRoutesGuardPolicy } from "../util/guard-policy";

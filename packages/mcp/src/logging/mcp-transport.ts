@@ -9,7 +9,7 @@ import {
   detachLogTransport,
   type LogTransport,
   type LogTransportRecord,
-} from "@mandujs/core";
+} from "@mandujs/core/compat/logging/index";
 import { monitorEventToRecord, type MonitorEvent } from "../adapters/monitor-adapter.js";
 
 /**

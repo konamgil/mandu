@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import type { CronDef } from "@mandujs/core/scheduler";
+import type { CronDef } from "@mandujs/core/compat/scheduler/index";
 import { extractWorkersCrons } from "../cron-wrangler";
 
 function job(partial: Partial<CronDef> & { name: string; schedule: string }): CronDef {

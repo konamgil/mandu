@@ -36,12 +36,12 @@ import {
   analyzeBundle,
   renderAnalyzeHtml,
   writeAnalyzeReport,
-} from "@mandujs/core/bundler/analyzer";
+} from "@mandujs/core/compat/bundler/analyzer";
 import {
   evaluateBudget,
   DEFAULT_BUDGET_MAX_GZ_BYTES,
-} from "@mandujs/core/bundler/budget";
-import type { BundleManifest } from "@mandujs/core/bundler/types";
+} from "@mandujs/core/compat/bundler/budget";
+import type { BundleManifest } from "@mandujs/core/compat/bundler/types";
 
 let ROOT: string;
 beforeAll(async () => {

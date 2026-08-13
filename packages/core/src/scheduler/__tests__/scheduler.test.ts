@@ -71,7 +71,7 @@ afterEach(() => {
   }
 });
 
-describe("@mandujs/core/scheduler — defineCron (public surface)", () => {
+describe("@mandujs/core/compat/scheduler — defineCron (public surface)", () => {
   it("returns a handle with start, stop, and status methods", () => {
     const reg = defineCron({});
     expect(typeof reg.start).toBe("function");
@@ -89,7 +89,7 @@ describe("@mandujs/core/scheduler — defineCron (public surface)", () => {
   });
 });
 
-describe("@mandujs/core/scheduler — scheduling", () => {
+describe("@mandujs/core/compat/scheduler — scheduling", () => {
   it("registers each job via the injected scheduleFn with its crontab expression", () => {
     const { scheduleFn, schedules } = makeFakeScheduler();
 
@@ -163,7 +163,7 @@ describe("@mandujs/core/scheduler — scheduling", () => {
   });
 });
 
-describe("@mandujs/core/scheduler — error isolation", () => {
+describe("@mandujs/core/compat/scheduler — error isolation", () => {
   it("increments errorCount when the handler throws and continues on next tick", async () => {
     const { scheduleFn, tick } = makeFakeScheduler();
     // Silence the expected console.error so test output stays clean.
@@ -206,7 +206,7 @@ describe("@mandujs/core/scheduler — error isolation", () => {
   });
 });
 
-describe("@mandujs/core/scheduler — overlap prevention", () => {
+describe("@mandujs/core/compat/scheduler — overlap prevention", () => {
   it("skips a tick when the previous invocation is still pending", async () => {
     const { scheduleFn, tick } = makeFakeScheduler();
 
@@ -252,7 +252,7 @@ describe("@mandujs/core/scheduler — overlap prevention", () => {
   });
 });
 
-describe("@mandujs/core/scheduler — dev-mode skip", () => {
+describe("@mandujs/core/compat/scheduler — dev-mode skip", () => {
   it("does not schedule jobs with skipInDev=true when NODE_ENV !== 'production'", () => {
     process.env.NODE_ENV = "development";
     const { scheduleFn, schedules } = makeFakeScheduler();
@@ -295,7 +295,7 @@ describe("@mandujs/core/scheduler — dev-mode skip", () => {
   });
 });
 
-describe("@mandujs/core/scheduler — timeout", () => {
+describe("@mandujs/core/compat/scheduler — timeout", () => {
   it("marks the tick as completed after timeoutMs and clears inFlight so the next tick can fire", async () => {
     const { scheduleFn, tick } = makeFakeScheduler();
     // Silence the expected console.warn.
@@ -340,7 +340,7 @@ describe("@mandujs/core/scheduler — timeout", () => {
   });
 });
 
-describe("@mandujs/core/scheduler — shutdown", () => {
+describe("@mandujs/core/compat/scheduler — shutdown", () => {
   it("stop() waits for in-flight handlers to complete before resolving", async () => {
     const { scheduleFn, tick } = makeFakeScheduler();
 
@@ -443,7 +443,7 @@ describe("@mandujs/core/scheduler — shutdown", () => {
   });
 });
 
-describe("@mandujs/core/scheduler — status shape", () => {
+describe("@mandujs/core/compat/scheduler — status shape", () => {
   it("returns a fully populated CronJobStatus for every registered job", () => {
     const { scheduleFn } = makeFakeScheduler();
     const jobs: Record<string, CronJobConfig> = {
@@ -489,7 +489,7 @@ describe("@mandujs/core/scheduler — status shape", () => {
   });
 });
 
-describe("@mandujs/core/scheduler — public defineCron probe", () => {
+describe("@mandujs/core/compat/scheduler — public defineCron probe", () => {
   it("throws a clear error when Bun.cron is unavailable and start() is invoked", () => {
     // Bun 1.3.10 (the test environment here) does not expose Bun.cron. The
     // module should surface a readable error that names the required version.

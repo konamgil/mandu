@@ -23,7 +23,7 @@ import {
   planWatch,
   testCommand,
 } from "../test";
-import { resolveTestConfig } from "@mandujs/core/config/validate";
+import { resolveTestConfig } from "@mandujs/core/compat/config/validate";
 
 const PREFIX = path.join(os.tmpdir(), "mandu-cli-test-watch-");
 

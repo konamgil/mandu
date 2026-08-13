@@ -187,7 +187,7 @@ export function createRateLimitResponse(
  *
  * @example
  * ```typescript
- * import { createRateLimiter } from '@mandujs/core/runtime/server';
+ * import { createRateLimiter } from '@mandujs/core/compat/runtime/server';
  *
  * const limiter = createRateLimiter({ max: 5, windowMs: 60000 });
  *

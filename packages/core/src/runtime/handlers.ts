@@ -141,6 +141,12 @@ export interface RegisterHandlersOptions {
    * `bundledImport` can skip rebuilds for modules the file isn't part of.
    */
   changedFile?: string;
+  /**
+   * Fail registration when an API module cannot be imported or does not
+   * expose a callable handler. Production build/start paths enable this;
+   * dev keeps tolerant registration so the overlay can recover on edit.
+   */
+  strict?: boolean;
 }
 
 /**
@@ -152,7 +158,13 @@ export async function registerManifestHandlers(
   rootDir: string,
   options: RegisterHandlersOptions
 ): Promise<void> {
-  const { importFn, registeredLayouts, isReload = false, changedFile } = options;
+  const {
+    importFn,
+    registeredLayouts,
+    isReload = false,
+    changedFile,
+    strict = false,
+  } = options;
   const baseImportOpts: { changedFile?: string } | undefined =
     changedFile !== undefined ? { changedFile } : undefined;
   const importOptsForRoute = (route?: RoutesManifest["routes"][number]) => {
@@ -221,13 +233,20 @@ export async function registerManifestHandlers(
         }
 
         if (typeof handler !== "function") {
-          console.warn(`  ⚠️ API handler conversion failed: ${route.id} (type: ${typeof handler})`);
+          const message = `API handler conversion failed: ${route.id} (type: ${typeof handler})`;
+          if (strict) throw new Error(message);
+          console.warn(`  ⚠️ ${message}`);
           continue;
         }
 
         registerApiHandler(route.id, handler as (req: Request, params?: Record<string, string>) => Response | Promise<Response>);
         console.log(`  📡 API: ${route.pattern} -> ${route.id}`);
       } catch (error) {
+        if (strict) {
+          throw new Error(`[Mandu] Failed to load API handler: ${route.id}`, {
+            cause: error,
+          });
+        }
         console.error(`  ❌ Failed to load API handler: ${route.id}`, error);
       }
     } else if (route.kind === "page" && route.componentModule) {

@@ -231,7 +231,7 @@ describe("Bun-only API polyfill shims", () => {
 
 describe("runtime-neutral primitives", () => {
   it("LegacyCookieCodec round-trips cookies via WebCrypto-safe APIs", async () => {
-    const { getCookieCodec } = await import("@mandujs/core/filling/cookie-codec");
+    const { getCookieCodec } = await import("@mandujs/core/compat/filling/cookie-codec");
     const codec = getCookieCodec();
 
     const parsed = codec.parseRequestHeader("session=abc; csrf=xyz");

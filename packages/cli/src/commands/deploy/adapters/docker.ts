@@ -33,12 +33,12 @@ import type {
 } from "../types";
 
 /**
- * Pinned to match `packages/cli/package.json#engines.bun` so the runtime
- * image matches the Bun the developer actually ships with. Kept as a
+ * Pinned to match the workspace `packageManager` so the runtime image
+ * matches the Bun the developer actually ships with. Kept as a
  * constant (not a runtime lookup) so the artifact is deterministic even
  * in CI where `package.json` is read-only.
  */
-const DEFAULT_BUN_IMAGE_TAG = "1.3.12-alpine";
+const DEFAULT_BUN_IMAGE_TAG = "1.3.14-alpine";
 const DEFAULT_PORT = 3333;
 
 // ---------------------------------------------------------------------
@@ -46,7 +46,7 @@ const DEFAULT_PORT = 3333;
 // ---------------------------------------------------------------------
 
 export interface DockerfileOptions {
-  /** Override the Bun image tag (e.g. `"1.3.12-debian"`). */
+  /** Override the Bun image tag (e.g. `"1.3.14-debian"`). */
   bunImageTag?: string;
   /** Expose port (defaults to Mandu's 3333). */
   port?: number;

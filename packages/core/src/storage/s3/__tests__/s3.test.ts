@@ -125,7 +125,7 @@ function createFakeCtor(): { Ctor: BunS3ClientCtor; state: FakeState } {
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-describe("@mandujs/core/storage/s3 — upload", () => {
+describe("@mandujs/core/compat/storage/s3 — upload", () => {
   it("calls bunClient.file(key).write(body) with the correct key and body", async () => {
     const { Ctor, state } = createFakeCtor();
     const client = _createS3ClientWith(Ctor, {
@@ -262,7 +262,7 @@ describe("@mandujs/core/storage/s3 — upload", () => {
   });
 });
 
-describe("@mandujs/core/storage/s3 — presign", () => {
+describe("@mandujs/core/compat/storage/s3 — presign", () => {
   it("returns a string URL for method=PUT", async () => {
     const { Ctor, state } = createFakeCtor();
     const client = _createS3ClientWith(Ctor, { bucket: "b" });
@@ -311,7 +311,7 @@ describe("@mandujs/core/storage/s3 — presign", () => {
   });
 });
 
-describe("@mandujs/core/storage/s3 — delete", () => {
+describe("@mandujs/core/compat/storage/s3 — delete", () => {
   it("calls bunClient.file(key).delete() and resolves", async () => {
     const { Ctor, state } = createFakeCtor();
     const client = _createS3ClientWith(Ctor, { bucket: "b" });
@@ -349,7 +349,7 @@ describe("@mandujs/core/storage/s3 — delete", () => {
   });
 });
 
-describe("@mandujs/core/storage/s3 — exists", () => {
+describe("@mandujs/core/compat/storage/s3 — exists", () => {
   it("returns true when the object exists", async () => {
     const { Ctor, state } = createFakeCtor();
     const client = _createS3ClientWith(Ctor, { bucket: "b" });
@@ -392,7 +392,7 @@ describe("@mandujs/core/storage/s3 — exists", () => {
   });
 });
 
-describe("@mandujs/core/storage/s3 — getReadable", () => {
+describe("@mandujs/core/compat/storage/s3 — getReadable", () => {
   it("returns a ReadableStream", async () => {
     const { Ctor, state } = createFakeCtor();
     const client = _createS3ClientWith(Ctor, { bucket: "b" });
@@ -404,7 +404,7 @@ describe("@mandujs/core/storage/s3 — getReadable", () => {
   });
 });
 
-describe("@mandujs/core/storage/s3 — createS3Client", () => {
+describe("@mandujs/core/compat/storage/s3 — createS3Client", () => {
   it("forwards bucket, endpoint, and region to the underlying ctor", () => {
     const { Ctor, state } = createFakeCtor();
     _createS3ClientWith(Ctor, {
@@ -450,7 +450,7 @@ describe("@mandujs/core/storage/s3 — createS3Client", () => {
 // to stringify `any` in the test body.
 type S3ConfigLike = Parameters<typeof _createS3ClientWith>[1];
 
-describe("@mandujs/core/storage/s3 — getContentType", () => {
+describe("@mandujs/core/compat/storage/s3 — getContentType", () => {
   it.each([
     ["photo.jpg", "image/jpeg"],
     ["PHOTO.JPEG", "image/jpeg"], // case-insensitive

@@ -2,7 +2,7 @@ import * as ts from "typescript";
 
 import type { HydrationPriority } from "../spec/schema";
 
-const DEFAULT_BOUNDARY_IMPORT = "@mandujs/core/internal/client-boundary";
+const DEFAULT_BOUNDARY_IMPORT = "@mandujs/core/compat/internal/client-boundary";
 const BOUNDARY_COMPONENT = "__ManduClientBoundary";
 const CLIENT_MODULE_PATTERN = /\.(?:client|island)(?:\.[cm]?[jt]sx?)?$/;
 

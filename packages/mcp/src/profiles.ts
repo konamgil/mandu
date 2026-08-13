@@ -3,7 +3,7 @@
  *
  * Controls how many tool categories are exposed to AI agents.
  * - agent-core: Canonical agent workflow plus docs grounding (default)
- * - agent-full: Agent workflow plus Mandu domain tools
+ * - agent-full: Deprecated compatibility alias of agent-core
  * - internal: All categories, no filtering
  */
 
@@ -11,34 +11,7 @@ export type McpProfile = "agent-core" | "agent-full" | "internal";
 
 export const PROFILE_CATEGORIES: Record<McpProfile, string[] | null> = {
   "agent-core": ["agent", "docs"],
-  "agent-full": [
-    // Official agent loop
-    "agent",
-    "docs",
-    // Code generation / scaffolding
-    "spec",
-    "generate",
-    "composite",
-    // Domain primitives
-    "slot",
-    "slot-validation",
-    "hydration",
-    "contract",
-    "design",
-    "seo",
-    // Quality / validation
-    "guard",
-    "lint",
-    "run-tests",
-    "ate",
-    // Deploy
-    "deploy-plan",
-    "deploy-preview",
-    // AI refactor
-    "refactor-barrel",
-    "refactor-routes",
-    "refactor-contract",
-  ],
+  "agent-full": ["agent", "docs"],
   internal: null,
 };
 
@@ -54,6 +27,22 @@ export const PROFILE_CATEGORIES: Record<McpProfile, string[] | null> = {
  * preventing silent default-profile bloat over time.
  */
 export const EXPERT_ONLY_CATEGORIES: ReadonlySet<string> = new Set([
+  // Low-level action handlers. Agent-facing clients use mandu.agent.*.
+  "spec",
+  "generate",
+  "composite",
+  "slot",
+  "slot-validation",
+  "hydration",
+  "contract",
+  "design",
+  "seo",
+  "guard",
+  "lint",
+  "run-tests",
+  "refactor-barrel",
+  "refactor-routes",
+  "refactor-contract",
   // Transactional state / framework internals
   "transaction",
   "history",
@@ -69,24 +58,6 @@ export const EXPERT_ONLY_CATEGORIES: ReadonlySet<string> = new Set([
   "component",
   // Agent loop internal helpers (used by mandu.agent.*, not by agents directly)
   "ai-brief",
-  "loop-close",
-  // Specialized ATE phases (core "ate" is exposed in agent-full)
-  "ate-phase5",
-  "ate-context",
-  "ate-run",
-  "ate-flakes",
-  "ate-prompt",
-  "ate-exemplar",
-  "ate-save",
-  "ate-boundary-probe",
-  "ate-recall",
-  "ate-remember",
-  "ate-coverage",
-  "ate-mutate",
-  "ate-mutation-report",
-  "ate-oracle-pending",
-  "ate-oracle-verdict",
-  "ate-oracle-replay",
 ]);
 
 /**

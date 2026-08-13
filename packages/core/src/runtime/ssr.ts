@@ -3,7 +3,11 @@ import { serializeProps } from "../client/serialize";
 import { createRequire } from "module";
 import React, { type ReactElement, type ReactNode } from "react";
 import type { BundleManifest } from "../bundler/types";
-import { isSafeManduUrl } from "../bundler/manifest-schema";
+import { isSafePublishedManduUrl } from "../bundler/manifest-schema";
+import {
+  scopeBundleManifestToGeneration,
+  scopeClientAssetUrl,
+} from "../bundler/generation";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 import { PORTS, TIMEOUTS } from "../constants";
 import { decodeHtmlText, escapeHtmlAttr, escapeHtmlText, escapeJsonForInlineScript } from "./escape";
@@ -319,7 +323,9 @@ export function wrapWithIsland(
   bundleSrc?: string,
   hydrate?: string
 ): string {
-  const cacheBustedSrc = bundleSrc ? `${bundleSrc}?t=${Date.now()}` : undefined;
+  const cacheBustedSrc = bundleSrc
+    ? `${bundleSrc}${bundleSrc.includes("?") ? "&" : "?"}t=${Date.now()}`
+    : undefined;
   const srcAttr = cacheBustedSrc ? ` data-mandu-src="${escapeHtmlAttr(cacheBustedSrc)}"` : "";
   const hydrateValue = hydrate ?? priorityToHydrateStrategy(priority);
   const hydrateAttr = ` data-hydrate="${escapeHtmlAttr(hydrateValue)}"`;
@@ -392,12 +398,12 @@ function generateFastRefreshPreambleTag(
   const fr = manifest?.shared?.fastRefresh;
   if (!fr) return "";
   if (!fr.glue || !fr.runtime) return "";
-  // Phase 7.2.R3 M-01 — manifest wire-up. `isSafeManduUrl` rejects
+  // Phase 7.2.R3 M-01 — manifest wire-up. The response-time validator
   // tampered entries (protocol, traversal, non-/.mandu paths, >2KB).
   // Fail closed: if either URL is suspect, skip the preamble entirely
   // — dev refresh breaks loudly instead of injecting an attacker-
   // controlled <script src> via a tampered manifest.
-  if (!isSafeManduUrl(fr.glue) || !isSafeManduUrl(fr.runtime)) return "";
+  if (!isSafePublishedManduUrl(fr.glue) || !isSafePublishedManduUrl(fr.runtime)) return "";
   const raw = generateFastRefreshPreamble(fr.glue, fr.runtime);
   if (!nonce) return raw;
   // Inject nonce attribute onto the first <script> tag ONLY. Matches
@@ -630,6 +636,10 @@ export async function resolveAsyncElement(node: ReactNode): Promise<ReactNode> {
 
 export function renderToHTML(element: ReactElement, options: SSROptions = {}): string {
   const hasExplicitTitle = options.title !== undefined;
+  const scopedBundleManifest = scopeBundleManifestToGeneration(options.bundleManifest);
+  const responseOptions = scopedBundleManifest === options.bundleManifest
+    ? options
+    : { ...options, bundleManifest: scopedBundleManifest };
   const {
     title = "Mandu App",
     lang = "ko",
@@ -651,7 +661,7 @@ export function renderToHTML(element: ReactElement, options: SSROptions = {}): s
     devtools,
     devErrorOverlay,
     layoutChain,
-  } = options;
+  } = responseOptions;
 
   // Issue #233 — derive a stable short key for the layout chain so the
   // SPA nav helper can detect cross-layout transitions. Deterministic
@@ -1084,7 +1094,17 @@ window.__MANDU_HMR_PORT__ = ${hmrPort};
             }
             if (!updated) location.reload();
           } else if (msg.type === 'error') {
-            console.error('[Mandu HMR] Build error:', msg.data && msg.data.message);
+            var errorData = msg.data || {};
+            console.error('[Mandu HMR] Build error:', errorData.message);
+            window.dispatchEvent(new CustomEvent('__MANDU_ERROR__', { detail: {
+              name: errorData.name || 'BuildError',
+              message: errorData.message || 'Build failed',
+              stack: errorData.stack || '',
+              kind: 'manual',
+              timestamp: errorData.timestamp || Date.now(),
+              routeId: errorData.routeId,
+              url: window.location.pathname + window.location.search
+            }}));
           }
         } catch(err) {}
       };
@@ -1149,10 +1169,16 @@ function shouldInjectDevtools(
  * can verify the URL shape without needing a full render.
  */
 function generateDevtoolsScript(manifest?: BundleManifest): string {
-  const cacheBust = manifest?.buildTime
-    ? `?v=${encodeURIComponent(manifest.buildTime)}`
-    : `?t=${Date.now()}`;
-  return `<script type="module" src="/.mandu/client/_devtools.js${cacheBust}"></script>`;
+  const src = scopeClientAssetUrl(
+    "/.mandu/client/_devtools.js",
+    manifest?.generationId,
+  );
+  const key = manifest?.buildTime ? "v" : "t";
+  const value = manifest?.buildTime
+    ? encodeURIComponent(manifest.buildTime)
+    : Date.now();
+  const cacheBust = `${src.includes("?") ? "&" : "?"}${key}=${value}`;
+  return `<script type="module" src="${src}${cacheBust}"></script>`;
 }
 
 /** @internal test helper — exposed only so unit tests can inspect the decision. */

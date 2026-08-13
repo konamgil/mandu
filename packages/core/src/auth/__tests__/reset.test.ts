@@ -54,7 +54,7 @@ function makeFixture(): Fixture {
   };
 }
 
-describeIfBun("@mandujs/core/auth/reset — createPasswordReset", () => {
+describeIfBun("@mandujs/core/compat/auth/reset — createPasswordReset", () => {
   let fx: Fixture;
 
   beforeEach(() => {

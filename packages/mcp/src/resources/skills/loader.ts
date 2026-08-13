@@ -6,6 +6,7 @@
 import { readdir, readFile } from "fs/promises";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { OFFICIAL_SKILLS, OFFICIAL_SKILL_IDS } from "../generated-skills/catalog.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -26,21 +27,7 @@ export interface RuleMeta {
   tags: string[];
 }
 
-// Available skills
-const SKILL_IDS = [
-  "mandu-agent-workflow",
-  "mandu-slot",
-  "mandu-fs-routes",
-  "mandu-hydration",
-  "mandu-guard",
-  "mandu-performance",
-  "mandu-composition",
-  "mandu-security",
-  "mandu-testing",
-  "mandu-deployment",
-  "mandu-styling",
-  "mandu-ui",
-];
+const SKILL_IDS: readonly string[] = OFFICIAL_SKILL_IDS;
 
 /**
  * Parse YAML frontmatter from markdown content
@@ -95,21 +82,7 @@ export function listSkills(): SkillMeta[] {
 }
 
 function getSkillDescription(id: string): string {
-  const descriptions: Record<string, string> = {
-    "mandu-agent-workflow": "Canonical context -> plan -> apply -> verify -> repair workflow for Mandu agents",
-    "mandu-slot": "Business logic with Mandu.filling() API",
-    "mandu-fs-routes": "File-system based routing patterns",
-    "mandu-hydration": "Island hydration and client components",
-    "mandu-guard": "Architecture enforcement and layer dependencies",
-    "mandu-performance": "Performance optimization patterns for Mandu apps",
-    "mandu-composition": "React composition patterns for Islands and state",
-    "mandu-security": "Security best practices for authentication and protection",
-    "mandu-testing": "Testing patterns with Bun test and Playwright",
-    "mandu-deployment": "Production deployment with Render, Supabase, Docker, and CI/CD",
-    "mandu-styling": "CSS framework integration with Tailwind, Panda CSS, and theming",
-    "mandu-ui": "UI component library integration with shadcn/ui and accessibility",
-  };
-  return descriptions[id] || "";
+  return OFFICIAL_SKILLS.find((skill) => skill.id === id)?.description ?? "";
 }
 
 /**
@@ -120,7 +93,7 @@ export async function getSkill(skillId: string): Promise<{ meta: SkillMeta; cont
     return null;
   }
 
-  const skillPath = join(__dirname, skillId, "SKILL.md");
+  const skillPath = join(__dirname, "..", "generated-skills", skillId, "SKILL.md");
 
   try {
     const content = await readFile(skillPath, "utf-8");
@@ -149,7 +122,7 @@ export async function listSkillRules(skillId: string): Promise<RuleMeta[]> {
     return [];
   }
 
-  const rulesPath = join(__dirname, skillId, "rules");
+  const rulesPath = join(__dirname, "..", "generated-skills", skillId, "rules");
 
   try {
     const files = await readdir(rulesPath);
@@ -194,7 +167,7 @@ export async function getSkillRule(
     return null;
   }
 
-  const rulePath = join(__dirname, skillId, "rules", `${ruleId}.md`);
+  const rulePath = join(__dirname, "..", "generated-skills", skillId, "rules", `${ruleId}.md`);
 
   try {
     const content = await readFile(rulePath, "utf-8");

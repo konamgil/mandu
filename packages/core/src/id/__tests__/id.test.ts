@@ -10,7 +10,7 @@ interface CryptoLike {
   randomUUID: () => string;
 }
 
-describe("@mandujs/core/id — newId", () => {
+describe("@mandujs/core/compat/id — newId", () => {
   it("returns a canonical UUID string", () => {
     const id = newId();
     expect(id).toMatch(UUID_REGEX);
@@ -57,7 +57,7 @@ describe("@mandujs/core/id — newId", () => {
   });
 });
 
-describe("@mandujs/core/id — newShortId", () => {
+describe("@mandujs/core/compat/id — newShortId", () => {
   it("returns exactly 8 hex characters", () => {
     const short = newShortId();
     expect(short).toMatch(HEX8_REGEX);
@@ -74,7 +74,7 @@ describe("@mandujs/core/id — newShortId", () => {
   });
 });
 
-describe("@mandujs/core/id — generator resolution", () => {
+describe("@mandujs/core/compat/id — generator resolution", () => {
   it("prefers crypto.randomUUIDv7 when present", () => {
     const sentinel = "01912345-6789-7abc-def0-123456789abc";
     const fakeCrypto = {

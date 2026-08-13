@@ -30,7 +30,7 @@ const hasBunSql = (() => {
 
 const describeIfBunSql = hasBunSql ? describe : describe.skip;
 
-describeIfBunSql("@mandujs/core/db — SQLite (in-memory) integration", () => {
+describeIfBunSql("@mandujs/core/compat/db — SQLite (in-memory) integration", () => {
   let db: Db;
 
   beforeEach(async () => {
@@ -179,7 +179,7 @@ describeIfBunSql("@mandujs/core/db — SQLite (in-memory) integration", () => {
   });
 });
 
-describeIfBunSql("@mandujs/core/db — SQLite file + concurrent handles", () => {
+describeIfBunSql("@mandujs/core/compat/db — SQLite file + concurrent handles", () => {
   let scratchDir: string;
 
   beforeEach(() => {
@@ -259,7 +259,7 @@ describeIfBunSql("@mandujs/core/db — SQLite file + concurrent handles", () => 
 
 // ─── Composable fragments against real Bun.SQL (#315) ────────────────────────
 
-describeIfBunSql("@mandujs/core/db — SQLite fragment composition", () => {
+describeIfBunSql("@mandujs/core/compat/db — SQLite fragment composition", () => {
   let db: Db;
 
   beforeEach(async () => {

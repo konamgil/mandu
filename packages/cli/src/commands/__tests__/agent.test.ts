@@ -178,6 +178,78 @@ describe("mandu agent CLI", () => {
     expect(parsed.actions.some((action: { kind: string }) => action.kind === "mcp_tool")).toBe(true);
   });
 
+  it("builds and executes a typed operation plan with the shared receipt schema", async () => {
+    await writeFile(root, "typed-operations.json", JSON.stringify({
+      operations: [
+        {
+          kind: "route.create",
+          target: "app/dashboard/page.tsx",
+          effect: {
+            type: "write",
+            content: "export default function Dashboard() { return <main>Dashboard</main>; }\n",
+            encoding: "utf8",
+          },
+        },
+      ],
+      idempotencyKey: "cli-dashboard-v1",
+    }));
+
+    const planned = await capture(() =>
+      agent({
+        action: "plan",
+        cwd: root,
+        intent: "add dashboard page",
+        operations: "typed-operations.json",
+        write: true,
+        json: true,
+      }),
+    );
+    expect(planned.ok).toBe(true);
+    expect(JSON.parse(planned.out).plan.executable).toBe(true);
+
+    const applied = await capture(() =>
+      agent({
+        action: "apply",
+        cwd: root,
+        from: ".mandu/agent-plan.json",
+        dryRun: false,
+        json: true,
+      }),
+    );
+    expect(applied.ok).toBe(true);
+    const receipt = JSON.parse(applied.out);
+    expect(receipt).toMatchObject({
+      schemaVersion: 1,
+      framework: "mandu",
+      ok: true,
+      status: "applied",
+      dryRun: false,
+      planId: expect.stringContaining("plan-"),
+    });
+    expect(receipt.operations[0]).toMatchObject({
+      kind: "route.create",
+      target: "app/dashboard/page.tsx",
+      status: "applied",
+    });
+    expect(receipt.rollback.id).toStartWith("rollback-");
+    expect(await fs.readFile(path.join(root, "app/dashboard/page.tsx"), "utf8"))
+      .toContain("Dashboard");
+
+    const rollback = await capture(() =>
+      agent({
+        action: "repair",
+        cwd: root,
+        rollbackId: receipt.rollback.id,
+        apply: true,
+        json: true,
+      }),
+    );
+    expect(rollback.ok).toBe(true);
+    expect(JSON.parse(rollback.out).status).toBe("rolled_back");
+    expect(await fs.stat(path.join(root, "app/dashboard/page.tsx")).catch(() => null)).toBeNull();
+    expect(await fs.stat(path.join(root, "app/dashboard")).catch(() => null)).toBeNull();
+  });
+
   it("syncs agent workflow artifacts", async () => {
     const { ok, out } = await capture(() =>
       agent({

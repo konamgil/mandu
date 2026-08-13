@@ -73,7 +73,7 @@ async function main(): Promise<void> {
   // Worker hosts the WebView — its blocking run() loop never competes
   // with Bun.serve() on the main thread.
   const worker = new Worker(
-    new URL("@mandujs/core/desktop/worker", import.meta.url),
+    new URL("@mandujs/core/compat/desktop/worker", import.meta.url),
   );
 
   worker.addEventListener("message", (ev) => {

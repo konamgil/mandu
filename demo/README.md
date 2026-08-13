@@ -1,52 +1,39 @@
 # Mandu Demos
 
-Mandu 프레임워크의 주요 기능을 시연하는 데모 앱 모음입니다.
+Mandu의 안정 제품은 세 reference workflow로 검증합니다.
 
-## Quick Start
+## 공식 reference workflows
+
+| 사용자 여정 | 위치 | 핵심 검증 |
+|---|---|---|
+| SaaS dashboard | `demo/auth-starter` | session/CSRF, 보호 route, 동적 SSR |
+| Contract CRUD | `demo/todo-app` | CRUD API, contract/resource, Island hydration |
+| Interactive realtime | `packages/cli/templates/realtime-chat` | fresh create/install, chat UI, health/messages/SSE |
+
+전체 계약은 저장소 루트에서 실행합니다.
 
 ```bash
-cd demo/<app-name>
-bun install
+bun install --frozen-lockfile
+bun run test:reference-apps
+```
+
+개별 workspace demo 실행:
+
+```bash
+cd demo/auth-starter # 또는 demo/todo-app
 bun run dev
 ```
 
-Default: `http://localhost:3333`
+`auth-starter`의 인증 페이지는 cookie에 의존하므로 prerender하지 않습니다.
+`todo-app`은 SSR, hydrated CRUD 화면, JSON API를 함께 검증합니다.
+`realtime-chat`은 배포된 starter와 같은 public create 경로로 임시 생성한 뒤
+검증하므로 demo 폴더에 복제본을 두지 않습니다.
 
----
+## Supporting / Labs demos
 
-## Demo Apps
+- `starter`: 최소 SSR/Filling 예제. 첫 생성 흐름은 `test:smoke`가 소유합니다.
+- `ai-chat`: AI/SSE 실험용 Labs 데모.
+- `desktop-starter`, `edge-workers-starter`: 선택 설치 target/Labs 데모.
 
-### `starter`
-
-최소 구성의 Mandu 앱. 프레임워크 기본 구조를 이해하는 시작점입니다.
-
-- `app/page.tsx` — SSR 페이지
-- `app/api/health/route.ts` — Health check API (Filling API)
-- `app/layout.tsx` — Root layout
-
-**Features**: File-based routing, Filling handler API
-
----
-
-### `todo-app`
-
-CRUD 풀스택 참조 앱. Mandu의 핵심 기능을 종합적으로 시연합니다.
-
-- REST API (GET/POST/PUT/DELETE)
-- Island 컴포넌트 (`Mandu.island()` + setup/render 패턴)
-- In-memory data store
-- TailwindCSS 스타일링
-
-**Features**: Filling API, Island hydration, Dynamic routes, SSR + Client interactivity
-
----
-
-### `ai-chat`
-
-SSE 스트리밍 채팅 데모. 실시간 데이터 스트리밍과 Island 인터랙션을 시연합니다.
-
-- `Mandu.sse()` 를 사용한 Server-Sent Events 스트리밍
-- Mock AI 응답 (글자 단위 스트리밍)
-- 실시간 채팅 UI (Island 컴포넌트)
-
-**Features**: SSE streaming, Island hydration, Real-time UI updates
+Supporting/Labs 데모는 유용한 실험을 보존하지만 stable Core/CLI/MCP의
+Golden Path나 product release contract를 정의하지 않습니다.

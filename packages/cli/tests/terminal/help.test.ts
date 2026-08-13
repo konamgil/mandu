@@ -215,13 +215,10 @@ describe("DNA-015: Semantic Help System", () => {
       expect(MANDU_HELP.examples).toBeDefined();
     });
 
-    it("should have all main commands", () => {
+    it("should have exactly the six official commands", () => {
       const commandNames = MANDU_HELP.subcommands?.map((s) => s.name) ?? [];
 
-      expect(commandNames).toContain("init");
-      expect(commandNames).toContain("dev");
-      expect(commandNames).toContain("build");
-      expect(commandNames).toContain("guard");
+      expect(commandNames).toEqual(["create", "dev", "build", "start", "check", "agent"]);
     });
 
     it("should render without errors", () => {

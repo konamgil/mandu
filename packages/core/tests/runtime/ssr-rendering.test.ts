@@ -343,6 +343,8 @@ describe("renderToHTML — HMR script", () => {
     expect(html).toContain("__MANDU_HMR_PORT__");
     expect(html).toContain(String(expectedWsPort));
     expect(html).toContain("WebSocket");
+    expect(html).toContain("CustomEvent('__MANDU_ERROR__'");
+    expect(html).toContain("BuildError");
   });
 
   it("does NOT inject HMR script when isDev is false", () => {
@@ -403,6 +405,32 @@ describe("renderToHTML — DevTools script", () => {
     const html = renderToHTML(React.createElement("div"));
 
     expect(html).not.toContain("_devtools.js");
+  });
+});
+
+describe("renderToHTML — immutable build generations", () => {
+  it("pins hydration, runtime, import-map, and devtools URLs to one generation", () => {
+    const manifest = manifestWithRoute("home", {
+      generationId: "generation-123",
+      importMap: {
+        imports: {
+          react: "/.mandu/client/vendor.js",
+        },
+      },
+    });
+    const html = renderToHTML(React.createElement("div", null, "generated"), {
+      isDev: true,
+      routeId: "home",
+      hydration: { strategy: "island", priority: "visible", preload: false },
+      bundleManifest: manifest,
+    });
+
+    expect(html).toContain("/.mandu/client/home.js?g=generation-123&amp;t=");
+    expect(html).toContain('src="/.mandu/client/runtime.js?g=generation-123"');
+    expect(html).toContain("/.mandu/client/vendor.js?g=generation-123");
+    expect(html).toContain("_devtools.js?g=generation-123&v=");
+    expect(html).not.toContain("?g=generation-123?t=");
+    expect(manifest.bundles.home.js).toBe("/.mandu/client/home.js");
   });
 });
 

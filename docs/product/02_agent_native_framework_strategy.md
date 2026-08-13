@@ -1,8 +1,10 @@
 # Mandu Agent-Native Framework Strategy v1
 
 작성일: 2026-05-01  
-상태: Product direction v1  
+상태: Superseded by `03_agent_safe_refoundation_strategy.md`
 대상: Mandu v0.x -> agent-native fullstack framework
+
+> 2026-08-13: 이 문서는 Agent-Native 정체성의 역사적 근거로 유지한다. 현재 제품 범위, 비목표, 공개 표면 예산은 `03_agent_safe_refoundation_strategy.md`가 대체한다.
 
 ---
 

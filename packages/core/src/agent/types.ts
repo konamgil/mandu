@@ -179,6 +179,16 @@ export interface AgentSuggestedCommand {
   required: boolean;
 }
 
+export interface AgentVerificationStep extends AgentSuggestedCommand {
+  id: string;
+  kind?: "agent.verify";
+  changedOnly?: boolean;
+  includeDiagnose?: boolean;
+  includeGit?: boolean;
+  includeGuard?: boolean;
+  includeContract?: boolean;
+}
+
 export interface AgentChangedFileReason {
   file: string;
   reasons: string[];
@@ -212,7 +222,12 @@ export interface BuildAgentVerifyOptions {
   staged?: boolean;
 }
 
-export type AgentRepairStatus = "ready" | "nothing_to_repair" | "input_missing";
+export type AgentRepairStatus =
+  | "ready"
+  | "nothing_to_repair"
+  | "input_missing"
+  | "rolled_back"
+  | "rollback_conflict";
 
 export interface AgentRepairAction {
   diagnosticCode: string;
@@ -234,6 +249,7 @@ export interface AgentRepairReport {
   diagnostics: AgentDiagnostic[];
   actions: AgentRepairAction[];
   appliedActions: AgentRepairAction[];
+  rollback?: AgentRollbackResult;
   warnings: string[];
   nextVerifyCommand: string;
 }
@@ -241,6 +257,7 @@ export interface AgentRepairReport {
 export interface BuildAgentRepairOptions {
   from?: string;
   apply?: boolean;
+  rollbackId?: string;
 }
 
 export type AgentDomain =
@@ -262,50 +279,181 @@ export interface AgentPlanRisk {
   reason: string;
 }
 
+export type AgentOperationKind =
+  | "file.create"
+  | "file.patch-with-hash"
+  | "route.create"
+  | "api.create"
+  | "contract.update"
+  | "guard.safe-fix"
+  | "generated.refresh";
+
+export interface AgentPermission {
+  kind: "read" | "write";
+  path: string;
+}
+
+export interface AgentOperationPrecondition {
+  exists: boolean;
+  contentHash?: string;
+}
+
+export interface AgentOperationEffect {
+  type: "write";
+  content: string;
+  encoding: "utf8";
+}
+
+export interface AgentRollbackDescriptor {
+  strategy: "restore-snapshot";
+}
+
+export interface AgentOperation {
+  id: string;
+  kind: AgentOperationKind;
+  target: string;
+  precondition: AgentOperationPrecondition;
+  effect: AgentOperationEffect;
+  rollback: AgentRollbackDescriptor;
+}
+
+export interface AgentOperationInput {
+  id?: string;
+  kind: AgentOperationKind;
+  target: string;
+  effect: AgentOperationEffect;
+}
+
+export type AgentRollbackPolicy = "automatic" | "manual";
+
 export interface AgentPlan {
   schemaVersion: 1;
   framework: "mandu";
   generatedAt: string;
+  id: string;
   intent: string;
+  baseRevision: string | null;
+  idempotencyKey: string | null;
+  scope: string[];
+  permissions: AgentPermission[];
+  operations: AgentOperation[];
+  rollbackPolicy: AgentRollbackPolicy;
   domains: AgentDomain[];
   filesToRead: string[];
   filesToCreate: string[];
   filesToModify: string[];
   mcpTools: string[];
   risks: AgentPlanRisk[];
-  verification: AgentSuggestedCommand[];
+  verification: AgentVerificationStep[];
   notes: string[];
-  executable: false;
+  executable: boolean;
 }
 
 export interface BuildAgentPlanOptions {
   intent: string;
 }
 
-export interface AgentApplyReport {
+export interface BuildExecutableAgentPlanOptions {
+  intent: string;
+  operations: AgentOperationInput[];
+  idempotencyKey?: string;
+  rollbackPolicy?: AgentRollbackPolicy;
+  verification?: AgentVerificationStep[];
+}
+
+export type AgentOperationStatus =
+  | "planned"
+  | "applied"
+  | "failed"
+  | "rolled_back"
+  | "skipped";
+
+export interface AgentOperationReceipt {
+  operationId: string;
+  kind: AgentOperationKind;
+  target: string;
+  status: AgentOperationStatus;
+  beforeHash: string | null;
+  afterHash: string | null;
+  error?: string;
+}
+
+export interface AgentVerificationResult {
+  id: string;
+  kind: "agent.verify";
+  required: boolean;
+  ok: boolean;
+  checks: AgentVerifyCheck[];
+  diagnostics: AgentDiagnostic[];
+}
+
+export interface AgentRollbackReceipt {
+  id: string | null;
+  snapshotPath: string | null;
+  policy: AgentRollbackPolicy;
+  attempted: boolean;
+  ok: boolean | null;
+  restoredFiles: string[];
+  conflicts: string[];
+}
+
+export type AgentApplyStatus =
+  | "preview"
+  | "applied"
+  | "blocked"
+  | "failed"
+  | "rolled_back";
+
+export interface AgentApplyAction {
+  kind: "mcp_tool" | "read_file" | "manual_edit" | "verify" | AgentOperationKind;
+  description: string;
+  tool?: string;
+  file?: string;
+  command?: string;
+  applied: boolean;
+}
+
+export interface ApplyReceipt {
   schemaVersion: 1;
   framework: "mandu";
   generatedAt: string;
+  receiptId: string;
+  planId: string | null;
+  idempotencyKey: string | null;
+  baseRevision: string | null;
+  startedAt: string;
+  completedAt: string;
   ok: boolean;
+  status: AgentApplyStatus;
   dryRun: boolean;
+  replayed: boolean;
   sourcePlan: string;
   intent: string;
   domains: AgentDomain[];
-  actions: Array<{
-    kind: "mcp_tool" | "read_file" | "manual_edit" | "verify";
-    description: string;
-    tool?: string;
-    file?: string;
-    command?: string;
-    applied: false;
-  }>;
+  actions: AgentApplyAction[];
+  operations: AgentOperationReceipt[];
+  touchedFiles: string[];
+  changedFiles: string[];
+  verification: AgentVerificationResult[];
+  rollback: AgentRollbackReceipt;
   warnings: string[];
   nextVerifyCommand: string;
 }
 
+export type AgentApplyReport = ApplyReceipt;
+
 export interface BuildAgentApplyOptions {
   from?: string;
   dryRun?: boolean;
+  /** Test-only deterministic failure injection; adapters never expose this option. */
+  failureAfterOperations?: number;
+}
+
+export interface AgentRollbackResult {
+  rollbackId: string;
+  ok: boolean;
+  restoredFiles: string[];
+  conflicts: string[];
 }
 
 export type AgentSyncTarget = "codex" | "claude" | "gemini" | "all";

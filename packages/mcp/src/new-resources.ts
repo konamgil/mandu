@@ -8,8 +8,8 @@ import type { Resource } from "@modelcontextprotocol/sdk/types.js";
 import path from "path";
 import { readConfig, readJsonFile } from "./utils/project.js";
 import { loadManduConfig, loadManifest } from "@mandujs/core";
-import { eventBus } from "@mandujs/core/observability";
-import { computeAgentStats } from "@mandujs/core/kitchen";
+import { eventBus } from "@mandujs/core/compat/observability/index";
+import { computeAgentStats } from "@mandujs/core/compat/kitchen/index";
 import { getDevServerState } from "./tools/project.js";
 
 export const manduResourceDefinitions: Resource[] = [

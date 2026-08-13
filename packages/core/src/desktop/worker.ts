@@ -15,7 +15,7 @@
  * // Worker owns the Webview — its blocking `run()` never competes with
  * // `Bun.serve()` for the event loop on the main thread.
  * const worker = new Worker(
- *   new URL("@mandujs/core/desktop/worker", import.meta.url),
+ *   new URL("@mandujs/core/compat/desktop/worker", import.meta.url),
  * );
  *
  * worker.postMessage({

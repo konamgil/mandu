@@ -34,7 +34,7 @@
  * ### As middleware
  *
  * ```ts
- * import { rateLimit } from "@mandujs/core/middleware/rate-limit";
+ * import { rateLimit } from "@mandujs/core/compat/middleware/rate-limit/index";
  *
  * export default Mandu.filling()
  *   .use(rateLimit({ limit: 60, windowMs: 60_000 }))

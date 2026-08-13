@@ -18,7 +18,7 @@
 import path from "path";
 import fs from "fs/promises";
 import { existsSync } from "fs";
-import { safeBuild } from "@mandujs/core/bundler/safe-build";
+import { safeBuild } from "@mandujs/core/compat/bundler/safe-build";
 import type { RoutesManifest } from "@mandujs/core";
 import { generateWranglerConfig } from "@mandujs/edge/workers";
 
@@ -210,7 +210,7 @@ function generateRegisterSource(manifest: RoutesManifest, rootDir: string): stri
   lines.push(`  registerPageHandler,`);
   lines.push(`  registerPageLoader,`);
   lines.push(`  registerLayoutLoader,`);
-  lines.push(`} from "@mandujs/core/runtime/server";`);
+  lines.push(`} from "@mandujs/core/compat/runtime/server";`);
   lines.push("");
 
   let importIndex = 0;

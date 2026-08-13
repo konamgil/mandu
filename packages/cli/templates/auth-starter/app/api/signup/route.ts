@@ -15,7 +15,7 @@ import type * as __ManduMandujsCoreTypes0 from "@mandujs/core";
  * so the form can re-render the error inline.
  */
 import { Mandu } from "@mandujs/core";
-import { hashPassword, loginUser } from "@mandujs/core/auth";
+import { hashPassword, loginUser } from "@mandujs/core/compat/auth/index";
 import { withSession, withCsrf } from "../../../src/lib/auth";
 import { userStore, EmailTakenError } from "../../../server/domain/users";
 

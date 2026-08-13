@@ -100,7 +100,7 @@ describe("StackTraceAnalyzer", () => {
 
       expect(analyzer.isFrameworkFile("packages/core/src/runtime/server.ts")).toBe(true);
       expect(analyzer.isFrameworkFile("packages/core/src/filling/filling.ts")).toBe(true);
-      expect(analyzer.isFrameworkFile("@mandujs/core/src/index.ts")).toBe(true);
+      expect(analyzer.isFrameworkFile("@mandujs/core/compat/src/index")).toBe(true);
     });
 
     test("should not identify user files as framework files", () => {

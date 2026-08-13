@@ -18,8 +18,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runSpec } from "../src/run";
 import type { RunnerExec } from "../src/run";
-import { eventBus } from "@mandujs/core/observability";
-import type { ObservabilityEvent } from "@mandujs/core/observability";
+import { eventBus } from "@mandujs/core/compat/observability/index";
+import type { ObservabilityEvent } from "@mandujs/core/compat/observability/index";
 import type { AteMonitorEvent } from "../src/types";
 
 function captureAteEvents(): {

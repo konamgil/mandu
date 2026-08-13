@@ -40,7 +40,7 @@ export interface SetupResult {
  *
  * This function:
  * 1. Creates .claude/skills/ directory
- * 2. Copies every skill's SKILL.md (skills/<id>/SKILL.md -> .claude/skills/<id>/SKILL.md)
+ * 2. Copies every generated skill into .claude/skills/<id>/SKILL.md
  * 3. Creates .claude/settings.json with hooks and permissions
  *
  * The `<id>/SKILL.md` subdirectory layout follows the Claude Code skills
@@ -67,9 +67,9 @@ export async function setupClaudeSkills(targetDir: string): Promise<SetupResult>
     return result;
   }
 
-  // 2. Copy skill files (skills/<id>/SKILL.md -> .claude/skills/<id>/SKILL.md)
+  // 2. Copy generated skill files into the project.
   for (const skillDir of SKILL_DIRS) {
-    const srcPath = join(PACKAGE_ROOT, "skills", skillDir, "SKILL.md");
+    const srcPath = join(PACKAGE_ROOT, "generated", "skills", skillDir, "SKILL.md");
     const destSubdir = join(skillsDir, skillDir);
     const destPath = join(destSubdir, "SKILL.md");
 

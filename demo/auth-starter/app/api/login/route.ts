@@ -10,7 +10,7 @@
  * credentials was wrong.
  */
 import { Mandu, type ManduContext } from "@mandujs/core";
-import { verifyPassword, loginUser } from "@mandujs/core/auth";
+import { verifyPassword, loginUser } from "@mandujs/core/compat/auth/index";
 import { withSession, withCsrf } from "../../../src/lib/auth";
 import { userStore } from "../../../server/domain/users";
 

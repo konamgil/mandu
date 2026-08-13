@@ -11,7 +11,7 @@
  *   2. `setupClaudeSkills()` — the dev-mode integration used by
  *      `mandu init` when running from source
  *   3. Each installed `SKILL.md` is byte-identical to the source under
- *      `packages/skills/skills/<id>/SKILL.md` (no placeholder substitution
+ *      `packages/skills/generated/skills/<id>/SKILL.md` (no placeholder substitution
  *      at install time — skills ship as-is).
  *
  * The CLI's binary-mode installer (`installEmbeddedClaudeSkills` in
@@ -40,7 +40,7 @@ import { setupClaudeSkills } from "../init-integration.js";
 
 // The source-of-truth skills directory inside the package.
 const PACKAGE_ROOT = path.resolve(import.meta.dir, "..", "..");
-const SKILLS_SRC_DIR = path.join(PACKAGE_ROOT, "skills");
+const SKILLS_SRC_DIR = path.join(PACKAGE_ROOT, "generated", "skills");
 
 describe("installSkills — Claude Code spec layout (#197)", () => {
   let target: string;
@@ -227,7 +227,7 @@ describe("setupClaudeSkills — `mandu init` dev-mode layout (#197)", () => {
 });
 
 describe("package layout — source truth (#197)", () => {
-  // Guard the *source* layout — `packages/skills/skills/<id>/SKILL.md` —
+  // Guard the generated package layout.
   // because the install logic assumes this exact shape. If a contributor
   // renames or flattens the source directory, we need a loud test failure
   // rather than a silent copy regression.

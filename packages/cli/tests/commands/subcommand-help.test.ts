@@ -30,13 +30,12 @@ async function runCLI(...args: string[]): Promise<{ stdout: string; stderr: stri
 }
 
 describe("per-subcommand --help routing", () => {
-  it("mandu ai --help prints the AI help block (not global)", async () => {
+  it("mandu ai --help points to the Labs and stable agent paths", async () => {
     const { stdout, exitCode } = await runCLI("ai", "--help");
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("mandu ai — terminal AI playground");
-    expect(stdout).toContain("Subcommands:");
-    expect(stdout).toContain("chat");
-    expect(stdout).toContain("eval");
+    expect(stdout).toContain("optional AI playground (Labs)");
+    expect(stdout).toContain("@mandujs/ate");
+    expect(stdout).toContain("mandu agent plan");
     // Global help markers must NOT be present.
     expect(stdout).not.toContain("Command Groups:");
   });
@@ -61,13 +60,13 @@ describe("per-subcommand --help routing", () => {
     expect(stdout).not.toContain("Command Groups:");
   });
 
-  it("mandu deploy --help prints the deploy help block", async () => {
+  it("mandu deploy --help explains the retired provider surface", async () => {
     const { stdout, exitCode } = await runCLI("deploy", "--help");
     expect(exitCode).toBe(0);
     expect(stdout).toContain("mandu deploy");
-    expect(stdout).toContain("--target");
-    expect(stdout).toContain("--dry-run");
-    expect(stdout).toContain("--execute");
+    expect(stdout).toContain("retired");
+    expect(stdout).toContain("mandu build");
+    expect(stdout).toContain("artifact-contract.md");
     expect(stdout).not.toContain("Command Groups:");
   });
 
@@ -96,7 +95,7 @@ describe("per-subcommand --help routing", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("mandu build");
     expect(stdout).toContain("--watch");
-    expect(stdout).toContain("--target=<name>");
+    expect(stdout).not.toContain("--target=<name>");
     expect(stdout).not.toContain("Command Groups:");
   });
 
@@ -109,26 +108,20 @@ describe("per-subcommand --help routing", () => {
     expect(stdout).not.toContain("Command Groups:");
   });
 
-  it("mandu ai chat --help falls through to chat's own CHAT_HELP", async () => {
-    // Sub-dispatch — `--help` is seen after a known subcommand, so main.ts
-    // lets registration.run() handle it. aiChat() checks options.help and
-    // prints CHAT_HELP.
+  it("mandu ai chat --help does not load the Labs chat runtime", async () => {
     const { stdout, exitCode } = await runCLI("ai", "chat", "--help");
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("mandu ai chat — interactive streaming chat");
-    expect(stdout).toContain("Slash commands:");
-    expect(stdout).toContain("/reset");
-    expect(stdout).toContain("/quit");
-    // Must NOT print the parent-level AI help (which lists eval as well).
-    expect(stdout).not.toContain("Non-interactive prompt eval");
+    expect(stdout).toContain("optional AI playground (Labs)");
+    expect(stdout).toContain("mandu agent plan");
+    expect(stdout).not.toContain("Slash commands:");
   });
 
-  it("mandu ai eval --help falls through to eval's own EVAL_HELP", async () => {
+  it("mandu ai eval --help does not load the Labs eval runtime", async () => {
     const { stdout, exitCode } = await runCLI("ai", "eval", "--help");
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("mandu ai eval");
-    // Must NOT print the parent-level AI help.
-    expect(stdout).not.toContain("Interactive streaming chat");
+    expect(stdout).toContain("optional AI playground (Labs)");
+    expect(stdout).toContain("mandu agent plan");
+    expect(stdout).not.toContain("prompt eval");
   });
 
   it("mandu --help still prints the global help block", async () => {

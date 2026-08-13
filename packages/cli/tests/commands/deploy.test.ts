@@ -42,6 +42,8 @@ describe("mandu completion", () => {
     expect(output).toContain("_mandu");
     expect(output).toContain("complete");
     expect(output).toContain("COMPREPLY");
+    expect(output).toContain("create dev build start check agent");
+    expect(output).not.toContain("deploy");
   });
 
   it("zsh outputs a valid completion script", async () => {

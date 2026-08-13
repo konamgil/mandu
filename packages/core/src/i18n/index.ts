@@ -4,7 +4,7 @@
  * Public surface for first-class internationalization in Mandu.
  *
  * ```ts
- * import { defineI18n, defineMessages, resolveLocale, createTranslator } from "@mandujs/core/i18n";
+ * import { defineI18n, defineMessages, resolveLocale, createTranslator } from "@mandujs/core/compat/i18n/index";
  *
  * export const i18n = defineI18n({
  *   locales: ["en", "ko"],

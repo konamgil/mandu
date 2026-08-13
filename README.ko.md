@@ -5,8 +5,8 @@
 <h1 align="center">Mandu</h1>
 
 <p align="center">
-  <strong>AI와 함께 개발하는 팀을 위한 Bun 네이티브 풀스택 프레임워크.</strong><br/>
-  React 앱, API 라우트, 계약, 아키텍처 가드를 한 곳에서 다룹니다.
+  <strong>Bun과 React를 위한 Agent-Safe 풀스택 프레임워크.</strong><br/>
+  AI 에이전트가 코드를 변경해도 아키텍처, 계약, 빌드 상태를 안전하게 유지합니다.
 </p>
 
 <p align="center">
@@ -25,11 +25,13 @@
 
 ---
 
+> **개편 상태:** Mandu v0.x는 초기 베타입니다. Agent-Safe 제품 계약은 합의된 v1 방향이며 typed apply와 전체 신뢰성 gate는 아직 구현 중입니다. [제품 전략](./docs/product/03_agent_safe_refoundation_strategy.md)과 [실행 계획](./docs/plans/22_mandu_refoundation_execution_plan.md)을 확인하세요.
+
 ## 왜 Mandu인가요?
 
 AI는 코드를 빠르게 씁니다. 진짜 어려운 일은 여러 번의 변경 뒤에도 앱을 이해 가능한 상태로 유지하는 것입니다.
 
-Mandu는 명확한 프로젝트 구조, 타입 안전한 API, island 기반 React 렌더링, 아키텍처 가드를 제공합니다. 사람과 에이전트가 함께 코드를 바꿔도 구조가 쉽게 무너지지 않게 돕습니다.
+Mandu는 집중된 풀스택 런타임에 계약, 아키텍처 가드, 통제된 에이전트 워크플로를 결합합니다. 사람과 에이전트가 코드를 바꿔도 프로젝트가 유효한 상태를 잃지 않게 돕습니다.
 
 | 원하는 것 | Mandu가 주는 것 |
 |-----------|-----------------|
@@ -39,7 +41,7 @@ Mandu는 명확한 프로젝트 구조, 타입 안전한 API, island 기반 Reac
 | 더 나은 AI 생성 코드 | Guard 규칙, MCP 도구, Mandu 전용 skill |
 | 빠른 로컬 개발 | Bun 네이티브 dev, build, test 명령 |
 
-짧게 말하면, Mandu는 AI의 도움을 받으면서도 코드베이스를 복잡한 미로로 만들고 싶지 않은 팀을 위한 프레임워크입니다.
+짧게 말하면, Mandu는 실제 변경을 AI 에이전트에게 맡기면서도 아키텍처와 릴리즈 품질은 직접 책임지는 개발자를 위한 프레임워크입니다.
 
 ## 1분 만에 시작하기
 
@@ -125,6 +127,7 @@ Mandu는 AI 에이전트가 실제로 수정하는 코드베이스를 전제로 
 
 ## 더 깊게 읽기
 
+- [Agent-Safe 제품 전략](./docs/product/03_agent_safe_refoundation_strategy.md)
 - [공식 문서](https://mandujs.com/docs)
 - [로컬 문서 인덱스](./docs/README.ko.md)
 - [CLI 레퍼런스](./packages/cli/README.md)

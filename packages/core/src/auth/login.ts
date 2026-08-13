@@ -11,8 +11,8 @@
  *
  * @example
  * ```ts
- * import { loginUser, logoutUser, currentUserId } from "@mandujs/core/auth";
- * import { hashPassword, verifyPassword } from "@mandujs/core/auth";
+ * import { loginUser, logoutUser, currentUserId } from "@mandujs/core/compat/auth/index";
+ * import { hashPassword, verifyPassword } from "@mandujs/core/compat/auth/index";
  *
  * // login route
  * const ok = await verifyPassword(plaintext, storedHash);

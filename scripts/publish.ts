@@ -9,18 +9,19 @@
  * Usage:
  *   bun run scripts/publish.ts          # 실제 배포
  *   bun run scripts/publish.ts --dry-run # 미리보기
+ *   NPM_DIST_TAG=beta bun run scripts/publish.ts --product
  */
 
 import { $ } from "bun";
 import { mkdir, readFile, writeFile, unlink } from "fs/promises";
 import { join } from "path";
 import { execSync } from "child_process";
-import { PUBLISHABLE_PACKAGE_DIRS } from "./publish-order";
+import { PRODUCT_PACKAGE_DIRS, PUBLISHABLE_PACKAGE_DIRS } from "./publish-order";
 
-// Publish 순서: 의존성 위상 순서대로 (의존되는 것이 먼저)
-// core → ate (needs core at runtime) → skills (peerDep core) → mcp (deps core+ate+skills)
-//   → edge (deps core, Workers adapter) → cli (deps core+mcp+skills+edge)
-const PACKAGES = PUBLISHABLE_PACKAGE_DIRS;
+// The stable train publishes Core -> MCP -> CLI. The legacy all-package
+// train remains available for an intentional Labs/generated release.
+const productRelease = process.argv.includes("--product");
+const PACKAGES = productRelease ? PRODUCT_PACKAGE_DIRS : PUBLISHABLE_PACKAGE_DIRS;
 const ROOT = join(import.meta.dir, "..");
 const isDryRun = process.argv.includes("--dry-run");
 const skipCheck = process.argv.includes("--skip-check");
@@ -34,11 +35,16 @@ const NPM_REGISTRY = process.env.NPM_REGISTRY ?? "https://registry.npmjs.org/";
 // OTP는 30초 유효하므로 publish 6개가 한 윈도우 안에 끝나야 한다.
 const NPM_OTP = process.env.NPM_OTP;
 
-// Pre-publish check
-if (!skipCheck) {
+function runPrePublishCheck(): void {
+  if (skipCheck) return;
   console.log("🔍 Running pre-publish check...\n");
   try {
-    execSync("bun run scripts/pre-publish-check.ts", { stdio: "inherit", cwd: ROOT });
+    execSync(
+      productRelease
+        ? "bun run scripts/pre-publish-check.ts --product"
+        : "bun run scripts/pre-publish-check.ts",
+      { stdio: "inherit", cwd: ROOT },
+    );
   } catch (err) {
     console.error("\n❌ Pre-publish check failed!");
     process.exit(1);
@@ -59,6 +65,7 @@ interface PublishPlanEntry {
   packageDir: string;
   name: string;
   version: string;
+  npmTag: string;
   npmLatest: string | null;
   npmAction:
     | "publish"
@@ -69,10 +76,23 @@ interface PublishPlanEntry {
   reason: string;
 }
 
-async function getPublishedVersion(name: string): Promise<string | null> {
+export function resolveNpmDistTag(version: string, requestedTag?: string): string {
+  const explicit = requestedTag?.trim();
+  if (explicit) {
+    if (!/^[A-Za-z][A-Za-z0-9._-]*$/.test(explicit)) {
+      throw new Error(`Invalid npm dist-tag: ${explicit}`);
+    }
+    return explicit;
+  }
+
+  const prerelease = version.match(/^[0-9]+\.[0-9]+\.[0-9]+-([0-9A-Za-z][0-9A-Za-z-]*)/);
+  return prerelease?.[1] ?? "latest";
+}
+
+async function getPublishedVersion(specifier: string): Promise<string | null> {
   try {
     // ~/.npmrc의 registry=가 verdaccio로 설정돼 있어도 public npm에서 조회
-    const result = await $`npm view ${name} version --registry=${NPM_REGISTRY}`.text();
+    const result = await $`npm view ${specifier} version --registry=${NPM_REGISTRY}`.text();
     return result.trim();
   } catch {
     return null;
@@ -236,7 +256,11 @@ async function publishToGPR(pkgPath: string, pkgName: string): Promise<void> {
     if (isDryRun) {
       console.log(`   📦 GPR dry-run: would publish ${pkgName} to ${GPR_REGISTRY}`);
     } else {
-      await $`cd ${pkgPath} && bun publish --access public`.text();
+      const pkgJson: PackageJson = JSON.parse(
+        await readFile(join(pkgPath, "package.json"), "utf-8")
+      );
+      const distTag = resolveNpmDistTag(pkgJson.version, process.env.NPM_DIST_TAG);
+      await $`cd ${pkgPath} && bun publish --access public --tag=${distTag}`.text();
       console.log(`   ✅ GPR published successfully`);
     }
   } finally {
@@ -250,6 +274,7 @@ async function publishToGPR(pkgPath: string, pkgName: string): Promise<void> {
 }
 
 async function main() {
+  runPrePublishCheck();
   console.log(isDryRun ? "🔍 Dry run mode\n" : "🚀 Publishing packages\n");
 
   if (GITHUB_TOKEN) {
@@ -289,8 +314,12 @@ async function main() {
       await readFile(join(pkgPath, "package.json"), "utf-8")
     );
 
-    const published = await getPublishedVersion(pkgJson.name);
-    const alreadyOnNpm = published === pkgJson.version;
+    const distTag = resolveNpmDistTag(pkgJson.version, process.env.NPM_DIST_TAG);
+    const [published, exactPublished] = await Promise.all([
+      getPublishedVersion(pkgJson.name),
+      getPublishedVersion(`${pkgJson.name}@${pkgJson.version}`),
+    ]);
+    const alreadyOnNpm = exactPublished === pkgJson.version;
     const npmAction: PublishPlanEntry["npmAction"] = isDryRun
       ? alreadyOnNpm
         ? "dry-run-validate-existing"
@@ -302,6 +331,7 @@ async function main() {
       packageDir: pkg,
       name: pkgJson.name,
       version: pkgJson.version,
+      npmTag: distTag,
       npmLatest: published,
       npmAction,
       gprAction: GITHUB_TOKEN ? (isDryRun ? "dry-run-publish" : "publish") : "skip",
@@ -319,7 +349,9 @@ async function main() {
       continue;
     }
 
-    console.log(`📦 ${pkgJson.name}@${pkgJson.version} (npm: ${published ?? "not found"})`);
+    console.log(
+      `📦 ${pkgJson.name}@${pkgJson.version} (npm latest: ${published ?? "not found"}, tag: ${distTag})`
+    );
 
     // workspace:* + catalog: → 실제 버전으로 치환 (이슈 #271 catalog leak 차단)
     const { original, resolved } = await resolveWorkspaceDeps(pkgPath, versions, catalog);
@@ -333,19 +365,19 @@ async function main() {
         if (alreadyOnNpm) {
           console.log(`   🔎 npm: already published, still running dry-run package validation`);
         }
-        const result = await $`cd ${pkgPath} && bun publish --dry-run --registry=${NPM_REGISTRY}`.text();
+        const result = await $`cd ${pkgPath} && bun publish --dry-run --tag=${distTag} --registry=${NPM_REGISTRY}`.text();
         console.log(result);
       } else if (alreadyOnNpm) {
         console.log(
           `   ⏭️  npm: already published, skipping; local metadata was not published. Run \`bun run check:npm-drift\` if this package changed.`
         );
       } else {
-        // --tag latest 명시: orphan/squatted 상위 버전이 npm에 있을 때 (skills 16.0.0
-        // 등 외부 점유) npm은 implicit latest tagging을 거부함. 명시하면 강제 적용.
+        // 안정 버전은 latest, prerelease는 beta/alpha/rc 등 semver 식별자를
+        // dist-tag로 사용합니다. NPM_DIST_TAG로 명시적인 override도 가능합니다.
         // --otp는 NPM_OTP 있을 때만 추가.
         const result = NPM_OTP
-          ? await $`cd ${pkgPath} && npm publish --access public --tag latest --registry=${NPM_REGISTRY} --otp=${NPM_OTP}`.text()
-          : await $`cd ${pkgPath} && npm publish --access public --tag latest --registry=${NPM_REGISTRY}`.text();
+          ? await $`cd ${pkgPath} && npm publish --access public --tag ${distTag} --registry=${NPM_REGISTRY} --otp=${NPM_OTP}`.text()
+          : await $`cd ${pkgPath} && npm publish --access public --tag ${distTag} --registry=${NPM_REGISTRY}`.text();
         console.log(`   ✅ Published to npm`);
         console.log(result);
         publishedPackages.push({ name: pkgJson.name, version: pkgJson.version });
@@ -414,4 +446,6 @@ async function main() {
   console.log("\n✨ Done!");
 }
 
-main();
+if (import.meta.main) {
+  main();
+}

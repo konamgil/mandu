@@ -8,15 +8,44 @@
 import fs from "fs";
 import path from "path";
 import type { Subprocess } from "bun";
-import { eventBus } from "@mandujs/core/observability";
-import type { AteMonitorEvent } from "@mandujs/ate";
+import { eventBus } from "@mandujs/core/compat/observability/index";
 
 /**
- * Local alias — reserved in case we need to accept slightly looser
- * shapes at the subscription boundary (forward-compat with events
- * emitted by newer ATE versions). Today it is a direct re-export.
+ * Labs event wire shape. MCP observes the Core event bus without taking a
+ * runtime or type dependency on @mandujs/ate. The optional ATE package owns
+ * production of these events; this adapter intentionally knows only the
+ * fields it renders.
  */
-type AteMonitorEventShape = AteMonitorEvent;
+type AteMonitorEventShape =
+  | { kind: "run_start"; runId: string; specPaths: string[] }
+  | { kind: "spec_progress"; runId: string; specPath: string; phase: string }
+  | {
+      kind: "spec_done";
+      runId: string;
+      specPath: string;
+      status: "pass" | "fail" | "skip";
+      durationMs: number;
+    }
+  | {
+      kind: "failure_captured";
+      runId: string;
+      specPath: string;
+      failure: { kind: string };
+    }
+  | {
+      kind: "artifact_saved";
+      runId: string;
+      specPath?: string;
+      path: string;
+    }
+  | {
+      kind: "run_end";
+      runId: string;
+      passed: number;
+      failed: number;
+      skipped: number;
+      durationMs: number;
+    };
 
 const TOOL_ICONS: Record<string, string> = {
   // Spec

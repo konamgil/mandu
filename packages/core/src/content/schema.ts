@@ -2,7 +2,7 @@
  * Schema Re-exports (Issue #199)
  *
  * Thin re-export shim so content authors can `import { z } from
- * '@mandujs/core/content'` without pulling `zod` directly into their
+ * '@mandujs/core/compat/content/index'` without pulling `zod` directly into their
  * `content.config.ts`. This keeps the import path consistent with
  * how users import `defineCollection`, and it gives us one chokepoint
  * if we ever need to swap the validation backend or wrap Zod with

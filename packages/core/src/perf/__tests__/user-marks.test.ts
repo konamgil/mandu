@@ -49,7 +49,7 @@ function disablePerf(): void {
   _resetUserMarksForTesting();
 }
 
-describe("@mandujs/core/perf — user marks (time / timeAsync / createPerf)", () => {
+describe("@mandujs/core/compat/perf — user marks (time / timeAsync / createPerf)", () => {
   afterEach(() => {
     disablePerf();
     resetTracer();

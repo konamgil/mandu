@@ -17,7 +17,7 @@ import {
   saveDeployIntentCache,
   DEPLOY_INTENT_CACHE_FILE,
   type DeployIntentCache,
-} from "@mandujs/core/deploy";
+} from "@mandujs/core/compat/deploy/index";
 
 async function setupFixture(): Promise<{ root: string; cleanup: () => Promise<void> }> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "mandu-mcp-deploy-"));

@@ -55,16 +55,17 @@
 import { Glob } from "bun";
 import path from "path";
 import fs from "fs";
-import { loadManduConfig } from "@mandujs/core/config/mandu";
+import { loadManduConfig } from "@mandujs/core/compat/config/mandu";
 import {
   resolveTestConfig,
   type ValidatedTestConfig,
-} from "@mandujs/core/config/validate";
+} from "@mandujs/core/compat/config/validate";
 import {
   checkCoverageThresholds,
   emptyReport,
   formatReport,
   formatThresholdFailure,
+  mergeAndWriteLcov,
   parseLcovSummary,
   type Coverage,
   type CoverageThresholds,
@@ -255,99 +256,21 @@ export async function runE2EPipeline(opts: {
   ci?: boolean;
   onlyRoutes?: string[];
 }): Promise<{ ok: boolean; lcovPath: string | null }> {
-  const {
-    buildE2EPlan,
-    describeE2ECodegenPlan,
-    planE2ERun,
-    describeE2ERunPlan,
-    runE2E,
-    ateExtract,
-    ateGenerate,
-    ateHeal,
-    findMissingPlaywright,
-  } = await import("@mandujs/ate");
-
-  const codegenPlan = buildE2EPlan({
-    repoRoot: opts.cwd,
-    onlyRoutes: opts.onlyRoutes,
-    oracleLevel: "L1",
-  });
-  const runPlan = planE2ERun({
-    repoRoot: opts.cwd,
-    baseURL: opts.baseURL,
-    ci: opts.ci,
-    coverage: opts.coverage,
-    onlyRoutes: opts.onlyRoutes,
-  });
-
   if (opts.dryRun) {
     console.log(theme.heading("mandu test --e2e --dry-run"));
-    console.log(describeE2ECodegenPlan(codegenPlan));
-    console.log("");
-    console.log(describeE2ERunPlan(runPlan));
-    if (opts.heal) {
-      console.log("");
-      console.log(theme.muted("(heal loop would run after the Playwright exit)"));
-    }
-    return { ok: true, lcovPath: runPlan.lcovPath };
+    console.log(theme.muted("ATE execution is owned by the optional @mandujs/ate Labs package."));
+    console.log(theme.muted("No process was started and no files were written."));
+    if (opts.heal) console.log(theme.muted("Healing would run in the Labs pipeline after a failed E2E run."));
+    return {
+      ok: true,
+      lcovPath: opts.coverage
+        ? path.join(opts.cwd, ".mandu", "coverage", "e2e.lcov")
+        : null,
+    };
   }
-
-  try {
-    await ateExtract({ repoRoot: opts.cwd });
-  } catch (err: unknown) {
-    console.error(
-      theme.error(
-        `ATE extract failed: ${err instanceof Error ? err.message : String(err)}`,
-      ),
-    );
-    return { ok: false, lcovPath: null };
-  }
-
-  try {
-    await ateGenerate({
-      repoRoot: opts.cwd,
-      oracleLevel: "L1",
-      onlyRoutes: opts.onlyRoutes,
-    });
-  } catch (err: unknown) {
-    console.error(
-      theme.error(
-        `ATE generate failed: ${err instanceof Error ? err.message : String(err)}`,
-      ),
-    );
-    return { ok: false, lcovPath: null };
-  }
-
-  const missing = findMissingPlaywright(opts.cwd);
-  if (missing) {
-    printCLIError(CLI_ERROR_CODES.TEST_E2E_PLAYWRIGHT_MISSING);
-    return { ok: false, lcovPath: null };
-  }
-
-  const result = await runE2E({
-    repoRoot: opts.cwd,
-    baseURL: opts.baseURL,
-    ci: opts.ci,
-    coverage: opts.coverage,
-    onlyRoutes: opts.onlyRoutes,
-  });
-
-  const ok = result.exitCode === 0;
-  if (!ok && opts.heal) {
-    try {
-      const healOut = await ateHeal({ repoRoot: opts.cwd, runId: "latest" });
-      console.log(theme.heading("mandu test --heal"));
-      console.log(JSON.stringify(healOut, null, 2));
-    } catch (err: unknown) {
-      console.error(
-        theme.error(
-          `Heal loop errored (ignored): ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
-    }
-  }
-
-  return { ok, lcovPath: result.lcovPath };
+  console.error(theme.error("ATE E2E moved to the optional @mandujs/ate Labs package."));
+  console.error(theme.muted("Install @mandujs/ate explicitly or run Playwright directly with `bunx playwright test`."));
+  return { ok: false, lcovPath: null };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -363,8 +286,6 @@ export async function mergeCoverageOutputs(opts: {
   cwd: string;
   e2eLcov: string | null;
 }): Promise<{ outputPath: string | null; files: number }> {
-  const { mergeAndWriteLcov } = await import("@mandujs/ate");
-
   const inputs: Array<{
     label: string;
     source: { kind: "file"; path: string };

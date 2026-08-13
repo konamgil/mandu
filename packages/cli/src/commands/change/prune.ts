@@ -1,4 +1,4 @@
-import { DEFAULT_HISTORY_CONFIG, pruneHistory } from "@mandujs/core/change";
+import { DEFAULT_HISTORY_CONFIG, pruneHistory } from "@mandujs/core/compat/change/index";
 import { getRootDir } from "../../util/fs";
 
 export interface ChangePruneOptions {

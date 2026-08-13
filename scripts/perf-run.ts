@@ -6,7 +6,7 @@ import {
   generateResourcesArtifacts,
   parseResourceSchemas,
   validateResourceUniqueness,
-} from "@mandujs/core/resource";
+} from "@mandujs/core/compat/resource/index";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const baselinePath = path.join(repoRoot, "tests", "perf", "perf-baseline.json");
@@ -47,6 +47,10 @@ export interface PerfScenario {
   runner: string;
   measuredMetrics: string[];
   budgets: Record<string, PerfBudgetEntry>;
+  measurementExpectations?: {
+    initialJs?: "required" | "zero";
+    hydration?: "required" | "none";
+  };
   notes: string;
 }
 
@@ -64,6 +68,14 @@ interface BenchmarkStats {
   bundleSize: { avg: number };
 }
 
+interface BenchmarkSample {
+  hydrationTime?: number;
+  islandCount?: number;
+  totalIslandCount?: number;
+  hydrationErrorCount?: number;
+  hydrationErrors?: string[];
+}
+
 interface BenchmarkJson {
   timestamp: string;
   config: {
@@ -73,7 +85,7 @@ interface BenchmarkJson {
     throttle: "3G" | "4G" | "none";
   };
   stats: BenchmarkStats;
-  raw: Array<Record<string, unknown>>;
+  raw: BenchmarkSample[];
 }
 
 export interface ScenarioMetrics {
@@ -95,8 +107,20 @@ export interface MetricResult {
   deltaFromBaseline: number | null;
   regressionFromBaselinePct: number | null;
   regressionThresholdPct: number | null;
-  failureReason: "budget" | "baseline-regression" | null;
+  failureReason: "budget" | "baseline-regression" | "measurement-invalid" | null;
+  validityError: string | null;
   status: "pass" | "warn" | "fail" | "unsupported";
+}
+
+export interface ScenarioMeasurementEvidence {
+  initialJs?: {
+    discoveredCount: number;
+    downloadedCount: number;
+    failedUrls: string[];
+  };
+  hydration?: {
+    samples: BenchmarkSample[];
+  };
 }
 
 interface ScenarioResult {
@@ -436,7 +460,10 @@ function extractInitialJsUrls(html: string, pageUrl: string): string[] {
   return [...resourceUrls];
 }
 
-async function measureHttpMetrics(url: string, runs: number): Promise<ScenarioMetrics> {
+async function measureHttpMetrics(
+  url: string,
+  runs: number,
+): Promise<{ metrics: ScenarioMetrics; evidence: ScenarioMeasurementEvidence }> {
   const ttfbSamples: number[] = [];
 
   for (let i = 0; i < runs; i++) {
@@ -456,22 +483,40 @@ async function measureHttpMetrics(url: string, runs: number): Promise<ScenarioMe
   const htmlResponse = await fetch(url, {
     headers: { "Cache-Control": "no-cache" },
   });
+  if (!htmlResponse.ok) {
+    throw new Error(`Expected ${url} to return 200 for asset discovery, got ${htmlResponse.status}`);
+  }
   const html = await htmlResponse.text();
   const scriptUrls = extractInitialJsUrls(html, url);
 
   let bundleBytes = 0;
+  let downloadedCount = 0;
+  const failedUrls: string[] = [];
   for (const scriptUrl of scriptUrls) {
     const response = await fetch(scriptUrl, {
       headers: { "Cache-Control": "no-cache" },
     });
-    if (!response.ok) continue;
+    if (!response.ok) {
+      failedUrls.push(`${scriptUrl} (${response.status})`);
+      continue;
+    }
     const body = await response.arrayBuffer();
+    downloadedCount += 1;
     bundleBytes += body.byteLength;
   }
 
   return {
-    ssr_ttfb_p95_ms: calculateP95(ttfbSamples),
-    initial_js_bundle_kb: bundleBytes / 1024,
+    metrics: {
+      ssr_ttfb_p95_ms: calculateP95(ttfbSamples),
+      initial_js_bundle_kb: bundleBytes / 1024,
+    },
+    evidence: {
+      initialJs: {
+        discoveredCount: scriptUrls.length,
+        downloadedCount,
+        failedUrls,
+      },
+    },
   };
 }
 
@@ -554,10 +599,30 @@ const BASELINE_REGRESSION_THRESHOLD_PCT = 10;
 export function compareScenarioMetrics(
   scenario: PerfScenario,
   metrics: ScenarioMetrics,
+  evidence: ScenarioMeasurementEvidence = {},
 ): MetricResult[] {
+  const validityErrors = validateScenarioMeasurements(scenario, metrics, evidence);
+
   return scenario.measuredMetrics.map((metric) => {
     const measured = metrics[metric as keyof ScenarioMetrics];
     const budgetEntry = scenario.budgets[metric];
+    const validityError = validityErrors[metric];
+    if (validityError) {
+      return {
+        metric,
+        measured: typeof measured === "number" && Number.isFinite(measured) ? measured : null,
+        budget: budgetEntry.budget,
+        baseline: budgetEntry.baseline,
+        deltaFromBudget: null,
+        deltaFromBaseline: null,
+        regressionFromBaselinePct: null,
+        regressionThresholdPct: budgetEntry.baseline === null ? null : BASELINE_REGRESSION_THRESHOLD_PCT,
+        failureReason: "measurement-invalid",
+        validityError,
+        status: "fail",
+      };
+    }
+
     if (typeof measured !== "number" || Number.isNaN(measured)) {
       return {
         metric,
@@ -569,6 +634,7 @@ export function compareScenarioMetrics(
         regressionFromBaselinePct: null,
         regressionThresholdPct: budgetEntry.baseline === null ? null : BASELINE_REGRESSION_THRESHOLD_PCT,
         failureReason: null,
+        validityError: null,
         status: "unsupported",
       };
     }
@@ -604,9 +670,95 @@ export function compareScenarioMetrics(
       regressionFromBaselinePct,
       regressionThresholdPct: budgetEntry.baseline === null ? null : BASELINE_REGRESSION_THRESHOLD_PCT,
       failureReason,
+      validityError: null,
       status,
     };
   });
+}
+
+export function validateScenarioMeasurements(
+  scenario: PerfScenario,
+  metrics: ScenarioMetrics,
+  evidence: ScenarioMeasurementEvidence,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+
+  for (const metric of scenario.measuredMetrics) {
+    const measured = metrics[metric as keyof ScenarioMetrics];
+    if (typeof measured === "number" && (!Number.isFinite(measured) || measured < 0)) {
+      errors[metric] = `Measured value must be a finite non-negative number, received ${String(measured)}.`;
+    }
+  }
+
+  if (scenario.measuredMetrics.includes("initial_js_bundle_kb")) {
+    const expectation = scenario.measurementExpectations?.initialJs;
+    const measured = metrics.initial_js_bundle_kb;
+    const assetEvidence = evidence.initialJs;
+
+    if (!expectation) {
+      errors.initial_js_bundle_kb = "Scenario does not declare whether initial JavaScript is required or intentionally zero.";
+    } else if (!assetEvidence) {
+      errors.initial_js_bundle_kb = "Initial JavaScript discovery/download evidence is missing.";
+    } else if (assetEvidence.failedUrls.length > 0) {
+      errors.initial_js_bundle_kb = `Failed to download ${assetEvidence.failedUrls.length} discovered JavaScript asset(s): ${assetEvidence.failedUrls.join(", ")}`;
+    } else if (assetEvidence.downloadedCount !== assetEvidence.discoveredCount) {
+      errors.initial_js_bundle_kb = `Discovered ${assetEvidence.discoveredCount} JavaScript asset(s) but downloaded ${assetEvidence.downloadedCount}.`;
+    } else if (expectation === "required" && assetEvidence.discoveredCount === 0) {
+      errors.initial_js_bundle_kb = "Expected initial JavaScript, but the rendered HTML exposed no JavaScript assets.";
+    } else if (expectation === "required" && (typeof measured !== "number" || measured <= 0)) {
+      errors.initial_js_bundle_kb = `Expected a positive initial JavaScript payload, received ${String(measured)} KB.`;
+    } else if (expectation === "zero" && assetEvidence.discoveredCount !== 0) {
+      errors.initial_js_bundle_kb = `Expected a zero-JS route, but discovered ${assetEvidence.discoveredCount} JavaScript asset(s).`;
+    } else if (expectation === "zero" && measured !== 0) {
+      errors.initial_js_bundle_kb = `Expected a zero-JS route to measure exactly 0 KB, received ${String(measured)} KB.`;
+    }
+  }
+
+  if (scenario.measuredMetrics.includes("hydration_p95_ms")) {
+    const expectation = scenario.measurementExpectations?.hydration;
+    const measured = metrics.hydration_p95_ms;
+    const samples = evidence.hydration?.samples;
+
+    if (!expectation) {
+      errors.hydration_p95_ms = "Scenario does not declare whether hydration is required or intentionally absent.";
+    } else if (!samples || samples.length === 0) {
+      errors.hydration_p95_ms = "Hydration benchmark samples are missing.";
+    } else {
+      const malformedSample = samples.find((sample) =>
+        !Number.isFinite(sample.hydrationTime) ||
+        !Number.isInteger(sample.islandCount) ||
+        !Number.isInteger(sample.totalIslandCount) ||
+        !Number.isInteger(sample.hydrationErrorCount)
+      );
+
+      if (malformedSample) {
+        errors.hydration_p95_ms = "Hydration benchmark sample is missing timing, island, or error evidence.";
+      } else if (samples.some((sample) => (sample.hydrationErrorCount ?? 0) > 0)) {
+        errors.hydration_p95_ms = "Hydration benchmark reported one or more island hydration errors.";
+      } else if (
+        expectation === "required" &&
+        samples.some((sample) => (sample.totalIslandCount ?? 0) <= 0)
+      ) {
+        errors.hydration_p95_ms = "Expected hydration, but at least one benchmark sample found no islands.";
+      } else if (
+        expectation === "required" &&
+        samples.some((sample) => sample.islandCount !== sample.totalIslandCount)
+      ) {
+        errors.hydration_p95_ms = "Not every expected island reached the hydrated state.";
+      } else if (expectation === "required" && (typeof measured !== "number" || measured <= 0)) {
+        errors.hydration_p95_ms = `Expected positive hydration timing, received ${String(measured)} ms.`;
+      } else if (
+        expectation === "none" &&
+        samples.some((sample) => sample.totalIslandCount !== 0 || sample.islandCount !== 0)
+      ) {
+        errors.hydration_p95_ms = "Expected no hydration, but the benchmark found island markers or hydrated islands.";
+      } else if (expectation === "none" && measured !== 0) {
+        errors.hydration_p95_ms = `Expected no hydration to measure exactly 0 ms, received ${String(measured)} ms.`;
+      }
+    }
+  }
+
+  return errors;
 }
 
 function renderMarkdownReport(results: ScenarioResult[], generatedAt: string): string {
@@ -633,7 +785,7 @@ function renderMarkdownReport(results: ScenarioResult[], generatedAt: string): s
 
     for (const metric of result.results) {
       lines.push(
-        `| \`${metric.metric}\` | ${metric.measured === null ? "n/a" : metric.measured.toFixed(1)} | ${metric.baseline === null ? "n/a" : metric.baseline.toFixed(1)} | ${metric.regressionFromBaselinePct === null ? "n/a" : `${metric.regressionFromBaselinePct.toFixed(1)}%`} | ${metric.budget.toFixed(1)} | ${metric.status} | ${metric.failureReason ?? ""} |`
+        `| \`${metric.metric}\` | ${metric.measured === null ? "n/a" : metric.measured.toFixed(1)} | ${metric.baseline === null ? "n/a" : metric.baseline.toFixed(1)} | ${metric.regressionFromBaselinePct === null ? "n/a" : `${metric.regressionFromBaselinePct.toFixed(1)}%`} | ${metric.budget.toFixed(1)} | ${metric.status} | ${metric.validityError ?? metric.failureReason ?? ""} |`
       );
     }
 
@@ -683,8 +835,9 @@ async function runScenarioBenchmark(
     await assertHealthEndpoint(`${origin}/api/health`);
     console.log(`  benchmark ${scenario.id} -> ${scenarioUrl}`);
 
-    const httpMetrics = await measureHttpMetrics(scenarioUrl, runs);
+    const httpMeasurement = await measureHttpMetrics(scenarioUrl, runs);
     let browserMetrics: ScenarioMetrics = {};
+    let browserEvidence: ScenarioMeasurementEvidence = {};
 
     if (scenario.measuredMetrics.includes("hydration_p95_ms")) {
       if (browserBenchmarkUnavailableReason !== null) {
@@ -715,6 +868,9 @@ async function runScenarioBenchmark(
           browserMetrics = {
             hydration_p95_ms: normalizedBrowserMetrics.hydration_p95_ms,
           };
+          browserEvidence = {
+            hydration: { samples: benchmarkJson.raw },
+          };
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           browserBenchmarkUnavailableReason = message;
@@ -740,8 +896,11 @@ async function runScenarioBenchmark(
       warnings,
       results: compareScenarioMetrics(scenario, {
         ...projectResult.metrics,
-        ...httpMetrics,
+        ...httpMeasurement.metrics,
         ...browserMetrics,
+      }, {
+        ...httpMeasurement.evidence,
+        ...browserEvidence,
       }),
     };
   } catch (error) {
@@ -881,7 +1040,7 @@ async function main(): Promise<number> {
   for (const scenario of results) {
     for (const metric of scenario.results) {
       console.log(
-        `${scenario.scenarioId} ${metric.metric}: ${metric.measured === null ? "n/a" : metric.measured.toFixed(1)} (baseline ${metric.baseline === null ? "n/a" : metric.baseline.toFixed(1)}, budget ${metric.budget.toFixed(1)}) -> ${metric.status}${metric.failureReason ? ` (${metric.failureReason})` : ""}`,
+        `${scenario.scenarioId} ${metric.metric}: ${metric.measured === null ? "n/a" : metric.measured.toFixed(1)} (baseline ${metric.baseline === null ? "n/a" : metric.baseline.toFixed(1)}, budget ${metric.budget.toFixed(1)}) -> ${metric.status}${metric.validityError ? ` (${metric.validityError})` : metric.failureReason ? ` (${metric.failureReason})` : ""}`,
       );
       if (metric.status === "fail") {
         hasFailure = true;

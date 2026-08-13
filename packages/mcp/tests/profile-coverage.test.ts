@@ -26,7 +26,7 @@ describe("profile coverage governance", () => {
         `Unclassified tool categories detected: [${unclassified.join(", ")}]\n` +
           `  Add each one to packages/mcp/src/profiles.ts in either:\n` +
           `    - PROFILE_CATEGORIES["agent-core"]  (canonical agent loop)\n` +
-          `    - PROFILE_CATEGORIES["agent-full"]  (domain work)\n` +
+          `    - PROFILE_CATEGORIES["agent-full"]  (legacy alias)\n` +
           `    - EXPERT_ONLY_CATEGORIES            (internal plumbing)`,
       );
     }

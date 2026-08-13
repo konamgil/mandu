@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
-import { collectPublishOrderIssues, PUBLISHABLE_PACKAGE_DIRS } from "./publish-order";
+import {
+  collectPublishOrderIssues,
+  GENERATED_PACKAGE_DIRS,
+  LABS_PACKAGE_DIRS,
+  PRODUCT_PACKAGE_DIRS,
+  PUBLISHABLE_PACKAGE_DIRS,
+} from "./publish-order";
 
 async function writePackage(root: string, dir: string, pkg: unknown) {
   const abs = path.join(root, dir);
@@ -22,6 +28,16 @@ async function withTempRoot(run: (root: string) => Promise<void>) {
 describe("collectPublishOrderIssues", () => {
   test("current publish order respects internal package dependencies", () => {
     expect(collectPublishOrderIssues(PUBLISHABLE_PACKAGE_DIRS, process.cwd())).toEqual([]);
+  });
+
+  test("stable, generated, and Labs release trains are explicit", () => {
+    expect(PRODUCT_PACKAGE_DIRS).toEqual(["packages/core", "packages/mcp", "packages/cli"]);
+    expect(GENERATED_PACKAGE_DIRS).toEqual(["packages/skills"]);
+    expect(LABS_PACKAGE_DIRS).toEqual([
+      "packages/ate",
+      "packages/edge",
+      "packages/playground-runner",
+    ]);
   });
 
   test("reports internal packages published after their consumers", async () => {

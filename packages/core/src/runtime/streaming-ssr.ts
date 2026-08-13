@@ -13,7 +13,11 @@ import { getRenderToReadableStream } from "./react-renderer";
 import type { ReactElement, ReactNode } from "react";
 import React, { Suspense } from "react";
 import type { BundleManifest } from "../bundler/types";
-import { isSafeManduUrl } from "../bundler/manifest-schema";
+import { isSafePublishedManduUrl } from "../bundler/manifest-schema";
+import {
+  scopeBundleManifestToGeneration,
+  scopeClientAssetUrl,
+} from "../bundler/generation";
 import type { HydrationConfig, HydrationPriority } from "../spec/schema";
 import { serializeProps } from "../client/serialize";
 import type { Metadata, MetadataItem } from "../seo/types";
@@ -230,10 +234,16 @@ function shouldInjectDevtoolsStreaming(
  * with a `buildTime`-keyed cache-bust (or `Date.now()` fallback).
  */
 function generateStreamingDevtoolsScript(manifest: BundleManifest | undefined): string {
-  const cacheBust = manifest?.buildTime
-    ? `?v=${encodeURIComponent(manifest.buildTime)}`
-    : `?t=${Date.now()}`;
-  return `<script type="module" src="/.mandu/client/_devtools.js${cacheBust}"></script>`;
+  const src = scopeClientAssetUrl(
+    "/.mandu/client/_devtools.js",
+    manifest?.generationId,
+  );
+  const key = manifest?.buildTime ? "v" : "t";
+  const value = manifest?.buildTime
+    ? encodeURIComponent(manifest.buildTime)
+    : Date.now();
+  const cacheBust = `${src.includes("?") ? "&" : "?"}${key}=${value}`;
+  return `<script type="module" src="${src}${cacheBust}"></script>`;
 }
 
 /** @internal — surface for the shared test suite in tests/runtime/devtools-inject.test.ts. */
@@ -631,7 +641,9 @@ function generateHTMLShell(options: StreamingSSROptions): string {
   const hasRouteBundle = !!(needsHydration && bundleManifest.bundles[routeId]?.js);
   if (needsHydration) {
     const bundle = bundleManifest.bundles[routeId];
-    const bundleSrc = bundle?.js ? `${bundle.js}?t=${Date.now()}` : "";
+    const bundleSrc = bundle?.js
+      ? `${bundle.js}${bundle.js.includes("?") ? "&" : "?"}t=${Date.now()}`
+      : "";
     const priority = hydration.priority || "visible";
     const hydrate = priorityToHydrateStrategy(priority);
     if (hasRouteBundle && !islandPreWrapped) {
@@ -657,7 +669,13 @@ function generateHTMLShell(options: StreamingSSROptions): string {
     // (protocol, traversal, non-/.mandu paths, >2KB) — fail closed so
     // an attacker-controlled <script src> cannot slip in via a
     // manipulated .mandu/manifest.json.
-    if (fr && fr.glue && fr.runtime && isSafeManduUrl(fr.glue) && isSafeManduUrl(fr.runtime)) {
+    if (
+      fr &&
+      fr.glue &&
+      fr.runtime &&
+      isSafePublishedManduUrl(fr.glue) &&
+      isSafePublishedManduUrl(fr.runtime)
+    ) {
       fastRefreshPreamble = generateFastRefreshPreamble(fr.glue, fr.runtime);
       const resolvedNonce = resolveStreamingCspNonce(options.cspNonce);
       if (resolvedNonce) {
@@ -993,7 +1011,17 @@ window.__MANDU_HMR_PORT__ = ${hmrPort};
             }
             if (!updated) location.reload();
           } else if (msg.type === 'error') {
-            console.error('[Mandu HMR] Build error:', msg.data && msg.data.message);
+            var errorData = msg.data || {};
+            console.error('[Mandu HMR] Build error:', errorData.message);
+            window.dispatchEvent(new CustomEvent('__MANDU_ERROR__', { detail: {
+              name: errorData.name || 'BuildError',
+              message: errorData.message || 'Build failed',
+              stack: errorData.stack || '',
+              kind: 'manual',
+              timestamp: errorData.timestamp || Date.now(),
+              routeId: errorData.routeId,
+              url: window.location.pathname + window.location.search
+            }}));
           }
         } catch(err) {}
       };
@@ -1024,6 +1052,10 @@ export async function renderToStream(
   options: StreamingSSROptions = {}
 ): Promise<ReadableStream<Uint8Array>> {
   mark("ssr:render");
+  const scopedBundleManifest = scopeBundleManifestToGeneration(options.bundleManifest);
+  const renderOptions = scopedBundleManifest === options.bundleManifest
+    ? options
+    : { ...options, bundleManifest: scopedBundleManifest };
   const {
     onShellReady,
     onAllReady,
@@ -1035,7 +1067,7 @@ export async function renderToStream(
     routeId = "unknown",
     criticalData,
     streamTimeout,
-  } = options;
+  } = renderOptions;
 
   // 메트릭 수집
   const metrics: StreamingMetrics = {
@@ -1057,14 +1089,21 @@ export async function renderToStream(
 
   const encoder = new TextEncoder();
   const collectedHeadTags = renderWithManduClientBoundaryManifest(
-    options.routeId,
-    options.bundleManifest,
+    renderOptions.routeId,
+    renderOptions.bundleManifest,
     () => collectStreamingHeadTags(element),
   );
   const resolvedOptions = collectedHeadTags
-    ? { ...options, headTags: [options.headTags, collectedHeadTags].filter(Boolean).join("\n") }
-    : options;
+    ? {
+        ...renderOptions,
+        headTags: [renderOptions.headTags, collectedHeadTags].filter(Boolean).join("\n"),
+      }
+    : renderOptions;
   const htmlShell = generateHTMLShell(resolvedOptions);
+  const resolvedNonce = STREAMING_OPTIONS_TO_NONCE.get(resolvedOptions as object);
+  if (resolvedNonce && resolvedOptions !== options) {
+    STREAMING_OPTIONS_TO_NONCE.set(options as object, resolvedNonce);
+  }
 
   // Reset SSR head before real render so streaming components push fresh tags
   try {

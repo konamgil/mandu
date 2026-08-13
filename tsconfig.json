@@ -5,6 +5,7 @@
     "moduleResolution": "bundler",
     "paths": {
       "@mandujs/core": ["./packages/core/src/index.ts"],
+      "@mandujs/core/compat/*": ["./packages/core/src/*.ts"],
       "@mandujs/core/*": ["./packages/core/src/*"],
       "@mandujs/cli": ["./packages/cli/src/main.ts"],
       "@mandujs/cli/*": ["./packages/cli/src/*"],

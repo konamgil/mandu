@@ -21,8 +21,8 @@
 
 import path from "node:path";
 
-import { createMigrationRunner } from "@mandujs/core/db/migrations/runner";
-import type { MigrationStatus } from "@mandujs/core/resource/ddl/types";
+import { createMigrationRunner } from "@mandujs/core/compat/db/migrations/runner";
+import type { MigrationStatus } from "@mandujs/core/compat/resource/ddl/types";
 
 import { resolveDb, DbResolutionError } from "./resolve-db";
 import { theme } from "../../terminal/theme";

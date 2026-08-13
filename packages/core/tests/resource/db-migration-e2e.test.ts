@@ -48,30 +48,30 @@ import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createDb, type Db } from "@mandujs/core/db";
+import { createDb, type Db } from "@mandujs/core/compat/db/index";
 import {
   createMigrationRunner,
   MigrationTamperedError,
   computeMigrationChecksum,
-} from "@mandujs/core/db/migrations/runner";
+} from "@mandujs/core/compat/db/migrations/runner";
 import {
   readAllHistory,
-} from "@mandujs/core/db/migrations/history-table";
+} from "@mandujs/core/compat/db/migrations/history-table";
 import {
   snapshotFromResources,
-} from "@mandujs/core/resource/ddl/snapshot";
-import { diffSnapshots } from "@mandujs/core/resource/ddl/diff";
-import { emitChanges } from "@mandujs/core/resource/ddl/emit";
+} from "@mandujs/core/compat/resource/ddl/snapshot";
+import { diffSnapshots } from "@mandujs/core/compat/resource/ddl/diff";
+import { emitChanges } from "@mandujs/core/compat/resource/ddl/emit";
 import type {
   ParsedResource,
-} from "@mandujs/core/resource/parser";
-import type { ResourceDefinition } from "@mandujs/core/resource/schema";
+} from "@mandujs/core/compat/resource/parser";
+import type { ResourceDefinition } from "@mandujs/core/compat/resource/schema";
 import type {
   Change,
   Snapshot,
   SqlProvider,
-} from "@mandujs/core/resource/ddl/types";
-import { generateRepoSource } from "@mandujs/core/resource/generator-repo";
+} from "@mandujs/core/compat/resource/ddl/types";
+import { generateRepoSource } from "@mandujs/core/compat/resource/generator-repo";
 
 // ============================================
 // Gate — needs Bun.SQL at all

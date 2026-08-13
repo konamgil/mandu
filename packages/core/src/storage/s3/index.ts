@@ -23,7 +23,7 @@
  *
  * @example
  * ```ts
- * import { createS3Client } from "@mandujs/core/storage/s3";
+ * import { createS3Client } from "@mandujs/core/compat/storage/s3/index";
  *
  * const storage = createS3Client({
  *   bucket: "uploads",

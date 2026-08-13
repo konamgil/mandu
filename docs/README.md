@@ -1,19 +1,16 @@
-# Mandu
+# Mandu documentation
 
-A Bun-based fullstack React framework with island architecture, AI-native tooling, and architectural guardrails.
+Mandu is an Agent-Safe Fullstack Framework for Bun, React, and supervised AI
+development. Its product contract is a focused runtime plus architecture,
+contract, build-state, and agent-change safety.
 
-Mandu gives you SSR and streaming out of the box, ships only the JavaScript your page actually needs through islands, and integrates directly with AI coding agents through 85 MCP tools and 9 skill files.
+[한국어](./README.ko.md)
 
-## Product Direction
+## Golden Path
 
-Mandu's product direction is **Agent-Native Fullstack Framework**: a framework for supervised AI development where agents can write code without losing architecture, contracts, runtime safety, or release confidence.
-
-- [Agent-Native Framework Strategy v1](./product/02_agent_native_framework_strategy.md)
-- [Agent-Native Framework Launch Plan](./plans/17_agent_native_launch_plan.md)
-- [Mandu Agent Workflow](./guides/07_agent_workflow.md)
-- [Agent DevTools Plan](./devtools/AGENT_DEVTOOLS_PLAN.md)
-
-## Quick Start
+```text
+create -> dev -> page/API -> agent change -> verify -> build -> start
+```
 
 ```bash
 bunx @mandujs/cli create my-app --yes
@@ -22,188 +19,45 @@ bun install
 bun run dev
 ```
 
-Your app is running at `http://localhost:3333`.
+The official top-level CLI surface is exactly:
 
-## Feature Overview
-
-### Island Architecture
-
-Every interactive component is an island. You choose when it hydrates.
-
-```tsx
-import { wrapComponent } from "@mandujs/core/client";
-import { useState } from "react";
-
-function Counter({ name }: { name: string }) {
-  const [count, setCount] = useState(0);
-  return <button onClick={() => setCount((c) => c + 1)}>{name}: {count}</button>;
-}
-
-export default wrapComponent(Counter);
+```text
+create  dev  build  start  check  agent
 ```
 
-Set page-level hydration priority with `export const hydration = { strategy: "island", priority: "visible" }`.
+Older commands remain compatibility or Labs routes during v0, but do not
+define the v1 product. `deploy` and `deploy:plan` are retired: Mandu produces
+a verified artifact and leaves provider operations to provider tooling.
 
-### Filling API
+## Read in this order
 
-Type-safe HTTP handlers with an 8-stage lifecycle.
+1. [Agent-Safe product strategy](./product/03_agent_safe_refoundation_strategy.md)
+2. [Agent workflow](./guides/07_agent_workflow.md)
+3. [Typed apply contract](./guides/08_typed_apply.md)
+4. [Configuration](./guides/01_configuration.md)
+5. [Core public API boundary](./architect/public-api-boundary.md)
+6. [Reference app contracts](./architect/reference-apps.md)
+7. [Core v1 migration](./migration/core-v1-surface.md)
+8. [Production artifact contract](./deploy/artifact-contract.md)
 
-```
-onRequest -> onParse -> beforeHandle -> handler -> afterHandle -> mapResponse -> onError -> afterResponse
-```
+## Agent surface
 
-```ts
-export const api = filling({
-  method: "POST",
-  path: "/users",
-  contract: { body: UserSchema },
-  handler: async ({ body }) => ({ id: crypto.randomUUID(), ...body }),
-});
-```
+The default MCP profile exposes six `mandu.agent.*` actions and two docs
+actions. The six official skills cover the shared workflow, routes, contracts,
+hydration, Guard, and testing. CLI, MCP, and skills are adapters around the
+same action model; they must not reimplement product logic independently.
 
-Supports WebSocket via `filling.ws()` with the same lifecycle model.
+Typed apply is implemented behind an explicit execution opt-in. It binds exact
+scope, base revision and content hashes, writes a touched-file snapshot,
+includes verification in a shared CLI/MCP receipt, and supports conflict-safe
+rollback. Intent-only plans remain read-only compatibility previews.
 
-### Contract API
+## Stability
 
-Zod-based schemas that power runtime validation and OpenAPI generation simultaneously.
+- Stable Core imports: `@mandujs/core` plus ten documented subpaths.
+- Compatibility: `@mandujs/core/compat/*`, temporary during v0 migration.
+- Labs: ATE, Kitchen, Playground, Edge, desktop, design, and AI brain.
+- External: cloud deployment execution and credential management.
 
-```ts
-import { contract } from "@mandujs/core";
-
-export const UserContract = contract({
-  body: z.object({ name: z.string(), email: z.string().email() }),
-  response: z.object({ id: z.string(), name: z.string() }),
-});
-```
-
-Run `mandu contract` to validate all contracts. Run `mandu openapi` to generate a spec.
-
-### Guard System
-
-Enforce project structure conventions at the filesystem level. Six presets available.
-
-| Preset | Architecture |
-|--------|-------------|
-| `fsd` | Feature-Sliced Design |
-| `clean` | Clean Architecture |
-| `hexagonal` | Hexagonal / Ports & Adapters |
-| `atomic` | Atomic Design |
-| `cqrs` | Command Query Responsibility Segregation |
-| `mandu` | Mandu default conventions |
-
-```bash
-mandu guard-check          # validate structure
-mandu guard-check --fix    # auto-fix violations
-```
-
-### Rendering
-
-- **SSR** -- server-side rendering with automatic `<head>` management
-- **Streaming SSR** -- progressive HTML streaming for large pages
-- **ISR / SWR** -- incremental static regeneration with `revalidatePath()` and `revalidateTag()`
-- **View Transitions** -- automatic transitions between route navigations
-
-### Data Loading
-
-**Slots** are server-side data loaders that run before render and inject typed props into pages. Define `page.slot.ts` next to any route and the data is available as props. **Middleware** runs globally via the `middleware.ts` convention at the project root.
-
-### Sessions and Auth
-
-Cookie-based sessions via `createCookieSessionStorage`. Scaffold auth boilerplate with `mandu auth` and session handling with `mandu session`.
-
-### Client Hooks
-
-| Hook | Purpose |
-|------|---------|
-| `useMandu()` | Framework context (route, params, navigation) |
-| `useLoaderData()` | Access slot data |
-| `useActionData()` | Access form action results |
-| `useSubmit()` | Programmatic form submission |
-| `useFetch()` | Data fetching with SWR semantics |
-| `useHead()` | Document head management |
-| `useSeoMeta()` | SEO meta tags |
-
-Progressive enhancement with the `<Form>` component. Type-safe server calls with `createClient` RPC.
-
-### Additional Features
-
-- **Image optimization** -- `/_mandu/image` endpoint with sharp, automatic format conversion
-- **Content Collections** -- Markdown and MDX with frontmatter, used via `mandu collection`
-- **Adapter system** -- `adapterBun` built-in, extensible for other runtimes
-
-## CLI
-
-38 commands organized by domain.
-
-| Category | Commands |
-|----------|---------|
-| **Core** | `dev`, `build`, `start`, `preview`, `clean`, `info` |
-| **Quality** | `guard-check`, `contract`, `doctor`, `explain`, `fix` |
-| **Scaffolding** | `init`, `scaffold`, `add`, `middleware`, `session`, `ws`, `auth`, `collection` |
-| **AI** | `ask`, `review`, `generate --ai`, `mcp` |
-| **Ops** | `deploy`, `upgrade`, `completion`, `cache`, `lock`, `monitor` |
-
-Run `mandu --help` for the full list.
-
-## MCP Integration
-
-Mandu ships an MCP server (`@mandujs/mcp`) with 85 tools across 18 categories.
-
-```bash
-mandu mcp                # start the MCP server
-mandu mcp --profile full # all 85 tools
-mandu mcp --profile minimal # essential subset
-```
-
-Tool categories use dot notation: `guard.check`, `contract.validate`, `slot.create`, `seo.audit`, `brain.explain`, `runtime.status`, and more.
-
-Includes 3 prompts, 3 resources, and transaction locking for safe multi-agent operation.
-
-## Skills
-
-The `@mandujs/skills` npm package provides 9 SKILL.md files that plug into Claude Code as a plugin with hooks.
-
-| Skill | Scope |
-|-------|-------|
-| `mandu-create-api` | API route scaffolding |
-| `mandu-create-feature` | Feature module generation |
-| `mandu-debug` | Debugging guidance |
-| `mandu-deploy` | Deployment workflows |
-| `mandu-explain` | Codebase explanation |
-| `mandu-fs-routes` | File-system routing |
-| `mandu-guard-guide` | Guard configuration |
-| `mandu-hydration` | Island hydration patterns |
-| `mandu-slot` | Data loader patterns |
-
-## Project Structure
-
-```
-app/                  # pages, layouts, islands
-  page.tsx            # route component
-  page.slot.ts        # server-side data loader
-  layout.tsx          # layout wrapper
-  *.island.tsx        # interactive island
-middleware.ts         # global middleware
-mandu.config.ts       # framework configuration
-.mandu/               # build output (generated)
-```
-
-## Configuration
-
-Configure via `mandu.config.ts` at the project root. Supports server, dev, build, and guard settings. CLI flags override config values. See `docs/guides/01_configuration.md` for full reference.
-
-## Documentation
-
-| Document | Path |
-|----------|------|
-| Configuration Guide | `docs/guides/01_configuration.md` |
-| API Reference | `docs/api/api-reference.md` |
-| Implementation Status | `docs/status.md` |
-| Technical Architecture | `docs/architecture/02_mandu_technical_architecture.md` |
-| FS Routes Spec | `docs/specs/05_fs_routes_system.md` |
-| Guard Spec | `docs/specs/06_mandu_guard.md` |
-| SEO Module | `docs/specs/07_seo_module.md` |
-
-## License
-
-MPL-2.0. Modified files must be shared. Applications built with Mandu remain under your own license.
+Historical plans and retired skill catalogs live under `docs/archive/` and do
+not describe the active product contract.

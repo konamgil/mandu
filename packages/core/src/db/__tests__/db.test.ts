@@ -124,7 +124,7 @@ function createFakeCtor(): { Ctor: BunSqlCtor; state: FakeState } {
 
 // ─── detectProvider ────────────────────────────────────────────────────────
 
-describe("@mandujs/core/db — detectProvider", () => {
+describe("@mandujs/core/compat/db — detectProvider", () => {
   it.each<[string, SqlProvider]>([
     ["postgres://user:pass@host:5432/db", "postgres"],
     ["postgresql://user:pass@host:5432/db", "postgres"],
@@ -151,7 +151,7 @@ describe("@mandujs/core/db — detectProvider", () => {
 
 // ─── createDb / _createDbWith: basic surface ───────────────────────────────
 
-describe("@mandujs/core/db — createDb basics", () => {
+describe("@mandujs/core/compat/db — createDb basics", () => {
   it("returns a callable handle with .provider set to sqlite for sqlite URL", () => {
     const db = createDb({ url: "sqlite::memory:" });
     expect(typeof db).toBe("function");
@@ -187,7 +187,7 @@ describe("@mandujs/core/db — createDb basics", () => {
 
 // ─── createDb: ctor forwarding ─────────────────────────────────────────────
 
-describe("@mandujs/core/db — ctor forwarding", () => {
+describe("@mandujs/core/compat/db — ctor forwarding", () => {
   it("forwards url + detected adapter + default max (10 for postgres)", () => {
     const { Ctor, state } = createFakeCtor();
     _createDbWith(Ctor, { url: "postgres://u:p@h/db" });
@@ -244,7 +244,7 @@ describe("@mandujs/core/db — ctor forwarding", () => {
 
 // ─── Tagged-template forwarding ────────────────────────────────────────────
 
-describe("@mandujs/core/db — tagged template forwarding", () => {
+describe("@mandujs/core/compat/db — tagged template forwarding", () => {
   it("forwards the full TemplateStringsArray and values to Bun.SQL", async () => {
     const { Ctor, state } = createFakeCtor();
     state.nextRowsQueue.push([{ id: 1, name: "alice" }]);
@@ -305,7 +305,7 @@ describe("@mandujs/core/db — tagged template forwarding", () => {
 
 // ─── .one() ────────────────────────────────────────────────────────────────
 
-describe("@mandujs/core/db — .one()", () => {
+describe("@mandujs/core/compat/db — .one()", () => {
   it("returns null when no rows match", async () => {
     const { Ctor, state } = createFakeCtor();
     state.nextRowsQueue.push([]);
@@ -342,7 +342,7 @@ describe("@mandujs/core/db — .one()", () => {
 
 // ─── .transaction() ────────────────────────────────────────────────────────
 
-describe("@mandujs/core/db — .transaction()", () => {
+describe("@mandujs/core/compat/db — .transaction()", () => {
   it("calls the user fn with a tx handle of the same Db shape and commits on resolve", async () => {
     const { Ctor, state } = createFakeCtor();
     state.nextRowsQueue.push([]); // INSERT 1
@@ -392,7 +392,7 @@ describe("@mandujs/core/db — .transaction()", () => {
 
 // ─── .close() ──────────────────────────────────────────────────────────────
 
-describe("@mandujs/core/db — .close()", () => {
+describe("@mandujs/core/compat/db — .close()", () => {
   it("invokes Bun.SQL's close() exactly once", async () => {
     const { Ctor, state } = createFakeCtor();
     const db = _createDbWith(Ctor, { url: "sqlite::memory:" });
@@ -426,7 +426,7 @@ describe("@mandujs/core/db — .close()", () => {
 
 // ─── Public createDb probe behaviour ───────────────────────────────────────
 
-describe("@mandujs/core/db — public createDb lazy probe", () => {
+describe("@mandujs/core/compat/db — public createDb lazy probe", () => {
   it("does NOT throw at construction time even if Bun.SQL were missing (lazy)", () => {
     // We can't actually remove Bun.SQL from globalThis in this test env (the
     // other integration suite relies on it), but we can prove the call
@@ -486,7 +486,7 @@ describe("@mandujs/core/db — public createDb lazy probe", () => {
 
 // ─── Composable SQL fragments (#315) ─────────────────────────────────────────
 
-describe("@mandujs/core/db — sql fragments", () => {
+describe("@mandujs/core/compat/db — sql fragments", () => {
   it("sql`` produces an inert fragment; isSqlFragment recognizes it", () => {
     const frag = sql`x = ${1}`;
     expect(isSqlFragment(frag)).toBe(true);

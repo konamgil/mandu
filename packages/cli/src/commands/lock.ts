@@ -16,8 +16,8 @@ import {
   diffConfig,
   formatConfigDiff,
   summarizeDiff,
-  validateAndReport,
-} from "@mandujs/core";
+} from "@mandujs/core/compat/utils/differ";
+import { validateAndReport } from "@mandujs/core";
 import {
   generateLockfile,
   readLockfile,
@@ -30,7 +30,7 @@ import {
   resolveMcpSources,
   type LockfileMode,
   LOCKFILE_PATH,
-} from "@mandujs/core/lockfile";
+} from "@mandujs/core/compat/lockfile/index";
 import { resolveFromCwd } from "../util/fs";
 
 // ============================================

@@ -489,7 +489,17 @@ export async function prerenderRoutes(
       const response = await fetchHandler(request);
 
       if (!response.ok) {
-        errors.push(`[${pathname}] HTTP ${response.status}`);
+        const message = `HTTP ${response.status}`;
+        errors.push(`[${pathname}] ${message}`);
+        const route = manifest.routes.find(
+          (candidate) => candidate.kind === "page" && candidate.pattern === pathname,
+        );
+        routeErrors.push({
+          pattern: pathname,
+          module: route?.module ?? "<runtime>",
+          message,
+          cause: new Error(`Prerender request for ${pathname} returned ${message}`),
+        });
         continue;
       }
 
@@ -551,7 +561,17 @@ export async function prerenderRoutes(
         }
       }
     } catch (error) {
-      errors.push(`[${pathname}] ${describeError(error)}`);
+      const message = describeError(error);
+      errors.push(`[${pathname}] ${message}`);
+      const route = manifest.routes.find(
+        (candidate) => candidate.kind === "page" && candidate.pattern === pathname,
+      );
+      routeErrors.push({
+        pattern: pathname,
+        module: route?.module ?? "<runtime>",
+        message,
+        cause: error,
+      });
     }
   }
 

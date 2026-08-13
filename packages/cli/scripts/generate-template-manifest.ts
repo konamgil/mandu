@@ -30,9 +30,9 @@
  *
  * Phase 11.A additionally emits:
  *
- *   5. `skills-manifest.js` — 9 `SKILL.md` payloads from
- *      `../../skills/skills/<id>/SKILL.md` plus the shared Claude
- *      `settings.json`, all via `with { type: "text" }`. Inside a
+ *   5. `skills-manifest.js` — the six official `SKILL.md` payloads from
+ *      the repository-level canonical source plus the shared Claude
+ *      `settings.json`, emitted as string literals. Inside a
  *      compiled binary (`mandu.exe init`), the skills-copy step in
  *      `init.ts` previously walked the real filesystem and hit 9
  *      ENOENT warnings because `@mandujs/skills` is not reachable from
@@ -67,12 +67,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 const CLI_ROOT = path.resolve(import.meta.dir, "..");
+const REPO_ROOT = path.resolve(CLI_ROOT, "..", "..");
 const TEMPLATES_DIR = path.join(CLI_ROOT, "templates");
-// `@mandujs/skills` source tree — `SKILL.md` and the shared Claude
-// `settings.json` live here. Relative so the generator still runs when
-// the repo is vendored into a different path.
 const SKILLS_PACKAGE_ROOT = path.resolve(CLI_ROOT, "..", "skills");
-const SKILLS_DIR = path.join(SKILLS_PACKAGE_ROOT, "skills");
+const OFFICIAL_SKILLS_ROOT = path.join(REPO_ROOT, "skills", "official");
 const SKILLS_TEMPLATES_DIR = path.join(SKILLS_PACKAGE_ROOT, "templates");
 // Generated files live OUTSIDE `src/` so the CLI tsconfig (`include:
 // ["src/**/*"]`) does not pull their `with { type: "file" }` imports into
@@ -114,33 +112,14 @@ const CLI_UX_INIT_LANDING_REL = "init-landing.md";
 const CLI_UX_ERRORS_DIR_REL = "errors";
 
 /**
- * Mandu Claude Code skills embedded into the CLI binary. Must stay in
- * sync with `packages/skills/src/index.ts::SKILL_IDS` and
- * `packages/skills/src/init-integration.ts::SKILL_DIRS`. An identity
- * test in `tests/util/__tests__/skills-manifest.test.ts` asserts this
- * array matches the runtime source of truth so a silent drift is caught
- * at CI time.
+ * Mandu skills embedded into the CLI binary. The repository manifest is
+ * the canonical source shared by the CLI, MCP, and @mandujs/skills.
  */
-const SKILL_IDS = [
-  // Task-shaped (domain knowledge)
-  "mandu-create-feature",
-  "mandu-create-api",
-  "mandu-debug",
-  "mandu-explain",
-  "mandu-guard-guide",
-  "mandu-lint",
-  "mandu-deploy",
-  "mandu-slot",
-  "mandu-fs-routes",
-  "mandu-hydration",
-  // Workflow-shaped (MCP tool orchestration — #234)
-  "mandu-mcp-index",
-  "mandu-mcp-orient",
-  "mandu-mcp-create-flow",
-  "mandu-mcp-verify",
-  "mandu-mcp-safe-change",
-  "mandu-mcp-deploy",
-] as const;
+const SKILL_IDS = (
+  JSON.parse(fs.readFileSync(path.join(OFFICIAL_SKILLS_ROOT, "manifest.json"), "utf8")) as {
+    skills: Array<{ id: string }>;
+  }
+).skills.map((skill) => skill.id);
 
 /**
  * Auxiliary skills assets (shared Claude `settings.json`) — required by
@@ -175,15 +154,13 @@ interface CliUxTextFile {
 interface SkillsTextFile {
   /**
    * Stable key used by consumers. For SKILL.md payloads this is the
-   * skill id (`"mandu-create-feature"` etc.). For auxiliary assets, a
+   * skill id (`"mandu-contract"` etc.). For auxiliary assets, a
    * prefixed key (`"settings/.claude/settings.json"`) keeps lookups
    * unambiguous even if a future skill id would collide.
    */
   key: string;
-  /** `../../skills/<...>` — the import specifier. */
-  importSpecifier: string;
-  /** Unique TypeScript identifier for the `import` binding. */
-  identifier: string;
+  /** Raw UTF-8 payload emitted directly into the generated module. */
+  contents: string;
 }
 
 function walk(dir: string, base: string, out: string[] = []): string[] {
@@ -212,14 +189,6 @@ function makeIdentifier(template: string, relPath: string, counter: Map<string, 
 
 function makeUxIdentifier(relPath: string, counter: Map<string, number>): string {
   const raw = `uxtpl_${relPath}`;
-  const sanitized = raw.replace(/[^a-zA-Z0-9_]/g, "_").replace(/__+/g, "_");
-  const count = (counter.get(sanitized) ?? 0) + 1;
-  counter.set(sanitized, count);
-  return count === 1 ? sanitized : `${sanitized}_${count}`;
-}
-
-function makeSkillIdentifier(key: string, counter: Map<string, number>): string {
-  const raw = `skill_${key}`;
   const sanitized = raw.replace(/[^a-zA-Z0-9_]/g, "_").replace(/__+/g, "_");
   const count = (counter.get(sanitized) ?? 0) + 1;
   counter.set(sanitized, count);
@@ -308,21 +277,18 @@ function collectCliUxFiles(): CliUxTextFile[] {
  */
 function collectSkillsFiles(): SkillsTextFile[] {
   const out: SkillsTextFile[] = [];
-  const idCounter = new Map<string, number>();
 
   for (const skillId of SKILL_IDS) {
-    const abs = path.join(SKILLS_DIR, skillId, "SKILL.md");
+    const abs = path.join(OFFICIAL_SKILLS_ROOT, skillId, "SKILL.md");
     if (!fs.existsSync(abs)) {
       throw new Error(
         `Skill file missing: ${abs}. ` +
           `Expected one SKILL.md per id in SKILL_IDS (${SKILL_IDS.length} total).`
       );
     }
-    const importSpecifier = `../../skills/skills/${skillId}/SKILL.md`;
     out.push({
       key: skillId,
-      importSpecifier,
-      identifier: makeSkillIdentifier(skillId, idCounter),
+      contents: fs.readFileSync(abs, "utf8"),
     });
   }
 
@@ -337,8 +303,7 @@ function collectSkillsFiles(): SkillsTextFile[] {
   }
   out.push({
     key: `settings/${SKILL_SETTINGS_REL}`,
-    importSpecifier: `../../skills/templates/${SKILL_SETTINGS_REL}`,
-    identifier: makeSkillIdentifier(`settings_${SKILL_SETTINGS_REL}`, idCounter),
+    contents: fs.readFileSync(settingsAbs, "utf8"),
   });
 
   return out;
@@ -497,11 +462,11 @@ export const CLI_UX_TEMPLATE_COUNT: number;
 }
 
 /**
- * Generate the skills manifest (9 SKILL.md + shared .claude/settings.json).
+ * Generate the skills manifest (six SKILL.md files + shared settings).
  *
- * Identical mechanism to `generateUxSources`: `with { type: "text" }`
- * embeds the string payload, so lookups via `SKILLS_MANIFEST.get(key)`
- * are synchronous and filesystem-free. That closes the Phase 9 audit
+ * Payloads are emitted as string literals, so the published CLI is
+ * self-contained and lookups via `SKILLS_MANIFEST.get(key)` are
+ * synchronous and filesystem-free. That closes the Phase 9 audit
  * I-03 gap where `@mandujs/skills/init-integration::setupClaudeSkills`
  * used `copyFile`/`readFile` against a `$bunfs` virtual path and silently
  * failed 9 times inside `mandu.exe init`.
@@ -516,7 +481,7 @@ export const CLI_UX_TEMPLATE_COUNT: number;
 function generateSkillsSources(files: SkillsTextFile[]): GeneratedSources {
   const header = `// AUTO-GENERATED by packages/cli/scripts/generate-template-manifest.ts.
 // DO NOT EDIT MANUALLY. Re-run the script whenever
-// packages/skills/skills/<id>/SKILL.md or
+// skills/official/<id>/SKILL.md or
 // packages/skills/templates/.claude/settings.json change:
 //   bun run packages/cli/scripts/generate-template-manifest.ts
 //
@@ -528,8 +493,8 @@ function generateSkillsSources(files: SkillsTextFile[]): GeneratedSources {
 // lives on disk, not in the binary, so every skill copy silently errored
 // out — users saw 9 warnings during init.
 //
-// This manifest embeds the 9 SKILL.md payloads + the shared Claude
-// \`settings.json\` as **inline strings** via \`with { type: "text" }\`.
+// This manifest embeds the official SKILL.md payloads + the shared Claude
+// \`settings.json\` as inline strings.
 // Lookups are synchronous and identical in dev and compiled modes.
 //
 // Consumers:
@@ -538,19 +503,15 @@ function generateSkillsSources(files: SkillsTextFile[]): GeneratedSources {
 
 `;
 
-  const imports = files
-    .map((f) => `import ${f.identifier} from "${f.importSpecifier}" with { type: "text" };`)
-    .join("\n");
-
   const mapEntries = files
-    .map((f) => `  ["${f.key}", ${f.identifier}],`)
+    .map((f) => `  [${JSON.stringify(f.key)}, ${JSON.stringify(f.contents)}],`)
     .join("\n");
 
   const body = `
 /**
  * Map from skill key to its raw UTF-8 text payload. Keys:
- *   - SKILL ids (e.g. "mandu-create-feature") → contents of
- *     \`packages/skills/skills/<id>/SKILL.md\`.
+ *   - SKILL ids (e.g. "mandu-contract") → contents of
+ *     \`skills/official/<id>/SKILL.md\`.
  *   - \`"settings/<rel>"\` → auxiliary Claude configuration files from
  *     \`packages/skills/templates/<rel>\` (currently only
  *     \`".claude/settings.json"\`).
@@ -571,7 +532,7 @@ export const EMBEDDED_SKILL_IDS = [
 ${SKILL_IDS.map((id) => `  "${id}",`).join("\n")}
 ];
 
-/** Sanity check: expected total count (9 SKILL.md + 1 settings.json). */
+/** Sanity check: official SKILL.md files + 1 settings.json. */
 export const SKILLS_PAYLOAD_COUNT = ${files.length};
 `;
 
@@ -593,7 +554,7 @@ export const EMBEDDED_SKILL_IDS: readonly string[];
 export const SKILLS_PAYLOAD_COUNT: number;
 `;
 
-  const js = `${header}${imports}\n${body}`;
+  const js = `${header}${body}`;
   return { js, dts };
 }
 

@@ -28,7 +28,7 @@
 # Stage 1: build — install deps, copy sources. Kept separate from the
 # runtime stage to strip dev tooling out of the final image.
 # ============================================================================
-FROM oven/bun:1.3.12-slim AS build
+FROM oven/bun:1.3.14-slim AS build
 
 WORKDIR /app
 
@@ -53,7 +53,7 @@ COPY src ./src
 # ============================================================================
 # Stage 2: runtime — minimal image carrying only the bun runtime + app.
 # ============================================================================
-FROM oven/bun:1.3.12-slim AS runtime
+FROM oven/bun:1.3.14-slim AS runtime
 
 # Install the Docker CLI so `DockerSandboxAdapter` can shell out to
 # `docker run …`. The **daemon** is NOT installed — we talk to the host's
@@ -106,7 +106,7 @@ ENV MANDU_PLAYGROUND_PORT=8788
 ENV MANDU_PLAYGROUND_HOST=0.0.0.0
 # Default sandbox image — operators may pin a local build via compose
 # env override.
-ENV MANDU_DOCKER_SANDBOX_IMAGE=oven/bun:1.3.12-slim
+ENV MANDU_DOCKER_SANDBOX_IMAGE=oven/bun:1.3.14-slim
 # Stage dir shared with the host for bind-mounting user code.
 ENV MANDU_DOCKER_WORK_DIR=/tmp/mandu-playground
 

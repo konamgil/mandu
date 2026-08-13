@@ -105,7 +105,7 @@ export type RpcClient<TDef extends RpcDefinition<RpcProcedureRecord>> = {
  * @example
  * ```ts
  * import { z } from "zod";
- * import { defineRpc } from "@mandujs/core/contract/rpc";
+ * import { defineRpc } from "@mandujs/core/compat/contract/rpc";
  *
  * export const postsRpc = defineRpc({
  *   list: {

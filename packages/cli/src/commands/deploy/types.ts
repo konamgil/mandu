@@ -24,7 +24,7 @@
  * @module cli/commands/deploy/types
  */
 import type { RoutesManifest } from "@mandujs/core";
-import type { ValidatedManduConfig } from "@mandujs/core/config/validate";
+import type { ValidatedManduConfig } from "@mandujs/core/compat/config/validate";
 
 // =====================================================================
 // Environments + targets

@@ -1,9 +1,7 @@
 /**
- * Issue #234 — Workflow-oriented MCP skill frontmatter & content sanity.
+ * Official skill frontmatter and content sanity.
  *
- * Validates the `packages/skills/skills/<id>/SKILL.md` corpus — applies to
- * both the existing task-shaped skills (`mandu-create-feature`, etc.) and
- * the newer `mandu-mcp-*` workflow skills.
+ * Validates the generated official skill corpus shipped by the package.
  *
  * Invariants:
  *   1. Every skill has YAML frontmatter with `name` + `description`.
@@ -25,7 +23,7 @@ import path from "node:path";
 import { SKILL_IDS } from "../index.js";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dir, "..", "..");
-const SKILLS_DIR = path.join(PACKAGE_ROOT, "skills");
+const SKILLS_DIR = path.join(PACKAGE_ROOT, "generated", "skills");
 
 /**
  * Canonical MCP tool names exposed by `@mandujs/mcp` (both dotted canonical
@@ -46,6 +44,13 @@ const SKILLS_DIR = path.join(PACKAGE_ROOT, "skills");
  * @mandujs/skills, and (b) a stale list is safer than a silent regression.
  */
 const KNOWN_MCP_TOOLS = new Set<string>([
+  // Official Phase 3 agent surface
+  "mandu.agent.context",
+  "mandu.agent.plan",
+  "mandu.agent.apply",
+  "mandu.agent.verify",
+  "mandu.agent.repair",
+  "mandu.agent.sync",
   // Aggregate orchestrators (Tier-0)
   "mandu.ai.brief",
   "mandu.ate.auto_pipeline",
@@ -343,16 +348,8 @@ describe("SKILL.md corpus — frontmatter invariants (#234)", () => {
   });
 });
 
-describe("SKILL.md corpus — workflow skills reference real MCP tools (#234)", () => {
-  // Collect mandu_* and mandu.* identifiers from workflow-shaped skill
-  // bodies. Task-shaped skills (`mandu-create-feature`, ...) can reference
-  // tool names more loosely in prose; the strict check applies to the
-  // orchestration skills which are the source of truth for tool names.
-  const workflowSkills = readdirSync(SKILLS_DIR)
-    .filter((name) =>
-      statSync(path.join(SKILLS_DIR, name)).isDirectory()
-    )
-    .filter((name) => name.startsWith("mandu-mcp-"));
+describe("official SKILL.md corpus", () => {
+  const officialSkills = [...SKILL_IDS];
 
   it("each workflow skill mentions real MCP tools only", () => {
     // Matches `mandu.foo.bar` and `mandu_foo_bar` tokens; also picks up
@@ -374,7 +371,7 @@ describe("SKILL.md corpus — workflow skills reference real MCP tools (#234)", 
       return false;
     };
 
-    for (const id of workflowSkills) {
+    for (const id of officialSkills) {
       const content = readFileSync(
         path.join(SKILLS_DIR, id, "SKILL.md"),
         "utf-8"
@@ -404,34 +401,18 @@ describe("SKILL.md corpus — workflow skills reference real MCP tools (#234)", 
     }
   });
 
-  it("every workflow skill points back to mandu-mcp-index", () => {
-    // The index is the always-on router. If a workflow skill forgets to
-    // link back, the tiered hierarchy breaks — agents land in a workflow
-    // skill and can't find the anti-pattern catalog.
-    for (const id of workflowSkills) {
-      if (id === "mandu-mcp-index") continue;
-      const content = readFileSync(
-        path.join(SKILLS_DIR, id, "SKILL.md"),
-        "utf-8"
-      );
-      expect(
-        content.includes("mandu-mcp-index"),
-        `${id} must reference mandu-mcp-index (see-also / router link)`
-      ).toBe(true);
-    }
+  it("keeps the canonical workflow first", () => {
+    expect(officialSkills[0]).toBe("mandu-agent-workflow");
   });
 
-  it("the 6 workflow skills from #234 are present", () => {
-    const required = [
-      "mandu-mcp-index",
-      "mandu-mcp-orient",
-      "mandu-mcp-create-flow",
-      "mandu-mcp-verify",
-      "mandu-mcp-safe-change",
-      "mandu-mcp-deploy",
-    ];
-    for (const id of required) {
-      expect(workflowSkills).toContain(id);
-    }
+  it("contains exactly the six Phase 3 official skills", () => {
+    expect(officialSkills).toEqual([
+      "mandu-agent-workflow",
+      "mandu-fs-routes",
+      "mandu-contract",
+      "mandu-hydration",
+      "mandu-guard",
+      "mandu-testing",
+    ]);
   });
 });

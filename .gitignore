@@ -34,6 +34,7 @@ bun.lockb
 .mandu-edge-test-scratch/
 .perf/
 .smoke/
+.reference-apps/
 
 # Temporary files
 *.log

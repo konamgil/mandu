@@ -38,7 +38,7 @@ const MINIO_SECRET = process.env.AWS_SECRET_ACCESS_KEY ?? "minioadmin";
 // Gate: if MINIO_TEST_ENDPOINT is unset, every `it` resolves as a skip.
 const describeIfMinio = MINIO_ENDPOINT ? describe : describe.skip;
 
-describeIfMinio("@mandujs/core/storage/s3 — MinIO integration", () => {
+describeIfMinio("@mandujs/core/compat/storage/s3 — MinIO integration", () => {
   beforeAll(() => {
     // Ensure Bun.s3 picks up credentials. Bun prefers env at init time (not
     // process.env reads later), but it also honors explicit credentials on

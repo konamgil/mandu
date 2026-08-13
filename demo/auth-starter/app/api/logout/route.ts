@@ -10,7 +10,7 @@
  * expiring Set-Cookie and 302s to /.
  */
 import { Mandu } from "@mandujs/core";
-import { logoutUser } from "@mandujs/core/auth";
+import { logoutUser } from "@mandujs/core/compat/auth/index";
 import { withSession, withCsrf } from "../../../src/lib/auth";
 
 export default Mandu.filling()

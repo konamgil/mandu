@@ -281,7 +281,7 @@ describe("checkPackageExportGaps", () => {
   }
 
   it("skips gracefully when @mandujs/core is not installed", async () => {
-    await writeFile(rootDir, "src/foo.ts", `import { x } from "@mandujs/core/unknown";`);
+    await writeFile(rootDir, "src/foo.ts", `import { x } from "@mandujs/core/compat/unknown";`);
     const result = await checkPackageExportGaps(rootDir);
     expect(result.ok).toBe(true);
     expect(result.details?.skipped).toBe(true);
@@ -298,7 +298,7 @@ describe("checkPackageExportGaps", () => {
 
   it("flags an import missing from the exports map", async () => {
     await seedCore({ ".": "./src/index.ts", "./client": "./src/client/index.ts" });
-    await writeFile(rootDir, "src/bad.ts", `import { x } from "@mandujs/core/nonexistent";`);
+    await writeFile(rootDir, "src/bad.ts", `import { x } from "@mandujs/core/compat/nonexistent";`);
     const result = await checkPackageExportGaps(rootDir);
     expect(result.ok).toBe(false);
     expect(result.severity).toBe("error");
@@ -307,14 +307,14 @@ describe("checkPackageExportGaps", () => {
 
   it("honors ./* wildcard export as a catch-all", async () => {
     await seedCore({ ".": "./src/index.ts", "./*": "./src/*" });
-    await writeFile(rootDir, "src/a.ts", `import { x } from "@mandujs/core/anything";`);
+    await writeFile(rootDir, "src/a.ts", `import { x } from "@mandujs/core/compat/anything";`);
     const result = await checkPackageExportGaps(rootDir);
     expect(result.ok).toBe(true);
   });
 
   it("recognizes require() specifiers in addition to import", async () => {
     await seedCore({ ".": "./src/index.ts" });
-    await writeFile(rootDir, "src/a.cjs", `const { x } = require("@mandujs/core/ghost");`);
+    await writeFile(rootDir, "src/a.cjs", `const { x } = require("@mandujs/core/compat/ghost");`);
     const result = await checkPackageExportGaps(rootDir);
     expect(result.ok).toBe(false);
     expect(result.severity).toBe("error");

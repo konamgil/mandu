@@ -1,7 +1,7 @@
 import {
   getBrain,
   initializeBrain,
-} from "@mandujs/core/brain";
+} from "@mandujs/core/compat/brain/index";
 import {
   getCompactArchitecture,
   searchDecisions,

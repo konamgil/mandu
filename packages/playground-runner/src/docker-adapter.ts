@@ -72,7 +72,7 @@ export type DockerSpawnFactory = (opts: DockerSpawnOptions) => DockerProcLike;
 export interface DockerAdapterOptions {
   /**
    * Override the OCI image name for the ephemeral user-code container.
-   * Default: `oven/bun:1.3.12-slim` (matches the outer-container image).
+   * Default: `oven/bun:1.3.14-slim` (matches the outer-container image).
    * Operators can pin to a locally-built image for deterministic output.
    */
   image?: string;
@@ -127,7 +127,7 @@ export interface DockerAdapterOptions {
   /**
    * Override the unprivileged uid:gid inside the container. Default
    * `65534:65534` (standard `nobody:nogroup`). Must match a user that
-   * exists in the sandbox image — `oven/bun:1.3.12-slim` ships `nobody`.
+   * exists in the sandbox image — `oven/bun:1.3.14-slim` ships `nobody`.
    */
   user?: string;
 }
@@ -140,7 +140,7 @@ export const DOCKER_ENV_KEYS = Object.freeze({
 } as const);
 
 /** Default image — matches the outer container so no extra pull step. */
-export const DEFAULT_SANDBOX_IMAGE = "oven/bun:1.3.12-slim";
+export const DEFAULT_SANDBOX_IMAGE = "oven/bun:1.3.14-slim";
 
 // ---------------------------------------------------------------------------
 // Adapter

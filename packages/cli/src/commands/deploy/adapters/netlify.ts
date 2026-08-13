@@ -130,6 +130,7 @@ async function getFetch(): Promise<(req: Request) => Promise<Response>> {
   await registerManifestHandlers(manifest, rootDir, {
     importFn: (p: string) => import(p),
     registeredLayouts: new Set(),
+    strict: true,
   });
   const server = startServer(manifest, {
     port: 0,

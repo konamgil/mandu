@@ -95,7 +95,7 @@ export interface FastRefreshPluginOptions {
   disabled?: boolean;
   /**
    * Runtime module specifier the plugin's injected import points at.
-   * Default: `"@mandujs/core/runtime/fast-refresh-runtime"`. Tests can
+   * Default: `"@mandujs/core/compat/runtime/fast-refresh-runtime"`. Tests can
    * override to a tmpdir-local stub.
    */
   runtimeImport?: string;

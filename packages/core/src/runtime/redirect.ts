@@ -44,7 +44,7 @@ const DEFAULT_REDIRECT_STATUS: RedirectStatus = 302;
 const VALID_REDIRECT_STATUS = new Set<number>([301, 302, 303, 307, 308]);
 
 /** Internal brand — identifies Response objects minted by `redirect()`. */
-export const REDIRECT_BRAND: unique symbol = Symbol.for("@mandujs/core/redirect");
+export const REDIRECT_BRAND: unique symbol = Symbol.for("@mandujs/core/compat/redirect");
 
 /** Options for tuning a redirect response. */
 export interface RedirectOptions {

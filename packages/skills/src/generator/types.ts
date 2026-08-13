@@ -3,7 +3,7 @@
  *
  * Produces per-project `.claude/skills/<project>-*.md` files that
  * capture the specific routes, resources, guard preset, and stack of
- * the host project. Static skills (`packages/skills/skills/`) remain
+ * the host project. Official skills (`packages/skills/generated/skills/`) remain
  * the fallback/default, these are an additive overlay.
  */
 

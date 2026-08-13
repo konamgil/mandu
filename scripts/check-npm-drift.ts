@@ -11,7 +11,7 @@ import { $ } from "bun";
 import { mkdtemp, readdir, readFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { PUBLISHABLE_PACKAGE_DIRS } from "./publish-order";
+import { PRODUCT_PACKAGE_DIRS, PUBLISHABLE_PACKAGE_DIRS } from "./publish-order";
 
 export const METADATA_FIELDS = [
   "name",
@@ -466,7 +466,10 @@ function printHumanReport(result: NpmDriftResult): void {
 
 async function main(): Promise<void> {
   const isJsonMode = process.argv.includes("--json");
-  const result = await checkNpmDrift();
+  const packageDirs = process.argv.includes("--product")
+    ? PRODUCT_PACKAGE_DIRS
+    : PUBLISHABLE_PACKAGE_DIRS;
+  const result = await checkNpmDrift(packageDirs);
 
   if (isJsonMode) {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");

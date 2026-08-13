@@ -17,7 +17,7 @@ import {
   runExtendedDiagnose,
   type DiagnoseCheckResult,
   type DiagnoseReport,
-} from "@mandujs/core/diagnose";
+} from "@mandujs/core/compat/diagnose/index";
 import { getRootDir } from "../util/fs";
 
 export interface DiagnoseOptions {

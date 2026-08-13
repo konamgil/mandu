@@ -48,8 +48,8 @@ import {
   logPrewarmResult,
   startJitPrewarm,
 } from "../jit-prewarm";
-import { _resetCacheForTesting } from "@mandujs/core/perf";
-import { HMR_PERF } from "@mandujs/core/perf/hmr-markers";
+import { _resetCacheForTesting } from "@mandujs/core/compat/perf/index";
+import { HMR_PERF } from "@mandujs/core/compat/perf/hmr-markers";
 
 function enablePerf(): void {
   process.env.MANDU_PERF = "1";

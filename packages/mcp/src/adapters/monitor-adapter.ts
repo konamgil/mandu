@@ -4,7 +4,7 @@
  * ActivityMonitor 이벤트와 DNA-008 LogTransportRecord 간 변환
  */
 
-import type { LogTransportRecord } from "@mandujs/core";
+import type { LogTransportRecord } from "@mandujs/core/compat/logging/index";
 
 /**
  * Monitor 이벤트 타입 (ActivityMonitor에서 사용)

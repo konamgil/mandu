@@ -385,7 +385,7 @@ export function _resetFFICache(): void {
  *
  * @example
  * ```ts
- * import { createFallbackWebview } from "@mandujs/core/desktop/webview-fallback";
+ * import { createFallbackWebview } from "@mandujs/core/compat/desktop/webview-fallback";
  *
  * const handle = await createFallbackWebview({
  *   url: "http://127.0.0.1:3333",

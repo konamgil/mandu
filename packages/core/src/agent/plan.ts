@@ -1,16 +1,13 @@
 import fs from "fs/promises";
 import path from "path";
+import { createHash } from "node:crypto";
 import type {
-  AgentApplyReport,
   AgentDomain,
   AgentPlan,
   AgentPlanRisk,
-  AgentSuggestedCommand,
-  BuildAgentApplyOptions,
+  AgentVerificationStep,
   BuildAgentPlanOptions,
 } from "./types";
-
-const DEFAULT_PLAN_PATH = ".mandu/agent-plan.json";
 
 const DOMAIN_KEYWORDS: Array<[AgentDomain, RegExp]> = [
   ["hydration", /\b(hydrat|island|partial|client|counter|interactive|ssr data)\b/i],
@@ -105,14 +102,16 @@ function risks(domains: AgentDomain[]): AgentPlanRisk[] {
   return out;
 }
 
-function verification(domains: AgentDomain[]): AgentSuggestedCommand[] {
-  const out: AgentSuggestedCommand[] = [
+function verification(domains: AgentDomain[]): AgentVerificationStep[] {
+  const out: AgentVerificationStep[] = [
     {
+      id: "agent-verify",
       command: "mandu agent verify --changed --json --write",
       reason: "Canonical post-change verification gate.",
       required: true,
     },
     {
+      id: "typecheck",
       command: "bun run typecheck",
       reason: "Type boundary check for generated or edited TypeScript.",
       required: true,
@@ -120,6 +119,7 @@ function verification(domains: AgentDomain[]): AgentSuggestedCommand[] {
   ];
   if (domains.includes("hydration") || domains.includes("route")) {
     out.push({
+      id: "hydration-route-tests",
       command: "bun test packages/core/src/bundler packages/core/tests/client",
       reason: "Route and hydration changes can affect bundling and client runtime.",
       required: true,
@@ -127,6 +127,7 @@ function verification(domains: AgentDomain[]): AgentSuggestedCommand[] {
   }
   if (domains.includes("api") || domains.includes("contract") || domains.includes("slot")) {
     out.push({
+      id: "contract-tests",
       command: "bun test packages/core/src/contract packages/core/src/slot packages/core/tests/routes",
       reason: "API, contract, and slot changes need framework contract coverage.",
       required: true,
@@ -134,22 +135,31 @@ function verification(domains: AgentDomain[]): AgentSuggestedCommand[] {
   }
   if (domains.includes("deploy")) {
     out.push({
+      id: "artifact-contract",
       command: "mandu deploy:plan --dry-run",
       reason: "Deploy intent should be inspected before writing provider artifacts.",
       required: true,
     });
   }
-  return unique(out.map((item) => JSON.stringify(item))).map((item) => JSON.parse(item) as AgentSuggestedCommand);
+  return unique(out.map((item) => JSON.stringify(item))).map((item) => JSON.parse(item) as AgentVerificationStep);
 }
 
 export function buildAgentPlan(options: BuildAgentPlanOptions): AgentPlan {
   const intent = options.intent.trim();
   const domains = inferDomains(intent);
+  const planHash = createHash("sha256").update(intent).digest("hex").slice(0, 20);
   return {
     schemaVersion: 1,
     framework: "mandu",
     generatedAt: new Date().toISOString(),
+    id: `preview-${planHash}`,
     intent,
+    baseRevision: null,
+    idempotencyKey: null,
+    scope: [],
+    permissions: [],
+    operations: [],
+    rollbackPolicy: "automatic",
     domains,
     filesToRead: filesToRead(domains),
     filesToCreate: filesToCreate(intent, domains),
@@ -176,7 +186,7 @@ export async function writeAgentPlan(rootDir: string, plan: AgentPlan): Promise<
   return { path: outPath, plan };
 }
 
-async function readAgentPlan(filePath: string): Promise<AgentPlan | null> {
+export async function readAgentPlan(filePath: string): Promise<AgentPlan | null> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
     const parsed = JSON.parse(raw) as AgentPlan;
@@ -187,96 +197,4 @@ async function readAgentPlan(filePath: string): Promise<AgentPlan | null> {
   } catch {
     return null;
   }
-}
-
-function resolveInside(rootDir: string, value: string): string {
-  const root = path.resolve(rootDir);
-  const resolved = path.resolve(root, value);
-  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
-    throw new Error("agent apply input must stay inside the project root");
-  }
-  return resolved;
-}
-
-export async function buildAgentApplyReport(
-  rootDir: string = process.cwd(),
-  options: BuildAgentApplyOptions = {},
-): Promise<AgentApplyReport> {
-  const sourceRel = options.from ?? DEFAULT_PLAN_PATH;
-  const sourcePath = resolveInside(rootDir, sourceRel);
-  const plan = await readAgentPlan(sourcePath);
-  if (!plan) {
-    return {
-      schemaVersion: 1,
-      framework: "mandu",
-      generatedAt: new Date().toISOString(),
-      ok: false,
-      dryRun: true,
-      sourcePlan: sourceRel,
-      intent: "",
-      domains: ["unknown"],
-      actions: [
-        {
-          kind: "verify",
-          description: "Create an agent plan first.",
-          command: "mandu agent plan \"<task>\" --json --write",
-          applied: false,
-        },
-      ],
-      warnings: [`Could not read ${sourceRel}.`],
-      nextVerifyCommand: "mandu agent verify --changed --json --write",
-    };
-  }
-
-  return {
-    schemaVersion: 1,
-    framework: "mandu",
-    generatedAt: new Date().toISOString(),
-    ok: true,
-    dryRun: options.dryRun !== false,
-    sourcePlan: sourceRel,
-    intent: plan.intent,
-    domains: plan.domains,
-    actions: [
-      ...plan.filesToRead.map((file) => ({
-        kind: "read_file" as const,
-        description: `Read ${file} before editing.`,
-        file,
-        applied: false as const,
-      })),
-      ...plan.mcpTools.map((tool) => ({
-        kind: "mcp_tool" as const,
-        description: `Consider ${tool} for this plan.`,
-        tool,
-        applied: false as const,
-      })),
-      ...plan.filesToCreate.map((file) => ({
-        kind: "manual_edit" as const,
-        description: `Create ${file} only after confirming the local pattern.`,
-        file,
-        applied: false as const,
-      })),
-      ...plan.verification.map((item) => ({
-        kind: "verify" as const,
-        description: item.reason,
-        command: item.command,
-        applied: false as const,
-      })),
-    ],
-    warnings: [
-      "Agent apply is dry-run only until typed operation payloads are introduced.",
-      "No filesystem changes were made by this report.",
-    ],
-    nextVerifyCommand: "mandu agent verify --changed --json --write",
-  };
-}
-
-export async function writeAgentApplyReport(
-  rootDir: string,
-  report: AgentApplyReport,
-): Promise<{ path: string; report: AgentApplyReport }> {
-  const outPath = path.join(rootDir, ".mandu", "agent-apply.json");
-  await fs.mkdir(path.dirname(outPath), { recursive: true });
-  await fs.writeFile(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  return { path: outPath, report };
 }

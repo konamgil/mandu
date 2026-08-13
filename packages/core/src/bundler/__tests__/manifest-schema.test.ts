@@ -20,6 +20,7 @@ import {
   ManifestValidationError,
   SAFE_MANDU_URL_REGEX,
   isSafeManduUrl,
+  isSafePublishedManduUrl,
   safeValidateBundleManifest,
   validateBundleManifest,
 } from "../manifest-schema";
@@ -98,6 +99,25 @@ describe("manifest-schema — isSafeManduUrl", () => {
     expect(SAFE_MANDU_URL_REGEX.test("/.mandu/client/page.js")).toBe(true);
     expect(SAFE_MANDU_URL_REGEX.test("/prefix/.mandu/client/page.js")).toBe(false);
     expect(SAFE_MANDU_URL_REGEX.test("/.mandu/client/page.js?t=1")).toBe(false);
+  });
+});
+
+describe("manifest-schema — published generation URLs", () => {
+  test("accepts one framework-owned generation query only at response time", () => {
+    expect(
+      isSafePublishedManduUrl("/.mandu/client/page.js?g=generation-123"),
+    ).toBe(true);
+    expect(isSafeManduUrl("/.mandu/client/page.js?g=generation-123")).toBe(false);
+  });
+
+  test("rejects malformed, duplicated, or injected generation queries", () => {
+    expect(isSafePublishedManduUrl("/.mandu/client/page.js?g=x")).toBe(false);
+    expect(
+      isSafePublishedManduUrl("/.mandu/client/page.js?g=generation-123&g=other-generation"),
+    ).toBe(false);
+    expect(
+      isSafePublishedManduUrl("/.mandu/client/page.js?g=generation-123%22%3E"),
+    ).toBe(false);
   });
 });
 
@@ -228,6 +248,25 @@ describe("manifest-schema — validateBundleManifest", () => {
       expect(paths).toContain("shared.fastRefresh.runtime");
       expect(paths).toContain("shared.fastRefresh.glue");
     }
+  });
+
+  test("[B12] accepts a valid optional generationId and rejects malformed IDs", () => {
+    expect(
+      validateBundleManifest({ ...VALID_MANIFEST, generationId: "generation-123" })
+        .generationId,
+    ).toBe("generation-123");
+    expect(() =>
+      validateBundleManifest({ ...VALID_MANIFEST, generationId: "../escape" }),
+    ).toThrow(ManifestValidationError);
+  });
+
+  test("[B13] accepts the inert zero-JS shared artifact shape", () => {
+    const empty = validateBundleManifest({
+      ...VALID_MANIFEST,
+      bundles: {},
+      shared: { runtime: "", vendor: "" },
+    });
+    expect(empty.shared).toEqual({ runtime: "", vendor: "" });
   });
 });
 

@@ -20,7 +20,7 @@ import {
   loadDeployIntentCache,
   saveDeployIntentCache,
   type DeployIntentCache,
-} from "@mandujs/core/deploy";
+} from "@mandujs/core/compat/deploy/index";
 
 const FIXED_NOW = "2026-04-30T00:00:00.000Z";
 

@@ -18,7 +18,7 @@ import {
   type Sitemap,
   type RobotsFile,
   type JsonLd,
-} from "@mandujs/core";
+} from "@mandujs/core/compat/seo/index";
 import { getProjectPaths } from "../utils/project.js";
 import * as fs from "fs";
 import * as path from "path";

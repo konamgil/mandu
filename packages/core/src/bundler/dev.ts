@@ -6,7 +6,7 @@ import type * as __ManduContentCollectionTypes0 from "../content/collection";
 
 import type { RoutesManifest } from "../spec/schema";
 import { buildClientBundles } from "./build";
-import type { BundleResult } from "./types";
+import type { BundleManifest, BundleResult } from "./types";
 import { PORTS, TIMEOUTS } from "../constants";
 import { mark, measure, withPerf } from "../perf";
 import { HMR_PERF } from "../perf/hmr-markers";
@@ -143,6 +143,15 @@ export interface DevBundler {
   reverseGraphReady: Promise<void>;
   /** 파일 감시 중지 */
   close: () => void;
+}
+
+function replaceBundleManifest(
+  target: BundleManifest,
+  source: BundleManifest,
+): void {
+  const mutable = target as unknown as Record<string, unknown>;
+  for (const key of Object.keys(mutable)) delete mutable[key];
+  Object.assign(mutable, source);
 }
 
 /**
@@ -424,6 +433,11 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
     console.log(`✅ Built ${initialBuild.stats.bundleCount} islands`);
   } else {
     console.error("⚠️  Initial build had errors:", initialBuild.errors);
+    onError?.(
+      new Error(
+        `Initial client bundle build failed:\n${initialBuild.errors.join("\n")}`,
+      ),
+    );
   }
 
   // clientModule 경로에서 routeId 매핑 생성
@@ -1339,6 +1353,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
         });
         const buildTime = performance.now() - startTime;
         if (result.success) {
+          replaceBundleManifest(initialBuild.manifest, result.manifest);
           console.log(
             `✅ Rebuilt ${targetIds.length} island(s) in ${buildTime.toFixed(0)}ms`,
           );
@@ -1400,6 +1415,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
         const buildTime = performance.now() - startTime;
 
         if (result.success) {
+          replaceBundleManifest(initialBuild.manifest, result.manifest);
           // #184: common dir 변경은 SSR 모듈 캐시 invalidation이 필요 — wildcard 시그널
           // 빌드 성공한 경우에만 SSR 레지스트리를 clear (실패 시 마지막 good state 유지)
           // 주의: Bun의 transitive ESM 캐시는 프로세스 레벨이라 이 시그널만으로는
@@ -1526,6 +1542,7 @@ export async function startDevBundler(options: DevBundlerOptions): Promise<DevBu
       const buildTime = performance.now() - startTime;
 
       if (result.success) {
+        replaceBundleManifest(initialBuild.manifest, result.manifest);
         console.log(`✅ Rebuilt in ${buildTime.toFixed(0)}ms`);
         onRebuild?.({
           routeId,
@@ -1740,6 +1757,9 @@ export interface HMRMessage {
     layoutPath?: string;
     cssPath?: string;
     message?: string;
+    name?: string;
+    stack?: string;
+    kind?: "build" | "guard" | "css" | "prebuild";
     timestamp?: number;
     file?: string;
     violations?: Array<{ line: number; message: string }>;
@@ -1822,6 +1842,14 @@ export function createHMRServer(
   // reload anyway so clients can't meaningfully resume across it).
   let lastRebuildId = 0;
   const replayBuffer: HMRReplayEnvelope[] = [];
+  let latestBuildError: HMRMessage | null = null;
+
+  const sendConnected = (ws: { send: (data: string) => void }): void => {
+    ws.send(
+      JSON.stringify({ type: "connected", data: { timestamp: Date.now(), id: lastRebuildId } }),
+    );
+    if (latestBuildError) ws.send(JSON.stringify(latestBuildError));
+  };
 
   /** Drop envelopes older than `REPLAY_MAX_AGE_MS`. Called opportunistically. */
   const pruneOldReplays = (): void => {
@@ -1888,16 +1916,12 @@ export function createHMRServer(
     since: number | null,
   ): void => {
     if (since === null) {
-      ws.send(
-        JSON.stringify({ type: "connected", data: { timestamp: Date.now(), id: lastRebuildId } }),
-      );
+      sendConnected(ws);
       return;
     }
     // Already caught up — nothing to replay but still greet.
     if (since >= lastRebuildId) {
-      ws.send(
-        JSON.stringify({ type: "connected", data: { timestamp: Date.now(), id: lastRebuildId } }),
-      );
+      sendConnected(ws);
       return;
     }
     pruneOldReplays();
@@ -1916,9 +1940,7 @@ export function createHMRServer(
     }
     // Replay every envelope strictly newer than `since`.
     mark(HMR_PERF.HMR_REPLAY_FLUSH);
-    ws.send(
-      JSON.stringify({ type: "connected", data: { timestamp: Date.now(), id: lastRebuildId } }),
-    );
+    sendConnected(ws);
     for (const env of replayBuffer) {
       if (env.id <= since) continue;
       // Wrap in a thin envelope so the client can see the id; keep the
@@ -2175,6 +2197,16 @@ export function createHMRServer(
         envelopeId !== undefined
           ? { ...message, data: { ...(message.data ?? {}), id: envelopeId } }
           : message;
+      if (outgoing.type === "error") {
+        latestBuildError = outgoing;
+      } else if (
+        outgoing.type === "reload" ||
+        outgoing.type === "full-reload" ||
+        outgoing.type === "island-update" ||
+        outgoing.type === "layout-update"
+      ) {
+        latestBuildError = null;
+      }
       const payload = JSON.stringify(outgoing);
       fanout(payload);
       measure(HMR_PERF.HMR_BROADCAST, HMR_PERF.HMR_BROADCAST);

@@ -45,7 +45,7 @@ export default async function PledgePage({ comments }) {
         hasSpreadProps: false,
       },
     ]);
-    expect(result.code).toContain('import { __ManduClientBoundary } from "@mandujs/core/internal/client-boundary";');
+    expect(result.code).toContain('import { __ManduClientBoundary } from "@mandujs/core/compat/internal/client-boundary";');
     expect(result.code).not.toContain("import { CommentsSection }");
     expect(result.code).toContain("<__ManduClientBoundary");
     expect(result.code).toContain('boundaryId="pledges-$id--0"');
@@ -359,7 +359,7 @@ const lazy = () => import("node:child_process");
 const required = require("os");
 import { Database } from "bun:sqlite";
 import { Mandu } from "@mandujs/core";
-import { internal } from "@mandujs/core/internal/secret";
+import { internal } from "@mandujs/core/compat/internal/secret";
 import "server-only";
 import data from "./data.server";
 import type { Stats } from "node:fs";

@@ -6,7 +6,7 @@
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { parseFieldsFlag, parseMethodsFlag, formatSchemaFile } from "../generate-resource";
-import type { ResourceDefinition } from "@mandujs/core";
+import type { ResourceDefinition } from "@mandujs/core/compat/resource/index";
 
 describe("CLI - Field Parsing", () => {
   test("should parse simple fields string", () => {
@@ -134,7 +134,7 @@ describe("CLI - Schema File Formatting", () => {
     const schemaFile = formatSchemaFile(definition);
 
     // Verify structure
-    expect(schemaFile).toContain('import { defineResource } from "@mandujs/core"');
+    expect(schemaFile).toContain('import { defineResource } from "@mandujs/core/compat/resource/index"');
     // Issue #265 — must be `export default`, parser reads `module.default`.
     expect(schemaFile).toContain("export default defineResource({");
     expect(schemaFile).toContain('name: "user"');
@@ -223,7 +223,7 @@ describe("CLI - Generator/Parser round-trip", () => {
   test("formatSchemaFile output must parse via parseResourceSchema", async () => {
     const { join } = await import("node:path");
     const { mkdir, writeFile } = await import("node:fs/promises");
-    const { parseResourceSchema } = await import("@mandujs/core/resource");
+    const { parseResourceSchema } = await import("@mandujs/core/compat/resource/index");
 
     const definition: ResourceDefinition = {
       name: "roundtripuser",

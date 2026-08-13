@@ -13,7 +13,7 @@
  *
  * @example
  * ```ts
- * import { hashPassword, verifyPassword } from "@mandujs/core/auth/password";
+ * import { hashPassword, verifyPassword } from "@mandujs/core/compat/auth/password";
  *
  * const hash = await hashPassword("s3cret!");
  * const ok = await verifyPassword("s3cret!", hash); // true

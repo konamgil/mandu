@@ -5,6 +5,7 @@ import type { CookieManager } from "../filling/context";
 import { renderSSR, renderStreamingResponse, resolveAsyncElement } from "./ssr";
 import { serializeProps } from "../client/serialize";
 import { escapeJsonForInlineScript } from "./escape";
+import { scopeClientAssetUrl } from "../bundler/generation";
 
 export interface InlineClientHydrationTarget {
   routeId: string;
@@ -46,14 +47,26 @@ export interface PageRenderResponseOptions {
 export async function renderPageResponse(
   options: PageRenderResponseOptions
 ): Promise<Response> {
-  let app = options.app;
-  let islandPreWrapped = !!options.islandPreWrapped;
+  const inlineClientHydration = options.inlineClientHydration
+    ? {
+        ...options.inlineClientHydration,
+        src: scopeClientAssetUrl(
+          options.inlineClientHydration.src,
+          options.bundleManifest?.generationId,
+        ),
+      }
+    : undefined;
+  const renderOptions = inlineClientHydration === options.inlineClientHydration
+    ? options
+    : { ...options, inlineClientHydration };
+  let app = renderOptions.app;
+  let islandPreWrapped = !!renderOptions.islandPreWrapped;
 
-  if (!options.useStreaming) {
-    if (options.inlineClientHydration) {
+  if (!renderOptions.useStreaming) {
+    if (renderOptions.inlineClientHydration) {
       const resolved = await resolveAndWrapInlineClientHydration(
         app,
-        options.inlineClientHydration,
+        renderOptions.inlineClientHydration,
       );
       app = resolved.node as React.ReactElement;
       islandPreWrapped = islandPreWrapped || resolved.didWrap;
@@ -62,15 +75,15 @@ export async function renderPageResponse(
     }
   }
 
-  const effectiveOptions = islandPreWrapped === !!options.islandPreWrapped
-    ? options
-    : { ...options, islandPreWrapped };
+  const effectiveOptions = islandPreWrapped === !!renderOptions.islandPreWrapped
+    ? renderOptions
+    : { ...renderOptions, islandPreWrapped };
 
-  const response = options.useStreaming
+  const response = renderOptions.useStreaming
     ? await renderStreamingPageResponse(app, effectiveOptions)
     : renderNonStreamingPageResponse(app, effectiveOptions);
 
-  return options.cookies ? options.cookies.applyToResponse(response) : response;
+  return renderOptions.cookies ? renderOptions.cookies.applyToResponse(response) : response;
 }
 
 async function resolveAndWrapInlineClientHydration(

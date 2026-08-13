@@ -15,7 +15,7 @@ import {
   generateDoctorMarkdownReport,
   initializeBrain,
   getBrain,
-} from "@mandujs/core/brain";
+} from "@mandujs/core/compat/brain/index";
 import { resolveFromCwd, getRootDir } from "../util/fs";
 import path from "path";
 import fs from "fs/promises";

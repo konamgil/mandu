@@ -26,6 +26,10 @@ const ScenarioSchema = z.object({
   runner: z.string().min(1),
   measuredMetrics: z.array(z.string().min(1)).min(1),
   budgets: z.record(BudgetEntrySchema),
+  measurementExpectations: z.object({
+    initialJs: z.enum(["required", "zero"]).optional(),
+    hydration: z.enum(["required", "none"]).optional(),
+  }).optional(),
   notes: z.string().min(1),
 });
 
@@ -66,6 +70,20 @@ function validateCrossReferences(config: PerfBaseline): void {
       if (!(metric in scenario.budgets)) {
         throw new Error(`Scenario '${scenario.id}' measures '${metric}' but has no budget entry`);
       }
+    }
+
+    if (
+      scenario.measuredMetrics.includes("initial_js_bundle_kb") &&
+      !scenario.measurementExpectations?.initialJs
+    ) {
+      throw new Error(`Scenario '${scenario.id}' measures initial JavaScript without an explicit required/zero expectation`);
+    }
+
+    if (
+      scenario.measuredMetrics.includes("hydration_p95_ms") &&
+      !scenario.measurementExpectations?.hydration
+    ) {
+      throw new Error(`Scenario '${scenario.id}' measures hydration without an explicit required/none expectation`);
     }
   }
 }

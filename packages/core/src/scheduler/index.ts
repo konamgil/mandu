@@ -31,7 +31,7 @@
  *
  * @example
  * ```ts
- * import { defineCron } from "@mandujs/core/scheduler";
+ * import { defineCron } from "@mandujs/core/compat/scheduler/index";
  *
  * const jobs = defineCron({
  *   "clean:sessions": {

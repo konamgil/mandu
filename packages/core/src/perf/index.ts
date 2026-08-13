@@ -15,7 +15,7 @@
  *
  * @example
  * ```ts
- * import { mark, measure, withPerf } from "@mandujs/core/perf";
+ * import { mark, measure, withPerf } from "@mandujs/core/compat/perf/index";
  *
  * mark("build:start");
  * await doWork();

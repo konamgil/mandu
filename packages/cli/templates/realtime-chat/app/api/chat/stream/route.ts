@@ -4,7 +4,7 @@ import {
 } from "@/server/application/chat-store";
 import type { ChatStreamEvent } from "@/shared/contracts/chat";
 import { createSSEConnection } from "@mandujs/core";
-import { createRateLimiter } from "@mandujs/core/runtime/server";
+import { createRateLimiter } from "@mandujs/core/compat/runtime/server";
 
 // Rate limiter: 1분당 5개 연결로 제한 (SSE는 장시간 유지되므로 보수적으로 설정)
 const limiter = createRateLimiter({ max: 5, windowMs: 60000 });

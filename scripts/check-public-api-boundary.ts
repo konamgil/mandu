@@ -2,7 +2,7 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-type ApiStability = "stable" | "experimental" | "internal";
+type ApiStability = "stable" | "compatibility" | "experimental" | "internal";
 
 interface PackageJson {
   name: string;
@@ -22,98 +22,30 @@ export interface PublicApiBoundaryResult {
   rootStarExports: string[];
 }
 
+export const V1_CORE_EXPORTS = [
+  ".",
+  "./client",
+  "./config",
+  "./contract",
+  "./error",
+  "./guard",
+  "./middleware",
+  "./plugins",
+  "./router",
+  "./runtime",
+  "./testing",
+] as const;
+
 const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
   {
-    stability: "internal",
-    exact: [
-      "./bundler",
-      "./change",
-      "./dev-error-overlay",
-      "./generator",
-      "./internal",
-      "./internal/client-boundary",
-      "./lockfile",
-      "./paths",
-      "./plugins/runner",
-      "./resource/generator-repo",
-      "./runtime/cache",
-      "./runtime/router",
-      "./runtime/server",
-      "./runtime/fast-refresh-types",
-      "./guard/tsgolint-bridge",
-      "./watcher",
-    ],
-    prefixes: [
-      "./bundler/",
-      "./resource/ddl/",
-    ],
-    reason: "framework implementation detail or release/build plumbing",
-  },
-  {
-    stability: "experimental",
-    exact: [
-      "./a11y",
-      "./agent",
-      "./brain",
-      "./deploy",
-      "./design",
-      "./desktop",
-      "./diagnose",
-      "./experimental",
-      "./kitchen",
-      "./scheduler",
-    ],
-    prefixes: [
-      "./desktop/",
-    ],
-    reason: "v0 feature surface that can still change before v1",
-  },
-  {
     stability: "stable",
-    exact: [
-      ".",
-      "./auth",
-      "./client",
-      "./contract",
-      "./content",
-      "./config",
-      "./db",
-      "./email",
-      "./error",
-      "./filling",
-      "./guard",
-      "./i18n",
-      "./id",
-      "./logging",
-      "./middleware",
-      "./observability",
-      "./openapi/generator",
-      "./perf",
-      "./plugins",
-      "./resource",
-      "./router",
-      "./routes",
-      "./runtime",
-      "./storage/s3",
-      "./testing",
-      "./components/Image",
-    ],
-    prefixes: [
-      "./auth/",
-      "./client/",
-      "./config/",
-      "./content/",
-      "./contract/",
-      "./db/",
-      "./filling/",
-      "./guard/",
-      "./middleware/",
-      "./perf/",
-      "./plugins/",
-      "./resource/",
-      "./testing/",
-    ],
-    reason: "documented app, adapter, testing, or operator-facing API",
+    exact: V1_CORE_EXPORTS,
+    reason: "minimal v1 application authoring and safety surface",
+  },
+  {
+    stability: "compatibility",
+    exact: ["./compat/*"],
+    reason: "temporary v0 migration namespace; excluded from the v1 contract",
   },
 ];
 
@@ -124,18 +56,12 @@ const STABLE_ROOT_STAR_EXPORTS = new Set([
   "./report",
   "./filling",
   "./errors",
-  "./logging",
   "./slot",
   "./contract",
-  "./openapi",
   "./router",
   "./config",
-  "./utils",
-  "./seo",
   "./island",
   "./intent",
-  "./observability",
-  "./resource",
   "./types",
 ]);
 
@@ -165,13 +91,21 @@ export function checkPublicApiBoundary(rootDir: string = process.cwd()): PublicA
   const rootIndex = readFileSync(rootIndexPath, "utf-8");
   const classified: Record<ApiStability, string[]> = {
     stable: [],
+    compatibility: [],
     experimental: [],
     internal: [],
   };
   const issues: string[] = [];
   const rootStarExports = findRootStarExports(rootIndex);
+  const exportEntries = Object.keys(pkg.exports ?? {}).sort();
 
-  for (const subpath of Object.keys(pkg.exports ?? {}).sort()) {
+  if (exportEntries.length < 10 || exportEntries.length > 12) {
+    issues.push(
+      `❌ @mandujs/core export map has ${exportEntries.length} entries; v1 budget is 10-12`,
+    );
+  }
+
+  for (const subpath of exportEntries) {
     const stability = classifyCoreExport(subpath);
     if (!stability) {
       issues.push(`❌ @mandujs/core export ${subpath} is not classified as stable, experimental, or internal`);
@@ -192,7 +126,7 @@ export function checkPublicApiBoundary(rootDir: string = process.cwd()): PublicA
 if (import.meta.main) {
   const result = checkPublicApiBoundary();
   console.log("🔎 Core public API boundary");
-  for (const stability of ["stable", "experimental", "internal"] as const) {
+  for (const stability of ["stable", "compatibility", "experimental", "internal"] as const) {
     console.log(`  ${stability}: ${result.classified[stability].length}`);
   }
 

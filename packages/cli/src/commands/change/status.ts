@@ -1,4 +1,4 @@
-import { getTransactionStatus } from "@mandujs/core/change";
+import { getTransactionStatus } from "@mandujs/core/compat/change/index";
 import { getRootDir } from "../../util/fs";
 
 export async function changeStatus(): Promise<boolean> {

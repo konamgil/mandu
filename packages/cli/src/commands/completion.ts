@@ -5,7 +5,7 @@
  * Usage: mandu completion bash >> ~/.bashrc
  */
 
-import { getAllCommands } from "./registry";
+import { OFFICIAL_COMMANDS } from "./surface";
 
 const SHELLS = ["bash", "zsh", "fish"] as const;
 type Shell = (typeof SHELLS)[number];
@@ -49,7 +49,7 @@ export async function completion(shell: string): Promise<boolean> {
     return false;
   }
 
-  const commands = getAllCommands();
+  const commands = [...OFFICIAL_COMMANDS];
 
   switch (shell as Shell) {
     case "bash":

@@ -6,8 +6,8 @@
  * Flow:
  *   1. `mandu db plan`  — emits `spec/db/migrations/NNNN_auto_*.sql`
  *   2. `mandu db apply` — runs the SQL against the local `app.db` SQLite file
- *   3. The slot at `spec/slots/posts.slot.ts` consumes the generated
- *      `createPostsRepo(db)` factory for all read/write paths.
+ *   3. Application code reads through `src/lib/db.ts`; generated repos stay
+ *      generator-owned implementation artifacts.
  */
 
 import { defineResource } from "@mandujs/core";

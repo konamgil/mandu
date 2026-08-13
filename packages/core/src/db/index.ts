@@ -63,7 +63,7 @@
  *
  * @example
  * ```ts
- * import { createDb } from "@mandujs/core/db";
+ * import { createDb } from "@mandujs/core/compat/db/index";
  *
  * const db = createDb({ url: "postgres://user:pass@localhost/app" });
  *
@@ -430,7 +430,7 @@ function getBunSqlCtor(): BunSqlCtor {
 const POOL_CLOSED_MESSAGE =
   "[@mandujs/core/db] pool closed — query issued after Db.close().";
 
-const PIN_DB_HANDLE = Symbol.for("@mandujs/core/db/pin-handle");
+const PIN_DB_HANDLE = Symbol.for("@mandujs/core/compat/db/pin-handle");
 
 interface DbHandlePin {
   [PIN_DB_HANDLE]?: <R>(fn: () => Promise<R>) => Promise<R>;

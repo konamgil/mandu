@@ -13,7 +13,8 @@ const MetricResultSchema = z.object({
   deltaFromBaseline: z.number().nullable().optional(),
   regressionFromBaselinePct: z.number().nullable().optional(),
   regressionThresholdPct: z.number().nullable().optional(),
-  failureReason: z.enum(["budget", "baseline-regression"]).nullable().optional(),
+  failureReason: z.enum(["budget", "baseline-regression", "measurement-invalid"]).nullable().optional(),
+  validityError: z.string().nullable().optional(),
   status: z.enum(["pass", "warn", "fail", "unsupported"]),
 });
 
@@ -102,7 +103,8 @@ function formatMetricLine(scenarioId: string, result: MetricResult): string {
       ? "n/a"
       : `${result.regressionFromBaselinePct.toFixed(1)}%`;
   const reason = result.failureReason ? `, reason=${result.failureReason}` : "";
-  return `${scenarioId} ${result.metric}: measured=${measured}, baseline=${baseline}, regression=${regression}, budget=${result.budget.toFixed(1)}, status=${result.status}${reason}`;
+  const validity = result.validityError ? `, validity=${result.validityError}` : "";
+  return `${scenarioId} ${result.metric}: measured=${measured}, baseline=${baseline}, regression=${regression}, budget=${result.budget.toFixed(1)}, status=${result.status}${reason}${validity}`;
 }
 
 function renderMarkdown(summary: PerfSummary): string {
@@ -130,7 +132,7 @@ function renderMarkdown(summary: PerfSummary): string {
 
     for (const result of scenario.results) {
       lines.push(
-        `| \`${result.metric}\` | ${result.measured === null ? "n/a" : result.measured.toFixed(1)} | ${result.baseline === null ? "n/a" : result.baseline.toFixed(1)} | ${result.regressionFromBaselinePct === null || result.regressionFromBaselinePct === undefined ? "n/a" : `${result.regressionFromBaselinePct.toFixed(1)}%`} | ${result.budget.toFixed(1)} | ${result.status} | ${result.failureReason ?? ""} |`
+        `| \`${result.metric}\` | ${result.measured === null ? "n/a" : result.measured.toFixed(1)} | ${result.baseline === null ? "n/a" : result.baseline.toFixed(1)} | ${result.regressionFromBaselinePct === null || result.regressionFromBaselinePct === undefined ? "n/a" : `${result.regressionFromBaselinePct.toFixed(1)}%`} | ${result.budget.toFixed(1)} | ${result.status} | ${result.validityError ?? result.failureReason ?? ""} |`
       );
     }
 

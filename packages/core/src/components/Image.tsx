@@ -52,7 +52,7 @@ function buildSrcSet(src: string, widths: number[], quality: number): string {
  *
  * @example
  * ```tsx
- * import { Image } from "@mandujs/core/components/Image";
+ * import { Image } from "@mandujs/core/compat/components/Image-compat";
  *
  * <Image
  *   src="/photos/hero.jpg"

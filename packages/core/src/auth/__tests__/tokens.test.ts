@@ -28,7 +28,7 @@ const describeIfBun = hasBunSql ? describe : describe.skip;
 
 const SECRET = "tokens-test-secret-at-least-32-bytes-long!";
 
-describeIfBun("@mandujs/core/auth/tokens — createAuthTokenStore", () => {
+describeIfBun("@mandujs/core/compat/auth/tokens — createAuthTokenStore", () => {
   let store: AuthTokenStore;
 
   beforeEach(() => {

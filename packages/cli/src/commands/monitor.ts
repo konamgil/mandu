@@ -425,7 +425,7 @@ export async function monitor(options: MonitorOptions = {}): Promise<boolean> {
       return false;
     }
     try {
-      const obs = await import("@mandujs/core/observability");
+      const obs = await import("@mandujs/core/compat/observability/index");
       // Initialize store to read existing data (no-op if already started)
       await obs.startSqliteStore(rootDir);
       const queryOpts = {

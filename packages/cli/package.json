@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./src/main.ts",
   "bin": {
-    "mandu": "src/main.ts"
+    "mandu": "src/main.ts",
+    "mandu-codemod": "src/codemod.ts"
   },
   "files": [
     "src/**/*",
@@ -41,11 +42,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@mandujs/core": "^0.54.20",
-    "@mandujs/mcp": "^0.38.12",
-    "@mandujs/ate": "^0.26.1",
-    "@mandujs/edge": "^0.4.68",
-    "@mandujs/skills": "^0.20.1",
+    "@mandujs/core": "workspace:*",
     "cfonts": "^3.3.0"
   },
   "engines": {

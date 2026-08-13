@@ -22,7 +22,7 @@ const FAST_ARGON2 = {
   timeCost: 2,
 } as const;
 
-describe("@mandujs/core/auth/password — hashPassword", () => {
+describe("@mandujs/core/compat/auth/password — hashPassword", () => {
   it("produces an argon2id hash by default", async () => {
     const h = await hashPassword("hunter2", FAST_ARGON2);
     expect(h.startsWith(ARGON2ID_PREFIX)).toBe(true);
@@ -74,7 +74,7 @@ describe("@mandujs/core/auth/password — hashPassword", () => {
   });
 });
 
-describe("@mandujs/core/auth/password — verifyPassword", () => {
+describe("@mandujs/core/compat/auth/password — verifyPassword", () => {
   it("returns true for a matching argon2id roundtrip", async () => {
     const h = await hashPassword("correct-horse-battery-staple", FAST_ARGON2);
     const ok = await verifyPassword("correct-horse-battery-staple", h);

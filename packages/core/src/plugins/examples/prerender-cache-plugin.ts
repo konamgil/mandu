@@ -15,7 +15,7 @@
  *
  * @example
  * ```ts
- * import { prerenderCachePlugin } from "@mandujs/core/plugins/examples/prerender-cache-plugin";
+ * import { prerenderCachePlugin } from "@mandujs/core/compat/plugins/examples/prerender-cache-plugin";
  *
  * export default {
  *   plugins: [prerenderCachePlugin({ cacheFile: ".mandu/prerender-cache.json" })],

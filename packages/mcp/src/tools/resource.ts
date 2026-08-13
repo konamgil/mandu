@@ -12,7 +12,7 @@ import {
   type ResourceField,
   type FieldType,
   FieldTypes,
-} from "@mandujs/core";
+} from "@mandujs/core/compat/resource/index";
 import path from "path";
 import fs from "fs/promises";
 

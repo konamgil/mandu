@@ -40,7 +40,7 @@
  *
  * @example
  * ```ts
- * import { createPasswordReset } from "@mandujs/core/auth/reset";
+ * import { createPasswordReset } from "@mandujs/core/compat/auth/reset";
  *
  * const reset = createPasswordReset({
  *   store,

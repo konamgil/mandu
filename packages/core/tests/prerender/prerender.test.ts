@@ -6,7 +6,7 @@ import { describe, it, expect, afterEach } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { prerenderRoutes } from "../../src/bundler/prerender";
+import { PrerenderError, prerenderRoutes } from "../../src/bundler/prerender";
 import type { RoutesManifest } from "../../src/spec/schema";
 
 let tmpDir: string;
@@ -98,7 +98,20 @@ describe("prerenderRoutes", () => {
     }
   });
 
-  it("records error for non-200 responses", async () => {
+  it("fails by default for non-200 responses", async () => {
+    const root = await makeTmpDir();
+    const failHandler = async () => new Response("Not Found", { status: 404 });
+
+    await expect(
+      prerenderRoutes(manifest, failHandler, {
+        rootDir: root,
+        outDir: path.join(root, "static"),
+        importModule: noStaticParamsImport,
+      }),
+    ).rejects.toBeInstanceOf(PrerenderError);
+  });
+
+  it("records non-200 responses when skipErrors is explicit", async () => {
     const root = await makeTmpDir();
     const failHandler = async () => new Response("Not Found", { status: 404 });
 
@@ -106,6 +119,7 @@ describe("prerenderRoutes", () => {
       rootDir: root,
       outDir: path.join(root, "static"),
       importModule: noStaticParamsImport,
+      skipErrors: true,
     });
 
     expect(result.generated).toBe(0);

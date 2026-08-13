@@ -1,5 +1,5 @@
-import type * as __ManduMandujsCoreBundlerAnalyzerTypes0 from "@mandujs/core/bundler/analyzer";
-import type * as __ManduMandujsCoreBundlerBudgetTypes1 from "@mandujs/core/bundler/budget";
+import type * as __ManduMandujsCoreBundlerAnalyzerTypes0 from "@mandujs/core/compat/bundler/analyzer";
+import type * as __ManduMandujsCoreBundlerBudgetTypes1 from "@mandujs/core/compat/bundler/budget";
 import type * as __ManduFsTypes2 from "fs";
 /**
  * mandu build - Client bundle build
@@ -21,9 +21,9 @@ import {
   isTailwindProject,
   buildCSS,
   type BundleManifest,
-} from "@mandujs/core/bundler";
-import { prerenderRoutes } from "@mandujs/core/bundler/prerender";
-import { resolveReactCompilerConfig } from "@mandujs/core/bundler/plugins";
+} from "@mandujs/core/compat/bundler/index";
+import { prerenderRoutes } from "@mandujs/core/compat/bundler/prerender";
+import { resolveReactCompilerConfig } from "@mandujs/core/compat/bundler/plugins/index";
 import path from "path";
 import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";
@@ -43,12 +43,8 @@ export interface BuildOptions {
   /** Output directory */
   outDir?: string;
   /**
-   * Deployment target. Leave undefined for the default Bun/Node adapter.
-   *
-   *   - `"workers"`      — Cloudflare Workers (`.mandu/workers/worker.js` + `wrangler.toml`)
-   *   - `"deno"`         — Deno Deploy (`.mandu/deno/server.ts` + `deno.json`)
-   *   - `"vercel-edge"`  — Vercel Edge Functions (`api/_mandu.ts` + `vercel.json`)
-   *   - `"netlify-edge"` — Netlify Edge Functions (`netlify/edge-functions/ssr.ts` + `netlify.toml`)
+   * Legacy Edge target selector. Edge emitters live in the optional
+   * `@mandujs/edge` Labs package and are not part of the product CLI graph.
    */
   target?: "workers" | "deno" | "vercel-edge" | "netlify-edge";
   /**
@@ -200,6 +196,12 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   const cwd = process.cwd();
 
   console.log("📦 Mandu Build - Client Bundle Builder\n");
+
+  if (options.target) {
+    console.error(`❌ Edge target \"${options.target}\" is an optional Mandu Labs feature.`);
+    console.error("   Install @mandujs/edge explicitly and use its adapter outside the stable build path.");
+    return false;
+  }
 
   const config = await validateAndReport(cwd);
   if (!config) {
@@ -394,7 +396,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     const hasContracts = manifest.routes.some((r) => r.contractModule);
     if (hasContracts) {
       try {
-        const { writeOpenAPIArtifacts } = await import("@mandujs/core/openapi/generator");
+        const { writeOpenAPIArtifacts } = await import("@mandujs/core/compat/openapi/generator");
         const result = await writeOpenAPIArtifacts(
           manifest,
           cwd,
@@ -442,6 +444,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
       await registerManifestHandlers(manifest, cwd, {
         importFn: importForPrerender,
         registeredLayouts: new Set(),
+        strict: true,
       });
       const tempServer = startServer(manifest, {
         port: 0,
@@ -594,107 +597,6 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     });
   }
 
-  // Phase 15.1 — Cloudflare Workers target
-  if (options.target === "workers") {
-    try {
-      const { emitWorkersBundle } = await import("../util/workers-emitter");
-      // Phase 18.λ — extract workers-eligible cron schedules from
-      // `mandu.config.ts` `scheduler.jobs`. `extractWorkersCrons` is
-      // pure — it de-duplicates schedule strings, filters by `runOn`,
-      // and collects advisory warnings (timezone mismatch, skipInDev
-      // ignored on Workers, etc.) so we can surface them to the user.
-      const { extractWorkersCrons } = await import("../util/cron-wrangler");
-      const cronExtraction = extractWorkersCrons(config.scheduler?.jobs);
-      if (cronExtraction.warnings.length > 0) {
-        for (const w of cronExtraction.warnings) {
-          console.warn(`⚠️  [scheduler] ${w}`);
-        }
-      }
-      await emitWorkersBundle({
-        rootDir: cwd,
-        manifest,
-        cssPath,
-        workerName: options.workerName,
-        crons: cronExtraction.crons,
-      });
-    } catch (error) {
-      console.error(
-        `\n❌ Workers build failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-      await runHook("onAfterBuild", plugins, hooks, {
-        success: false,
-        duration: Math.round(performance.now() - buildStartTime),
-      });
-      return false;
-    }
-  }
-
-  // Phase 15.2 — Deno Deploy target
-  if (options.target === "deno") {
-    try {
-      const { emitDenoBundle } = await import("../util/deno-emitter");
-      await emitDenoBundle({
-        rootDir: cwd,
-        manifest,
-        cssPath,
-        projectName: options.projectName,
-      });
-    } catch (error) {
-      console.error(
-        `\n❌ Deno build failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-      await runHook("onAfterBuild", plugins, hooks, {
-        success: false,
-        duration: Math.round(performance.now() - buildStartTime),
-      });
-      return false;
-    }
-  }
-
-  // Phase 15.2 — Vercel Edge target
-  if (options.target === "vercel-edge") {
-    try {
-      const { emitVercelEdgeBundle } = await import("../util/vercel-edge-emitter");
-      await emitVercelEdgeBundle({
-        rootDir: cwd,
-        manifest,
-        cssPath,
-        projectName: options.projectName,
-      });
-    } catch (error) {
-      console.error(
-        `\n❌ Vercel Edge build failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-      await runHook("onAfterBuild", plugins, hooks, {
-        success: false,
-        duration: Math.round(performance.now() - buildStartTime),
-      });
-      return false;
-    }
-  }
-
-  // Phase 15.2 — Netlify Edge target
-  if (options.target === "netlify-edge") {
-    try {
-      const { emitNetlifyEdgeBundle } = await import("../util/netlify-edge-emitter");
-      await emitNetlifyEdgeBundle({
-        rootDir: cwd,
-        manifest,
-        cssPath,
-        projectName: options.projectName,
-      });
-    } catch (error) {
-      console.error(
-        `\n❌ Netlify Edge build failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-      await runHook("onAfterBuild", plugins, hooks, {
-        success: false,
-        duration: Math.round(performance.now() - buildStartTime),
-      });
-      return false;
-    }
-  }
-
   // Phase 18.φ + 18.η — Bundle-size budget enforcement + bundle analyzer.
   //
   // Ordering contract (important for CI log legibility):
@@ -721,7 +623,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   > | null = null;
   if (bundleManifest && (analyzeFlag || budgetRequested)) {
     try {
-      const { analyzeBundle } = await import("@mandujs/core/bundler/analyzer");
+      const { analyzeBundle } = await import("@mandujs/core/compat/bundler/analyzer");
       analyzeReport = await analyzeBundle(cwd, bundleManifest);
     } catch (error) {
       console.warn(
@@ -747,7 +649,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
     } else {
       try {
         const { evaluateBudget, formatBudgetTable, formatBudgetBytes } =
-          await import("@mandujs/core/bundler/budget");
+          await import("@mandujs/core/compat/bundler/budget");
         budgetReport = evaluateBudget(analyzeReport, budgetConfig);
         if (budgetReport) {
           console.log("");
@@ -795,7 +697,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   if (analyzeFlag && analyzeReport) {
     try {
       const { writeAnalyzeReport } = await import(
-        "@mandujs/core/bundler/analyzer"
+        "@mandujs/core/compat/bundler/analyzer"
       );
       const jsonOnly = analyzeFlag === "json";
       const { jsonPath, htmlPath } = await writeAnalyzeReport(
@@ -808,7 +710,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
       console.log(
         `   ${analyzeReport.summary.islandCount} island(s), ${analyzeReport.summary.sharedCount} shared chunk(s)`
       );
-      const { formatSize } = await import("@mandujs/core/bundler");
+      const { formatSize } = await import("@mandujs/core/compat/bundler/index");
       console.log(
         `   Total: ${formatSize(analyzeReport.summary.totalRaw)} raw / ${formatSize(analyzeReport.summary.totalGz)} gzip`
       );
@@ -858,7 +760,7 @@ export async function build(options: BuildOptions = {}): Promise<boolean> {
   if (options.audit === true) {
     try {
       const { runAudit, formatAuditReport, impactAtLeast } = await import(
-        "@mandujs/core/a11y"
+        "@mandujs/core/compat/a11y/index"
       );
 
       // Discover prerendered HTML. We re-scan (rather than plumbing the

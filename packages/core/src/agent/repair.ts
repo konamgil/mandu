@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { rollbackAgentApply } from "./apply";
 import type {
   AgentDiagnostic,
   AgentRepairAction,
@@ -87,6 +88,82 @@ export async function buildAgentRepairReport(
 ): Promise<AgentRepairReport> {
   const root = path.resolve(rootDir);
   const sourceRel = options.from ?? DEFAULT_VERIFY_INPUT;
+  if (options.rollbackId) {
+    const action: AgentRepairAction = {
+      diagnosticCode: "MANDU_APPLY_ROLLBACK",
+      kind: "patch",
+      description: `Restore the touched-file snapshot ${options.rollbackId}.`,
+      safeToApply: true,
+      applied: false,
+    };
+    if (!options.apply) {
+      return {
+        schemaVersion: 1,
+        framework: "mandu",
+        generatedAt: new Date().toISOString(),
+        ok: true,
+        status: "ready",
+        sourceReport: `rollback:${options.rollbackId}`,
+        diagnostics: [],
+        actions: [action],
+        appliedActions: [],
+        warnings: ["Rollback preview only. Re-run with --apply to restore the snapshot."],
+        nextVerifyCommand: "mandu agent verify --changed --json --write",
+      };
+    }
+
+    try {
+      const rollback = await rollbackAgentApply(root, options.rollbackId);
+      action.applied = rollback.restoredFiles.length > 0;
+      const diagnostics: AgentDiagnostic[] = rollback.conflicts.map((conflict) => ({
+        code: "MANDU_APPLY_ROLLBACK_CONFLICT",
+        severity: "error",
+        title: "Rollback preserved a later edit",
+        cause: conflict,
+        repairable: false,
+        source: "agent.repair",
+      }));
+      return {
+        schemaVersion: 1,
+        framework: "mandu",
+        generatedAt: new Date().toISOString(),
+        ok: rollback.ok,
+        status: rollback.ok ? "rolled_back" : "rollback_conflict",
+        sourceReport: `rollback:${options.rollbackId}`,
+        diagnostics,
+        actions: [action],
+        appliedActions: action.applied ? [action] : [],
+        rollback,
+        warnings: rollback.ok
+          ? []
+          : ["Rollback stopped at files changed after apply; those user edits were preserved."],
+        nextVerifyCommand: "mandu agent verify --changed --json --write",
+      };
+    } catch (error) {
+      return {
+        schemaVersion: 1,
+        framework: "mandu",
+        generatedAt: new Date().toISOString(),
+        ok: false,
+        status: "rollback_conflict",
+        sourceReport: `rollback:${options.rollbackId}`,
+        diagnostics: [
+          {
+            code: "MANDU_APPLY_ROLLBACK_FAILED",
+            severity: "error",
+            title: "Rollback failed",
+            cause: error instanceof Error ? error.message : String(error),
+            repairable: false,
+            source: "agent.repair",
+          },
+        ],
+        actions: [action],
+        appliedActions: [],
+        warnings: [],
+        nextVerifyCommand: "mandu agent verify --changed --json --write",
+      };
+    }
+  }
   const sourcePath = resolveInside(root, sourceRel);
   const warnings: string[] = [];
   const report = await readVerifyReport(sourcePath);

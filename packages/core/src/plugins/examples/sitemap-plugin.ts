@@ -11,7 +11,7 @@
  * @example
  * ```ts
  * // mandu.config.ts
- * import { sitemapPlugin } from "@mandujs/core/plugins/examples/sitemap-plugin";
+ * import { sitemapPlugin } from "@mandujs/core/compat/plugins/examples/sitemap-plugin";
  *
  * export default {
  *   plugins: [sitemapPlugin({ baseUrl: "https://example.com" })],

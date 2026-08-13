@@ -18,7 +18,7 @@ import {
   type GuardPreset,
   type Violation,
 } from "@mandujs/core";
-import type { GeneratedMap } from "@mandujs/core/generator";
+import type { GeneratedMap } from "@mandujs/core/compat/generator/index";
 import { getProjectPaths, readJsonFile, readConfig } from "../utils/project.js";
 import fs from "fs/promises";
 import path from "path";

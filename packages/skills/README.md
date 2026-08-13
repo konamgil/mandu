@@ -1,76 +1,48 @@
 # @mandujs/skills
 
-Claude Code plugin for the Mandu Framework. Provides 9 architecture skills, guard validation hooks, MCP integration, and development environment setup for agent-native fullstack development.
+Generated Mandu skills for the Agent-Safe workflow. The package contains no
+independent framework logic; it distributes the repository's canonical six
+skills and project setup files.
 
-## 9 Skills
+## Official skills
 
-| Skill | Description |
-|-------|-------------|
-| **mandu-create-feature** | Feature scaffolding via MCP negotiate/generate pipeline |
-| **mandu-create-api** | REST API generation with contracts and tests |
-| **mandu-debug** | Error diagnosis and repair (8-category triage) |
-| **mandu-explain** | Mandu concept reference (18 concepts) |
-| **mandu-guard-guide** | Guard architecture guide (6 presets) |
-| **mandu-deploy** | Production deployment (Docker, CI/CD, nginx) |
-| **mandu-slot** | Filling API reference (ctx methods, lifecycle, middleware) |
-| **mandu-fs-routes** | File-system routing rules and layout constraints |
-| **mandu-hydration** | Island hydration and client import rules |
+| Skill | Scope |
+|---|---|
+| `mandu-agent-workflow` | context → plan → apply → verify → repair |
+| `mandu-fs-routes` | pages and API routes |
+| `mandu-contract` | typed API contracts |
+| `mandu-hydration` | islands and client boundaries |
+| `mandu-guard` | architecture safety |
+| `mandu-testing` | targeted Bun verification |
 
-## Installation
+## Install
 
-### Via `mandu init` (Recommended)
-
-```bash
-bunx mandu init my-app
-```
-
-Skills are automatically installed during project creation.
-
-### Manual Installation
+New projects receive these files through `mandu create`. For an existing
+project:
 
 ```bash
 bun add -D @mandujs/skills
 bunx mandu-skills install
 ```
 
-### Existing Project Upgrade
+Use `--force` to replace installed copies or `--dry-run` to preview changes.
+
+The installed layout is `.claude/skills/<id>/SKILL.md`. MCP configuration and
+shared settings are merged without making deployment providers part of the
+framework contract.
+
+## Maintainers
+
+Edit only `skills/official/` at the repository root, then run:
 
 ```bash
-bunx mandu-skills install --force
+bun run generate:official-skills
+bun run check:official-skills
 ```
 
-## What Gets Installed
-
-```
-.claude/
-  skills/
-    mandu-create-feature.md
-    mandu-create-api.md
-    mandu-debug.md
-    mandu-explain.md
-    mandu-guard-guide.md
-    mandu-deploy.md
-    mandu-slot.md
-    mandu-fs-routes.md
-    mandu-hydration.md
-  settings.json
-.mcp.json
-```
-
-## CLI
-
-```bash
-mandu-skills install              # Install all skills
-mandu-skills install --force      # Overwrite existing
-mandu-skills install --dry-run    # Preview changes
-mandu-skills list                 # List available skills
-```
-
-## Version Compatibility
-
-| @mandujs/skills | @mandujs/core | @mandujs/mcp |
-|-----------------|---------------|--------------|
-| 1.0.x | >= 0.19.0 | >= 0.18.10 |
+`packages/skills/generated/skills` is generated and must not be edited by
+hand. Legacy catalogs are preserved under `docs/archive/skills/` and are not
+published.
 
 ## License
 

@@ -22,7 +22,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { loadManduConfig, type ManduConfig } from "@mandujs/core";
-import { startWatcher } from "@mandujs/core/watcher";
+import { startWatcher } from "@mandujs/core/compat/watcher/index";
 
 // DNA-001: 플러그인 기반 도구 레지스트리
 import { mcpToolRegistry } from "./registry/mcp-tool-registry.js";

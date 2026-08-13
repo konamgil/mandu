@@ -16,7 +16,7 @@
  *   currentUserId,
  *   requireUser,
  *   AuthenticationError,
- * } from "@mandujs/core/auth";
+ * } from "@mandujs/core/compat/auth/index";
  * ```
  *
  * Fine-grained subpath imports remain available for tree-shaking-sensitive

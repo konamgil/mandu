@@ -18,7 +18,8 @@ This directory defines the first fixed contract for Mandu performance tracking.
 - `tests/perf/perf-baseline.json` is the source of truth for metric names, scenarios, and budgets.
 - Active scenarios point at real reference demos: `demo/todo-app` and `demo/starter`.
 - HTTP, route-scan, resource-generation, and initial-JS baselines are frozen for the active scenarios that can measure them locally.
-- `hydration_p95_ms` baselines are fixed from the latest local browser run. If browser launch is unavailable on a runner, the run must leave a `browser-error.txt` artifact and report the metric as unsupported instead of mutating the tracked baseline.
+- `hydration_p95_ms` baselines are fixed from the latest local browser run. If browser launch is unavailable, the run leaves a `browser-error.txt` artifact and the active scenario fails measurement validity instead of treating a missing sample as a pass.
+- Every scenario that measures initial JavaScript or hydration declares whether that signal is required or intentionally absent. A zero value is valid only for an explicit `zero`/`none` expectation backed by asset and island evidence.
 - Manual scenarios are runnable by id for host-sensitive checks such as HMR; they are excluded from default `perf:ci`.
 
 ## Freeze Snapshot
@@ -81,7 +82,7 @@ bun run perf:hydration -- http://localhost:3333/ 5 none --json-out tests/perf/la
 - Local scenario runs write their artifacts to `.perf/latest/` and do not modify tracked baseline files.
 - `perf:budget:check` is soft by default for local triage. `perf:ci` and `perf:expanded` pass `--enforce`.
 - Perf runs set `MANDU_LOCK_BYPASS=1` for spawned demo servers so stale local `.mandu/lockfile.json` files do not block measurement of rendering performance.
-- Browser launch failure is cached per `perf:run`; after the first failure, later hydration metrics are recorded as `unsupported` immediately with a matching artifact.
+- Browser launch failure is cached per `perf:run`; after the first failure, later hydration attempts stop immediately with matching artifacts. Active scenarios then fail the missing-evidence validity gate.
 
 ## Updating Baselines
 

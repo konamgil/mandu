@@ -80,7 +80,7 @@ function createFakeHandle(options: WindowOptions): {
   };
 }
 
-describe("@mandujs/core/desktop — Worker protocol", () => {
+describe("@mandujs/core/compat/desktop — Worker protocol", () => {
   it("handles open → ready sequence and stores handle", async () => {
     const emitter = createEmitter();
     let fake: ReturnType<typeof createFakeHandle> | null = null;

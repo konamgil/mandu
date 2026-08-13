@@ -8,6 +8,7 @@
 import { readFile, writeFile, mkdir, access, copyFile } from "fs/promises";
 import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
+import { OFFICIAL_SKILL_IDS } from "../generated/skills/catalog.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,40 +16,8 @@ const __dirname = dirname(__filename);
 /** Root of the @mandujs/skills package */
 const PACKAGE_ROOT = resolve(__dirname, "..");
 
-/**
- * Available skill IDs.
- *
- * Two families:
- * - Task-shaped skills (domain knowledge — "how to make an API", "what is
- *   an Island", etc.)
- * - `mandu-mcp-*` workflow skills (MCP tool orchestration — "when editing,
- *   run ate_auto_pipeline + guard_check + doctor in parallel"). See #234.
- *
- * The MCP workflow skills are loaded alongside the task-shaped ones so
- * agents see both "what" (domain) and "how to invoke" (orchestration).
- * `mandu-mcp-index` is the always-on router that points to the other
- * `mandu-mcp-*` skills.
- */
-export const SKILL_IDS = [
-  // Task-shaped (domain knowledge)
-  "mandu-create-feature",
-  "mandu-create-api",
-  "mandu-debug",
-  "mandu-explain",
-  "mandu-guard-guide",
-  "mandu-lint",
-  "mandu-deploy",
-  "mandu-slot",
-  "mandu-fs-routes",
-  "mandu-hydration",
-  // Workflow-shaped (MCP tool orchestration — #234)
-  "mandu-mcp-index",
-  "mandu-mcp-orient",
-  "mandu-mcp-create-flow",
-  "mandu-mcp-verify",
-  "mandu-mcp-safe-change",
-  "mandu-mcp-deploy",
-] as const;
+/** Official skill IDs generated from the repository-level canonical source. */
+export const SKILL_IDS = OFFICIAL_SKILL_IDS;
 
 export type SkillId = (typeof SKILL_IDS)[number];
 
@@ -115,7 +84,7 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
 /**
  * Install Mandu skills into a project.
  *
- * Copies skill SKILL.md files from `skills/<id>/SKILL.md` to
+ * Copies generated skill files from `generated/skills/<id>/SKILL.md` to
  * `<targetDir>/.claude/skills/<id>/SKILL.md`.
  *
  * Directory layout follows the Claude Code skills spec — each skill lives
@@ -145,7 +114,7 @@ export async function installSkills(options: InstallOptions = {}): Promise<Insta
   }
 
   for (const skillId of skillIds) {
-    const srcPath = join(PACKAGE_ROOT, "skills", skillId, "SKILL.md");
+    const srcPath = join(PACKAGE_ROOT, "generated", "skills", skillId, "SKILL.md");
     const skillSubdir = join(skillsDir, skillId);
     const destPath = join(skillSubdir, "SKILL.md");
     const relLabel = `skills/${skillId}/SKILL.md`;
@@ -257,7 +226,7 @@ export async function installSkills(options: InstallOptions = {}): Promise<Insta
  * Get the path to a skill SKILL.md file in the package
  */
 export function getSkillPath(skillId: SkillId): string {
-  return join(PACKAGE_ROOT, "skills", skillId, "SKILL.md");
+  return join(PACKAGE_ROOT, "generated", "skills", skillId, "SKILL.md");
 }
 
 /**

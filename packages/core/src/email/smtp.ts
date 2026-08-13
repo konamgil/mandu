@@ -4,7 +4,7 @@
  * Intentionally not implemented in Phase 5.2. This file reserves the import
  * surface so that Phase 5.3 and downstream callers can write
  *
- *   import { createSmtpSender } from "@mandujs/core/email";
+ *   import { createSmtpSender } from "@mandujs/core/compat/email/index";
  *
  * and decide at runtime whether to fall back to `createResendSender` or
  * `createMemoryEmailSender`. Calling the factory throws a clear, actionable

@@ -4,7 +4,7 @@ import os from "os";
 import path from "path";
 import { createBuildSummaryRows, renderBuildSummaryTable } from "../../src/util/build-summary";
 import type { RouteSpec } from "@mandujs/core";
-import type { BundleManifest, BundleOutput } from "@mandujs/core/bundler";
+import type { BundleManifest, BundleOutput } from "@mandujs/core/compat/bundler/index";
 
 describe("build summary helpers", () => {
   it("creates route and shared asset rows", async () => {

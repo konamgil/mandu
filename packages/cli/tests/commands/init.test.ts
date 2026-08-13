@@ -10,7 +10,7 @@ import {
   readLockfile,
   readMcpConfig,
   validateLockfile,
-} from "@mandujs/core/lockfile";
+} from "@mandujs/core/compat/lockfile/index";
 
 describe("init command template validation", () => {
   const cwd = process.cwd();

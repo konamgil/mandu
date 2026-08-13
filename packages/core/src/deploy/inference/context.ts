@@ -236,7 +236,7 @@ function classifyOne(spec: string): DependencyClass | null {
   ) {
     return "db";
   }
-  if (s === "@mandujs/core/db" || s.startsWith("@mandujs/core/db/")) {
+  if (s === "@mandujs/core/compat/db/index" || s.startsWith("@mandujs/core/compat/db/")) {
     return "db";
   }
   if (/^(@anthropic-ai\/sdk|openai|ai|@ai-sdk\/.+|@google\/generative-ai|cohere-ai)$/.test(s)) {

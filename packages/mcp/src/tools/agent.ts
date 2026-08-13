@@ -3,6 +3,7 @@ import path from "path";
 import {
   buildAgentApplyReport,
   buildAgentContext,
+  buildExecutableAgentPlan,
   buildAgentPlan,
   buildAgentRepairReport,
   buildAgentSyncReport,
@@ -12,7 +13,8 @@ import {
   writeAgentPlan,
   writeAgentRepairReport,
   writeAgentVerifyReport,
-} from "@mandujs/core/agent";
+  type AgentOperationInput,
+} from "@mandujs/core/compat/agent/index";
 
 interface AgentContextInput {
   cwd?: unknown;
@@ -36,6 +38,9 @@ interface AgentVerifyInput {
 interface AgentPlanInput {
   cwd?: unknown;
   intent?: unknown;
+  operations?: unknown;
+  idempotencyKey?: unknown;
+  rollbackPolicy?: unknown;
   writePlan?: unknown;
 }
 
@@ -56,6 +61,7 @@ interface AgentRepairInput {
   cwd?: unknown;
   from?: unknown;
   apply?: unknown;
+  rollbackId?: unknown;
   writeReport?: unknown;
 }
 
@@ -112,7 +118,18 @@ async function runAgentPlan(
     throw new Error("intent is required for mandu.agent.plan");
   }
 
-  const plan = buildAgentPlan({ intent });
+  const plan = Array.isArray(input.operations) && input.operations.length > 0
+    ? await buildExecutableAgentPlan(cwd, {
+        intent,
+        operations: input.operations as AgentOperationInput[],
+        idempotencyKey:
+          typeof input.idempotencyKey === "string" ? input.idempotencyKey : undefined,
+        rollbackPolicy:
+          input.rollbackPolicy === "automatic" || input.rollbackPolicy === "manual"
+            ? input.rollbackPolicy
+            : undefined,
+      })
+    : buildAgentPlan({ intent });
 
   if (boolOrDefault(input.writePlan, false)) {
     const { path, plan: written } = await writeAgentPlan(cwd, plan);
@@ -192,6 +209,10 @@ async function runAgentRepair(
   const report = await buildAgentRepairReport(cwd, {
     from: typeof input.from === "string" && input.from.length > 0 ? input.from : undefined,
     apply: boolOrDefault(input.apply, false),
+    rollbackId:
+      typeof input.rollbackId === "string" && input.rollbackId.length > 0
+        ? input.rollbackId
+        : undefined,
   });
 
   if (boolOrDefault(input.writeReport, false)) {
@@ -262,7 +283,7 @@ export const agentToolDefinitions: Tool[] = [
   {
     name: "mandu.agent.plan",
     description:
-      "Official agent-core planning entry point. Converts a natural-language Mandu task into a conservative domain plan with files to inspect, files likely to create, preferred MCP/domain tools, risks, and verification commands.",
+      "Official agent-core planning entry point. Without operations it returns a conservative intent preview. With typed operations it binds current content hashes, exact write scope, rollback policy, and an idempotency key into an executable plan.",
     annotations: {
       readOnlyHint: true,
     },
@@ -277,6 +298,49 @@ export const agentToolDefinitions: Tool[] = [
           type: "string",
           description: "Natural-language task request, for example: add authenticated dashboard.",
         },
+        operations: {
+          type: "array",
+          description:
+            "Optional typed write operations. When present, the server binds current preconditions and returns an executable plan.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              kind: {
+                type: "string",
+                enum: [
+                  "file.create",
+                  "file.patch-with-hash",
+                  "route.create",
+                  "api.create",
+                  "contract.update",
+                  "guard.safe-fix",
+                  "generated.refresh",
+                ],
+              },
+              target: { type: "string" },
+              effect: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["write"] },
+                  content: { type: "string" },
+                  encoding: { type: "string", enum: ["utf8"] },
+                },
+                required: ["type", "content", "encoding"],
+              },
+            },
+            required: ["kind", "target", "effect"],
+          },
+        },
+        idempotencyKey: {
+          type: "string",
+          description: "Optional stable retry key. A UUID is generated when omitted.",
+        },
+        rollbackPolicy: {
+          type: "string",
+          enum: ["automatic", "manual"],
+          description: "Failure policy. Defaults to automatic rollback.",
+        },
         writePlan: {
           type: "boolean",
           description: "Write .mandu/agent-plan.json while planning. Defaults to false.",
@@ -288,9 +352,10 @@ export const agentToolDefinitions: Tool[] = [
   {
     name: "mandu.agent.apply",
     description:
-      "Official agent-core apply preview. Reads an agent plan and returns ordered intent-level actions. This initial implementation is dry-run only and does not mutate project files.",
+      "Official agent-core typed apply entry point. It previews by default. With dryRun=false it enforces exact scope, base revision and content hashes, snapshots touched files, applies UTF-8 write operations, verifies the result, rolls back failures by policy, and returns the shared ApplyReceipt schema.",
     annotations: {
-      readOnlyHint: true,
+      readOnlyHint: false,
+      destructiveHint: true,
     },
     inputSchema: {
       type: "object",
@@ -305,7 +370,7 @@ export const agentToolDefinitions: Tool[] = [
         },
         dryRun: {
           type: "boolean",
-          description: "Return a dry-run action report. Defaults to true.",
+          description: "Validate and preview without writing. Defaults to true; set false to execute.",
         },
         writeReport: {
           type: "boolean",
@@ -368,7 +433,7 @@ export const agentToolDefinitions: Tool[] = [
   {
     name: "mandu.agent.repair",
     description:
-      "Official agent-core repair entry point. Reads an agent verify report and returns structured next actions. It does not execute shell commands; apply mode only handles safe typed patch candidates.",
+      "Official agent-core repair entry point. Reads an agent verify report and returns structured next actions, or restores an ApplyReceipt snapshot by rollbackId when apply=true. It never executes shell commands and preserves files changed after apply.",
     annotations: {
       readOnlyHint: false,
     },
@@ -386,6 +451,11 @@ export const agentToolDefinitions: Tool[] = [
         apply: {
           type: "boolean",
           description: "Apply safe typed patch candidates only. Defaults to false.",
+        },
+        rollbackId: {
+          type: "string",
+          description:
+            "Optional rollback ID from an ApplyReceipt. With apply=true, restores the touched-file snapshot after conflict checks.",
         },
         writeReport: {
           type: "boolean",

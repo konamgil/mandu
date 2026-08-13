@@ -3,7 +3,7 @@
  *
  * @example
  * ```ts
- * import { file, glob, api } from '@mandujs/core/content';
+ * import { file, glob, api } from '@mandujs/core/compat/content/index';
  *
  * export default defineContentConfig({
  *   collections: {

@@ -38,19 +38,19 @@ import {
   MigrationTimeoutError,
   createMigrationRunner,
   type MigrationRunner,
-} from "@mandujs/core/db/migrations/runner";
+} from "@mandujs/core/compat/db/migrations/runner";
 import {
   parseResourceSchemas,
   validateResourceUniqueness,
-} from "@mandujs/core/resource";
+} from "@mandujs/core/compat/resource/index";
 import {
   snapshotFromResources,
   serializeSnapshot,
-} from "@mandujs/core/resource/ddl/snapshot";
+} from "@mandujs/core/compat/resource/ddl/snapshot";
 import type {
   AppliedMigration,
   PendingMigration,
-} from "@mandujs/core/resource/ddl/types";
+} from "@mandujs/core/compat/resource/ddl/types";
 
 import { resolveDb, DbResolutionError } from "./resolve-db";
 import { theme } from "../../terminal/theme";

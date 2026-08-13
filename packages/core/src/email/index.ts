@@ -16,7 +16,7 @@
  *
  * @example
  * ```ts
- * import { createResendSender } from "@mandujs/core/email";
+ * import { createResendSender } from "@mandujs/core/compat/email/index";
  *
  * const mail = createResendSender({ apiKey: process.env.RESEND_API_KEY! });
  * await mail.send({
@@ -29,7 +29,7 @@
  *
  * @example Tests — swap in the memory adapter:
  * ```ts
- * import { createMemoryEmailSender } from "@mandujs/core/email";
+ * import { createMemoryEmailSender } from "@mandujs/core/compat/email/index";
  *
  * const mail = createMemoryEmailSender();
  * await handler({ mail });            // your code under test

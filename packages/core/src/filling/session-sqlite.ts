@@ -38,7 +38,7 @@
  *
  * @example
  * ```ts
- * import { createSqliteSessionStorage } from "@mandujs/core/filling/session-sqlite";
+ * import { createSqliteSessionStorage } from "@mandujs/core/compat/filling/session-sqlite";
  * import { session } from "@mandujs/core/middleware";
  *
  * const storage = createSqliteSessionStorage({

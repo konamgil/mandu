@@ -15,7 +15,7 @@ import {
   precommitCheck,
 } from "@mandujs/ate";
 import type { OracleLevel, AteMonitorEvent } from "@mandujs/ate";
-import { eventBus } from "@mandujs/core/observability";
+import { eventBus } from "@mandujs/core/compat/observability/index";
 import {
   writePartialResults,
   createAteProgressTracker,

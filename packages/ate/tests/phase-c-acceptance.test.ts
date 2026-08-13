@@ -47,7 +47,7 @@ export async function handle(req: Request) {
 `;
 
 const RPC_SOURCE = `import { z } from "zod";
-import { defineRpc } from "@mandujs/core/contract/rpc";
+import { defineRpc } from "@mandujs/core/compat/contract/rpc";
 export const usersRpc = defineRpc({
   signup: {
     input: z.object({ email: z.string().email(), password: z.string().min(8) }),

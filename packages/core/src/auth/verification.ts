@@ -35,8 +35,8 @@
  *
  * @example
  * ```ts
- * import { createEmailVerification } from "@mandujs/core/auth/verification";
- * import { createAuthTokenStore } from "@mandujs/core/auth/tokens"; // internal
+ * import { createEmailVerification } from "@mandujs/core/compat/auth/verification";
+ * import { createAuthTokenStore } from "@mandujs/core/compat/auth/tokens"; // internal
  *
  * const store = createAuthTokenStore({ secret: process.env.TOKEN_SECRET! });
  * const verify = createEmailVerification({

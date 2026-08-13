@@ -9,13 +9,13 @@
  *
  * Consumers should subscribe via:
  *
- *   import { eventBus } from "@mandujs/core/observability";
+ *   import { eventBus } from "@mandujs/core/compat/observability/index";
  *   eventBus.on("ate", (e) => {
  *     const payload = e.data as AteMonitorEvent;
  *     if (payload.kind === "spec_done") { ... }
  *   });
  */
-import { eventBus } from "@mandujs/core/observability";
+import { eventBus } from "@mandujs/core/compat/observability/index";
 import type {
   AteMonitorEvent,
   AteRunStartEvent,

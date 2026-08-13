@@ -3,6 +3,12 @@
   "version": "25.0.29",
   "private": true,
   "description": "Private Mandu playground runner scaffold with local mock/Docker execution plus Cloudflare Worker/Durable Object wiring placeholders.",
+  "mandu": {
+    "tier": "labs",
+    "status": "prototype",
+    "defaultInstall": false,
+    "releaseGate": "independent"
+  },
   "type": "module",
   "sideEffects": false,
   "main": "./src/worker.ts",

@@ -71,6 +71,7 @@ async function cleanup(project: { root: string }): Promise<void> {
 describe("template renderers", () => {
   it("Dockerfile includes multi-stage base/deps/build/runtime", () => {
     const content = renderDockerfile({ hasLockfile: true });
+    expect(content).toContain("ARG BUN_IMAGE=oven/bun:1.3.14-alpine");
     expect(content).toContain("FROM ${BUN_IMAGE} AS base");
     expect(content).toContain("AS deps");
     expect(content).toContain("AS build");
@@ -119,7 +120,7 @@ describe("template renderers", () => {
     expect(rj.build.builder).toBe("NIXPACKS");
     const nt = renderNixpacksToml();
     expect(nt).toContain(`providers = ["bun"]`);
-    expect(nt).toContain("BUN_VERSION");
+    expect(nt).toContain(`BUN_VERSION = "1.3.14"`);
   });
 
   it("railway.json rejects lowercase env keys", () => {

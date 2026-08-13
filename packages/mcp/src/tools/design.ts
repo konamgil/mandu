@@ -35,8 +35,8 @@ import {
   type PatchOperation,
   type PatchableSection,
   DESIGN_SECTION_IDS,
-} from "@mandujs/core/design";
-import { checkFileForDesignInlineClasses } from "@mandujs/core/guard/design-inline-class";
+} from "@mandujs/core/compat/design/index";
+import { checkFileForDesignInlineClasses } from "@mandujs/core/compat/guard/design-inline-class";
 
 // ─── Internal helpers ─────────────────────────────────────────────────
 

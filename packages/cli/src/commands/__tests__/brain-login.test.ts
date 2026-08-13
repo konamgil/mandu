@@ -34,7 +34,7 @@ import {
   type StoredToken,
   type HttpClient,
   type OAuthEndpoints,
-} from "@mandujs/core/brain";
+} from "@mandujs/core/compat/brain/index";
 
 function makeMemoryStore(
   seed: Record<string, StoredToken> = {},

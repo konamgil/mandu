@@ -54,7 +54,7 @@ import {
   loadDeployIntentCache,
   renderVercelJsonFromCompile,
   VercelCompileError,
-} from "@mandujs/core/deploy";
+} from "@mandujs/core/compat/deploy/index";
 import { CLI_ERROR_CODES } from "../../../errors/codes";
 import { writeArtifact } from "../artifact-writer";
 import {

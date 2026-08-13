@@ -1,4 +1,4 @@
-import type * as __ManduMandujsCoreDeployTypes0 from "@mandujs/core/deploy";
+import type * as __ManduMandujsCoreDeployTypes0 from "@mandujs/core/compat/deploy/index";
 /**
  * `mandu deploy:plan` — infer per-route deploy intent and write
  * `.mandu/deploy.intent.json`.
@@ -41,9 +41,9 @@ import {
   type DeployInferenceContext,
   type PlanDiffEntry,
   type PlanDiffEntryKind,
-} from "@mandujs/core/deploy";
+} from "@mandujs/core/compat/deploy/index";
 import type { RoutesManifest } from "@mandujs/core";
-import { resolveBrainAdapter } from "@mandujs/core/brain";
+import { resolveBrainAdapter } from "@mandujs/core/compat/brain/index";
 import { resolveManifest } from "../../util/manifest";
 import { CLI_ERROR_CODES } from "../../errors/codes";
 

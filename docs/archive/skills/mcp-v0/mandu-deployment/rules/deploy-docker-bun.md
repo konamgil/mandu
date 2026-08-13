@@ -15,7 +15,7 @@ Docker를 사용하여 Bun 기반 Mandu 앱을 컨테이너화하세요.
 
 ```dockerfile
 # Build stage
-FROM oven/bun:1.0 as builder
+FROM oven/bun:1.3.14 as builder
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ RUN bun run build
 RUN bun install --frozen-lockfile --production
 
 # Production stage
-FROM oven/bun:1.0-slim
+FROM oven/bun:1.3.14-slim
 
 WORKDIR /app
 
@@ -72,10 +72,10 @@ coverage
 
 ```dockerfile
 # Alpine 기반 (더 작은 이미지)
-FROM oven/bun:1.0-alpine as builder
+FROM oven/bun:1.3.14-alpine as builder
 # ... 빌드 과정
 
-FROM oven/bun:1.0-alpine
+FROM oven/bun:1.3.14-alpine
 # ... 프로덕션 설정
 
 # distroless 기반 (최소 공격면)
@@ -113,7 +113,7 @@ docker exec -it mandu sh
 
 ```dockerfile
 # Dockerfile.dev
-FROM oven/bun:1.0
+FROM oven/bun:1.3.14
 
 WORKDIR /app
 
@@ -142,7 +142,7 @@ docker images mandu-app
 docker history mandu-app:latest
 
 # 최적화 목표
-# - oven/bun:1.0-slim: ~150MB base
+# - oven/bun:1.3.14-slim: ~150MB base
 # - 프로덕션 deps만: 추가 50-100MB
 # - 총 목표: < 300MB
 ```

@@ -6,7 +6,7 @@
  * @example
  * ```ts
  * // content.config.ts
- * import { defineContentConfig, glob, file, api } from '@mandujs/core/content';
+ * import { defineContentConfig, glob, file, api } from '@mandujs/core/compat/content/index';
  * import { z } from 'zod';
  *
  * const postSchema = z.object({
@@ -33,7 +33,7 @@
  *
  * ```ts
  * // 페이지에서 사용
- * import { getCollection, getEntry } from '@mandujs/core/content';
+ * import { getCollection, getEntry } from '@mandujs/core/compat/content/index';
  *
  * const posts = await getCollection('posts');
  * const post = await getEntry('posts', 'hello-world');

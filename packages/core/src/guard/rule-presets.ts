@@ -25,7 +25,7 @@
  *   forbidImport,
  *   requireNamedExport,
  *   requirePrefixForExports,
- * } from "@mandujs/core/guard/define-rule";
+ * } from "@mandujs/core/compat/guard/define-rule";
  *
  * export default {
  *   guard: {

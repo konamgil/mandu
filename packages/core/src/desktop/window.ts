@@ -250,7 +250,7 @@ export const _DEFAULTS: Required<Pick<WindowOptions, "title" | "width" | "height
  *
  * @example Main-thread use (window only, no HTTP server):
  * ```ts
- * import { createWindow } from "@mandujs/core/desktop";
+ * import { createWindow } from "@mandujs/core/compat/desktop/index";
  *
  * const win = await createWindow({
  *   url: "https://example.com",

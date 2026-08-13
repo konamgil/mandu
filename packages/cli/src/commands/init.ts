@@ -27,20 +27,13 @@ import {
   LOCKFILE_PATH,
   readMcpConfig,
   writeLockfile,
-} from "@mandujs/core/lockfile";
-// `setupClaudeSkills` is the dev-mode filesystem copier and remains the
-// public API exposed by `@mandujs/skills`. The CLI no longer calls it
-// directly (Phase 11.A: binary-safe path below), but we keep the type
-// import (`SetupResult`) to preserve the existing summary contract and
-// the value import for third-party consumers who import `init.ts` as a
-// library and want to substitute their own skills strategy.
-// `getSkillCount` is a pure constant — safe to call from any context.
-import {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  setupClaudeSkills as _setupClaudeSkillsFsCopy,
-  getSkillCount,
-  type SetupResult as SkillsSetupResult,
-} from "@mandujs/skills/init-integration";
+} from "@mandujs/core/compat/lockfile/index";
+
+interface SkillsSetupResult {
+  skillsInstalled: number;
+  settingsCreated: boolean;
+  errors: string[];
+}
 
 /**
  * Phase 11.A — Binary-safe Claude Code skills installer.
@@ -696,7 +689,7 @@ export async function init(options: InitOptions = {}): Promise<boolean> {
     const slug = typeof options.design === "string" ? options.design : undefined;
     try {
       const { EMPTY_DESIGN_MD, fetchUpstreamDesignMd, linkAgentsToDesignMd } =
-        await import("@mandujs/core/design");
+        await import("@mandujs/core/compat/design/index");
       const body = slug ? await fetchUpstreamDesignMd(slug) : EMPTY_DESIGN_MD;
       await fs.writeFile(path.join(targetDir, "DESIGN.md"), body);
       const linkResult = await linkAgentsToDesignMd({
@@ -926,7 +919,7 @@ function renderInitLanding(ctx: InitLandingContext): void {
 
   const skillsLines: string[] = [];
   if (ctx.skillsResult.skillsInstalled > 0) {
-    skillsLines.push(`- ${ctx.skillsResult.skillsInstalled}/${getSkillCount()} skills installed to \`.claude/skills/\``);
+    skillsLines.push(`- ${ctx.skillsResult.skillsInstalled}/${getEmbeddedSkillIds().length} skills installed to \`.claude/skills/\``);
   }
   if (ctx.skillsResult.settingsCreated) {
     skillsLines.push("- `.claude/settings.json` created (hooks + permissions)");

@@ -9,7 +9,7 @@
  * A real app would replace this with a DB-backed repository while keeping
  * the same shape so callers (`app/api/signup/route.ts`, etc.) don't change.
  */
-import { newId } from "@mandujs/core/id";
+import { newId } from "@mandujs/core/compat/id/index";
 
 export interface User {
   id: string;

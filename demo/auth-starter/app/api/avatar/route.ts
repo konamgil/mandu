@@ -26,7 +26,7 @@
  *     dashboard can render an inline error next to the form.
  */
 import { Mandu, type ManduContext } from "@mandujs/core";
-import { currentUserId } from "@mandujs/core/auth";
+import { currentUserId } from "@mandujs/core/compat/auth/index";
 import { withSession, withCsrf } from "../../../src/lib/auth";
 import { userStore } from "../../../server/domain/users";
 import { saveAvatar, setUserAvatar, UploadRejectedError } from "../../../server/domain/uploads";

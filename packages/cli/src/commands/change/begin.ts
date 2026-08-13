@@ -1,4 +1,4 @@
-import { beginChange } from "@mandujs/core/change";
+import { beginChange } from "@mandujs/core/compat/change/index";
 import { getRootDir } from "../../util/fs";
 
 export interface ChangeBeginOptions {

@@ -2,6 +2,12 @@ name: Publish
 
 on:
   workflow_dispatch:
+    inputs:
+      dist_tag:
+        description: "Optional npm dist-tag override (for example: beta)"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -23,16 +29,28 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Verify packages
+      - name: Verify product packages
         run: |
-          bun run typecheck
-          bun run lint
+          bun run typecheck:product
+          bun run lint:product
           bun run check:public-api
+          bun run check:package-boundaries
           bun run check:target-boundaries
           bun run check:docs-drift
-          bun run test:packages
+          bun run test:product
+          bun run test:agent-apply-gate
           bun run test:smoke
-          bun run test:edge:build
+          bun run test:reference-apps
+
+      - name: Labs/generated signal (non-blocking)
+        continue-on-error: true
+        run: |
+          bun run typecheck:labs
+          bun run scripts/typecheck.ts skills
+          bun run lint:labs
+          oxlint packages/skills
+          bun run test:generated
+          bun run test:labs
 
       - name: Release performance gates
         run: |
@@ -57,7 +75,7 @@ jobs:
         run: bun run version
 
       - name: Pre-publish check
-        run: bun run check:publish
+        run: bun run check:product-release
 
       - name: Commit & push version changes
         run: |
@@ -70,7 +88,8 @@ jobs:
           fi
 
       - name: Publish to npm + GitHub Packages
-        run: bun run publish
+        run: bun run publish:product
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_DIST_TAG: ${{ inputs.dist_tag }}

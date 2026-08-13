@@ -39,13 +39,13 @@ import {
   type DeployIntentCache,
   type PlanDiffEntry,
   type VercelCompileResult,
-} from "@mandujs/core/deploy";
+} from "@mandujs/core/compat/deploy/index";
 import {
   generateManifest,
   loadManifest,
   type RoutesManifest,
 } from "@mandujs/core";
-import { resolveBrainAdapter } from "@mandujs/core/brain";
+import { resolveBrainAdapter } from "@mandujs/core/compat/brain/index";
 import path from "node:path";
 
 /**

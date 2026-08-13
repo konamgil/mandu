@@ -1,4 +1,12 @@
-import { executeMcpTool } from "./mcp";
+import { loadManduConfig } from "@mandujs/core/config";
+import { runExtendedDiagnose } from "@mandujs/core/compat/diagnose/index";
+import {
+  checkWithHealing,
+  healAll,
+  type GuardConfig,
+  type GuardPreset,
+} from "@mandujs/core/guard";
+import { getRootDir } from "../util/fs";
 
 export interface FixOptions {
   apply?: boolean;
@@ -25,119 +33,65 @@ interface FixReport {
   suggestions: string[];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function summarizeGuardHeal(result: unknown, apply: boolean): { passed: boolean; summary: string; suggestions: string[] } {
-  if (!isRecord(result)) {
-    return {
-      passed: false,
-      summary: "Guard heal returned an unexpected response.",
-      suggestions: ["Re-run `mandu fix --json` to inspect the raw tool output."],
-    };
-  }
-
-  const suggestions: string[] = [];
-  const message = typeof result.message === "string" ? result.message : null;
-  const totalViolations = typeof result.totalViolations === "number" ? result.totalViolations : null;
-  const autoFixable = typeof result.autoFixable === "number" ? result.autoFixable : null;
-  const remaining = typeof result.remaining === "number" ? result.remaining : null;
-
-  if (!apply && autoFixable && autoFixable > 0) {
-    suggestions.push("Run `mandu fix --apply` to apply the primary auto-fixes.");
-  }
-
-  if (apply && remaining !== null && remaining > 0) {
-    suggestions.push("Review the remaining Guard violations manually or run `mandu doctor` for deeper guidance.");
-  }
-
-  if (message) {
-    return {
-      passed: result.passed === true,
-      summary: message,
-      suggestions,
-    };
-  }
-
-  if (totalViolations !== null && totalViolations > 0) {
-    return {
-      passed: result.passed === true,
-      summary: apply
-        ? `Guard heal processed ${totalViolations} violation(s).`
-        : `Guard heal found ${totalViolations} violation(s).`,
-      suggestions,
-    };
-  }
-
-  return {
-    passed: result.passed === true,
-    summary: result.passed === true ? "No architecture violations found." : "Guard heal reported issues.",
-    suggestions,
+async function runGuardHealing(rootDir: string, options: FixOptions): Promise<FixStage> {
+  const projectConfig = await loadManduConfig(rootDir).catch(() => null);
+  const config: GuardConfig = {
+    ...(projectConfig?.guard ?? {}),
+    preset: (options.preset as GuardPreset | undefined) ?? projectConfig?.guard?.preset ?? "mandu",
   };
-}
+  const result = await checkWithHealing(config, rootDir);
+  const items = options.file
+    ? result.items.filter((item) => item.violation.filePath.includes(options.file!))
+    : result.items;
 
-function summarizeDiagnose(result: unknown): { passed: boolean; summary: string; failedChecks: string[] } {
-  if (!isRecord(result)) {
+  if (options.apply && items.length > 0) {
+    const healed = await healAll({ ...result, items });
+    const remaining = items.length - healed.fixed;
     return {
-      passed: false,
-      summary: "Diagnose returned an unexpected response.",
-      failedChecks: [],
+      name: "guard-heal",
+      ok: true,
+      passed: remaining === 0,
+      summary: remaining === 0
+        ? `Applied ${healed.fixed} Guard fix(es).`
+        : `Applied ${healed.fixed} Guard fix(es); ${remaining} remain.`,
+      details: { totalViolations: items.length, remaining, ...healed },
     };
   }
 
-  const failedChecks = Array.isArray(result.checks)
-    ? result.checks
-        .filter((entry) => {
-          if (!isRecord(entry) || !isRecord(entry.result)) return false;
-          return entry.result.error || entry.result.passed === false || entry.result.valid === false;
-        })
-        .map((entry) => (isRecord(entry) && typeof entry.name === "string" ? entry.name : "unknown"))
-    : [];
-
-  const blockingFailedChecks = failedChecks.filter((name) => name !== "kitchen_errors");
-  const kitchenOnlyFailure = failedChecks.length > 0 && blockingFailedChecks.length === 0;
-
-  const summary = blockingFailedChecks.length > 0
-    ? `${blockingFailedChecks.length} blocking diagnostic check(s) failed.`
-    : kitchenOnlyFailure
-      ? "Core diagnostics passed. Kitchen diagnostics were unavailable."
-      : "Diagnostics passed.";
-
   return {
-    passed: blockingFailedChecks.length === 0,
-    summary,
-    failedChecks,
+    name: "guard-heal",
+    ok: true,
+    passed: items.length === 0,
+    summary: items.length === 0
+      ? "No architecture violations found."
+      : `Found ${items.length} Guard violation(s); ${items.filter((item) => item.healing.primary.autoFix).length} auto-fixable.`,
+    details: {
+      totalViolations: items.length,
+      violations: items.map((item) => ({
+        file: item.violation.filePath,
+        rule: item.violation.ruleName,
+        suggestion: item.healing.primary.explanation,
+      })),
+    },
   };
 }
 
 async function runBuildVerification(captureOutput: boolean): Promise<{ passed: boolean; output?: string[] }> {
   const { build } = await import("./build");
+  if (!captureOutput) return { passed: await build() };
 
-  if (!captureOutput) {
-    return { passed: await build() };
-  }
-
-  const captured: string[] = [];
+  const output: string[] = [];
   const originalLog = console.log;
   const originalError = console.error;
-
-  const write = (...args: unknown[]) => {
-    captured.push(args.map((value) => String(value)).join(" "));
-  };
-
+  const write = (...args: unknown[]) => output.push(args.map(String).join(" "));
   console.log = write;
   console.error = write;
-
   try {
-    return {
-      passed: await build(),
-      output: captured,
-    };
+    return { passed: await build(), output };
   } finally {
     console.log = originalLog;
     console.error = originalError;
@@ -146,69 +100,40 @@ async function runBuildVerification(captureOutput: boolean): Promise<{ passed: b
 
 function printHumanReport(report: FixReport): void {
   console.log("Mandu Fix");
-
   for (const stage of report.stages) {
     console.log(`\nStage: ${stage.name}`);
     console.log(`- Status: ${stage.passed ? "pass" : "fail"}`);
     console.log(`- Summary: ${stage.summary}`);
-
-    if (stage.name === "diagnose" && isRecord(stage.details) && Array.isArray(stage.details.failedChecks) && stage.details.failedChecks.length > 0) {
-      console.log(`- Failed checks: ${stage.details.failedChecks.join(", ")}`);
-    }
   }
-
   if (report.suggestions.length > 0) {
     console.log("\nNext steps:");
-    for (const suggestion of report.suggestions) {
-      console.log(`- ${suggestion}`);
-    }
+    for (const suggestion of report.suggestions) console.log(`- ${suggestion}`);
   }
 }
 
 export async function fix(options: FixOptions = {}): Promise<boolean> {
+  const rootDir = getRootDir();
   const stages: FixStage[] = [];
   const suggestions: string[] = [];
   const shouldRunBuildVerify = options.verify === true && options.build !== false;
 
   try {
-    const healResult = await executeMcpTool("mandu.guard.heal", {
-      autoFix: options.apply === true,
-      file: options.file,
-      preset: options.preset,
-    });
-    const healSummary = summarizeGuardHeal(healResult, options.apply === true);
+    const guard = await runGuardHealing(rootDir, options);
+    stages.push(guard);
+    if (!guard.passed && !options.apply) suggestions.push("Run `mandu fix --apply` or review the reported Guard violations.");
 
-    stages.push({
-      name: "guard-heal",
-      ok: true,
-      passed: healSummary.passed,
-      summary: healSummary.summary,
-      details: healResult,
-    });
-    suggestions.push(...healSummary.suggestions);
-
-    const diagnoseResult = await executeMcpTool("mandu.diagnose", {
-      autoFix: false,
-    });
-    const diagnoseSummary = summarizeDiagnose(diagnoseResult);
-
+    const diagnose = await runExtendedDiagnose(rootDir);
     stages.push({
       name: "diagnose",
       ok: true,
-      passed: diagnoseSummary.passed,
-      summary: diagnoseSummary.summary,
-      details: {
-        raw: diagnoseResult,
-        failedChecks: diagnoseSummary.failedChecks,
-      },
+      passed: diagnose.healthy,
+      summary: diagnose.healthy
+        ? "Diagnostics passed."
+        : `${diagnose.errorCount} blocking diagnostic check(s) failed.`,
+      details: diagnose,
     });
-
-    if (diagnoseSummary.failedChecks.includes("kitchen_errors")) {
-      suggestions.push("Start `mandu dev` if you want browser-side Kitchen diagnostics included in the verification pass.");
-    }
-
-    if (diagnoseSummary.failedChecks.some((name) => name !== "kitchen_errors")) {
-      suggestions.push("Run `mandu review` or `mandu doctor` to inspect the failing Guard/contract/manifest checks in more detail.");
+    for (const check of diagnose.checks) {
+      if (!check.ok && check.suggestion) suggestions.push(check.suggestion);
     }
 
     if (shouldRunBuildVerify) {
@@ -220,10 +145,6 @@ export async function fix(options: FixOptions = {}): Promise<boolean> {
         summary: buildResult.passed ? "Build verification passed." : "Build verification failed.",
         details: buildResult.output ? { output: buildResult.output } : undefined,
       });
-
-      if (!buildResult.passed) {
-        suggestions.push("Inspect the build output above and re-run `mandu build` after fixing the reported errors.");
-      }
     }
   } catch (error) {
     stages.push({
@@ -232,23 +153,17 @@ export async function fix(options: FixOptions = {}): Promise<boolean> {
       passed: false,
       summary: toErrorMessage(error),
     });
-    suggestions.push("Re-run with `--json` to inspect raw stage output if the error persists.");
   }
 
-  const success = stages.length > 0 && stages.every((stage) => stage.ok && stage.passed);
   const report: FixReport = {
-    success,
+    success: stages.length > 0 && stages.every((stage) => stage.ok && stage.passed),
     apply: options.apply === true,
     verify: shouldRunBuildVerify,
     stages,
-    suggestions: Array.from(new Set(suggestions)),
+    suggestions: [...new Set(suggestions)],
   };
 
-  if (options.json) {
-    console.log(JSON.stringify(report, null, 2));
-  } else {
-    printHumanReport(report);
-  }
-
-  return success;
+  if (options.json) console.log(JSON.stringify(report, null, 2));
+  else printHumanReport(report);
+  return report.success;
 }

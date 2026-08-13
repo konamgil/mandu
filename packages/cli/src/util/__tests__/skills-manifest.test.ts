@@ -3,7 +3,7 @@
  *
  * Background: `mandu.exe init` previously emitted 9 silent ENOENT warnings
  * because `@mandujs/skills/init-integration::setupClaudeSkills` walked the
- * host filesystem to copy `skills/<id>/SKILL.md`. Inside a compiled
+ * host filesystem to copy `generated/skills/<id>/SKILL.md`. Inside a compiled
  * binary the skills package is unreachable (it isn't embedded) and
  * `$bunfs` is read-only, so every `copyFile()` silently resolved to
  * error and the user saw 9 fuzzy yellow warnings during `init`.
@@ -11,10 +11,7 @@
  * This test suite pins the embedding contract end-to-end:
  *
  *   1. Manifest ships the expected SKILL.md payloads + 1 settings.json.
- *      The count is derived from `EXPECTED_SKILL_IDS.length + 1` so adding
- *      new skills only requires updating that list. (#234 added 6 workflow
- *      skills bringing the total from 9 to 15.) Drift is caught on the
- *      count alone.
+ *      The count is derived from `EXPECTED_SKILL_IDS.length + 1`.
  *   2. `EMBEDDED_SKILL_IDS` exported by `generated/skills-manifest.js`
  *      matches `@mandujs/skills`'s runtime `SKILL_IDS` exactly — order
  *      included. Catches the scenario where the skills package grows a
@@ -44,31 +41,16 @@ import path from "node:path";
 
 const CLI_ROOT = path.resolve(import.meta.dir, "..", "..", "..");
 const REPO_ROOT = path.resolve(CLI_ROOT, "..", "..");
-const SKILLS_PKG_ROOT = path.join(REPO_ROOT, "packages", "skills");
+const OFFICIAL_SKILLS_ROOT = path.join(REPO_ROOT, "skills", "official");
 
-// Must stay in sync with `@mandujs/skills` SKILL_IDS and with the
-// generator's own hardcoded list in
-// `packages/cli/scripts/generate-template-manifest.ts`.
-// Two task-shaped families (9) + workflow-shaped family (6, #234) = 15.
+// Phase 3 public skill budget: one workflow plus five domain addenda.
 const EXPECTED_SKILL_IDS = [
-  // Task-shaped (domain knowledge)
-  "mandu-create-feature",
-  "mandu-create-api",
-  "mandu-debug",
-  "mandu-explain",
-  "mandu-guard-guide",
-  "mandu-lint",
-  "mandu-deploy",
-  "mandu-slot",
+  "mandu-agent-workflow",
   "mandu-fs-routes",
+  "mandu-contract",
   "mandu-hydration",
-  // Workflow-shaped (MCP tool orchestration — #234)
-  "mandu-mcp-index",
-  "mandu-mcp-orient",
-  "mandu-mcp-create-flow",
-  "mandu-mcp-verify",
-  "mandu-mcp-safe-change",
-  "mandu-mcp-deploy",
+  "mandu-guard",
+  "mandu-testing",
 ] as const;
 
 describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
@@ -112,12 +94,7 @@ describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
     for (const skillId of EXPECTED_SKILL_IDS) {
       const embedded = SKILLS_MANIFEST.get(skillId);
       expect(embedded).toBeTruthy();
-      const sourcePath = path.join(
-        SKILLS_PKG_ROOT,
-        "skills",
-        skillId,
-        "SKILL.md"
-      );
+      const sourcePath = path.join(OFFICIAL_SKILLS_ROOT, skillId, "SKILL.md");
       const onDisk = readFileSync(sourcePath, "utf-8");
       expect(embedded).toBe(onDisk);
     }
@@ -128,7 +105,7 @@ describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
     );
     expect(settingsEmbedded).toBeTruthy();
     const settingsOnDisk = readFileSync(
-      path.join(SKILLS_PKG_ROOT, "templates", ".claude", "settings.json"),
+      path.join(REPO_ROOT, "packages", "skills", "templates", ".claude", "settings.json"),
       "utf-8"
     );
     expect(settingsEmbedded).toBe(settingsOnDisk);
@@ -214,18 +191,13 @@ describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
     }
   });
 
-  it("regression: setupClaudeSkills (on-disk copyFile path) is not wired into runSteps", () => {
-    // This is a stronger assertion than the pattern check above — it
-    // ensures even accidental refactors can't silently reintroduce the
-    // I-03 bug. The import itself is allowed (we alias it as
-    // `_setupClaudeSkillsFsCopy` for library consumers), but calling it
-    // from the init pipeline is not.
+  it("regression: init uses embedded payloads without a Skills runtime dependency", () => {
     const raw = readFileSync(
       path.join(CLI_ROOT, "src", "commands", "init.ts"),
       "utf-8"
     ).replace(/\r\n/g, "\n");
-    // Allowed: import statement with alias — check before comment strip.
-    expect(raw).toMatch(/setupClaudeSkills as _setupClaudeSkillsFsCopy/);
+    expect(raw).not.toMatch(/from\s+["']@mandujs\/skills/);
+    expect(raw).toContain("installEmbeddedClaudeSkills(targetDir)");
 
     // Strip // line comments + /* block comments */ before the call scan,
     // so documentary references (e.g. "was `setupClaudeSkills(targetDir)`")
@@ -237,7 +209,7 @@ describe("Phase 11.A skills-manifest embedding (I-03 fix)", () => {
       // contain "//" but init.ts has none on live code lines, and a false
       // positive here would only make the regression more strict (good).
       .replace(/\/\/[^\n]*/g, "");
-    // Disallowed: a bare `setupClaudeSkills(` call anywhere in live code.
+    // Disallowed: an on-disk `setupClaudeSkills(` call anywhere in live code.
     const unaliasedCallPattern = /[^_a-zA-Z]setupClaudeSkills\s*\(/g;
     const occurrences = codeOnly.match(unaliasedCallPattern) ?? [];
     expect(occurrences).toEqual([]);

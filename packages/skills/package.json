@@ -3,6 +3,12 @@
   "version": "0.20.1",
   "type": "module",
   "description": "Claude Code skills and plugin for Mandu framework",
+  "mandu": {
+    "tier": "generated",
+    "status": "compatibility",
+    "runtimeLogic": false,
+    "releaseGate": "independent"
+  },
   "license": "MPL-2.0",
   "main": "./src/index.ts",
   "exports": {
@@ -17,7 +23,7 @@
   },
   "files": [
     "src/**/*",
-    "skills/**/*",
+    "generated/skills/**/*",
     "templates/**/*",
     ".claude-plugin/**/*",
     "README.md"

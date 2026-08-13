@@ -38,7 +38,7 @@
  */
 
 /** Internal brand — identifies Response objects minted by `notFound()`. */
-export const NOT_FOUND_BRAND: unique symbol = Symbol.for("@mandujs/core/not-found");
+export const NOT_FOUND_BRAND: unique symbol = Symbol.for("@mandujs/core/compat/not-found");
 
 /** WeakSet of Response instances tagged as notFound. Avoids property writes. */
 const brandedNotFoundResponses = new WeakSet<Response>();

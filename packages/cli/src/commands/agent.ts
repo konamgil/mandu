@@ -1,7 +1,9 @@
+import fs from "fs/promises";
 import path from "path";
 import {
   buildAgentApplyReport,
   buildAgentContext,
+  buildExecutableAgentPlan,
   buildAgentPlan,
   buildAgentRepairReport,
   buildAgentSyncReport,
@@ -16,11 +18,12 @@ import {
   type AgentContext,
   type AgentManifest,
   type AgentPlan,
+  type AgentOperationInput,
   type AgentRepairReport,
   type AgentSyncReport,
   type AgentSyncTarget,
   type AgentVerifyReport,
-} from "@mandujs/core/agent";
+} from "@mandujs/core/compat/agent/index";
 import { getRootDir } from "../util/fs";
 import { theme } from "../terminal";
 
@@ -42,6 +45,8 @@ export interface AgentCommandOptions {
   base?: string;
   from?: string;
   intent?: string;
+  operations?: string;
+  rollbackId?: string;
   dryRun?: boolean;
   target?: AgentSyncTarget;
   apply?: boolean;
@@ -62,11 +67,14 @@ export const AGENT_HELP = [
   "  Available now:",
   "    context [--json] [--no-diagnose]    Print project context for agents.",
   "    manifest [--write] [--json]         Build the agent manifest, optionally writing .mandu/agent-manifest.json.",
-  "    plan <intent> [--json] [--write]     Convert a natural-language task into a Mandu work plan.",
-  "    apply [--from <file>] [--json]       Preview plan-based actions without direct file mutation.",
+  "    plan <intent> [--json] [--write]     Convert a natural-language task into a conservative work plan.",
+  "    plan <intent> --operations <file>    Bind typed operations and preconditions into an executable plan.",
+  "    apply [--from <file>] [--json]       Validate and preview a typed plan (no writes by default).",
+  "    apply --from <file> --execute        Apply typed operations with snapshot rollback and a receipt.",
   "    verify [--changed] [--json]         Run one agent-facing verification report.",
   "",
   "    repair [--from <file>] [--json]      Convert a verify report into next actions.",
+  "    repair --rollback <id> --apply       Restore a receipt snapshot unless later edits conflict.",
   "    sync [--target all] [--json]         Emit Codex/Claude/Gemini workflow artifacts.",
   "",
   "  Examples:",
@@ -82,6 +90,17 @@ export const AGENT_HELP = [
 
 function normalizeRoot(cwd: string | undefined): string {
   return cwd && cwd !== "true" ? path.resolve(cwd) : getRootDir();
+}
+
+function resolveInsideRoot(rootDir: string, value: string): string {
+  const root = path.resolve(rootDir);
+  const resolved = path.resolve(root, value);
+  const rootKey = process.platform === "win32" ? root.toLowerCase() : root;
+  const resolvedKey = process.platform === "win32" ? resolved.toLowerCase() : resolved;
+  if (resolvedKey !== rootKey && !resolvedKey.startsWith(`${rootKey}${path.sep}`)) {
+    throw new Error("typed operation input must stay inside the project root");
+  }
+  return resolved;
 }
 
 function printContextSummary(context: AgentContext): void {
@@ -308,12 +327,42 @@ export async function agent(options: AgentCommandOptions = {}): Promise<boolean>
     }
 
     case "plan": {
-      const intent = options.intent?.trim();
-      if (!intent) {
-        console.error("Usage: mandu agent plan \"<task>\" --json");
-        return false;
+      let intent = options.intent?.trim();
+      let plan: AgentPlan;
+      if (options.operations) {
+        const operationPath = resolveInsideRoot(rootDir, options.operations);
+        const draft = JSON.parse(await fs.readFile(operationPath, "utf8")) as {
+          intent?: unknown;
+          operations?: unknown;
+          idempotencyKey?: unknown;
+          rollbackPolicy?: unknown;
+        };
+        if (!intent && typeof draft.intent === "string") intent = draft.intent.trim();
+        if (!Array.isArray(draft.operations)) {
+          console.error("Typed operation input must contain an operations array.");
+          return false;
+        }
+        if (!intent) {
+          console.error("Typed operation input requires an intent in the file or command arguments.");
+          return false;
+        }
+        plan = await buildExecutableAgentPlan(rootDir, {
+          intent,
+          operations: draft.operations as AgentOperationInput[],
+          idempotencyKey:
+            typeof draft.idempotencyKey === "string" ? draft.idempotencyKey : undefined,
+          rollbackPolicy:
+            draft.rollbackPolicy === "manual" || draft.rollbackPolicy === "automatic"
+              ? draft.rollbackPolicy
+              : undefined,
+        });
+      } else {
+        if (!intent) {
+          console.error("Usage: mandu agent plan \"<task>\" --json");
+          return false;
+        }
+        plan = buildAgentPlan({ intent });
       }
-      const plan = buildAgentPlan({ intent });
       if (options.write) {
         const result = await writeAgentPlan(rootDir, plan);
         if (options.json) {
@@ -384,6 +433,7 @@ export async function agent(options: AgentCommandOptions = {}): Promise<boolean>
       const report = await buildAgentRepairReport(rootDir, {
         from: options.from,
         apply: options.apply === true,
+        rollbackId: options.rollbackId,
       });
       if (options.write) {
         const result = await writeAgentRepairReport(rootDir, report);

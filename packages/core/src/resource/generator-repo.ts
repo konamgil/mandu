@@ -127,7 +127,7 @@ export function generateRepoSource(
     );
   }
 
-  const dbImport = options.dbImport ?? "@mandujs/core/db";
+  const dbImport = options.dbImport ?? "@mandujs/core/compat/db/index";
   const contractImport =
     options.contractImport ?? `../contracts/${resource.definition.name}.contract`;
 

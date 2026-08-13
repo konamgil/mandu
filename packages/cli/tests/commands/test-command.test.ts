@@ -16,7 +16,7 @@ import {
   resolveTargetFiles,
   testCommand,
 } from "../../src/commands/test";
-import { resolveTestConfig } from "@mandujs/core/config/validate";
+import { resolveTestConfig } from "@mandujs/core/compat/config/validate";
 
 describe("discoverTestFiles", () => {
   let dir: string;

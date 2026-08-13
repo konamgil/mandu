@@ -10,6 +10,22 @@ export const PUBLISHABLE_PACKAGE_DIRS = [
   "packages/cli",
 ];
 
+/** Stable product release train. A failure in Labs/generated distributions
+ * must not prevent publishing the Core/CLI/MCP Golden Path. */
+export const PRODUCT_PACKAGE_DIRS = [
+  "packages/core",
+  "packages/mcp",
+  "packages/cli",
+];
+
+export const LABS_PACKAGE_DIRS = [
+  "packages/ate",
+  "packages/edge",
+  "packages/playground-runner",
+];
+
+export const GENERATED_PACKAGE_DIRS = ["packages/skills"];
+
 interface PackageJson {
   name: string;
   dependencies?: Record<string, string>;

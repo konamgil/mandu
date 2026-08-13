@@ -2,6 +2,12 @@
   "name": "@mandujs/edge",
   "version": "0.4.79",
   "description": "Mandu edge adapters — Cloudflare Workers, Deno Deploy, Vercel Edge, Netlify Edge",
+  "mandu": {
+    "tier": "labs",
+    "status": "experimental",
+    "defaultInstall": false,
+    "releaseGate": "independent"
+  },
   "type": "module",
   "sideEffects": false,
   "main": "./src/index.ts",

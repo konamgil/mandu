@@ -13,7 +13,7 @@
  *
  * @example
  * ```ts
- * import { definePlugin } from "@mandujs/core/plugins/define";
+ * import { definePlugin } from "@mandujs/core/compat/plugins/define";
  *
  * export const sitemap = definePlugin({
  *   name: "sitemap",

@@ -229,4 +229,4 @@ export type LockStrategy = "pg_advisory_lock" | "mysql_get_lock" | "sqlite_immed
  * v1. Expansion lands in 4c.1 / 4c.2 patches after 4c merge.
  */
 export type Phase4cScopeMarker = typeof _PHASE_4C_V1_SCOPE;
-const _PHASE_4C_V1_SCOPE = Symbol.for("@mandujs/core/resource/ddl/phase-4c-v1");
+const _PHASE_4C_V1_SCOPE = Symbol.for("@mandujs/core/compat/resource/ddl/phase-4c-v1");

@@ -1,8 +1,8 @@
 import type { Resource } from "@modelcontextprotocol/sdk/types.js";
 import { loadManifest } from "@mandujs/core";
-import { getTransactionStatus } from "@mandujs/core/change";
-import type { GeneratedMap } from "@mandujs/core/generator";
-import { getWatcher } from "@mandujs/core/watcher";
+import { getTransactionStatus } from "@mandujs/core/compat/change/index";
+import type { GeneratedMap } from "@mandujs/core/compat/generator/index";
+import { getWatcher } from "@mandujs/core/compat/watcher/index";
 import { getProjectPaths, readJsonFile } from "../utils/project.js";
 import {
   getGuide,

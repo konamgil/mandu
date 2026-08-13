@@ -31,8 +31,8 @@ import {
   parseDesignMd,
   validateDesignSpec,
   humanizeSectionId,
-} from "@mandujs/core/design";
-import type { ValidationIssue, LintIssue } from "@mandujs/core/design";
+} from "@mandujs/core/compat/design/index";
+import type { ValidationIssue, LintIssue } from "@mandujs/core/compat/design/index";
 
 const DEFAULT_FILENAME = "DESIGN.md";
 

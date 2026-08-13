@@ -20,13 +20,13 @@ import {
   getBrain,
   initializeArchitectureAnalyzer,
   getArchitectureAnalyzer,
-} from "@mandujs/core/brain";
+} from "@mandujs/core/compat/brain/index";
 import {
   generateJsonStatus,
   getWatcher,
   startWatcher,
   stopWatcher,
-} from "@mandujs/core/watcher";
+} from "@mandujs/core/compat/watcher/index";
 import { getProjectPaths } from "../utils/project.js";
 
 export const brainToolDefinitions: Tool[] = [
@@ -665,7 +665,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
 
   // #235 followup — brain auth tools (status / login / logout).
   handlers["mandu.brain.status"] = async () => {
-    const core = await import("@mandujs/core/brain");
+    const core = await import("@mandujs/core/compat/brain/index");
     assertBrainAuthSurface(core);
     const store = core.getCredentialStore();
     const resolution = await core.resolveBrainAdapter({
@@ -745,7 +745,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
     };
 
     if (provider === "openai") {
-      const core = await import("@mandujs/core/brain");
+      const core = await import("@mandujs/core/compat/brain/index");
       assertBrainAuthSurface(core);
       const auth = new core.ChatGPTAuth();
       const existing = auth.locateAuthFile();
@@ -836,7 +836,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
     }
 
     // Anthropic — Mandu-managed OAuth loopback flow.
-    const core = await import("@mandujs/core/brain");
+    const core = await import("@mandujs/core/compat/brain/index");
     assertBrainAuthSurface(core);
     try {
       const adapter = new core.AnthropicOAuthAdapter({
@@ -889,7 +889,7 @@ export function brainTools(projectRoot: string, server?: Server, monitor?: Activ
     const { provider = "all" } = args as {
       provider?: "openai" | "anthropic" | "all";
     };
-    const core = await import("@mandujs/core/brain");
+    const core = await import("@mandujs/core/compat/brain/index");
     assertBrainAuthSurface(core);
     const store = core.getCredentialStore();
     const targets =

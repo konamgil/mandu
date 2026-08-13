@@ -26,8 +26,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import { startJitPrewarm, logPrewarmResult } from "../jit-prewarm";
-import { _resetCacheForTesting, withPerf } from "@mandujs/core/perf";
-import { HMR_PERF } from "@mandujs/core/perf/hmr-markers";
+import { _resetCacheForTesting, withPerf } from "@mandujs/core/compat/perf/index";
+import { HMR_PERF } from "@mandujs/core/compat/perf/hmr-markers";
 
 function enablePerf(): void {
   process.env.MANDU_PERF = "1";

@@ -46,6 +46,7 @@
 import type { BunPlugin } from "bun";
 import {
   buildForbiddenGeneratedImportMessage,
+  FORBIDDEN_GENERATED_IMPORT_PATTERN,
   FORBIDDEN_GENERATED_IMPORT_SUGGESTION,
   GENERATED_IMPORT_DOCS_URL,
 } from "../../guard/check";
@@ -153,4 +154,4 @@ export function blockGeneratedImports(
 }
 
 /** Exported for unit-test convenience — keep the filter text assertable. */
-export const DEFAULT_BLOCK_FILTER = /__generated__|(?:^|[\/\\])\.mandu[\/\\]generated(?:[\/\\]|$)/;
+export const DEFAULT_BLOCK_FILTER = FORBIDDEN_GENERATED_IMPORT_PATTERN;

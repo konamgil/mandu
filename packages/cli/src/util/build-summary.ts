@@ -1,5 +1,5 @@
 import type { RouteSpec } from "@mandujs/core";
-import { formatSize, type BundleManifest, type BundleOutput } from "@mandujs/core/bundler";
+import { formatSize, type BundleManifest, type BundleOutput } from "@mandujs/core/compat/bundler/index";
 import { renderTable } from "../terminal";
 import path from "path";
 

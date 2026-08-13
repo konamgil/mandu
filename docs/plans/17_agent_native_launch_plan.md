@@ -1,8 +1,10 @@
 # 17. Agent-Native Framework Launch Plan
 
 작성일: 2026-05-01  
-상태: Draft execution plan  
+상태: Superseded by `22_mandu_refoundation_execution_plan.md`
 기준 문서: `docs/product/02_agent_native_framework_strategy.md`
+
+> 2026-08-13: 공개 launch보다 제품 범위 축소와 reliability 복구를 먼저 수행한다. 완료된 항목의 역사적 기록으로만 유지한다.
 
 ---
 

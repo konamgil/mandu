@@ -25,7 +25,7 @@ function disablePerf(): void {
   _resetCacheForTesting();
 }
 
-describe("@mandujs/core/perf", () => {
+describe("@mandujs/core/compat/perf/index", () => {
   let logSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {

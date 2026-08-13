@@ -115,7 +115,7 @@ export interface NixpacksTomlOptions {
 }
 
 export function renderNixpacksToml(options: NixpacksTomlOptions = {}): string {
-  const bunVersion = options.bunVersion ?? "1.3.12";
+  const bunVersion = options.bunVersion ?? "1.3.14";
   const port = options.port ?? DEFAULT_PORT;
   const providers = options.providers ?? ["bun"];
   const lines = [

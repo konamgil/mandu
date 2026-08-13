@@ -137,7 +137,7 @@ describe("notFound()", () => {
     // (e.g. monorepo duplication) agree on identity. If this changes we've
     // broken cross-package detection — regression guard.
     expect(typeof NOT_FOUND_BRAND).toBe("symbol");
-    expect(Symbol.keyFor(NOT_FOUND_BRAND)).toBe("@mandujs/core/not-found");
+    expect(Symbol.keyFor(NOT_FOUND_BRAND)).toBe("@mandujs/core/compat/not-found");
   });
 
   it("two separate notFound() calls produce independently-branded Responses", () => {

@@ -108,7 +108,7 @@ packages/playground-runner/
                        │ Bun.spawn(['docker', 'run', ...])
                        ▼
  ┌─────────────────────────────────────────┐
- │  oven/bun:1.3.12-slim  (per request)    │
+ │  oven/bun:1.3.14-slim  (per request)    │
  │  --rm --network=none --memory=256m      │
  │  --cpus=0.5 --pids-limit=128            │
  │  --user=65534:65534 --cap-drop=ALL      │
@@ -158,7 +158,7 @@ The adapter kills the inner container via `docker kill <name>` on timeout.
 | `PLAYGROUND_ORIGIN` | yes | — | CORS origin for browser fetches |
 | `ACME_EMAIL` | rec. | empty | Let's Encrypt renewal notices |
 | `DOCKER_GID` | opt. | `999` | `getent group docker | cut -d: -f3` |
-| `MANDU_DOCKER_SANDBOX_IMAGE` | opt. | `oven/bun:1.3.12-slim` | Per-run image |
+| `MANDU_DOCKER_SANDBOX_IMAGE` | opt. | `oven/bun:1.3.14-slim` | Per-run image |
 | `TURNSTILE_SECRET` | opt. | empty | Reserved for parity with CF path |
 
 ### Environment variables (container side)
@@ -169,7 +169,7 @@ The adapter kills the inner container via `docker kill <name>` on timeout.
 | `MANDU_PLAYGROUND_PORT` | `8788` | Bind port (internal only) |
 | `MANDU_PLAYGROUND_HOST` | `0.0.0.0` | Bind addr (reachable by Caddy) |
 | `MANDU_PLAYGROUND_CORS_ORIGIN` | — | CORS allowlist |
-| `MANDU_DOCKER_SANDBOX_IMAGE` | `oven/bun:1.3.12-slim` | Per-run OCI image |
+| `MANDU_DOCKER_SANDBOX_IMAGE` | `oven/bun:1.3.14-slim` | Per-run OCI image |
 | `MANDU_DOCKER_WORK_DIR` | `/tmp/mandu-playground` | Stage dir for user code |
 
 ## Operations
@@ -431,11 +431,11 @@ Set that value, then `docker compose up -d --force-recreate playground`.
 ### Timeouts on every run
 
 Likely the sandbox image isn't pulled yet. First run pulls
-`oven/bun:1.3.12-slim` (~110 MB) which can time out on slow links.
+`oven/bun:1.3.14-slim` (~110 MB) which can time out on slow links.
 Pre-pull:
 
 ```bash
-docker pull oven/bun:1.3.12-slim
+docker pull oven/bun:1.3.14-slim
 ```
 
 ### Container creation fails with "No space left on device"

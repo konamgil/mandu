@@ -30,6 +30,18 @@ export const GENERATED_IMPORT_DOCS_URL =
   "https://mandujs.com/docs/architect/generated-access";
 
 /**
+ * Only Mandu application artifacts are registry-owned. Package-local build
+ * outputs such as `generated/cli-ux-manifest.js` are regular bundled modules
+ * and must not be mistaken for `.mandu/generated` or `__generated__` data.
+ */
+export const FORBIDDEN_GENERATED_IMPORT_PATTERN =
+  /__generated__|(?:^|[\/\\])\.mandu[\/\\]generated(?:[\/\\]|$)/;
+
+export function isForbiddenGeneratedImport(specifier: string): boolean {
+  return FORBIDDEN_GENERATED_IMPORT_PATTERN.test(specifier);
+}
+
+/**
  * Build the user-facing message for a detected direct generated-artifact
  * import. `specifier` is the literal import string that tripped the guard
  * (not the resolved path).
@@ -152,17 +164,20 @@ export async function checkInvalidGeneratedImport(
       const content = await readFileContent(file);
       if (!content) continue;
 
-      // Check for imports from generated directories
-      const importRegex = /import\s+.*from\s+['"](.*generated.*)['"]/g;
-      let match;
-
-      while ((match = importRegex.exec(content)) !== null) {
+      // Parse actual module edges so comments, fixture strings, and template
+      // literals cannot become false positives. Package-local `generated/`
+      // folders are not owned by the application registry.
+      const imports = extractImportsAST(content);
+      for (const imported of imports) {
+        if (imported.statement.trimStart().startsWith("import type")) continue;
+        if (!isForbiddenGeneratedImport(imported.path)) continue;
         const relativePath = path.relative(rootDir, file);
         violations.push({
           ruleId: GUARD_RULES.INVALID_GENERATED_IMPORT.id,
           file: relativePath,
-          message: buildForbiddenGeneratedImportMessage(match[1]),
+          message: buildForbiddenGeneratedImportMessage(imported.path),
           suggestion: FORBIDDEN_GENERATED_IMPORT_SUGGESTION,
+          line: imported.line,
         });
       }
     }

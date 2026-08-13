@@ -12,15 +12,14 @@ const EXPECTED_NAMES = [
   "mandu.diagnose",
   "mandu.island.add",
   "mandu.middleware.add",
-  "mandu.test.route",
   "mandu.deploy.check",
   "mandu.cache.manage",
 ] as const;
 
 describe("compositeToolDefinitions", () => {
-  it("is an array of 7 tools", () => {
+  it("is an array of 6 product tools", () => {
     expect(Array.isArray(compositeToolDefinitions)).toBe(true);
-    expect(compositeToolDefinitions).toHaveLength(7);
+    expect(compositeToolDefinitions).toHaveLength(6);
   });
 
   it("contains all expected tool names", () => {
@@ -56,12 +55,12 @@ describe("compositeToolDefinitions", () => {
 });
 
 describe("compositeTools()", () => {
-  it("returns a map with all 7 handler functions", () => {
+  it("returns a map with all 6 product handler functions", () => {
     const handlers = compositeTools("/fake/root");
     for (const n of EXPECTED_NAMES) {
       expect(typeof handlers[n]).toBe("function");
     }
-    expect(Object.keys(handlers)).toHaveLength(7);
+    expect(Object.keys(handlers)).toHaveLength(6);
   });
 
   it("mandu.island.add emits the supported @mandujs/core/client wrapper API", async () => {

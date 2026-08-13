@@ -5,7 +5,7 @@ import {
   rollbackChange,
   getTransactionStatus,
   hasActiveTransaction,
-} from "@mandujs/core/change";
+} from "@mandujs/core/compat/change/index";
 import { acquireLock, releaseLock, checkLock, requireLock } from "../tx-lock.js";
 
 export const transactionToolDefinitions: Tool[] = [

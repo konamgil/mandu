@@ -8,7 +8,7 @@
  * surface:
  *
  * ```ts
- * import type { SitemapEntry, Robots, WebAppManifest } from "@mandujs/core/routes";
+ * import type { SitemapEntry, Robots, WebAppManifest } from "@mandujs/core/compat/routes/index";
  * ```
  *
  * Runtime helpers (`renderSitemap`, `renderRobots`, `renderManifest`,

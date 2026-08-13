@@ -26,7 +26,7 @@
  * imports this module from `src/lib/auth.ts`, which every page/API route
  * transitively pulls in).
  */
-import { defineCron } from "@mandujs/core/scheduler";
+import { defineCron } from "@mandujs/core/compat/scheduler/index";
 
 // Module-level so the cron handler accumulates observable state across ticks.
 let gcRunCount = 0;

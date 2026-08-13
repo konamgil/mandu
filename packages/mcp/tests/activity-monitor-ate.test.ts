@@ -15,7 +15,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActivityMonitor } from "../src/activity-monitor";
-import { eventBus } from "@mandujs/core/observability";
+import { eventBus } from "@mandujs/core/compat/observability/index";
 import type { AteMonitorEvent } from "@mandujs/ate";
 
 /**

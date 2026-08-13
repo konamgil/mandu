@@ -9,7 +9,7 @@ import { extractRpcProcedures, buildRpcContext } from "../src/rpc-extractor";
 
 const RPC_SOURCE = `
 import { z } from "zod";
-import { defineRpc, registerRpc } from "@mandujs/core/contract/rpc";
+import { defineRpc, registerRpc } from "@mandujs/core/compat/contract/rpc";
 
 export const usersRpc = defineRpc({
   signup: {
@@ -27,7 +27,7 @@ registerRpc("users", usersRpc);
 `;
 
 const MIDDLEWARE_RPC = `
-import { defineRpc } from "@mandujs/core/contract/rpc";
+import { defineRpc } from "@mandujs/core/compat/contract/rpc";
 const builder = new HandlerBuilder();
 builder.use(csrf()).use(rateLimit({ max: 10 }));
 export const postsRpc = defineRpc({

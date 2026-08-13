@@ -84,8 +84,8 @@
  *   still lands.
  */
 
-import { mark, measure } from "@mandujs/core/perf";
-import { HMR_PERF } from "@mandujs/core/perf/hmr-markers";
+import { mark, measure } from "@mandujs/core/compat/perf/index";
+import { HMR_PERF } from "@mandujs/core/compat/perf/hmr-markers";
 
 /**
  * Modules to pull into Bun's module loader early so JIT can see their
@@ -121,7 +121,7 @@ const PREWARM_SPECIFIERS = [
  * always true for `mandu dev` since the CLI itself is what's running.
  */
 const PREWARM_DEEP_SPECIFIERS = [
-  "@mandujs/core/bundler/safe-build",
+  "@mandujs/core/compat/bundler/safe-build",
   "../util/bun",
   // `registerManifestHandlers` lives in `@mandujs/core/runtime` (formerly
   // `cli/util/handlers`). Pulling it through the runtime barrel still

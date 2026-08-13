@@ -11,7 +11,7 @@ import {
   diffContractRegistry,
   validateAndReport,
 } from "@mandujs/core";
-import { generateContractTemplate } from "@mandujs/core/generator";
+import { generateContractTemplate } from "@mandujs/core/compat/generator/index";
 import path from "path";
 import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";

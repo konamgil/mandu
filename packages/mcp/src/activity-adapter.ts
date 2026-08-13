@@ -3,7 +3,7 @@
  * Emits MCP tool execution events into the unified observability bus.
  */
 
-import { eventBus } from "@mandujs/core";
+import { eventBus } from "@mandujs/core/compat/observability/index";
 
 export function emitMcpEvent(
   toolName: string,

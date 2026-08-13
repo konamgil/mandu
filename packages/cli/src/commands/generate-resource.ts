@@ -12,7 +12,7 @@ import {
   generateResourceArtifacts,
   parseResourceSchema,
   logGeneratorResult,
-} from "@mandujs/core";
+} from "@mandujs/core/compat/resource/index";
 import path from "path";
 import fs from "fs/promises";
 import { createInterface } from "readline/promises";
@@ -258,7 +258,7 @@ export function formatSchemaFile(definition: ResourceDefinition): string {
         .join("\n")
     : "";
 
-  return `import { defineResource } from "@mandujs/core";
+  return `import { defineResource } from "@mandujs/core/compat/resource/index";
 
 /**
  * ${name.charAt(0).toUpperCase() + name.slice(1)} Resource

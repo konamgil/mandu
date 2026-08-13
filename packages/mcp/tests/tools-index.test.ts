@@ -107,7 +107,18 @@ describe("builtin MCP tool module registry", () => {
     registerBuiltinTools(process.cwd(), undefined, undefined, { profile: "agent-core" });
 
     const summary = getToolsSummary();
+    expect(summary.total).toBe(8);
     expect(summary.categories.sort()).toEqual(["agent", "docs"]);
+    expect(mcpToolRegistry.names.sort()).toEqual([
+      "mandu.agent.apply",
+      "mandu.agent.context",
+      "mandu.agent.plan",
+      "mandu.agent.repair",
+      "mandu.agent.sync",
+      "mandu.agent.verify",
+      "mandu.docs.get",
+      "mandu.docs.search",
+    ]);
     expect(mcpToolRegistry.get("mandu.agent.context")).toBeTruthy();
     expect(mcpToolRegistry.get("mandu.agent.plan")).toBeTruthy();
     expect(mcpToolRegistry.get("mandu.agent.apply")).toBeTruthy();
@@ -115,5 +126,10 @@ describe("builtin MCP tool module registry", () => {
     expect(mcpToolRegistry.get("mandu.agent.repair")).toBeTruthy();
     expect(mcpToolRegistry.get("mandu.agent.sync")).toBeTruthy();
     expect(mcpToolRegistry.get("mandu.route.list")).toBeUndefined();
+  });
+
+  test("provider deployment tools are not registered by the product server", () => {
+    expect(TOOL_MODULES.map((module) => module.category)).not.toContain("deploy-plan");
+    expect(TOOL_MODULES.map((module) => module.category)).not.toContain("deploy-preview");
   });
 });

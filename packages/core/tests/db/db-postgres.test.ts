@@ -55,7 +55,7 @@ const TABLE = "mandu_test_users";
 const TABLE_POSTS = "mandu_test_posts";
 const TABLE_JSON = "mandu_test_events";
 
-describeIfPg("@mandujs/core/db — Postgres integration", () => {
+describeIfPg("@mandujs/core/compat/db — Postgres integration", () => {
   // Top-level connection used for schema setup/teardown. Each test that
   // needs isolation spins up its own createDb handle.
   let admin: ReturnType<typeof createDb>;

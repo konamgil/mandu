@@ -88,7 +88,7 @@ services:
 ### Docker 배포
 
 ```dockerfile
-FROM oven/bun:1.0
+FROM oven/bun:1.3.14
 
 WORKDIR /app
 COPY package.json bun.lockb ./

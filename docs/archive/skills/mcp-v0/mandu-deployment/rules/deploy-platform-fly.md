@@ -45,7 +45,7 @@ primary_region = "nrt"  # Tokyo
 **Dockerfile:**
 
 ```dockerfile
-FROM oven/bun:1.0-slim as builder
+FROM oven/bun:1.3.14-slim as builder
 
 WORKDIR /app
 COPY package.json bun.lockb ./
@@ -55,7 +55,7 @@ COPY . .
 RUN bun run build
 
 # Production image
-FROM oven/bun:1.0-slim
+FROM oven/bun:1.3.14-slim
 
 WORKDIR /app
 COPY --from=builder /app/dist ./dist

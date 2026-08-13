@@ -36,6 +36,7 @@ Expected artifacts:
 bun run typecheck
 bun run check:docs-drift
 bun run test:smoke
+bun run test:reference-apps
 ```
 
 Reference app coverage is defined in [`docs/architect/reference-apps.md`](../architect/reference-apps.md).
@@ -59,4 +60,5 @@ If a command changes here, update all of these in the same PR:
 - `packages/cli/README.*`
 - `packages/cli/src/commands/registry.ts`
 - `scripts/smoke.ts`
+- `scripts/reference-app-gate.ts`
 - `scripts/check-docs-drift.ts`

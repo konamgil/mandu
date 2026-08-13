@@ -137,6 +137,18 @@ export function isSafeManduUrl(url: unknown): url is string {
 }
 
 /**
+ * Response-time variant of `isSafeManduUrl`. Published HTML may add one
+ * framework-owned `g=<generationId>` query parameter so an older document
+ * keeps loading assets from its own immutable build generation. Raw manifests
+ * remain query-free and continue to use the stricter predicate above.
+ */
+export function isSafePublishedManduUrl(url: unknown): url is string {
+  if (typeof url !== "string") return false;
+  const match = /^(.*)\?g=([a-z0-9][a-z0-9-]{5,127})$/.exec(url);
+  return match ? isSafeManduUrl(match[1]) : isSafeManduUrl(url);
+}
+
+/**
  * Zod refinement that runs `isSafeManduUrl` with a helpful error message.
  * We use a single shared factory so the same message text appears for
  * every URL field — grepping support logs becomes one-pattern-fits-all.
@@ -188,8 +200,10 @@ const FastRefreshSchema = z.object({
 });
 
 const SharedSchema = z.object({
-  runtime: safeManduUrl("shared.runtime"),
-  vendor: safeManduUrl("shared.vendor"),
+  // A successful zero-JS build has no client runtime/vendor artifacts.
+  // Empty strings are inert and are the canonical empty-manifest shape.
+  runtime: safeManduUrl("shared.runtime").or(z.literal("")),
+  vendor: safeManduUrl("shared.vendor").or(z.literal("")),
   router: safeManduUrl("shared.router").optional(),
   fastRefresh: FastRefreshSchema.optional(),
 });
@@ -233,6 +247,7 @@ const ImportMapSchema = z.object({
 export const BundleManifestSchema = z
   .object({
     version: z.number().int().min(1),
+    generationId: z.string().regex(/^[a-z0-9][a-z0-9-]{5,127}$/).optional(),
     buildTime: z.string().min(1),
     env: z.enum(["development", "production"]),
     bundles: z.record(z.string(), BundleEntrySchema),

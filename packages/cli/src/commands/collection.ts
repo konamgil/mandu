@@ -31,7 +31,7 @@ function buildCollectionSnippet(name: string): string {
 }
 
 function buildCollectionConfig(name: string): string {
-  return `import { defineCollection, defineContentConfig, glob } from "@mandujs/core/content";
+  return `import { defineCollection, defineContentConfig, glob } from "@mandujs/core/compat/content/index";
 
 export default defineContentConfig({
   collections: {
@@ -87,10 +87,10 @@ async function updateExistingConfig(rootDir: string, name: string): Promise<"upd
       if (!names.includes("defineContentConfig")) names.push("defineContentConfig");
       if (!names.includes("glob")) names.push("glob");
 
-      return `import { ${names.join(", ")} } from "@mandujs/core/content";`;
+      return `import { ${names.join(", ")} } from "@mandujs/core/compat/content/index";`;
     });
   } else {
-    nextContent = `import { defineCollection, defineContentConfig, glob } from "@mandujs/core/content";\n\n${nextContent}`;
+    nextContent = `import { defineCollection, defineContentConfig, glob } from "@mandujs/core/compat/content/index";\n\n${nextContent}`;
   }
 
   if (!/collections\s*:\s*{/.test(nextContent)) {

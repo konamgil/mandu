@@ -59,6 +59,7 @@ import tpl_default_tsconfig_json from "../templates/default/tsconfig.json" with 
 import tpl_realtime_chat_github_README_md from "../templates/realtime-chat/.github/README.md" with { type: "file" };
 import tpl_realtime_chat_github_workflows_ate_e2e_subset_yml from "../templates/realtime-chat/.github/workflows/ate-e2e-subset.yml" with { type: "file" };
 import tpl_realtime_chat_github_workflows_ate_e2e_yml from "../templates/realtime-chat/.github/workflows/ate-e2e.yml" with { type: "file" };
+import tpl_realtime_chat_mandu_routes_manifest_json from "../templates/realtime-chat/.mandu/routes.manifest.json" with { type: "file" };
 import tpl_realtime_chat_oxlintrc_json from "../templates/realtime-chat/.oxlintrc.json" with { type: "file" };
 import tpl_realtime_chat_AGENTS_md from "../templates/realtime-chat/AGENTS.md" with { type: "file" };
 import tpl_realtime_chat_app_api_chat_messages_route_ts from "../templates/realtime-chat/app/api/chat/messages/route.ts" with { type: "file" };
@@ -79,7 +80,6 @@ import tpl_realtime_chat_src_client_features_chat_use_realtime_chat_ts from "../
 import tpl_realtime_chat_src_client_features_index_ts from "../templates/realtime-chat/src/client/features/index.ts" with { type: "file" };
 import tpl_realtime_chat_src_client_pages_index_ts from "../templates/realtime-chat/src/client/pages/index.ts" with { type: "file" };
 import tpl_realtime_chat_src_client_shared_index_ts from "../templates/realtime-chat/src/client/shared/index.ts" with { type: "file" };
-import tpl_realtime_chat_src_client_shared_lib_utils_ts from "../templates/realtime-chat/src/client/shared/lib/utils.ts" with { type: "file" };
 import tpl_realtime_chat_src_client_shared_ui_button_tsx from "../templates/realtime-chat/src/client/shared/ui/button.tsx" with { type: "file" };
 import tpl_realtime_chat_src_client_shared_ui_card_tsx from "../templates/realtime-chat/src/client/shared/ui/card.tsx" with { type: "file" };
 import tpl_realtime_chat_src_client_shared_ui_index_ts from "../templates/realtime-chat/src/client/shared/ui/index.ts" with { type: "file" };
@@ -97,6 +97,7 @@ import tpl_realtime_chat_src_shared_contracts_index_ts from "../templates/realti
 import tpl_realtime_chat_src_shared_env_index_ts from "../templates/realtime-chat/src/shared/env/index.ts" with { type: "file" };
 import tpl_realtime_chat_src_shared_schema_index_ts from "../templates/realtime-chat/src/shared/schema/index.ts" with { type: "file" };
 import tpl_realtime_chat_src_shared_types_index_ts from "../templates/realtime-chat/src/shared/types/index.ts" with { type: "file" };
+import tpl_realtime_chat_src_shared_utils_client_cn_ts from "../templates/realtime-chat/src/shared/utils/client/cn.ts" with { type: "file" };
 import tpl_realtime_chat_src_shared_utils_client_index_ts from "../templates/realtime-chat/src/shared/utils/client/index.ts" with { type: "file" };
 import tpl_realtime_chat_src_shared_utils_server_index_ts from "../templates/realtime-chat/src/shared/utils/server/index.ts" with { type: "file" };
 import tpl_realtime_chat_tests_chat_api_sse_test_ts from "../templates/realtime-chat/tests/chat-api.sse.test.ts" with { type: "file" };
@@ -186,6 +187,7 @@ export const TEMPLATE_MANIFEST = new Map([
     [".github/README.md", tpl_realtime_chat_github_README_md],
     [".github/workflows/ate-e2e-subset.yml", tpl_realtime_chat_github_workflows_ate_e2e_subset_yml],
     [".github/workflows/ate-e2e.yml", tpl_realtime_chat_github_workflows_ate_e2e_yml],
+    [".mandu/routes.manifest.json", tpl_realtime_chat_mandu_routes_manifest_json],
     [".oxlintrc.json", tpl_realtime_chat_oxlintrc_json],
     ["AGENTS.md", tpl_realtime_chat_AGENTS_md],
     ["app/api/chat/messages/route.ts", tpl_realtime_chat_app_api_chat_messages_route_ts],
@@ -206,7 +208,6 @@ export const TEMPLATE_MANIFEST = new Map([
     ["src/client/features/index.ts", tpl_realtime_chat_src_client_features_index_ts],
     ["src/client/pages/index.ts", tpl_realtime_chat_src_client_pages_index_ts],
     ["src/client/shared/index.ts", tpl_realtime_chat_src_client_shared_index_ts],
-    ["src/client/shared/lib/utils.ts", tpl_realtime_chat_src_client_shared_lib_utils_ts],
     ["src/client/shared/ui/button.tsx", tpl_realtime_chat_src_client_shared_ui_button_tsx],
     ["src/client/shared/ui/card.tsx", tpl_realtime_chat_src_client_shared_ui_card_tsx],
     ["src/client/shared/ui/index.ts", tpl_realtime_chat_src_client_shared_ui_index_ts],
@@ -224,6 +225,7 @@ export const TEMPLATE_MANIFEST = new Map([
     ["src/shared/env/index.ts", tpl_realtime_chat_src_shared_env_index_ts],
     ["src/shared/schema/index.ts", tpl_realtime_chat_src_shared_schema_index_ts],
     ["src/shared/types/index.ts", tpl_realtime_chat_src_shared_types_index_ts],
+    ["src/shared/utils/client/cn.ts", tpl_realtime_chat_src_shared_utils_client_cn_ts],
     ["src/shared/utils/client/index.ts", tpl_realtime_chat_src_shared_utils_client_index_ts],
     ["src/shared/utils/server/index.ts", tpl_realtime_chat_src_shared_utils_server_index_ts],
     ["tests/chat-api.sse.test.ts", tpl_realtime_chat_tests_chat_api_sse_test_ts],
@@ -266,4 +268,4 @@ export const TEMPLATE_MANIFEST = new Map([
 ]);
 
 /** Total number of embedded template files (sanity check). */
-export const EMBEDDED_FILE_COUNT = 117;
+export const EMBEDDED_FILE_COUNT = 118;

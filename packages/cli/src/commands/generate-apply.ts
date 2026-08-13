@@ -4,11 +4,13 @@ import {
   buildGenerateReport,
   printReportSummary,
   writeReport,
+} from "@mandujs/core";
+import {
   parseResourceSchemas,
   generateResourcesArtifacts,
   logGeneratorResult,
-} from "@mandujs/core";
-import { generateRoutes } from "@mandujs/core/generator";
+} from "@mandujs/core/compat/resource/index";
+import { generateRoutes } from "@mandujs/core/compat/generator/index";
 import { resolveFromCwd, getRootDir } from "../util/fs";
 import path from "path";
 import fs from "fs/promises";

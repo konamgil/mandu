@@ -94,11 +94,11 @@ export interface FillingDeps {
    *
    * Typed as `unknown` here to avoid a circular type import from
    * `@mandujs/core/db` into the filling layer. Consumers cast via
-   * `import type { Db } from "@mandujs/core/db"` at the call site:
+   * `import type { Db } from "@mandujs/core/compat/db/index"` at the call site:
    *
    * @example
    * ```ts
-   * import type { Db } from "@mandujs/core/db";
+   * import type { Db } from "@mandujs/core/compat/db/index";
    * export default Mandu.filling().get((ctx) => {
    *   const db = ctx.deps.sql as Db;
    *   const repo = createUsersRepo(db);

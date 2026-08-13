@@ -10,11 +10,10 @@ import {
 } from "../context";
 import {
   agentPlanPath,
-  buildAgentApplyReport,
   buildAgentPlan,
-  writeAgentApplyReport,
   writeAgentPlan,
 } from "../plan";
+import { buildAgentApplyReport, writeAgentApplyReport } from "../apply";
 import {
   agentRepairReportPath,
   buildAgentRepairReport,

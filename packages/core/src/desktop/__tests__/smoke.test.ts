@@ -17,7 +17,7 @@ import fs from "fs";
 const repoRoot = path.resolve(__dirname, "..", "..", "..", "..", "..");
 const demoPath = path.join(repoRoot, "demo", "desktop-starter");
 
-describe("@mandujs/core/desktop — smoke", () => {
+describe("@mandujs/core/compat/desktop — smoke", () => {
   it("barrel exports createWindow and the type surface", async () => {
     const mod = await import("../index");
     expect(typeof mod.createWindow).toBe("function");
@@ -82,7 +82,7 @@ const canOpenWindow =
     process.platform === "linux");
 
 describe.skipIf(!canOpenWindow)(
-  "@mandujs/core/desktop — browser smoke (opt-in)",
+  "@mandujs/core/compat/desktop — browser smoke (opt-in)",
   () => {
     it("opens and closes a data: URL window", async () => {
       const { createWindow } = await import("../window");

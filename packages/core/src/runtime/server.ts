@@ -438,6 +438,8 @@ export interface ManduServer {
   registry: ServerRegistry;
   /** Replace the live dispatch table after FS routes change in dev mode. */
   updateManifest: (nextManifest: RoutesManifest) => void;
+  /** Replace the client artifact manifest after a dev-server restart. */
+  updateBundleManifest: (nextManifest: BundleManifest | undefined) => void;
   stop: () => void;
 }
 
@@ -3613,6 +3615,7 @@ function startBunServerWithFallback(options: {
 }): { server: Server<undefined>; port: number; attempts: number } {
   const { port: startPort, hostname, fetch, websocket } = options;
   let lastError: unknown = null;
+  const attemptedPorts: number[] = [];
 
   // `Parameters<typeof Bun.serve>[0]` captures the full `Serve.Options`
   // XOR union. We only ever use the hostname/port branch, so cast through
@@ -3633,6 +3636,7 @@ function startBunServerWithFallback(options: {
     if (candidate < 1 || candidate > 65535) {
       continue;
     }
+    attemptedPorts.push(candidate);
     try {
       const server = Bun.serve({ port: candidate, ...serveOptions } as unknown as BunServeOptions);
       return { server, port: server.port ?? candidate, attempts: attempt };
@@ -3644,7 +3648,19 @@ function startBunServerWithFallback(options: {
     }
   }
 
-  throw lastError ?? new Error(`No available port found starting at ${startPort}`);
+  const attemptedRange = attemptedPorts.length === 0
+    ? String(startPort)
+    : attemptedPorts.length === 1
+      ? String(attemptedPorts[0])
+      : `${attemptedPorts[0]}-${attemptedPorts.at(-1)}`;
+  const bindHost = hostname?.trim() || "::";
+  const fatal = new Error(
+    `[Mandu Port Bind Failed] Could not bind ${bindHost} on port(s) ${attemptedRange}. ` +
+      "All candidates are already in use. Stop the conflicting process or choose another port with --port <number>.",
+  );
+  fatal.name = "ManduPortBindError";
+  (fatal as Error & { cause?: unknown }).cause = lastError;
+  throw fatal;
 }
 
 // ========== Server Startup ==========
@@ -3782,13 +3798,13 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
   if (i18nOption !== undefined && !isI18nDefinition(i18nOption)) {
     throw new Error(
       "[mandu] ServerOptions.i18n must be the return value of defineI18n(). " +
-        "Import { defineI18n } from '@mandujs/core/i18n'."
+        "Import { defineI18n } from '@mandujs/core/compat/i18n/index'."
     );
   }
   if (messagesOption !== undefined && !isMessageRegistry(messagesOption)) {
     throw new Error(
       "[mandu] ServerOptions.messages must be the return value of defineMessages(). " +
-        "Import { defineMessages } from '@mandujs/core/i18n'."
+        "Import { defineMessages } from '@mandujs/core/compat/i18n/index'."
     );
   }
 
@@ -4127,6 +4143,9 @@ export function startServer(manifest: RoutesManifest, options: ServerOptions = {
     updateManifest: (nextManifest: RoutesManifest) => {
       router.setRoutes(nextManifest.routes);
       registry.devtoolsAdapter?.updateManifest(nextManifest);
+    },
+    updateBundleManifest: (nextManifest: BundleManifest | undefined) => {
+      registry.settings.bundleManifest = nextManifest;
     },
     stop: () => {
       registry.devtoolsAdapter?.stop();

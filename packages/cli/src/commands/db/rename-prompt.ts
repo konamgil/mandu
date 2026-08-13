@@ -31,8 +31,8 @@
  */
 
 import { createInterface, type Interface } from "node:readline/promises";
-import type { Change, DdlFieldDef, SqlProvider } from "@mandujs/core/resource/ddl/types";
-import { resolveColumnType } from "@mandujs/core/resource/ddl/type-map";
+import type { Change, DdlFieldDef, SqlProvider } from "@mandujs/core/compat/resource/ddl/types";
+import { resolveColumnType } from "@mandujs/core/compat/resource/ddl/type-map";
 
 export interface RenamePromptOptions {
   /** CI mode: never prompts, always leaves drop+add as pure drop+add. */

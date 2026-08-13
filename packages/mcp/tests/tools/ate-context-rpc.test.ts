@@ -9,7 +9,7 @@ import { ateContextTools } from "../../src/tools/ate-context";
 
 const RPC_SOURCE = `
 import { z } from "zod";
-import { defineRpc } from "@mandujs/core/contract/rpc";
+import { defineRpc } from "@mandujs/core/compat/contract/rpc";
 
 export const ordersRpc = defineRpc({
   place: {

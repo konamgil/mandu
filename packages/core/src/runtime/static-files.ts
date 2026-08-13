@@ -1,6 +1,10 @@
 import type { BunFile } from "bun";
 import path from "path";
 import fs from "fs/promises";
+import {
+  resolveActiveBuildArtifacts,
+  resolveBuildGenerationClientDirectory,
+} from "../bundler/generation";
 
 export interface StaticFileSettings {
   isDev: boolean;
@@ -184,10 +188,34 @@ export async function serveStaticFile(
   let allowRouteFallbackOnMissing = false;
   let allowedBaseDir: string;
   let relativePath: string;
+  let bundleGenerationId: string | null = null;
+  let requestedBundleGeneration = false;
 
   if (pathname.startsWith("/.mandu/client/")) {
     relativePath = pathname.slice("/.mandu/client/".length);
-    allowedBaseDir = path.join(settings.rootDir, ".mandu", "client");
+    const generationParams = request
+      ? new URL(request.url).searchParams.getAll("g")
+      : [];
+    if (generationParams.length > 0) {
+      requestedBundleGeneration = true;
+      if (generationParams.length !== 1) {
+        return { handled: true, response: createStaticErrorResponse(404) };
+      }
+      const requestedGenerationId = generationParams[0]!;
+      const generationClientDir = await resolveBuildGenerationClientDirectory(
+        settings.rootDir,
+        requestedGenerationId,
+      );
+      if (!generationClientDir) {
+        return { handled: true, response: createStaticErrorResponse(404) };
+      }
+      allowedBaseDir = generationClientDir;
+      bundleGenerationId = requestedGenerationId;
+    } else {
+      const active = await resolveActiveBuildArtifacts(settings.rootDir);
+      allowedBaseDir = active.clientDir;
+      bundleGenerationId = active.generationId;
+    }
     isBundleFile = true;
   } else if (pathname.startsWith("/public/")) {
     relativePath = pathname.slice("/public/".length);
@@ -231,6 +259,23 @@ export async function serveStaticFile(
   }
 
   const safeRelativePath = normalizedPath.replace(/^\/+/, "");
+
+  // CSS is rebuilt by its own long-running watcher after the client build is
+  // published. Keep that mutable asset on the compatibility path; immutable
+  // JS/runtime artifacts always come from one active generation.
+  if (
+    isBundleFile &&
+    !requestedBundleGeneration &&
+    path.extname(safeRelativePath).toLowerCase() === ".css"
+  ) {
+    const legacyClientDir = path.join(settings.rootDir, ".mandu", "client");
+    const legacyCssPath = path.join(legacyClientDir, safeRelativePath);
+    if (await Bun.file(legacyCssPath).exists()) {
+      allowedBaseDir = legacyClientDir;
+      bundleGenerationId = null;
+    }
+  }
+
   filePath = path.join(allowedBaseDir, safeRelativePath);
 
   if (!(await isPathSafe(filePath, allowedBaseDir))) {
@@ -239,8 +284,33 @@ export async function serveStaticFile(
   }
 
   try {
-    const file = Bun.file(filePath);
-    const exists = await file.exists();
+    let file = Bun.file(filePath);
+    let exists = await file.exists();
+
+    // Compatibility-only client assets may be produced after the managed
+    // build (for example by a dedicated CSS/raw-module tool). Generated SSR
+    // URLs always include `g=...` and never take this fallback, so an older
+    // document remains pinned to its immutable generation. Only an unscoped
+    // legacy URL may fall back when the active generation has no such file.
+    if (
+      !exists &&
+      isBundleFile &&
+      !requestedBundleGeneration &&
+      bundleGenerationId !== null
+    ) {
+      const legacyClientDir = path.join(settings.rootDir, ".mandu", "client");
+      const legacyFilePath = path.join(legacyClientDir, safeRelativePath);
+      if (
+        await isPathSafe(legacyFilePath, legacyClientDir) &&
+        await Bun.file(legacyFilePath).exists()
+      ) {
+        allowedBaseDir = legacyClientDir;
+        filePath = legacyFilePath;
+        bundleGenerationId = null;
+        file = Bun.file(filePath);
+        exists = true;
+      }
+    }
 
     if (!exists) {
       if (isPublicFlatFallback || allowRouteFallbackOnMissing) return { handled: false };
@@ -264,23 +334,30 @@ export async function serveStaticFile(
 
     const ifNoneMatch = request?.headers.get("If-None-Match");
     if (ifNoneMatch && matchesEtag(ifNoneMatch, etag)) {
+      const headers: Record<string, string> = {
+        "ETag": etag,
+        "Cache-Control": cacheControl,
+      };
+      if (bundleGenerationId) headers["X-Mandu-Build-Generation"] = bundleGenerationId;
       return {
         handled: true,
         response: new Response(null, {
           status: 304,
-          headers: { "ETag": etag, "Cache-Control": cacheControl },
+          headers,
         }),
       };
     }
 
+    const headers: Record<string, string> = {
+      "Content-Type": mimeType,
+      "Cache-Control": cacheControl,
+      "ETag": etag,
+    };
+    if (bundleGenerationId) headers["X-Mandu-Build-Generation"] = bundleGenerationId;
     return {
       handled: true,
       response: new Response(file, {
-        headers: {
-          "Content-Type": mimeType,
-          "Cache-Control": cacheControl,
-          "ETag": etag,
-        },
+        headers,
       }),
     };
   } catch {

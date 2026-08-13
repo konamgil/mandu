@@ -7,7 +7,7 @@
  * MCP notification이 AI 에이전트에 전달되지 않는 문제를 해결.
  */
 
-import { getWatcher } from "@mandujs/core/watcher";
+import { getWatcher } from "@mandujs/core/compat/watcher/index";
 
 const MUTATION_TOOLS = new Set([
   "mandu_write_slot",

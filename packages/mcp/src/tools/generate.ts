@@ -1,7 +1,8 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { generateManifest, loadManifest, parseResourceSchema, generateResourceArtifacts } from "@mandujs/core";
-import { generateRoutes, type GeneratedMap } from "@mandujs/core/generator";
-import { GENERATED_RELATIVE_PATHS } from "@mandujs/core/paths";
+import { generateManifest, loadManifest } from "@mandujs/core";
+import { parseResourceSchema, generateResourceArtifacts } from "@mandujs/core/compat/resource/index";
+import { generateRoutes, type GeneratedMap } from "@mandujs/core/compat/generator/index";
+import { GENERATED_RELATIVE_PATHS } from "@mandujs/core/compat/paths";
 import { getProjectPaths, readJsonFile } from "../utils/project.js";
 import path from "path";
 import fs from "fs/promises";

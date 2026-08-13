@@ -27,10 +27,10 @@ import {
   isTailwindProject,
   startCSSWatch,
   type CSSWatcher,
-} from "@mandujs/core/bundler";
-import { newId } from "@mandujs/core/id";
-import { HMR_PERF } from "@mandujs/core/perf/hmr-markers";
-import { mark, measure, withPerf } from "@mandujs/core/perf";
+} from "@mandujs/core/compat/bundler/index";
+import { newId } from "@mandujs/core/compat/id/index";
+import { HMR_PERF } from "@mandujs/core/compat/perf/hmr-markers";
+import { mark, measure, withPerf } from "@mandujs/core/compat/perf/index";
 import { resolveFromCwd } from "../util/fs";
 import { resolveOutputFormat } from "../util/output";
 import { CLI_ERROR_CODES, printCLIError } from "../errors";
@@ -42,7 +42,7 @@ import {
   handleBlockedLockfile,
   printRuntimeLockfileStatus,
 } from "../util/lockfile";
-import { resolveReactCompilerConfig } from "@mandujs/core/bundler/plugins";
+import { resolveReactCompilerConfig } from "@mandujs/core/compat/bundler/plugins/index";
 import { getFsRoutesGuardPolicy } from "../util/guard-policy";
 import { openBrowser } from "../util/browser";
 import { resolveDisplayHost } from "../util/host";
@@ -196,7 +196,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
         ? false
         : await (async () => {
             // Lazy import so projects opting out pay zero cost.
-            const mod = await import("@mandujs/core/content/prebuild");
+            const mod = await import("@mandujs/core/compat/content/prebuild");
             return mod.shouldAutoPrebuild(rootDir);
           })();
   tracePhase(
@@ -204,7 +204,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   );
   if (shouldRunPrebuild) {
     const { runPrebuildScripts, PrebuildError } = await import(
-      "@mandujs/core/content/prebuild"
+      "@mandujs/core/compat/content/prebuild"
     );
     try {
       const prebuildResult = await runPrebuildScripts({
@@ -310,7 +310,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   // and is awaited during `stopSqliteStore` so we don't race on shutdown.
   const sqliteStorePromise: Promise<void> =
     devConfig.observability !== false
-      ? import("@mandujs/core/observability")
+      ? import("@mandujs/core/compat/observability/index")
           .then((m) => m.startSqliteStore(rootDir))
           .then(() => {
             measure(HMR_PERF.BOOT_SQLITE_START, HMR_PERF.BOOT_SQLITE_START);
@@ -582,7 +582,13 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     } else {
       hmrServer?.broadcast({
         type: "error",
-        data: { routeId: result.routeId, message: result.error },
+        data: {
+          routeId: result.routeId,
+          name: "BuildError",
+          kind: "build",
+          message: result.error ?? "Client build failed",
+          timestamp: Date.now(),
+        },
       });
     }
   };
@@ -590,7 +596,14 @@ export async function dev(options: DevOptions = {}): Promise<void> {
   const handleBundlerError = (error: Error, routeId?: string) => {
     hmrServer?.broadcast({
       type: "error",
-      data: { routeId, message: error.message },
+      data: {
+        routeId,
+        name: error.name || "BuildError",
+        kind: "build",
+        message: error.message,
+        stack: error.stack,
+        timestamp: Date.now(),
+      },
     });
   };
 
@@ -820,7 +833,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     );
     if (pureSsrRoutes.length === 0) return;
 
-    const { prerenderRoutes } = await import("@mandujs/core/bundler/prerender");
+    const { prerenderRoutes } = await import("@mandujs/core/compat/bundler/prerender");
 
     const devServer = server; // captured via closure from outer scope
     const basePort = devServer.server.port;
@@ -938,10 +951,10 @@ export async function dev(options: DevOptions = {}): Promise<void> {
 
     if (isResource) {
       try {
-        // Lazy import from the core barrel (`@mandujs/core`) so projects
+        // Lazy import from the compatibility resource module so projects
         // without any resources don't parse the generator at dev boot.
         // `generate-resource.ts` uses the same barrel for these exports.
-        const core = await import("@mandujs/core");
+        const core = await import("@mandujs/core/compat/resource/index");
         const parsed = await core.parseResourceSchema(filePath);
         const result = await core.generateResourceArtifacts(parsed, { rootDir });
         if (result.success) {
@@ -1036,6 +1049,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
         onPackageJsonChange: handlePackageJsonChange,
         reactCompiler: reactCompilerOption,
       });
+      server.updateBundleManifest(devBundler.initialBuild.manifest);
 
       hmrServer.broadcast({
         type: "reload",
@@ -1227,7 +1241,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
       const [{ default: chokidar }, { runPrebuildScripts, PrebuildError }] =
         await Promise.all([
           import("chokidar"),
-          import("@mandujs/core/content/prebuild"),
+          import("@mandujs/core/compat/content/prebuild"),
         ]);
 
       let pending: Promise<void> = Promise.resolve();
@@ -1314,7 +1328,7 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     // ran and stop is still a safe no-op.
     void sqliteStorePromise
       .then(() =>
-        import("@mandujs/core/observability").then((m) => m.stopSqliteStore?.()),
+        import("@mandujs/core/compat/observability/index").then((m) => m.stopSqliteStore?.()),
       )
       .catch(() => {});
     void removeRuntimeControl(rootDir).finally(() => {
@@ -1394,7 +1408,7 @@ function attachDevShortcuts(options: {
     mcpMonitorActive = !mcpMonitorActive;
     if (mcpMonitorActive) {
       console.log("\n🤖 MCP activity: ON (press 'm' again to stop)");
-      const { eventBus } = await import("@mandujs/core/observability");
+      const { eventBus } = await import("@mandujs/core/compat/observability/index");
       mcpUnsubscribe = eventBus.on("mcp", (event) => {
         if (!mcpMonitorActive) return;
         const ts = new Date().toLocaleTimeString();

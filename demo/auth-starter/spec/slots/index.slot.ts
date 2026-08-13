@@ -21,4 +21,10 @@
  *      wants a deterministic, observable change — every mutation
  *      rewrites this constant to a fresh Date.now() string.
  */
+import { Mandu } from "@mandujs/core";
+
 export const HOME_SLOT_MARKER = "initial";
+
+// Keep the file a valid slot as well as the HDR change signal. The page owns
+// its loader; this empty filling only satisfies the slot boundary contract.
+export default Mandu.filling();

@@ -1,11 +1,12 @@
 # 20. Agent Surface Consolidation Plan
 
 작성일: 2026-05-19
-상태: Draft product/architecture plan
+상태: Completed safe-v1 foundation; typed apply follow-up moved to Refoundation Phase 4
 기준 문서:
 
 - `docs/product/02_agent_native_framework_strategy.md`
 - `docs/plans/17_agent_native_launch_plan.md`
+- `docs/plans/22_mandu_refoundation_execution_plan.md`
 
 ---
 
@@ -542,7 +543,7 @@ mandu agent sync --target all
 
 - route/API/slot/hydration/contract 변경이 plan 기반으로 실행된다.
 
-구현 상태: 완료(safe v1). Deterministic `AgentPlan`/`AgentApplyReport` core, CLI `mandu agent plan/apply`, MCP `mandu.agent.plan/apply`가 연결됨. `apply`는 typed operation payload 도입 전까지 dry-run action report를 생성해 에이전트가 MCP/domain tool과 직접 편집 후보를 같은 순서로 따르게 한다.
+구현 상태: 완료. Deterministic preview는 compatibility로 유지하고, Refoundation Phase 4에서 exact scope, revision/hash precondition, typed operation, idempotent `ApplyReceipt`, verify, snapshot/rollback을 가진 실행 경로를 추가했다. CLI `--execute`와 MCP `dryRun=false`는 같은 Core apply 함수를 호출한다.
 
 ### Phase 6. Agent Sync and Profiles
 

@@ -82,17 +82,17 @@ import { existsSync, promises as fs } from "node:fs";
 import { createHash } from "node:crypto";
 import { Glob } from "bun";
 
-import { quoteIdent } from "@mandujs/core/resource/ddl/emit";
+import { quoteIdent } from "@mandujs/core/compat/resource/ddl/emit";
 import {
   parseResourceSchemas,
   validateResourceUniqueness,
   type ParsedResource,
-} from "@mandujs/core/resource";
-import { snapshotFromResources } from "@mandujs/core/resource/ddl/snapshot";
+} from "@mandujs/core/compat/resource/index";
+import { snapshotFromResources } from "@mandujs/core/compat/resource/ddl/snapshot";
 import type {
   DdlResource,
   Snapshot,
-} from "@mandujs/core/resource/ddl/types";
+} from "@mandujs/core/compat/resource/ddl/types";
 
 import { resolveDb, DbResolutionError } from "./db/resolve-db";
 import { theme } from "../terminal/theme";

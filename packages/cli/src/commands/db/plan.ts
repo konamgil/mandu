@@ -47,19 +47,19 @@ import {
   parseResourceSchemas,
   validateResourceUniqueness,
   type ParsedResource,
-} from "@mandujs/core/resource";
+} from "@mandujs/core/compat/resource/index";
 import {
   snapshotFromResources,
   serializeSnapshot,
   parseSnapshot,
-} from "@mandujs/core/resource/ddl/snapshot";
-import { diffSnapshots } from "@mandujs/core/resource/ddl/diff";
-import { emitChanges } from "@mandujs/core/resource/ddl/emit";
+} from "@mandujs/core/compat/resource/ddl/snapshot";
+import { diffSnapshots } from "@mandujs/core/compat/resource/ddl/diff";
+import { emitChanges } from "@mandujs/core/compat/resource/ddl/emit";
 import type {
   Change,
   Snapshot,
   SqlProvider,
-} from "@mandujs/core/resource/ddl/types";
+} from "@mandujs/core/compat/resource/ddl/types";
 
 import { applyRenames } from "./rename-prompt";
 import { theme } from "../../terminal/theme";

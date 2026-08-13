@@ -3,7 +3,8 @@
  * OpenAPI spec generation commands
  */
 
-import { generateOpenAPIDocument, openAPIToJSON, validateAndReport } from "@mandujs/core";
+import { validateAndReport } from "@mandujs/core";
+import { generateOpenAPIDocument, openAPIToJSON } from "@mandujs/core/compat/openapi/index";
 import path from "path";
 import fs from "fs/promises";
 import { resolveManifest } from "../util/manifest";

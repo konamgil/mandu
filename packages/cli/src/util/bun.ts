@@ -58,17 +58,17 @@ import path from "path";
 import { mkdir, readdir, unlink, readFile, rm } from "fs/promises";
 import { statSync } from "fs";
 import type { BunPlugin } from "bun";
-import { safeBuild } from "@mandujs/core/bundler/safe-build";
-import { defaultBundlerPlugins } from "@mandujs/core/bundler/plugins";
+import { safeBuild } from "@mandujs/core/compat/bundler/safe-build";
+import { defaultBundlerPlugins } from "@mandujs/core/compat/bundler/plugins/index";
 import {
   assertNoClientBoundaryDiagnostics,
   transformClientBoundaries,
   validateClientBoundaryExport,
   validateClientBoundaryServerOnlyImports,
   type ClientBoundaryHydrateMode,
-} from "@mandujs/core/bundler";
-import { HMR_PERF } from "@mandujs/core/perf/hmr-markers";
-import { isPerfEnabled, mark, measure } from "@mandujs/core/perf";
+} from "@mandujs/core/compat/bundler/index";
+import { HMR_PERF } from "@mandujs/core/compat/perf/hmr-markers";
+import { isPerfEnabled, mark, measure } from "@mandujs/core/compat/perf/index";
 import {
   ImportGraph,
   extractSourcesFromInlineSourcemap,
@@ -134,7 +134,7 @@ const REACT_AND_PLATFORM_EXTERNAL = [
 const FRAMEWORK_EXTERNAL = [
   ...REACT_AND_PLATFORM_EXTERNAL,
   "@mandujs/core",
-  "@mandujs/core/*",
+  "@mandujs/core/compat/*",
   "@mandujs/cli",
   "@mandujs/cli/*",
   "@mandujs/mcp",

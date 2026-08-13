@@ -3,17 +3,23 @@
  * Pre-publish check: workspace 의존성이 올바르게 해결되었는지 확인
  */
 
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import * as fs from "fs/promises";
 import { Glob } from "bun";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
+import ts from "typescript";
 import { checkPublicApiBoundary } from "./check-public-api-boundary";
+import { checkPackageBoundaries } from "./check-package-boundaries";
 import { checkTargetBoundaries } from "./check-target-boundaries";
 import { checkDocsDrift } from "./check-docs-drift";
 import { collectTempArtifactDirs } from "./pre-publish-temp-artifacts";
-import { collectPublishOrderIssues, PUBLISHABLE_PACKAGE_DIRS } from "./publish-order";
+import {
+  collectPublishOrderIssues,
+  PRODUCT_PACKAGE_DIRS,
+  PUBLISHABLE_PACKAGE_DIRS,
+} from "./publish-order";
 import {
   transformClientBoundaries,
   validateClientBoundaryServerOnlyImports,
@@ -208,7 +214,8 @@ async function assertPackedPackageJson(
       : `tar -xzf "${join(tmp, tarball)}" -C "${tmp}"`;
     execSync(tarCmd, { stdio: "pipe" });
 
-    const stagedPkgPath = join(tmp, "package", "package.json");
+    const stagedRoot = join(tmp, "package");
+    const stagedPkgPath = join(stagedRoot, "package.json");
     const staged = await fs.readFile(stagedPkgPath, "utf-8");
     const parsed: PackageJson = JSON.parse(staged);
 
@@ -236,8 +243,31 @@ async function assertPackedPackageJson(
       }
     }
 
+    if (parsed.name === "@mandujs/core") {
+      const representativeSubpaths = [
+        "@mandujs/core/runtime",
+        "@mandujs/core/compat/paths",
+        "@mandujs/core/compat/runtime/server",
+        "@mandujs/core/compat/resource/index",
+        "@mandujs/core/compat/components/Image-compat",
+      ];
+
+      for (const specifier of representativeSubpaths) {
+        try {
+          execFileSync(
+            process.execPath,
+            ["-e", `console.log(import.meta.resolve(${JSON.stringify(specifier)}))`],
+            { cwd: stagedRoot, stdio: "pipe" }
+          );
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          issues.push(`❌ ${parsed.name}: tarball cannot resolve ${specifier} (${detail})`);
+        }
+      }
+    }
+
     if (issues.length === 0) {
-      console.log(`  ✅ ${parsed.name} tarball: no leaked/stale internal specifiers`);
+      console.log(`  ✅ ${parsed.name} tarball: dependencies and representative subpaths resolve`);
     }
   } finally {
     if (originalPackageJson !== null) {
@@ -259,8 +289,8 @@ async function assertPackedPackageJson(
  * making `bunx @mandujs/mcp` unusable for every end-user that hit that
  * version pair.
  *
- * This step grep-walks each publishable package's `src/**` for `from
- * "@mandujs/<other>/<subpath>"` imports, then asserts every subpath is
+ * This step parses each publishable package's `src/**` and collects static
+ * imports/exports plus literal dynamic imports and `require` calls, then asserts every subpath is
  * declared in the target package's `exports` map. Catches the regression at
  * publish time instead of at user-install time.
  *
@@ -278,20 +308,46 @@ const INTERNAL_PACKAGE_NAMES = [
   "@mandujs/edge",
 ];
 
-const INTERNAL_NAME_PATTERN = INTERNAL_PACKAGE_NAMES
-  .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-  .join("|");
-
-const SUBPATH_IMPORT_RE = new RegExp(
-  `(?:from|import|require)\\s*\\(?\\s*["'\\\`](${INTERNAL_NAME_PATTERN})/([^"'\\\`]+)["'\\\`]`,
-  "g",
-);
-
 interface ImportSite {
   consumerPackage: string;
   file: string;
   pkg: string;
   subpath: string;
+}
+
+function parseInternalSpecifier(specifier: string): { pkg: string; subpath: string } | null {
+  for (const pkg of INTERNAL_PACKAGE_NAMES) {
+    const prefix = `${pkg}/`;
+    if (specifier.startsWith(prefix)) {
+      return { pkg, subpath: specifier.slice(prefix.length) };
+    }
+  }
+  return null;
+}
+
+function collectModuleSpecifiers(file: string, sourceText: string): string[] {
+  const kind = file.endsWith(".tsx") || file.endsWith(".jsx")
+    ? ts.ScriptKind.TSX
+    : file.endsWith(".js") || file.endsWith(".mjs") || file.endsWith(".cjs")
+      ? ts.ScriptKind.JS
+      : ts.ScriptKind.TS;
+  const source = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true, kind);
+  const specifiers: string[] = [];
+  const addLiteral = (node: ts.Expression | undefined): void => {
+    if (node && ts.isStringLiteralLike(node)) specifiers.push(node.text);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      addLiteral(node.moduleSpecifier);
+    } else if (ts.isCallExpression(node)) {
+      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+      const isRequire = ts.isIdentifier(node.expression) && node.expression.text === "require";
+      if (isDynamicImport || isRequire) addLiteral(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return specifiers;
 }
 
 async function scanInternalSubpathImports(pkgDir: string, pkgName: string): Promise<ImportSite[]> {
@@ -304,11 +360,10 @@ async function scanInternalSubpathImports(pkgDir: string, pkgName: string): Prom
   for await (const rel of glob.scan({ cwd: srcDir })) {
     const file = resolve(srcDir, rel);
     const text = await fs.readFile(file, "utf-8");
-    SUBPATH_IMPORT_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = SUBPATH_IMPORT_RE.exec(text)) !== null) {
-      const pkg = m[1];
-      const subpath = m[2];
+    for (const specifier of collectModuleSpecifiers(file, text)) {
+      const parsed = parseInternalSpecifier(specifier);
+      if (!parsed) continue;
+      const { pkg, subpath } = parsed;
       if (pkg === pkgName) continue; // intra-package, doesn't traverse exports
       sites.push({ consumerPackage: pkgName, file, pkg, subpath });
     }
@@ -341,11 +396,14 @@ function exportsCovers(exportsKeys: Set<string>, subpathKey: string): boolean {
   return false;
 }
 
-async function auditCrossPackageSubpaths(versionMap: Map<string, string>): Promise<string[]> {
+async function auditCrossPackageSubpaths(
+  versionMap: Map<string, string>,
+  packageDirs = PUBLISHABLE_PACKAGE_DIRS,
+): Promise<string[]> {
   const issues: string[] = [];
 
   const pkgInfoByName = new Map<string, { dir: string; pkg: PackageJson; exportsKeys: Set<string> }>();
-  for (const pkgDir of PUBLISHABLE_PACKAGE_DIRS) {
+  for (const pkgDir of packageDirs) {
     const abs = resolve(process.cwd(), pkgDir);
     const pkg: PackageJson = JSON.parse(readFileSync(resolve(abs, "package.json"), "utf-8"));
     pkgInfoByName.set(pkg.name, { dir: abs, pkg, exportsKeys: exportsKeySet(pkg) });
@@ -427,9 +485,16 @@ export default function Widget() { return String(readFile); }
   return issues;
 }
 
-console.log("🔍 Pre-publish check: workspace 의존성 검증\n");
+const productRelease = process.argv.includes("--product");
+const releasePackageDirs = productRelease ? PRODUCT_PACKAGE_DIRS : PUBLISHABLE_PACKAGE_DIRS;
 
-const versions = loadVersionMap(PUBLISHABLE_PACKAGE_DIRS);
+console.log(
+  productRelease
+    ? "🔍 Product release check: Core + MCP + CLI\n"
+    : "🔍 Pre-publish check: all publishable packages\n",
+);
+
+const versions = loadVersionMap(releasePackageDirs);
 let hasIssues = false;
 
 // 1. lockfile 업데이트 확인
@@ -455,7 +520,12 @@ try {
 console.log("🧾 Step 1.1: npm version/metadata drift 확인...\n");
 
 try {
-  execSync("bun run check:npm-drift", { stdio: "inherit", cwd: process.cwd() });
+  execSync(
+    productRelease
+      ? "bun run scripts/check-npm-drift.ts --product"
+      : "bun run check:npm-drift",
+    { stdio: "inherit", cwd: process.cwd() },
+  );
 } catch {
   hasIssues = true;
   console.log();
@@ -485,7 +555,7 @@ console.log();
 console.log("🧹 Step 1.5: 임시 테스트 산출물 확인...\n");
 
 let tempArtifactIssues = false;
-for (const pkgDir of PUBLISHABLE_PACKAGE_DIRS) {
+for (const pkgDir of releasePackageDirs) {
   const abs = resolve(process.cwd(), pkgDir);
   const tempIssues = await collectTempArtifactDirs(abs);
   if (tempIssues.length > 0) {
@@ -502,7 +572,7 @@ console.log();
 // 1.6. publish 순서가 내부 의존성 위상을 따르는지 확인
 console.log("📚 Step 1.6: Publish order dependency graph 확인...\n");
 
-const publishOrderIssues = collectPublishOrderIssues(PUBLISHABLE_PACKAGE_DIRS, process.cwd());
+const publishOrderIssues = collectPublishOrderIssues(releasePackageDirs, process.cwd());
 if (publishOrderIssues.length > 0) {
   hasIssues = true;
   publishOrderIssues.forEach((issue) => console.log(`  ${issue}`));
@@ -514,7 +584,7 @@ console.log();
 // 2. workspace 의존성 검증
 console.log("🔗 Step 2: Workspace 의존성 검증...\n");
 
-for (const pkgDir of PUBLISHABLE_PACKAGE_DIRS) {
+for (const pkgDir of releasePackageDirs) {
   const pkgPath = resolve(process.cwd(), pkgDir, "package.json");
   try {
     const { name, issues, ok } = checkPackage(pkgPath, versions);
@@ -542,7 +612,7 @@ for (const pkgDir of PUBLISHABLE_PACKAGE_DIRS) {
 // 3. 스테이지된 tarball 검증 (catalog:/workspace: 누설 방지)
 console.log("📦 Step 3: 스테이지된 tarball 검증...\n");
 
-for (const pkgDir of PUBLISHABLE_PACKAGE_DIRS) {
+for (const pkgDir of releasePackageDirs) {
   const abs = resolve(process.cwd(), pkgDir);
   try {
     const leakIssues = await assertPackedPackageJson(abs, versions);
@@ -560,7 +630,7 @@ console.log();
 // 4. 버전 일관성 검증
 console.log("🔢 Step 4: 버전 일관성 검증...\n");
 
-for (const pkgDir of PUBLISHABLE_PACKAGE_DIRS) {
+for (const pkgDir of releasePackageDirs) {
   const pkg: PackageJson = JSON.parse(
     readFileSync(resolve(process.cwd(), pkgDir, "package.json"), "utf-8")
   );
@@ -594,6 +664,41 @@ try {
 
 console.log();
 
+// 5.5. Phase 3 generated-surface drift gates
+console.log("🧩 Step 5.5: Core v1 imports and official skill generation...\n");
+
+for (const command of ["bun run check:core-v1-imports", "bun run check:official-skills"]) {
+  try {
+    execSync(command, { stdio: "inherit", cwd: process.cwd() });
+  } catch {
+    hasIssues = true;
+  }
+}
+
+console.log();
+
+// 5.7. Typed apply safety and recovery benchmark
+console.log("🧾 Step 5.7: Typed apply safety/recovery gate...\n");
+
+try {
+  execSync("bun run test:agent-apply-gate", { stdio: "inherit", cwd: process.cwd() });
+} catch {
+  hasIssues = true;
+}
+
+console.log();
+
+// 5.8. Stable reference-app Golden Paths
+console.log("🥟 Step 5.8: Reference app Golden Paths...\n");
+
+try {
+  execSync("bun run test:reference-apps", { stdio: "inherit", cwd: process.cwd() });
+} catch {
+  hasIssues = true;
+}
+
+console.log();
+
 // 6. Target-safe import boundary check
 console.log("🧱 Step 6: Target-safe import boundary check...\n");
 
@@ -623,11 +728,36 @@ try {
 
 console.log();
 
+// 6.5. Stable product package and Core owner boundaries
+console.log("🧭 Step 6.5: Product package/Core owner boundaries...\n");
+
+try {
+  const packageBoundaryIssues = await checkPackageBoundaries(process.cwd());
+  if (packageBoundaryIssues.length > 0) {
+    hasIssues = true;
+    packageBoundaryIssues.forEach((issue) => {
+      console.log(
+        `  ❌ ${issue.file}: ${issue.kind} dependency on ${issue.specifier} violates \"${issue.policy}\" (${issue.reason})`,
+      );
+    });
+  } else {
+    console.log("  ✅ Core runtime/safety/actions and Core <- CLI/MCP boundaries are clean");
+  }
+} catch (err) {
+  hasIssues = true;
+  console.error(
+    "  ❌ package boundary check failed:",
+    err instanceof Error ? err.message : String(err),
+  );
+}
+
+console.log();
+
 // 7. Cross-package subpath audit (#260 회귀 방지)
 console.log("🔗 Step 7: Cross-package subpath audit (#260)...\n");
 
 try {
-  const auditIssues = await auditCrossPackageSubpaths(versions);
+  const auditIssues = await auditCrossPackageSubpaths(versions, releasePackageDirs);
   if (auditIssues.length > 0) {
     hasIssues = true;
     auditIssues.forEach((issue) => console.log(`  ${issue}`));

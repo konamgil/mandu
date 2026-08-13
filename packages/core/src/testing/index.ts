@@ -363,3 +363,9 @@ export {
   type ReportSummary,
   type FormatOptions,
 } from "./reporter";
+
+export {
+  mergeAndWriteLcov,
+  type LcovMergeInput,
+  type LcovMergeSummary,
+} from "./lcov";

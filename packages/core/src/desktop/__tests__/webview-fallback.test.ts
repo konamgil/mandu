@@ -36,7 +36,7 @@ import {
   afterEach,
 } from "bun:test";
 
-describe("@mandujs/core/desktop/webview-fallback — module import", () => {
+describe("@mandujs/core/compat/desktop/webview-fallback — module import", () => {
   it("imports without loading libwebview", async () => {
     // The import itself must succeed even when `bun:ffi.dlopen` would
     // fail (no libwebview). Module-level code must not `dlopen` — that
@@ -60,7 +60,7 @@ describe("@mandujs/core/desktop/webview-fallback — module import", () => {
   });
 });
 
-describe("@mandujs/core/desktop/webview-fallback — FFI symbol contract", () => {
+describe("@mandujs/core/compat/desktop/webview-fallback — FFI symbol contract", () => {
   it("_ffiSymbols declares the minimal webview C ABI we depend on", async () => {
     const { _ffiSymbols } = await import("../webview-fallback");
     // The set of symbols MUST match the upstream webview.h surface we
@@ -105,7 +105,7 @@ describe("@mandujs/core/desktop/webview-fallback — FFI symbol contract", () =>
   });
 });
 
-describe("@mandujs/core/desktop/webview-fallback — _mapHintToInt", () => {
+describe("@mandujs/core/compat/desktop/webview-fallback — _mapHintToInt", () => {
   it("matches WEBVIEW_HINT_* enum values from upstream webview.h", async () => {
     const { _mapHintToInt } = await import("../webview-fallback");
     expect(_mapHintToInt("none")).toBe(0);
@@ -116,7 +116,7 @@ describe("@mandujs/core/desktop/webview-fallback — _mapHintToInt", () => {
   });
 });
 
-describe("@mandujs/core/desktop/webview-fallback — library candidate probe", () => {
+describe("@mandujs/core/compat/desktop/webview-fallback — library candidate probe", () => {
   const ORIGINAL_ENV = process.env.MANDU_LIBWEBVIEW_PATH;
 
   beforeEach(() => {
@@ -158,7 +158,7 @@ describe("@mandujs/core/desktop/webview-fallback — library candidate probe", (
   });
 });
 
-describe("@mandujs/core/desktop/webview-fallback — createFallbackWebview", () => {
+describe("@mandujs/core/compat/desktop/webview-fallback — createFallbackWebview", () => {
   it("rejects missing options before any dlopen attempt", async () => {
     const { createFallbackWebview } = await import("../webview-fallback");
     // An empty-object options bag must be caught by defensive guards
@@ -184,7 +184,7 @@ describe("@mandujs/core/desktop/webview-fallback — createFallbackWebview", () 
   });
 });
 
-describe("@mandujs/core/desktop/webview-fallback — loadFFILibwebview failure surface", () => {
+describe("@mandujs/core/compat/desktop/webview-fallback — loadFFILibwebview failure surface", () => {
   const ORIGINAL_ENV = process.env.MANDU_LIBWEBVIEW_PATH;
 
   beforeEach(async () => {
@@ -237,7 +237,7 @@ const canOpenFallbackWindow =
     process.platform === "linux");
 
 describe.skipIf(!canOpenFallbackWindow)(
-  "@mandujs/core/desktop/webview-fallback — browser smoke (opt-in)",
+  "@mandujs/core/compat/desktop/webview-fallback — browser smoke (opt-in)",
   () => {
     it("opens a data: URL window via the FFI fallback", async () => {
       const { createFallbackWebview } = await import("../webview-fallback");

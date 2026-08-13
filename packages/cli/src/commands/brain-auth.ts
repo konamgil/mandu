@@ -27,7 +27,7 @@ import {
   type StoredToken,
   type HttpClient,
   type OAuthEndpoints,
-} from "@mandujs/core/brain";
+} from "@mandujs/core/compat/brain/index";
 
 export type BrainAuthProvider = "openai" | "anthropic";
 export type BrainLogoutProvider = BrainAuthProvider | "all";
@@ -140,7 +140,7 @@ export async function brainLogin(
     }
 
     // Verify the auth.json actually showed up.
-    const { ChatGPTAuth } = await import("@mandujs/core/brain");
+    const { ChatGPTAuth } = await import("@mandujs/core/compat/brain/index");
     const auth = new ChatGPTAuth();
     const located = auth.locateAuthFile();
     if (!located) {
@@ -292,7 +292,7 @@ export async function brainAuthStatus(
   log("");
 
   // OpenAI: prefer ChatGPT session token (codex-managed) over keychain.
-  const { ChatGPTAuth } = await import("@mandujs/core/brain");
+  const { ChatGPTAuth } = await import("@mandujs/core/compat/brain/index");
   const chatgpt = new ChatGPTAuth();
   const chatgptFile = chatgpt.locateAuthFile();
 

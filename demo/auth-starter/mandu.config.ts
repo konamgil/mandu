@@ -15,4 +15,9 @@ export default {
   server: {
     port: 3333,
   },
+  // Authenticated pages depend on request cookies and must remain dynamic.
+  // Prerendering them would freeze the anonymous redirect/login response.
+  build: {
+    prerender: false,
+  },
 } satisfies ManduConfig;

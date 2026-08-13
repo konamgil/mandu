@@ -5,8 +5,8 @@
 <h1 align="center">Mandu</h1>
 
 <p align="center">
-  <strong>A Bun-native fullstack framework built for AI-assisted teams.</strong><br/>
-  Build React apps, API routes, contracts, and architecture guardrails in one place.
+  <strong>The agent-safe fullstack framework for Bun and React.</strong><br/>
+  Keep architecture, contracts, and build state safe while AI agents change code.
 </p>
 
 <p align="center">
@@ -25,11 +25,13 @@
 
 ---
 
+> **Refoundation status:** Mandu v0.x is an early beta. The Agent-Safe product contract is the accepted v1 direction; typed apply and the full reliability gates are still being implemented. See the [strategy](./docs/product/03_agent_safe_refoundation_strategy.md) and [execution plan](./docs/plans/22_mandu_refoundation_execution_plan.md).
+
 ## Why Mandu?
 
 AI can write code fast. The hard part is keeping the app understandable after many changes.
 
-Mandu gives your team a clear project shape, type-safe APIs, island-based React rendering, and guardrails that help people and agents change code without losing the architecture.
+Mandu combines a focused fullstack runtime with contracts, architecture guardrails, and a controlled agent workflow so people and agents can change code without losing a valid project state.
 
 | You want | Mandu gives you |
 |----------|-----------------|
@@ -39,7 +41,7 @@ Mandu gives your team a clear project shape, type-safe APIs, island-based React 
 | Cleaner AI-generated code | Guard rules, MCP tools, and Mandu-aware skills |
 | A fast local workflow | Bun-native dev, build, and test commands |
 
-The short version: Mandu is for teams that want AI help without turning their codebase into a maze.
+The short version: Mandu is for developers who delegate real changes to AI agents but still own architecture and release quality.
 
 ## Start in One Minute
 
@@ -125,6 +127,7 @@ For the full agent workflow, read [Mandu Agent Workflow](./docs/guides/07_agent_
 
 ## Learn More
 
+- [Agent-Safe Product Strategy](./docs/product/03_agent_safe_refoundation_strategy.md)
 - [Documentation](https://mandujs.com/docs)
 - [Local docs index](./docs/README.md)
 - [CLI reference](./packages/cli/README.md)

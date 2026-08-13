@@ -16,36 +16,10 @@ describe("getProfileCategories", () => {
     expect(cats).toEqual(["agent", "docs"]);
   });
 
-  it("agent-full returns official and domain categories", () => {
+  it("agent-full is a compatibility alias of the official profile", () => {
     const cats = getProfileCategories("agent-full");
     expect(Array.isArray(cats)).toBe(true);
-    expect(cats).toHaveLength(20);
-    // Official agent loop
-    expect(cats).toContain("agent");
-    expect(cats).toContain("docs");
-    // Generation / scaffolding
-    expect(cats).toContain("spec");
-    expect(cats).toContain("generate");
-    expect(cats).toContain("composite");
-    // Domain primitives
-    expect(cats).toContain("slot");
-    expect(cats).toContain("slot-validation");
-    expect(cats).toContain("hydration");
-    expect(cats).toContain("contract");
-    expect(cats).toContain("design");
-    expect(cats).toContain("seo");
-    // Quality / validation
-    expect(cats).toContain("guard");
-    expect(cats).toContain("lint");
-    expect(cats).toContain("run-tests");
-    expect(cats).toContain("ate");
-    // Deploy
-    expect(cats).toContain("deploy-plan");
-    expect(cats).toContain("deploy-preview");
-    // AI refactor
-    expect(cats).toContain("refactor-barrel");
-    expect(cats).toContain("refactor-routes");
-    expect(cats).toContain("refactor-contract");
+    expect(cats).toEqual(["agent", "docs"]);
   });
 
   it("agent-full excludes internal plumbing categories", () => {
@@ -59,7 +33,8 @@ describe("getProfileCategories", () => {
     expect(cats).not.toContain("brain");
     expect(cats).not.toContain("runtime");
     expect(cats).not.toContain("project");
-    // Specialized ATE phases stay internal (core "ate" is exposed)
+    // ATE is an optional Labs package and is not registered by product MCP.
+    expect(cats).not.toContain("ate");
     expect(cats).not.toContain("ate-oracle-replay");
     expect(cats).not.toContain("ate-mutate");
     expect(cats).not.toContain("ate-mutation-report");
@@ -69,10 +44,10 @@ describe("getProfileCategories", () => {
     expect(getProfileCategories("internal")).toBeNull();
   });
 
-  it("agent-core is a strict subset of agent-full", () => {
+  it("agent-core and the legacy agent-full alias expose the same categories", () => {
     const core = getProfileCategories("agent-core")!;
     const full = getProfileCategories("agent-full")!;
-    for (const cat of core) expect(full).toContain(cat);
+    expect(full).toEqual(core);
   });
 });
 

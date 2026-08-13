@@ -160,6 +160,10 @@ async function collect(stream: AsyncIterable<SSEEvent>, limit = 1000): Promise<S
 // ---------------------------------------------------------------------------
 
 describe("DockerSandboxAdapter: docker run argv", () => {
+  it("pins the default sandbox to Bun 1.3.14", () => {
+    expect(DEFAULT_SANDBOX_IMAGE).toBe("oven/bun:1.3.14-slim");
+  });
+
   it("includes every required security flag", () => {
     const adapter = new DockerSandboxAdapter({
       spawnFactory: () => scriptedProc(),

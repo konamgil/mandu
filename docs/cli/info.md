@@ -63,7 +63,7 @@ mandu
   @mandujs/edge      0.4.16
 
 runtime
-  Bun              1.3.12
+  Bun              1.3.14
   Node             v20.11.0
   OS               win32 x64 (10.0.19045)
   CPU              8 cores — Intel(R) Core(TM) i7-9700K
@@ -74,7 +74,7 @@ project
   name             mandujs.com
   version          0.2.0
   root             C:\Users\me\projects\mandujs.com
-  packageManager   bun@1.3.12
+  packageManager   bun@1.3.14
   config           mandu.config.ts
 
 mandu.config summary
@@ -127,7 +127,7 @@ diagnose
     "edge": "0.4.16"
   },
   "runtime": {
-    "bun": "1.3.12",
+    "bun": "1.3.14",
     "node": "v20.11.0",
     "platform": "win32",
     "arch": "x64",

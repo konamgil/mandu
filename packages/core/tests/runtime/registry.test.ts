@@ -188,4 +188,28 @@ describe("guard INVALID_GENERATED_IMPORT (fix #200)", () => {
     const violations = await checkInvalidGeneratedImport(tmpRoot);
     expect(violations).toHaveLength(0);
   });
+
+  test("allows package-local generated build modules", async () => {
+    const srcDir = path.join(tmpRoot, "packages", "cli", "src");
+    await fs.mkdir(srcDir, { recursive: true });
+    await fs.writeFile(
+      path.join(srcDir, "init.ts"),
+      `import { templates } from "../../generated/cli-ux-manifest.js";\nexport default templates;\n`,
+    );
+
+    const violations = await checkInvalidGeneratedImport(tmpRoot);
+    expect(violations).toHaveLength(0);
+  });
+
+  test("ignores generated import examples inside fixture strings", async () => {
+    const srcDir = path.join(tmpRoot, "src");
+    await fs.mkdir(srcDir, { recursive: true });
+    await fs.writeFile(
+      path.join(srcDir, "fixture.ts"),
+      "export const source = `import routes from '../.mandu/generated/routes.manifest'`;\n",
+    );
+
+    const violations = await checkInvalidGeneratedImport(tmpRoot);
+    expect(violations).toHaveLength(0);
+  });
 });

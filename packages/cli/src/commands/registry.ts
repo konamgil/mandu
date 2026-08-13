@@ -10,6 +10,8 @@ import type * as __ManduMonitorTypes0 from "./monitor";
 
 
 import type { CSSFramework, UILibrary } from "./init";
+import { reportLabsFeature } from "../util/labs";
+import { OFFICIAL_COMMANDS } from "./surface";
 
 /**
  * Command execution context
@@ -140,6 +142,17 @@ export function getAllCommandRegistrations(): CommandRegistration[] {
   return out;
 }
 
+/** Product help is deliberately smaller than the compatibility registry. */
+export function getOfficialCommandRegistrations(): CommandRegistration[] {
+  return OFFICIAL_COMMANDS.map((id) => {
+    const registration = getCommand(id);
+    if (!registration) {
+      throw new Error(`Official CLI command "${id}" is not registered.`);
+    }
+    return registration;
+  });
+}
+
 // ============================================================================
 // Command registration (lazy loading)
 // ============================================================================
@@ -245,7 +258,7 @@ registerCommand({
 
 registerCommand({
   id: "build",
-  description: "Build client bundles (hydration). Use --target=<edge> for edge deployments.",
+  description: "Build the stable Bun runtime and client hydration bundles",
   exitOnSuccess: true,
   help: [
     "",
@@ -253,9 +266,6 @@ registerCommand({
     "",
     "  Flags:",
     "    --watch                   Rebuild on file changes",
-    "    --target=<name>           Deployment target (workers|deno|vercel-edge|netlify-edge)",
-    "    --worker-name=<slug>      Cloudflare Workers project name (target=workers)",
-    "    --project-name=<slug>     Project name (target=deno|vercel-edge|netlify-edge)",
     "    --analyze[=json]          Emit .mandu/analyze/report.html + report.json (Phase 18.η)",
     "    --no-budget               Skip bundle-size budget enforcement for this run (Phase 18.φ)",
     "    --prerender-skip-errors   Downgrade prerender errors to warnings (Issue #216)",
@@ -267,20 +277,16 @@ registerCommand({
     "    .mandu/client/                              Hydration bundles (default target)",
     "    .mandu/prerendered/                         Prerendered HTML (per locale, per route)",
     "    <dir>/                                      Flat static export (when --static is used)",
-    "    .mandu/workers/worker.js + wrangler.toml    (target=workers)",
-    "    .mandu/deno/server.ts + deno.json           (target=deno)",
-    "    api/_mandu.ts + vercel.json                 (target=vercel-edge)",
-    "    netlify/edge-functions/ssr.ts + netlify.toml (target=netlify-edge)",
     "",
     "  Examples:",
     "    mandu build",
     "    mandu build --watch",
     "    mandu build --static                         # flat dist/ for any static host",
     "    mandu build --static=public-out              # custom output dir",
-    "    mandu build --target=workers --worker-name=my-app",
-    "    mandu build --target=deno --project-name=my-app",
-    "    mandu build --target=vercel-edge",
-    "    mandu build --target=netlify-edge",
+    "",
+    "  Deployment:",
+    "    Deploy the verified project with provider or container tooling.",
+    "    Contract: docs/deploy/artifact-contract.md",
     "",
   ].join("\n"),
   async run(ctx) {
@@ -510,10 +516,19 @@ registerCommand({
           ? ctx.options.from
           : undefined,
       intent: intentFromFlag ?? intentFromArgs,
+      operations:
+        ctx.options.operations && ctx.options.operations !== "true"
+          ? ctx.options.operations
+          : undefined,
+      rollbackId:
+        ctx.options.rollback && ctx.options.rollback !== "true"
+          ? ctx.options.rollback
+          : undefined,
       dryRun:
         ctx.options["dry-run"] === "true" || ctx.options["dry-run"] === ""
           ? true
-          : ctx.options["no-dry-run"] === "true" || ctx.options["no-dry-run"] === ""
+          : ctx.options.execute === "true" || ctx.options.execute === "" ||
+              ctx.options["no-dry-run"] === "true" || ctx.options["no-dry-run"] === ""
             ? false
             : undefined,
       target:
@@ -1004,70 +1019,38 @@ registerCommand({
 
 registerCommand({
   id: "ate",
-  description: "ATE agent-native tooling (Phase A.3+): lint-exemplars",
+  description: "Compatibility notice for the optional ATE Labs package",
   subcommands: ["lint-exemplars"],
-  async run(ctx) {
-    const { runAteCommand } = await import("./ate");
-    const ok = await runAteCommand(ctx.args.slice(1), {
-      json: ctx.options.json === "true",
+  async run() {
+    return reportLabsFeature({
+      feature: "ATE automation testing",
+      packageName: "@mandujs/ate",
+      alternative: "use `mandu test` for the stable Bun unit/integration test path",
     });
-    if (!ok) process.exitCode = 1;
-    return ok;
   },
 });
 
 registerCommand({
   id: "test:auto",
-  description: "ATE auto E2E generation/execution",
-  async run(ctx) {
-    const { testAuto } = await import("./test-auto");
-    return testAuto({
-      ci: ctx.options.ci === "true",
-      impact: ctx.options.impact === "true",
-      baseURL: ctx.options["base-url"] || ctx.options.baseURL || ctx.options.baseUrl,
+  description: "Compatibility notice for optional ATE auto E2E",
+  async run() {
+    return reportLabsFeature({
+      feature: "ATE auto E2E",
+      packageName: "@mandujs/ate",
+      alternative: "use `mandu test` or run Playwright directly",
     });
   },
 });
 
 registerCommand({
   id: "test:watch",
-  description: "Watch mode: re-run ATE tests for affected routes on file changes",
-  async run(ctx) {
-    const { createAteWatcher } = await import("@mandujs/ate");
-    type OracleLevel = "L0" | "L1" | "L2" | "L3";
-    const oracleOpt = ctx.options.oracle as string | undefined;
-    const oracleLevel: OracleLevel =
-      oracleOpt === "L0" || oracleOpt === "L1" || oracleOpt === "L2" || oracleOpt === "L3"
-        ? (oracleOpt as OracleLevel)
-        : "L1";
-    const baseURL =
-      (ctx.options["base-url"] as string | undefined) ??
-      (ctx.options.baseURL as string | undefined) ??
-      (ctx.options.baseUrl as string | undefined) ??
-      "http://localhost:3333";
-    const debounceMs = ctx.options.debounce ? Number(ctx.options.debounce) : undefined;
-
-    const watcher = createAteWatcher({
-      repoRoot: process.cwd(),
-      baseURL,
-      oracleLevel,
-      debounceMs,
+  description: "Compatibility notice for optional ATE route watch",
+  async run() {
+    return reportLabsFeature({
+      feature: "ATE route-aware watch",
+      packageName: "@mandujs/ate",
+      alternative: "use `mandu test --watch` for stable test watching",
     });
-
-    const shutdown = () => {
-      watcher.stop();
-      process.exit(0);
-    };
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
-
-    await watcher.start();
-    // Keep the process alive — fs.watch handles do not hold the loop on all
-    // platforms, so we block on a never-resolving promise until SIGINT.
-    await new Promise<void>(() => {
-      /* intentionally unresolved; shutdown via SIGINT */
-    });
-    return true;
   },
 });
 
@@ -1091,8 +1074,8 @@ registerCommand({
     "    --coverage         bun coverage + LCOV merge",
     "    --bail             Stop on first failure",
     "    --update-snapshots Regenerate snapshot files (-u)",
-    "    --e2e              Run ATE E2E pipeline after unit/integration",
-    "    --heal             Run ATE heal loop after E2E failure",
+    "    --e2e              Optional ATE Labs feature (requires @mandujs/ate)",
+    "    --heal             Optional ATE Labs healing (requires @mandujs/ate)",
     "    --dry-run          Print plan, exit 0 (only with --e2e/--watch)",
     "    --base-url <url>   Playwright baseURL override",
     "    --ci               Non-interactive mode",
@@ -1152,10 +1135,13 @@ registerCommand({
 
 registerCommand({
   id: "test:heal",
-  description: "Generate ATE healing suggestions (no auto-commit)",
+  description: "Compatibility notice for optional ATE healing",
   async run() {
-    const { testHeal } = await import("./test-heal");
-    return testHeal();
+    return reportLabsFeature({
+      feature: "ATE healing",
+      packageName: "@mandujs/ate",
+      alternative: "use `mandu agent verify --changed --write` then `mandu agent repair`",
+    });
   },
 });
 
@@ -1430,16 +1416,14 @@ registerCommand({
 
 registerCommand({
   id: "mcp",
-  description: "Run MCP tools from terminal, or register Mandu with IDEs (mcp register)",
-  subcommands: ["register"],
+  description: "Register standalone Mandu MCP with IDEs",
   exitOnSuccess: true,
   help: [
     "",
-    "  mandu mcp — MCP tool bridge + IDE integration",
+    "  mandu mcp — standalone MCP integration",
     "",
     "  Usage:",
-    "    mandu mcp                    List all available MCP tools",
-    "    mandu mcp <tool> [args]      Execute a specific tool",
+    "    bunx mandu-mcp               Start the standalone MCP server",
     "    mandu mcp register [...]     Register Mandu with an IDE (Phase 13.2)",
     "",
     "  mcp register flags:",
@@ -1448,12 +1432,8 @@ registerCommand({
     "    --token=<strategy> generate | prompt | env:VAR | (default: ${env:MANDU_MCP_TOKEN})",
     "    --dry-run          Preview writes without touching disk",
     "",
-    "  Flags (tool invocation):",
-    "    --list             Print all tools then exit (same as no <tool>)",
-    "    --json             Machine-readable output",
-    "",
     "  Examples:",
-    "    mandu mcp --list",
+    "    bunx mandu-mcp",
     "    mandu mcp register --ide=claude",
     "    mandu mcp register --ide=all --dry-run",
     "",
@@ -1482,98 +1462,58 @@ registerCommand({
       return code === 0;
     }
 
-    const { mcp } = await import("./mcp");
-    const tool = ctx.options._positional;
-    const json = ctx.options.json === "true";
-    const list = !tool || ctx.options.list === "true";
-    return mcp({ tool, args: ctx.options, json, list });
+    return reportLabsFeature({
+      feature: "MCP server and tool invocation",
+      packageName: "@mandujs/mcp",
+      alternative: "run `bunx mandu-mcp`; keep `mandu mcp register` for IDE configuration",
+    });
   },
 });
 
 registerCommand({
   id: "deploy",
-  description:
-    "Prepare deployment artifacts (docker, docker-compose, fly, vercel, railway, netlify, cf-pages, render)",
+  description: "Retired provider deployment compatibility command",
   exitOnSuccess: true,
   help: [
     "",
-    "  mandu deploy — prepare deployment artifacts",
+    "  mandu deploy — retired in the stable Mandu product",
     "",
-    "  Flags:",
-    "    --target=<name>    docker|docker-compose|fly|vercel|railway|netlify|cf-pages|render (required)",
-    "    --env=<name>       Environment name (default: production)",
-    "    --project=<name>   Project name override",
-    "    --dry-run          Preview artifacts without touching filesystem",
-    "    --execute          Invoke the provider CLI after artifact prep",
-    "    --verbose          Extra diagnostics (secrets still masked)",
-    "    --set-secret KEY=VAL  Stash a secret into OS keychain then exit (repeatable)",
+    "  Mandu owns a reproducible Bun artifact, not provider credentials or",
+    "  remote deployment execution.",
     "",
-    "  Examples:",
-    "    mandu deploy --target=vercel --dry-run",
-    "    mandu deploy --target=fly --execute",
-    "    mandu deploy --set-secret VERCEL_TOKEN=xxx --set-secret DATABASE_URL=yyy",
+    "  Replacement:",
+    "    1. mandu build",
+    "    2. validate with mandu start",
+    "    3. deploy the artifact with your provider CLI or container platform",
     "",
-    "  See docs/deploy/README.md for adapter capability matrix.",
+    "  See docs/deploy/artifact-contract.md.",
     "",
   ].join("\n"),
-  async run(ctx) {
-    const { deploy } = await import("./deploy");
-    const setSecretRaw = ctx.options["set-secret"];
-    const setSecret = Array.isArray(setSecretRaw)
-      ? setSecretRaw
-      : typeof setSecretRaw === "string" && setSecretRaw !== "true"
-        ? [setSecretRaw]
-        : undefined;
-    return deploy({
-      target: ctx.options.target,
-      env: ctx.options.env,
-      project: ctx.options.project,
-      dryRun: ctx.options["dry-run"] === "true",
-      execute: ctx.options.execute === "true" || ctx.options.execute === "",
-      verbose: ctx.options.verbose === "true",
-      setSecret,
-    });
+  async run() {
+    console.error("`mandu deploy` has been retired from the stable product.");
+    console.error("Run `mandu build`, validate with `mandu start`, then use your provider CLI.");
+    console.error("Artifact contract: docs/deploy/artifact-contract.md");
+    return false;
   },
 });
 
 registerCommand({
   id: "deploy:plan",
-  description:
-    "Infer per-route deploy intent and write .mandu/deploy.intent.json (#250)",
+  description: "Retired provider deployment planning compatibility command",
   exitOnSuccess: true,
   help: [
     "",
-    "  mandu deploy:plan — infer DeployIntent for every route",
+    "  mandu deploy:plan — retired in the stable Mandu product",
     "",
-    "  Reads app/ + the routes manifest, runs the heuristic inferer",
-    "  (or the brain, when --use-brain is set in M4+), and produces a",
-    "  diff against .mandu/deploy.intent.json. The file is the source",
-    "  of truth that adapters read at deploy time — commit it.",
-    "",
-    "  Flags:",
-    "    --apply            Write the cache without prompting (CI-safe)",
-    "    --dry-run          Render the plan without prompting or writing",
-    "    --reinfer          Force re-inference even on unchanged sources",
-    "    --verbose          Show unchanged rows in the diff",
-    "    --use-brain        Wrap the heuristic with the OAuth brain adapter (#250 M4)",
-    "",
-    "  Examples:",
-    "    mandu deploy:plan",
-    "    mandu deploy:plan --dry-run",
-    "    mandu deploy:plan --apply",
-    "    mandu deploy:plan --reinfer --apply",
+    "  Deployment intent and provider planning now belong to provider tooling.",
+    "  Mandu only guarantees the artifact documented at:",
+    "  docs/deploy/artifact-contract.md",
     "",
   ].join("\n"),
-  async run(ctx) {
-    const { deployPlan } = await import("./deploy/plan");
-    const result = await deployPlan({
-      apply: ctx.options.apply === "true" || ctx.options.apply === "",
-      dryRun: ctx.options["dry-run"] === "true" || ctx.options["dry-run"] === "",
-      reinfer: ctx.options.reinfer === "true" || ctx.options.reinfer === "",
-      useBrain: ctx.options["use-brain"] === "true" || ctx.options["use-brain"] === "",
-      verbose: ctx.options.verbose === "true" || ctx.options.verbose === "",
-    });
-    return result.exitCode === 0;
+  async run() {
+    console.error("`mandu deploy:plan` has been retired from the stable product.");
+    console.error("Use provider-native configuration after `mandu build`.");
+    return false;
   },
 });
 
@@ -1670,32 +1610,29 @@ registerCommand({
 
 registerCommand({
   id: "skills:generate",
-  description: "Generate per-project Claude Code skills (glossary, conventions, workflow)",
+  description: "Compatibility alias for `mandu agent sync --target=claude`",
   exitOnSuccess: true,
   async run(ctx) {
-    const { skillsGenerate } = await import("./skills");
-    const rawKinds = ctx.options.kinds;
-    const kinds = typeof rawKinds === "string" && rawKinds !== "true"
-      ? (rawKinds.split(",").map((k) => k.trim()).filter(Boolean) as Array<"glossary" | "conventions" | "workflow">)
-      : undefined;
-    return skillsGenerate({
-      regenerate: ctx.options.regenerate === "true",
+    const { agent } = await import("./agent");
+    return agent({
+      action: "sync",
+      target: "claude",
       dryRun: ctx.options["dry-run"] === "true",
-      yes: ctx.options.yes === "true",
-      outDir: typeof ctx.options["out-dir"] === "string" && ctx.options["out-dir"] !== "true" ? ctx.options["out-dir"] : undefined,
-      kinds,
+      json: ctx.options.json === "true",
     });
   },
 });
 
 registerCommand({
   id: "skills:list",
-  description: "List installed per-project Claude Code skills",
+  description: "Preview canonical Claude agent artifacts",
   exitOnSuccess: true,
   async run(ctx) {
-    const { skillsList } = await import("./skills");
-    return skillsList({
-      outDir: typeof ctx.options["out-dir"] === "string" && ctx.options["out-dir"] !== "true" ? ctx.options["out-dir"] : undefined,
+    const { agent } = await import("./agent");
+    return agent({
+      action: "sync",
+      target: "claude",
+      dryRun: true,
       json: ctx.options.json === "true",
     });
   },
@@ -1705,17 +1642,33 @@ registerCommand({
 // Phase 14.2 — `mandu ai` AI playground (chat + eval)
 // ============================================================================
 
+const AI_LABS_HELP = [
+  "",
+  "  mandu ai — optional AI playground (Labs)",
+  "",
+  "  The provider chat/eval playground is no longer part of the stable CLI runtime.",
+  "  Install @mandujs/ate explicitly for Labs experiments.",
+  "  Stable workflow: mandu agent plan \"<intent>\"",
+  "",
+].join("\n");
+
 registerCommand({
   id: "ai",
-  description: "Terminal AI playground: interactive chat or non-interactive eval",
+  description: "Compatibility notice for the optional AI playground",
   subcommands: ["chat", "eval"],
   async help(_ctx) {
-    const { AI_HELP } = await import("./ai");
-    process.stdout.write(AI_HELP);
+    process.stdout.write(AI_LABS_HELP);
   },
   async run(ctx) {
-    const { aiDispatch } = await import("./ai");
-    return aiDispatch(ctx);
+    if (ctx.options.help === "true") {
+      process.stdout.write(AI_LABS_HELP);
+      return true;
+    }
+    return reportLabsFeature({
+      feature: "Terminal AI playground",
+      packageName: "@mandujs/ate",
+      alternative: "use `mandu agent plan \"<intent>\"` for the supported product workflow",
+    });
   },
 });
 

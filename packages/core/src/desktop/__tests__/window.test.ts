@@ -18,7 +18,7 @@ import {
 } from "../window";
 import type { WindowOptions } from "../types";
 
-describe("@mandujs/core/desktop — types & validation", () => {
+describe("@mandujs/core/compat/desktop — types & validation", () => {
   it("_DEFAULTS match the documented contract", () => {
     expect(_DEFAULTS.title).toBe("Mandu Desktop");
     expect(_DEFAULTS.width).toBe(1024);
@@ -122,7 +122,7 @@ describe("@mandujs/core/desktop — types & validation", () => {
   });
 });
 
-describe("@mandujs/core/desktop — createWindow peer loading", () => {
+describe("@mandujs/core/compat/desktop — createWindow peer loading", () => {
   beforeEach(() => {
     _resetWebviewBunCache();
   });

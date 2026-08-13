@@ -26,8 +26,8 @@ import {
   EXIT_ERROR,
   EXIT_REFUSED,
 } from "../db-seed";
-import { createDb } from "@mandujs/core/db";
-import type { ParsedResource } from "@mandujs/core/resource";
+import { createDb } from "@mandujs/core/compat/db/index";
+import type { ParsedResource } from "@mandujs/core/compat/resource/index";
 
 const PREFIX = path.join(os.tmpdir(), "mandu-db-seed-test-");
 

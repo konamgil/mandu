@@ -21,12 +21,12 @@ import {
   type ManduContext,
   type SessionStorage,
 } from "@mandujs/core";
-import { createSqliteSessionStorage } from "@mandujs/core/filling/session-sqlite";
+import { createSqliteSessionStorage } from "@mandujs/core/compat/filling/session-sqlite";
 import {
   session as sessionMiddleware,
   csrf as csrfMiddleware,
 } from "@mandujs/core/middleware";
-import { currentUserId } from "@mandujs/core/auth";
+import { currentUserId } from "@mandujs/core/compat/auth/index";
 // Side-effect import: registers Phase 3.1 cron jobs (session GC).
 // Every API route + page loader pulls `auth.ts` in, so this is the most
 // reliable boot hook without touching mandu.config.ts.

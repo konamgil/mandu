@@ -21,7 +21,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { validateAndReport, checkDirectory, type GuardConfig } from "@mandujs/core";
-import type { ValidatedManduConfig } from "@mandujs/core/config/validate";
+import type { ValidatedManduConfig } from "@mandujs/core/compat/config/validate";
 import { CLI_ERROR_CODES } from "../../errors/codes";
 import { resolveFromCwd } from "../../util/fs";
 import { resolveManifest } from "../../util/manifest";

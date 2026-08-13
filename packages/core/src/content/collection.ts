@@ -8,7 +8,7 @@
  *
  * ```ts
  * // content.config.ts
- * import { defineCollection, z } from '@mandujs/core/content';
+ * import { defineCollection, z } from '@mandujs/core/compat/content/index';
  *
  * export const docs = defineCollection({
  *   path: 'content/docs',

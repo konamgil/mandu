@@ -34,9 +34,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@mandujs/core": "^0.54.20",
-    "@mandujs/ate": "^0.26.1",
-    "@mandujs/skills": "workspace:*",
+    "@mandujs/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.25.3"
   },
   "engines": {

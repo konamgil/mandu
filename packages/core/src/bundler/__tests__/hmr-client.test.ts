@@ -442,6 +442,39 @@ describe("createHMRServer — wire format + event dispatch", () => {
     });
   });
 
+  test("[13a] a build error reaches new browsers until a successful recovery", async () => {
+    server!.broadcast({
+      type: "error",
+      data: {
+        name: "BuildError",
+        kind: "build",
+        message: "synthetic build failure",
+        routeId: "home",
+        timestamp: Date.now(),
+      },
+    });
+
+    const failedClient = await connectWS(hmrPort);
+    expect(await failedClient.awaitMessage(0)).toMatchObject({ type: "connected" });
+    expect(await failedClient.awaitMessage(1)).toMatchObject({
+      type: "error",
+      data: {
+        name: "BuildError",
+        kind: "build",
+        message: "synthetic build failure",
+        routeId: "home",
+      },
+    });
+    failedClient.ws.close();
+
+    server!.broadcast({ type: "reload", data: { timestamp: Date.now() } });
+    const recoveredClient = await connectWS(hmrPort);
+    expect(await recoveredClient.awaitMessage(0)).toMatchObject({ type: "connected" });
+    await waitFor(25);
+    expect(recoveredClient.peek()).toHaveLength(1);
+    recoveredClient.ws.close();
+  });
+
   test("[14] reconnect with since=0 after many broadcasts and no buffered survivors → full-reload", async () => {
     // Fire enough envelopes to push id past MAX_REPLAY_BUFFER — oldestId
     // becomes > 0, so since=0 is older than oldestId.

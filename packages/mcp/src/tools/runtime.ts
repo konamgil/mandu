@@ -11,7 +11,7 @@ import {
   loadManifest,
   needsHydration,
 } from "@mandujs/core";
-import type { BundleManifest } from "@mandujs/core/bundler";
+import type { BundleManifest } from "@mandujs/core/compat/bundler/index";
 import { getDevServerState } from "./project.js";
 import { readRuntimeControl } from "../utils/runtime-control.js";
 import path from "path";

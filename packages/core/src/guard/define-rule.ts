@@ -13,7 +13,7 @@
  * @example Project-local "no axios" rule.
  * ```ts
  * // mandu.config.ts
- * import { defineGuardRule } from "@mandujs/core/guard/define-rule";
+ * import { defineGuardRule } from "@mandujs/core/compat/guard/define-rule";
  *
  * export default {
  *   guard: {

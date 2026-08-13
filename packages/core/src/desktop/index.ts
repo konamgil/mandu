@@ -18,7 +18,7 @@
  * @example Minimal desktop entry
  * ```ts
  * import { startServer } from "@mandujs/core";
- * import { createWindow } from "@mandujs/core/desktop";
+ * import { createWindow } from "@mandujs/core/compat/desktop/index";
  * import manifest from "../../.mandu/manifest.json" with { type: "json" };
  *
  * const server = startServer(manifest, { port: 0, hostname: "127.0.0.1" });

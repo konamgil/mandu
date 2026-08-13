@@ -28,7 +28,7 @@
  */
 
 import path from "node:path";
-import { createDb, detectProvider, type Db, type DbConfig, type SqlProvider } from "@mandujs/core/db";
+import { createDb, detectProvider, type Db, type DbConfig, type SqlProvider } from "@mandujs/core/compat/db/index";
 
 /**
  * Narrow, resolve-db-local DB section shape.

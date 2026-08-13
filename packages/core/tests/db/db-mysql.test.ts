@@ -46,7 +46,7 @@ const MYSQL_URL = process.env.DB_TEST_MYSQL_URL;
 
 const describeIfMysql = MYSQL_URL ? describe : describe.skip;
 
-describeIfMysql("@mandujs/core/db — MySQL integration", () => {
+describeIfMysql("@mandujs/core/compat/db — MySQL integration", () => {
   async function withMysqlDb<T>(
     fn: (db: ReturnType<typeof createDb>) => Promise<T>,
   ): Promise<T> {

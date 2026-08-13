@@ -111,6 +111,59 @@ describe("mandu.agent.context MCP tool", () => {
     expect(result.report.path).toBe(path.join(root, ".mandu", "agent-apply.json"));
   });
 
+  it("binds and executes typed operations with the shared receipt schema", async () => {
+    const handlers = agentTools(root);
+    const plan = await handlers["mandu.agent.plan"]({
+      intent: "add settings page",
+      operations: [
+        {
+          kind: "route.create",
+          target: "app/settings/page.tsx",
+          effect: {
+            type: "write",
+            content: "export default function Settings() { return <main>Settings</main>; }\n",
+            encoding: "utf8",
+          },
+        },
+      ],
+      idempotencyKey: "mcp-settings-v1",
+      writePlan: true,
+    }) as { executable: boolean; operations: Array<{ precondition: { exists: boolean } }> };
+
+    expect(plan.executable).toBe(true);
+    expect(plan.operations[0]?.precondition.exists).toBe(false);
+
+    const receipt = await handlers["mandu.agent.apply"]({
+      from: ".mandu/agent-plan.json",
+      dryRun: false,
+    }) as {
+      schemaVersion: number;
+      framework: string;
+      ok: boolean;
+      status: string;
+      dryRun: boolean;
+      planId: string;
+      operations: Array<{ kind: string; target: string; status: string }>;
+      rollback: { id: string };
+    };
+    expect(receipt).toMatchObject({
+      schemaVersion: 1,
+      framework: "mandu",
+      ok: true,
+      status: "applied",
+      dryRun: false,
+      planId: expect.stringContaining("plan-"),
+    });
+    expect(receipt.operations[0]).toMatchObject({
+      kind: "route.create",
+      target: "app/settings/page.tsx",
+      status: "applied",
+    });
+    expect(receipt.rollback.id).toStartWith("rollback-");
+    expect(await fs.readFile(path.join(root, "app/settings/page.tsx"), "utf8"))
+      .toContain("Settings");
+  });
+
   it("returns the shared agent verify report shape", async () => {
     const handlers = agentTools(root);
     const result = await handlers["mandu.agent.verify"]({

@@ -24,6 +24,14 @@ import { mark, measure } from "../perf";
 import { HMR_PERF } from "../perf/hmr-markers";
 import { runOnBundleComplete } from "../plugins/runner";
 import {
+  beginBuildGeneration,
+  failBuildGeneration,
+  publishBuildGeneration,
+  resolveActiveBuildArtifacts,
+  runSerializedClientBuild,
+} from "./generation";
+import { validateBundleManifest } from "./manifest-schema";
+import {
   describeMissingHydrationClientModule,
   validateClientModuleForBrowserBundle,
 } from "../router/client-entry";
@@ -48,6 +56,11 @@ interface BoundaryBundleBuild {
   hydrate: string;
   size: number;
   gzipSize: number;
+}
+
+interface InternalBundlerOptions extends BundlerOptions {
+  /** Staged bundle manifest used by the generation wrapper. */
+  __manifestPath?: string;
 }
 
 /**
@@ -129,6 +142,18 @@ function resolveClientOutDir(rootDir: string, outDir?: string): string {
   }
 
   return resolvedOutDir;
+}
+
+function resolveBundleManifestPath(
+  rootDir: string,
+  options: InternalBundlerOptions,
+): string {
+  return options.__manifestPath ?? path.join(rootDir, ".mandu", "manifest.json");
+}
+
+function usesDefaultClientOutDir(rootDir: string, outDir?: string): boolean {
+  return path.normalize(resolveClientOutDir(rootDir, outDir)) ===
+    path.normalize(path.join(rootDir, ".mandu", "client"));
 }
 
 /**
@@ -1979,7 +2004,7 @@ function calculateStats(
  *
  * @example
  * ```typescript
- * import { buildClientBundles } from "@mandujs/core/bundler";
+ * import { buildClientBundles } from "@mandujs/core/compat/bundler/index";
  *
  * const result = await buildClientBundles(manifest, "./my-app", {
  *   minify: true,
@@ -1996,10 +2021,74 @@ export async function buildClientBundles(
   rootDir: string,
   options: BundlerOptions = {}
 ): Promise<BundleResult> {
+  if (!usesDefaultClientOutDir(rootDir, options.outDir)) {
+    return buildClientBundlesInternal(manifest, rootDir, options);
+  }
+
+  return runSerializedClientBuild(rootDir, async () => {
+    let previousPublishedManifest: BundleManifest | null = null;
+    const activeBeforeBuild = await resolveActiveBuildArtifacts(rootDir);
+    if (activeBeforeBuild.source === "generation") {
+      try {
+        const raw = await fs.readFile(activeBeforeBuild.manifestPath, "utf8");
+        const parsed = validateBundleManifest(JSON.parse(raw));
+        if (parsed.generationId === activeBeforeBuild.generationId) {
+          previousPublishedManifest = parsed;
+        }
+      } catch (error) {
+        console.warn(
+          `[Mandu] Last published manifest is invalid and will not be reused: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    const generation = await beginBuildGeneration(rootDir);
+    try {
+      const result = await buildClientBundlesInternal(manifest, rootDir, {
+        ...options,
+        outDir: generation.clientDir,
+        __manifestPath: generation.manifestPath,
+      });
+
+      if (!result.success) {
+        await failBuildGeneration(generation, result.errors);
+        return {
+          ...result,
+          manifest: previousPublishedManifest ?? createEmptyManifest(
+            options.mode === "production" ? "production" : "development",
+          ),
+        };
+      }
+
+      result.manifest.generationId = generation.id;
+      await fs.writeFile(
+        generation.manifestPath,
+        `${JSON.stringify(result.manifest, null, 2)}\n`,
+        "utf8",
+      );
+      await publishBuildGeneration(generation);
+      return result;
+    } catch (error) {
+      await failBuildGeneration(generation, [
+        error instanceof Error ? error.message : String(error),
+      ]);
+      throw error;
+    }
+  });
+}
+
+async function buildClientBundlesInternal(
+  manifest: RoutesManifest,
+  rootDir: string,
+  options: InternalBundlerOptions = {},
+): Promise<BundleResult> {
   mark("bundler:full");
   const startTime = performance.now();
   const outputs: BundleOutput[] = [];
   const errors: string[] = [];
+  const bundleManifestPath = resolveBundleManifestPath(rootDir, options);
 
   // Phase 18.τ — fire `onBundleComplete(stats)` before returning. Helper
   // is inlined here so every return path in this function can opt in
@@ -2057,7 +2146,7 @@ export async function buildClientBundles(
   if (hydratedRoutes.length === 0 && partialFiles.length === 0) {
     // #185: skipFrameworkBundles 모드에서는 기존 manifest를 그대로 유지 (devtools 재빌드도 스킵)
     if (options.skipFrameworkBundles && errors.length === 0) {
-      const manifestPath = path.join(rootDir, ".mandu/manifest.json");
+      const manifestPath = bundleManifestPath;
       try {
         const manifestRaw = await fs.readFile(manifestPath, "utf-8");
         let existing: BundleManifest;
@@ -2104,7 +2193,7 @@ export async function buildClientBundles(
 
     const emptyManifest = createEmptyManifest(env);
     await fs.writeFile(
-      path.join(rootDir, ".mandu/manifest.json"),
+      bundleManifestPath,
       JSON.stringify(emptyManifest, null, 2)
     );
     return {
@@ -2154,11 +2243,11 @@ export async function buildClientBundles(
     // 기존 매니페스트를 읽어 변경된 Island만 갱신
     let existingManifest: BundleManifest;
     try {
-      const manifestData = await fs.readFile(path.join(rootDir, ".mandu/manifest.json"), "utf-8");
+      const manifestData = await fs.readFile(bundleManifestPath, "utf-8");
       existingManifest = JSON.parse(manifestData) as BundleManifest;
     } catch {
       // 기존 매니페스트 없으면 전체 빌드로 재시도 (targetRouteIds 제거)
-      return buildClientBundles(manifest, rootDir, { ...options, targetRouteIds: undefined });
+      return buildClientBundlesInternal(manifest, rootDir, { ...options, targetRouteIds: undefined });
     }
 
     // Only update manifest with successfully built outputs (#10: preserve previous good manifest on failure)
@@ -2187,7 +2276,7 @@ export async function buildClientBundles(
       );
 
       await fs.writeFile(
-        path.join(rootDir, ".mandu/manifest.json"),
+        bundleManifestPath,
         JSON.stringify(existingManifest, null, 2)
       );
     }
@@ -2211,7 +2300,7 @@ export async function buildClientBundles(
   if (options.skipFrameworkBundles) {
     let existingManifest: BundleManifest;
     try {
-      const manifestData = await fs.readFile(path.join(rootDir, ".mandu/manifest.json"), "utf-8");
+      const manifestData = await fs.readFile(bundleManifestPath, "utf-8");
       existingManifest = JSON.parse(manifestData) as BundleManifest;
     } catch (parseError) {
       // 기존 매니페스트 없음/corrupt → 경고 후 full build로 fallback
@@ -2220,7 +2309,7 @@ export async function buildClientBundles(
           `[Mandu] Existing manifest is corrupt, falling back to full build: ${parseError.message}`,
         );
       }
-      return buildClientBundles(manifest, rootDir, { ...options, skipFrameworkBundles: false });
+      return buildClientBundlesInternal(manifest, rootDir, { ...options, skipFrameworkBundles: false });
     }
 
     // #186 hardening: 필수 필드 검증 — 누락 시 full build로 fallback
@@ -2233,7 +2322,7 @@ export async function buildClientBundles(
       console.warn(
         "[Mandu] Existing manifest missing required fields (shared/bundles), falling back to full build",
       );
-      return buildClientBundles(manifest, rootDir, { ...options, skipFrameworkBundles: false });
+      return buildClientBundlesInternal(manifest, rootDir, { ...options, skipFrameworkBundles: false });
     }
 
     for (const routeId of invalidClientRouteIds) {
@@ -2360,7 +2449,7 @@ export async function buildClientBundles(
     }
 
     await fs.writeFile(
-      path.join(rootDir, ".mandu/manifest.json"),
+      bundleManifestPath,
       JSON.stringify(existingManifest, null, 2),
     );
 
@@ -2531,7 +2620,7 @@ export async function buildClientBundles(
   );
 
   await fs.writeFile(
-    path.join(rootDir, ".mandu/manifest.json"),
+    bundleManifestPath,
     JSON.stringify(bundleManifest, null, 2)
   );
 

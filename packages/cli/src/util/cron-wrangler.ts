@@ -1,6 +1,6 @@
 /**
  * `cron-wrangler` — helpers that translate `ManduConfig.scheduler.jobs`
- * (an array of {@link import("@mandujs/core/scheduler").CronDef}) into the
+ * (an array of {@link import("@mandujs/core/compat/scheduler/index").CronDef}) into the
  * schedule strings consumed by `wrangler.toml`'s `[triggers] crons = [...]`
  * block.
  *
@@ -23,7 +23,7 @@
  * and a warning is collected so the CLI can surface it to the user.
  */
 
-import type { CronDef, CronRuntime } from "@mandujs/core/scheduler";
+import type { CronDef, CronRuntime } from "@mandujs/core/compat/scheduler/index";
 
 export interface CronWranglerExtraction {
   /**

@@ -549,7 +549,7 @@ export async function checkPackageExportGaps(rootDir: string): Promise<DiagnoseC
   }
 
   const files = await collectSourceFiles(rootDir);
-  // Match both `from "@mandujs/core/..."` and `require("@mandujs/core/...")` forms.
+  // Match both `from "@mandujs/core/compat/..."` and `require("@mandujs/core/compat/...")` forms.
   const importRegex = /(?:from|require\()\s*["']([^"']+)["']/g;
   const userSubpaths = new Map<string, string[]>();
 

@@ -2,12 +2,14 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   loadManifest,
   runContractGuardCheck,
-  generateOpenAPIDocument,
-  openAPIToJSON,
   type RouteSpec,
   type SpecHttpMethod,
 } from "@mandujs/core";
-import { generateContractTemplate } from "@mandujs/core/generator";
+import {
+  generateOpenAPIDocument,
+  openAPIToJSON,
+} from "@mandujs/core/compat/openapi/index";
+import { generateContractTemplate } from "@mandujs/core/compat/generator/index";
 import { getProjectPaths, writeJsonFile } from "../utils/project.js";
 import path from "path";
 import fs from "fs/promises";

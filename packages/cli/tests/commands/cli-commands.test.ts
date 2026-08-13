@@ -144,25 +144,22 @@ describe("mandu cache runtime control", () => {
 });
 
 describe("mandu mcp", () => {
-  it("lists tools", async () => {
+  it("points tool invocation to the standalone MCP package", async () => {
     const output = await runCLI("mcp --list");
-    expect(output).toContain("MCP Tools");
+    expect(output).toContain("optional Mandu Labs feature");
+    expect(output).toContain("bunx mandu-mcp");
   });
 });
 
 describe("mandu help", () => {
-  it("renders the semantic help output", async () => {
+  it("renders exactly the six-command stable product surface", async () => {
     const output = await runCLI("--help");
-    expect(output).toContain("cache");
-    expect(output).toContain("middleware");
-    expect(output).toContain("auth");
-    expect(output).toContain("collection");
-    expect(output).toContain("review");
-    expect(output).toContain("ask");
-    expect(output).toContain("fix");
-    expect(output).toContain("deploy");
-    expect(output).toContain("upgrade");
-    expect(output).toContain("completion");
+    for (const command of ["create", "dev", "build", "start", "check", "agent"]) {
+      expect(output).toMatch(new RegExp(`^\\s{2}${command}\\s`, "m"));
+    }
+    for (const hidden of ["init", "guard", "test", "mcp", "deploy", "db", "ai"]) {
+      expect(output).not.toMatch(new RegExp(`^\\s{2}${hidden}\\s`, "m"));
+    }
     expect(output).toContain("Command Groups:");
   });
 });

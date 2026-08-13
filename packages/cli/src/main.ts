@@ -10,10 +10,15 @@
 
 import {
   getCommand,
-  getAllCommandRegistrations,
+  getOfficialCommandRegistrations,
   type CommandContext,
   type CommandRegistration,
 } from "./commands/registry";
+import {
+  getCommandReplacement,
+  getCommandSurface,
+  type CommandSurface,
+} from "./commands/surface";
 import { CLI_ERROR_CODES, handleCLIError, printCLIError } from "./errors";
 import { shouldShowBanner, renderHeroBanner, renderHelp, MANDU_HELP } from "./terminal";
 
@@ -59,7 +64,7 @@ import pkg from "../package.json" with { type: "json" };
 const VERSION = (pkg as { version?: string }).version ?? "0.0.0";
 
 function getHelpText(): string {
-  const subcommands = getAllCommandRegistrations().map((command) => ({
+  const subcommands = getOfficialCommandRegistrations().map((command) => ({
     name: command.id,
     description: command.description,
     aliases: command.aliases,
@@ -70,6 +75,22 @@ function getHelpText(): string {
     description: `${MANDU_HELP.description} v${VERSION}`,
     subcommands,
   });
+}
+
+function printSurfaceNotice(command: string, surface: CommandSurface): void {
+  const replacement = getCommandReplacement(command);
+  if (surface === "compatibility") {
+    console.error(`Compatibility command: mandu ${command}`);
+    if (replacement) console.error(`Stable path: ${replacement}`);
+    return;
+  }
+  if (surface === "labs") {
+    console.error(`Labs command: mandu ${command} is outside the stable Mandu product.`);
+    return;
+  }
+  if (surface === "internal") {
+    console.error(`Utility command: mandu ${command} is not part of the public v1 command surface.`);
+  }
 }
 
 /**
@@ -167,6 +188,17 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
       process.stdout.write(renderFallbackHelp(registration));
     }
     process.exit(0);
+  }
+
+  const surface = getCommandSurface(registration.id) ??
+    (registration.id.startsWith("__test_") ? "internal" : null);
+  if (!surface) {
+    throw new Error(`CLI command "${registration.id}" is missing from the product surface manifest.`);
+  }
+  // Keep stdout machine-readable for compatibility commands that support
+  // --json. Notices are local-only; Mandu does not emit telemetry.
+  if (surface !== "official" && surface !== "retired" && options.json !== "true") {
+    printSurfaceNotice(registration.id, surface);
   }
 
   // Show hero banner (after help routing so `--help` never prints it).

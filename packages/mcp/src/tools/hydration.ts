@@ -7,7 +7,7 @@ import {
   type HydrationPriority,
   type HydrationConfig,
 } from "@mandujs/core";
-import { buildClientBundles, formatSize, type BundleManifest } from "@mandujs/core/bundler";
+import { buildClientBundles, formatSize, type BundleManifest } from "@mandujs/core/compat/bundler/index";
 import { getProjectPaths, readJsonFile, writeJsonFile } from "../utils/project.js";
 import path from "path";
 

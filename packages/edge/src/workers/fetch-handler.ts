@@ -28,7 +28,7 @@
 import {
   createAppFetchHandler,
   type AppFetchHandlerOptions,
-} from "@mandujs/core/runtime/server";
+} from "@mandujs/core/compat/runtime/server";
 import type { RoutesManifest } from "@mandujs/core";
 import { installWorkersPolyfills } from "./polyfills";
 import { assertEdgeCompatibleManifest, hintBunOnlyApiError } from "./guards";

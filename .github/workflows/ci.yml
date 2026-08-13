@@ -49,7 +49,8 @@ jobs:
               - '.github/workflows/ci.yml'
             e2e:
               - 'demo/todo-app/**'
-              - 'demo/ai-chat/**'
+              - 'demo/auth-starter/**'
+              - 'packages/cli/templates/realtime-chat/**'
               - 'packages/core/src/runtime/**'
               - 'packages/core/src/server/**'
               - 'packages/core/src/client/**'
@@ -74,24 +75,41 @@ jobs:
         with:
           bun-version: ${{ matrix.bun }}
       - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run lint
+      - run: bun run typecheck:product
+      - run: bun run lint:product
       - run: bun run check:public-api
+      - run: bun run check:core-v1-imports
+      - run: bun run check:official-skills
+      - run: bun run check:package-boundaries
       - run: bun run check:target-boundaries
       - run: bun run check:docs-drift
-      - run: bun run test:core -- --randomize --retry=2 --seed=${{ github.run_id }}
-      - run: bun run test:cli -- --randomize --retry=2 --seed=${{ github.run_id }}
-      - run: bun run test:mcp -- --randomize --retry=2 --seed=${{ github.run_id }}
-      - run: bun run test:ate -- --randomize --retry=2 --seed=${{ github.run_id }}
-      - run: bun run test:edge -- --randomize --retry=2 --seed=${{ github.run_id }}
-      - run: bun run test:edge:build
-      - run: bun run test:skills -- --randomize --retry=2 --seed=${{ github.run_id }}
-      - run: bun run test:playground-runner -- --randomize --retry=2 --seed=${{ github.run_id }}
+      - run: bun run test:core -- --randomize --seed=${{ github.run_id }}
+      - run: bun run test:cli -- --randomize --seed=${{ github.run_id }}
+      - run: bun run test:mcp -- --randomize --seed=${{ github.run_id }}
+      - run: bun run test:agent-apply-gate
       - run: bun run test:smoke
+      - run: bun run test:reference-apps
 
-  # macOS/Windows: only core + cli — the suites where OS-specific regressions
-  # actually surface (path handling, fs.watch, child_process, Bun.spawn).
-  # mcp/ate/edge/skills/playground are pure-logic and covered on Linux.
+  labs-linux:
+    name: Labs/generated signal (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck:labs
+      - run: bun run scripts/typecheck.ts skills
+      - run: bun run lint:labs
+      - run: oxlint packages/skills
+      - run: bun run test:generated
+      - run: bun run test:labs
+
+  # macOS/Windows: core + CLI plus both install rehearsals. `test:smoke`
+  # creates and freshly installs an app; `test:reference-apps` exercises the
+  # three product workflows after the frozen workspace install above.
   quality-os:
     name: Quality (${{ matrix.os }}, core+cli)
     strategy:
@@ -105,9 +123,12 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run test:core -- --randomize --retry=2 --seed=${{ github.run_id }}
-      - run: bun run test:cli -- --randomize --retry=2 --seed=${{ github.run_id }}
+      - run: bun run typecheck:product
+      - run: bun run check:package-boundaries
+      - run: bun run test:core -- --randomize --seed=${{ github.run_id }}
+      - run: bun run test:cli -- --randomize --seed=${{ github.run_id }}
+      - run: bun run test:smoke
+      - run: bun run test:reference-apps
 
   db-integration:
     name: DB Integration (Postgres + MySQL)
@@ -208,7 +229,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        demo: [todo-app, ai-chat]
+        demo: [todo-app, auth-starter]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -220,8 +241,17 @@ jobs:
       - name: Build demo app
         working-directory: demo/${{ matrix.demo }}
         run: bun run build
+      - name: Apply auth reference migrations
+        if: matrix.demo == 'auth-starter'
+        working-directory: demo/auth-starter
+        env:
+          DATABASE_URL: sqlite://./app.db
+        run: bun ../../packages/cli/src/main.ts db apply --ci
       - name: Start demo server
         working-directory: demo/${{ matrix.demo }}
+        env:
+          PORT: "3333"
+          DATABASE_URL: ${{ matrix.demo == 'auth-starter' && 'sqlite://./app.db' || '' }}
         run: bun run start &
       - name: Wait for server
         run: |

@@ -71,7 +71,7 @@ export function _desktopEntryTemplate(): string {
 
 import { startServer } from "@mandujs/core";
 import type { RoutesManifest } from "@mandujs/core";
-import type { BundleManifest } from "@mandujs/core/bundler";
+import type { BundleManifest } from "@mandujs/core/compat/bundler/index";
 import path from "path";
 import fs from "fs";
 
@@ -120,7 +120,7 @@ async function main(): Promise<void> {
   // Worker-based window pattern — keeps the blocking Webview loop isolated
   // from Bun.serve(). See: @mandujs/core/desktop/worker.
   const worker = new Worker(
-    new URL("@mandujs/core/desktop/worker", import.meta.url),
+    new URL("@mandujs/core/compat/desktop/worker", import.meta.url),
   );
 
   worker.addEventListener("message", (ev) => {

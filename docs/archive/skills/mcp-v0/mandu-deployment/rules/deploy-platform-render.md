@@ -88,7 +88,7 @@ services:
 
 ```dockerfile
 # Dockerfile
-FROM oven/bun:1.0-slim
+FROM oven/bun:1.3.14-slim
 
 WORKDIR /app
 

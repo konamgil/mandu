@@ -37,6 +37,8 @@ export interface BundleOutput {
 export interface BundleManifest {
   /** 매니페스트 버전 */
   version: number;
+  /** Atomically published client build generation. Absent on legacy/custom output builds. */
+  generationId?: string;
   /** 빌드 시간 */
   buildTime: string;
   /** 환경 */

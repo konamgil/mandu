@@ -9,7 +9,7 @@ import {
   formatDoctorReport,
   getBrain,
   initializeBrain,
-} from "@mandujs/core/brain";
+} from "@mandujs/core/compat/brain/index";
 import { getChangedFiles } from "../util/git";
 
 export interface ReviewOptions {

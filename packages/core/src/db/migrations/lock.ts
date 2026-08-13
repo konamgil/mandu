@@ -178,7 +178,7 @@ async function acquireMysqlLock(
  * avoids concurrent GET_LOCK calls from separate Bun.SQL pools in one runtime.
  */
 const MYSQL_LOCK_REGISTRY_SYMBOL = Symbol.for(
-  "@mandujs/core/db/migrations/mysql-locks",
+  "@mandujs/core/compat/db/migrations/mysql-locks",
 );
 interface MysqlLockRegistry {
   chains: Map<string, Promise<void>>;
@@ -231,7 +231,7 @@ async function acquireMysqlProcessMutex(lockId: string): Promise<MigrationLock> 
  * agree on the same queue.
  */
 const SQLITE_LOCK_REGISTRY_SYMBOL = Symbol.for(
-  "@mandujs/core/db/migrations/sqlite-locks",
+  "@mandujs/core/compat/db/migrations/sqlite-locks",
 );
 interface SqliteLockRegistry {
   /** Most-recent promise in each lockId's queue. */
