@@ -54,6 +54,7 @@ jobs:
 
       - name: Release performance gates
         run: |
+          bunx playwright install chromium
           bun run perf:baseline:check
           bun run perf:ci
           bun run perf:expanded

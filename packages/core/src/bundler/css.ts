@@ -27,7 +27,10 @@ import { withPerf } from "../perf";
  */
 function isBunExecutable(executablePath: string | undefined): boolean {
   if (!executablePath) return false;
-  const base = path.basename(executablePath).toLowerCase();
+  // `path.basename()` only understands the current host separator. Tests,
+  // wrappers, and cross-compiled binaries can still hand us a Windows path on
+  // POSIX (or vice versa), so normalize both separators before inspecting it.
+  const base = path.posix.basename(executablePath.replace(/\\/g, "/")).toLowerCase();
   return base === "bun" || base === "bun.exe";
 }
 

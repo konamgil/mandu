@@ -640,7 +640,8 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     // paths; compare after normalizing both sides so Windows
     // backslashes and drive-letter case don't cause misses.
     const normalizeCompare = (p: string): string => {
-      const resolved = path.resolve(rootDir, p).replace(/\\/g, "/");
+      const portablePath = p.replace(/[\\/]+/g, path.sep);
+      const resolved = path.resolve(rootDir, portablePath).replace(/\\/g, "/");
       return process.platform === "win32" ? resolved.toLowerCase() : resolved;
     };
     const target = normalizeCompare(filePath);

@@ -53,7 +53,8 @@ function isSlotFile(filePath: string): boolean {
 
 function normalizeCompareFactory(rootDir: string) {
   return (p: string): string => {
-    const resolved = path.resolve(rootDir, p).replace(/\\/g, "/");
+    const portablePath = p.replace(/[\\/]+/g, path.sep);
+    const resolved = path.resolve(rootDir, portablePath).replace(/\\/g, "/");
     return process.platform === "win32" ? resolved.toLowerCase() : resolved;
   };
 }

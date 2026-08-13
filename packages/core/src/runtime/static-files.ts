@@ -247,7 +247,10 @@ export async function serveStaticFile(
     return { handled: true, response: createStaticErrorResponse(400) };
   }
 
-  const normalizedPath = path.posix.normalize(decodedPath);
+  // URL paths use `/`, but an encoded backslash is a path separator on
+  // Windows. Treat it as one on every host so traversal attempts have the
+  // same security result in Linux/macOS deployments as they do on Windows.
+  const normalizedPath = path.posix.normalize(decodedPath.replace(/\\/g, "/"));
   if (normalizedPath.includes("\0")) {
     console.warn(`[Mandu Security] Null byte attack detected: ${pathname}`);
     return { handled: true, response: createStaticErrorResponse(400) };

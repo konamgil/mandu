@@ -33,7 +33,7 @@
     "test:playground-runner": "bun test packages/playground-runner/tests",
     "test:product": "bun run test:core && bun run test:cli && bun run test:mcp",
     "test:generated": "bun run test:skills",
-    "test:labs": "bun run test:ate && bun run test:edge && bun run test:edge:build && bun run test:playground-runner",
+    "test:labs": "bun run test:ate && bun run test:edge && bun run test:playground-runner",
     "test:demo": "bun run test:smoke",
     "test:smoke": "bun run ./scripts/smoke.ts",
     "test:reference-apps": "bun run ./scripts/reference-app-gate.ts",

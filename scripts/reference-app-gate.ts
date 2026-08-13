@@ -320,15 +320,11 @@ async function linkDirectory(source: string, target: string): Promise<void> {
 
 async function stageWorkspaceApp(reference: ReferenceApp, appDir: string): Promise<void> {
   const sourceDir = path.join(repoRoot, reference.source!);
-  const sourceNodeModules = path.join(sourceDir, "node_modules");
-  await fs.access(sourceNodeModules).catch(() => {
-    throw new Error(`Missing workspace dependencies for ${reference.id}; run bun install --frozen-lockfile`);
-  });
   await fs.cp(sourceDir, appDir, {
     recursive: true,
     filter: (candidate) => shouldCopy(sourceDir, candidate),
   });
-  await linkDirectory(sourceNodeModules, path.join(appDir, "node_modules"));
+  await installReferenceDependencies(appDir);
 }
 
 async function stripManduDependencies(appDir: string): Promise<void> {
@@ -346,17 +342,26 @@ async function stripManduDependencies(appDir: string): Promise<void> {
   await fs.writeFile(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 
+async function installReferenceDependencies(appDir: string): Promise<void> {
+  // Install the copied app as a real standalone consumer. Reusing a workspace
+  // node_modules directory is not portable: Bun's generated Windows launchers
+  // retain their original location and can cause `bun x` to download a second
+  // CLI whose peer package is then invisible from the staged application.
+  await stripManduDependencies(appDir);
+  await runCommand(["bun", "install"], appDir);
+
+  const coreTarget = path.join(appDir, "node_modules", "@mandujs", "core");
+  await fs.mkdir(path.dirname(coreTarget), { recursive: true });
+  await fs.rm(coreTarget, { recursive: true, force: true });
+  await linkDirectory(path.join(repoRoot, "packages", "core"), coreTarget);
+}
+
 async function stageTemplateApp(reference: ReferenceApp, runRoot: string, appDir: string): Promise<void> {
   await runCommand([
     "bun", "run", cliEntry, "create", reference.id,
     "--template", reference.template!, "--yes", "--no-install",
   ], runRoot);
-  await stripManduDependencies(appDir);
-  await runCommand(["bun", "install"], appDir);
-  const coreTarget = path.join(appDir, "node_modules", "@mandujs", "core");
-  await fs.mkdir(path.dirname(coreTarget), { recursive: true });
-  await fs.rm(coreTarget, { recursive: true, force: true });
-  await linkDirectory(path.join(repoRoot, "packages", "core"), coreTarget);
+  await installReferenceDependencies(appDir);
 }
 
 async function verifyReference(reference: ReferenceApp, appDir: string): Promise<void> {
