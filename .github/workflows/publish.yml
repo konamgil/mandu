@@ -72,7 +72,14 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Version packages
-        run: bun run version
+        run: |
+          if [ -n "$NPM_DIST_TAG" ]; then
+            bun run version:product -- --pre "$NPM_DIST_TAG"
+          else
+            bun run version:product
+          fi
+        env:
+          NPM_DIST_TAG: ${{ inputs.dist_tag }}
 
       - name: Pre-publish check
         run: bun run check:product-release

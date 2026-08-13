@@ -52,6 +52,7 @@
     "mandu": "bun run packages/cli/src/main.ts",
     "changeset": "changeset",
     "version": "changeset version && bun install",
+    "version:product": "bun run scripts/version-product.ts",
     "publish": "bun run scripts/publish.ts",
     "publish:product": "bun run scripts/publish.ts --product",
     "publish:dry": "bun run scripts/publish.ts --dry-run",
