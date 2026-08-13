@@ -148,7 +148,7 @@
     },
     "packages/cli": {
       "name": "@mandujs/cli",
-      "version": "0.44.24",
+      "version": "0.45.0-beta.0",
       "bin": {
         "mandu": "src/main.ts",
       },
@@ -159,7 +159,7 @@
     },
     "packages/core": {
       "name": "@mandujs/core",
-      "version": "0.54.31",
+      "version": "0.55.0-beta.0",
       "dependencies": {
         "chokidar": "^5.0.0",
         "fast-glob": "^3.3.2",
@@ -213,7 +213,7 @@
     },
     "packages/mcp": {
       "name": "@mandujs/mcp",
-      "version": "0.38.12",
+      "version": "0.39.0-beta.0",
       "bin": {
         "mandu-mcp": "./src/index.ts",
         "mandujs-mcp": "./src/index.ts",
@@ -243,7 +243,7 @@
         "mandu-skills": "./src/cli.ts",
       },
       "peerDependencies": {
-        "@mandujs/core": ">=0.1.0",
+        "@mandujs/core": "^0.54.0",
       },
       "optionalPeers": [
         "@mandujs/core",

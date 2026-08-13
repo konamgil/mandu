@@ -1,5 +1,15 @@
 # @mandujs/core
 
+## 0.55.0-beta.0
+
+### Minor Changes
+
+- [`762e09a`](https://github.com/konamgil/mandu/commit/762e09a9a6c7b947c5b71c6169537a32d483d5ea) Thanks [@konamgil](https://github.com/konamgil)! - Establish the stable Mandu product boundary around Core, CLI, and MCP. Enforce reachable package imports and Core runtime/safety/actions ownership, remove CLI and MCP runtime coupling to Labs packages, split product verification and publishing from Labs release trains, and make generated-artifact Guard checks precise and AST-based. Converge the public surface to six official CLI commands, twelve Core exports including a compatibility shim and codemod, and eight default MCP actions. Retire provider deployment execution in favor of a provider-neutral production artifact contract. Add executable typed agent plans with exact scope, SHA-256/base-revision preconditions, idempotent receipts, built-in verification, touched-file snapshots, automatic failure rollback, and conflict-safe explicit rollback shared by CLI and MCP. Establish three release-blocking reference workflows for SaaS auth, contract CRUD, and realtime interactivity across Linux, Windows, and macOS install rehearsals, and make production handler/prerender failures fail closed.
+
+### Patch Changes
+
+- [`762e09a`](https://github.com/konamgil/mandu/commit/762e09a9a6c7b947c5b71c6169537a32d483d5ea) Thanks [@konamgil](https://github.com/konamgil)! - Publish client bundles as atomic build generations so failed or concurrent rebuilds cannot expose partial artifacts. Pin SSR, streaming, client-boundary, import-map, and DevTools asset URLs to an immutable generation, preserve the last published manifest after failures, and refresh the live server manifest after HMR or a dev restart.
+
 ## 0.54.31
 
 ### Patch Changes

@@ -1,0 +1,14 @@
+{
+  "mode": "pre",
+  "tag": "beta",
+  "initialVersions": {
+    "@mandujs/cli": "0.44.24",
+    "@mandujs/core": "0.54.31",
+    "@mandujs/mcp": "0.38.12"
+  },
+  "changesets": [
+    "atomic-build-generations",
+    "fresh-buns-smile",
+    "quiet-dumplings-refound"
+  ]
+}
