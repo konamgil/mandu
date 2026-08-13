@@ -173,7 +173,6 @@
       },
       "peerDependencies": {
         "@babel/core": "^7.29.0",
-        "@tailwindcss/cli": ">=4.0.0",
         "axe-core": ">=4.8.0",
         "babel-plugin-react-compiler": "^1.0.0",
         "eslint": "^9.0.0",
@@ -187,7 +186,6 @@
       },
       "optionalPeers": [
         "@babel/core",
-        "@tailwindcss/cli",
         "axe-core",
         "babel-plugin-react-compiler",
         "eslint",
