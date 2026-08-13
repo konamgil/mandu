@@ -79,18 +79,36 @@ describe("DNA-006: Config Hot Reload", () => {
       await writeFile(configPath, JSON.stringify(initialConfig));
 
       const callback = mock();
-      const watcher = await watchConfig(tempDir, callback, { debounceMs: 10 });
+      let resolveChange!: (event: ConfigChangeEvent) => void;
+      const changed = new Promise<ConfigChangeEvent>((resolve) => {
+        resolveChange = resolve;
+      });
+      const watcher = await watchConfig(
+        tempDir,
+        (config, event) => {
+          callback(config, event);
+          resolveChange(event);
+        },
+        { debounceMs: 10 },
+      );
 
       try {
+        // macOS FSEvents registration may finish shortly after fs.watch()
+        // returns. Mutating immediately makes this test depend on runner load.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
         // 설정 변경
         const newConfig: ManduConfig = {
           server: { port: 4000 },
         };
         await writeFile(configPath, JSON.stringify(newConfig));
 
-        // 디바운스 대기
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        const changeEvent = await Promise.race([
+          changed,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2_000)),
+        ]);
 
+        expect(changeEvent).not.toBeNull();
         expect(callback).toHaveBeenCalled();
         const [config, event] = callback.mock.calls[0];
         expect(config.server?.port).toBe(4000);
