@@ -25,7 +25,7 @@
 
 ---
 
-> **Refoundation status:** Mandu v0.x is an early beta. The Agent-Safe product contract is the accepted v1 direction; typed apply and the full reliability gates are still being implemented. See the [strategy](./docs/product/03_agent_safe_refoundation_strategy.md) and [execution plan](./docs/plans/22_mandu_refoundation_execution_plan.md).
+> **Refoundation status:** Mandu v0.x is an early beta. Typed apply supports dry-run previews, post-apply verification, and automatic rollback. See the [typed apply walkthrough](./docs/guides/08_typed_apply.md) and the [execution plan](./docs/plans/22_mandu_refoundation_execution_plan.md).
 
 ## Why Mandu?
 
@@ -136,7 +136,7 @@ For the full agent workflow, read [Mandu Agent Workflow](./docs/guides/07_agent_
 
 ## Requirements
 
-- Bun `>= 1.3.12`
+- Bun `>= 1.4.0`
 - TypeScript
 - React 19
 

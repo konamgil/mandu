@@ -141,9 +141,9 @@ export async function runAgentApplyBenchmark(): Promise<AgentApplyBenchmarkResul
       outOfScopeWrites += receipt.changedFiles.filter((file) => !plan.scope.includes(file)).length;
     }
 
-    const rollbackAttempts = 5;
+    const rollbackAttempts = 6;
     let rollbackSucceeded = 0;
-    for (let index = 0; index < rollbackAttempts; index += 1) {
+    for (let index = 0; index < rollbackAttempts - 1; index += 1) {
       const first = `src/rollback-${index}-a.ts`;
       const second = `src/rollback-${index}-b.ts`;
       const plan = await buildExecutableAgentPlan(root, {
@@ -167,6 +167,40 @@ export async function runAgentApplyBenchmark(): Promise<AgentApplyBenchmarkResul
       ) {
         rollbackSucceeded += 1;
       }
+    }
+
+    const contract = "spec/contracts/api-todos.contract.ts";
+    const manifest = ".mandu/manifest.json";
+    const contractBefore = await fs.readFile(path.join(import.meta.dir, "../demo/todo-app", contract), "utf8");
+    const manifestBefore = JSON.stringify({
+      version: 1, env: "production", buildTime: "2026-01-01T00:00:00Z",
+      bundles: { todo: { js: "/todo.js", dependencies: [] } },
+      shared: { runtime: "/runtime.js", vendor: "/vendor.js" },
+    });
+    await writeFile(root, contract, contractBefore);
+    await writeFile(root, manifest, manifestBefore);
+    const todoPlan = await buildExecutableAgentPlan(root, {
+      intent: "Change the todo API contract and detect a corrupt build manifest",
+      operations: [
+        { kind: "contract.update", target: contract, effect: writeEffect(contractBefore.replace('"low"', '"low", "urgent"')) },
+        { kind: "generated.refresh", target: manifest, effect: writeEffect("{truncated") },
+      ],
+      verification: [{
+        id: "verify-build-manifest", kind: "agent.verify", command: "mandu agent verify",
+        reason: "Verify generated build artifacts", required: true, includeDiagnose: true,
+      }],
+    });
+    await writeAgentPlan(root, todoPlan);
+    const todoReceipt = await buildAgentApplyReport(root, { dryRun: false });
+    if (
+      todoReceipt.status === "rolled_back" && todoReceipt.rollback.ok &&
+      todoReceipt.verification.some((step) => !step.ok && step.diagnostics.some(
+        (diagnostic) => diagnostic.code === "MANDU_DIAGNOSE_MANIFEST_FRESHNESS" && /invalid JSON/.test(diagnostic.cause),
+      )) &&
+      await fs.readFile(path.join(root, contract), "utf8") === contractBefore &&
+      await fs.readFile(path.join(root, manifest), "utf8") === manifestBefore
+    ) {
+      rollbackSucceeded += 1;
     }
 
     const stalePreconditions = 5;

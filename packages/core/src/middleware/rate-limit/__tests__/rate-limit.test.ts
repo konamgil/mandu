@@ -493,20 +493,14 @@ describeIfBunSql("createSqliteStore", () => {
       gcSchedule: false,
     });
     try {
-      // Fire 20 parallel hits under a limit of 100. All must pass AND the
-      // reported remaining values must form a strictly-decreasing set from
-      // 99 down to 80 (modulo ordering). If SQLite let the transactions
-      // interleave with lost updates we'd see duplicates.
       const hits = await Promise.all(
-        Array.from({ length: 20 }, () => store.hit("concurrent", 100, 60_000)),
+        Array.from({ length: 20 }, () => store.hit("concurrent", 12, 60_000)),
       );
-      expect(hits.every((r) => r.allowed)).toBe(true);
-      const remainings = hits.map((r) => r.remaining).sort((a, b) => a - b);
-      // 20 hits → remaining values 80..99 (each unique).
-      const unique = new Set(remainings);
-      expect(unique.size).toBe(20);
-      expect(Math.min(...remainings)).toBe(80);
-      expect(Math.max(...remainings)).toBe(99);
+      const allowed = hits.filter((hit) => hit.allowed);
+      const blocked = hits.filter((hit) => !hit.allowed);
+      expect(allowed.map((hit) => hit.remaining).sort((a, b) => a - b))
+        .toEqual(Array.from({ length: 12 }, (_, index) => index));
+      expect(blocked.map((hit) => hit.remaining)).toEqual(Array(8).fill(0));
     } finally {
       await store.close?.();
     }

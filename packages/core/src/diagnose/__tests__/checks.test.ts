@@ -512,10 +512,9 @@ describe("runExtendedDiagnose", () => {
   beforeEach(async () => { rootDir = await mkTmpRoot(); });
   afterEach(async () => { await fs.rm(rootDir, { recursive: true, force: true }); });
 
-  it("runs all 8 extended checks and returns a structured report", async () => {
+  it("runs all extended checks and returns a structured report", async () => {
     const report = await runExtendedDiagnose(rootDir);
-    // F42/F45 added `client_boundary_manifests` — total is now 8.
-    expect(report.summary.total).toBe(8);
+    expect(report.summary.total).toBe(9);
     // manifest is missing → at least one error
     expect(report.healthy).toBe(false);
     expect(report.errorCount).toBeGreaterThanOrEqual(1);
@@ -528,6 +527,7 @@ describe("runExtendedDiagnose", () => {
     expect(rules).toContain("nested_internal_core");
     expect(rules).toContain("client_boundary_manifests");
     expect(rules).toContain("a11y_hints");
+    expect(rules).toContain("tailwind_native_binding");
   });
 
   it("returns healthy=true when all checks pass (production manifest, no gaps)", async () => {
@@ -539,6 +539,21 @@ describe("runExtendedDiagnose", () => {
     const report = await runExtendedDiagnose(rootDir);
     expect(report.healthy).toBe(true);
     expect(report.errorCount).toBe(0);
+  });
+
+  it("distinguishes a missing Tailwind CLI from a blocked native binding", async () => {
+    await writeFile(rootDir, "app/globals.css", '@import "tailwindcss";');
+    const missing = await runExtendedDiagnose(rootDir);
+    expect(missing.checks.find((check) => check.rule === "tailwind_native_binding")?.message)
+      .toContain("@tailwindcss/cli is missing");
+
+    await writeFile(rootDir, "node_modules/@tailwindcss/cli/dist/index.mjs", `
+      console.error("Cannot find native binding @tailwindcss/oxide: Application Control policy has blocked this file.");
+      process.exit(1);
+    `);
+    const blocked = await runExtendedDiagnose(rootDir);
+    expect(blocked.checks.find((check) => check.rule === "tailwind_native_binding")?.message)
+      .toContain("Windows application control blocked @tailwindcss/oxide");
   });
 });
 

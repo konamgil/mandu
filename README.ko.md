@@ -25,7 +25,7 @@
 
 ---
 
-> **개편 상태:** Mandu v0.x는 초기 베타입니다. Agent-Safe 제품 계약은 합의된 v1 방향이며 typed apply와 전체 신뢰성 gate는 아직 구현 중입니다. [제품 전략](./docs/product/03_agent_safe_refoundation_strategy.md)과 [실행 계획](./docs/plans/22_mandu_refoundation_execution_plan.md)을 확인하세요.
+> **개편 상태:** Mandu v0.x는 초기 베타입니다. Typed apply는 변경 미리보기, 적용 후 검증, 자동 롤백을 지원합니다. [실행 예제](./docs/guides/08_typed_apply.md)와 [실행 계획](./docs/plans/22_mandu_refoundation_execution_plan.md)을 확인하세요.
 
 ## 왜 Mandu인가요?
 
@@ -136,7 +136,7 @@ Mandu는 AI 에이전트가 실제로 수정하는 코드베이스를 전제로 
 
 ## 요구사항
 
-- Bun `>= 1.3.12`
+- Bun `>= 1.4.0`
 - TypeScript
 - React 19
 

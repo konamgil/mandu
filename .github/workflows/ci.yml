@@ -114,17 +114,21 @@ jobs:
   # creates and freshly installs an app; `test:reference-apps` exercises the
   # three product workflows after the frozen workspace install above.
   quality-os:
-    name: Quality (${{ matrix.os }}, core+cli)
+    name: Quality (${{ matrix.os }}${{ matrix.bun == 'latest' && ', Bun latest' || '' }}, core+cli)
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
+        bun: [1.4.0]
+        include:
+          - os: windows-latest
+            bun: latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.0
+          bun-version: ${{ matrix.bun }}
       - run: bun install --frozen-lockfile
       - run: bun run typecheck:product
       - run: bun run check:package-boundaries
@@ -144,7 +148,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile
 
       - name: Start Postgres + MySQL via compose
@@ -201,12 +205,12 @@ jobs:
         run: docker compose -f packages/core/tests/fixtures/db/docker-compose.yml down -v
 
   performance-budget:
-    name: Performance Budget (ubuntu-latest, Bun 1.4.0)
+    name: Performance Budget (ubuntu-24.04, Bun 1.4.0)
     needs: changes
     if: |
       needs.changes.outputs.perf == 'true' ||
       contains(github.event.pull_request.labels.*.name, 'ci:perf')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -229,7 +233,7 @@ jobs:
     if: |
       needs.changes.outputs.e2e == 'true' ||
       contains(github.event.pull_request.labels.*.name, 'ci:e2e')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
