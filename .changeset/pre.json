@@ -10,7 +10,9 @@
     "agent-devtools-p2-diagnose-bundle",
     "atomic-build-generations",
     "bun-1-4-runtime-baseline",
+    "bun-sql-template-compatibility",
     "fresh-buns-smile",
-    "quiet-dumplings-refound"
+    "quiet-dumplings-refound",
+    "tailwind-native-load-diagnostics"
   ]
 }

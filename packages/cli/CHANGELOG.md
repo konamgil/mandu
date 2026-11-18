@@ -1,5 +1,14 @@
 # @mandujs/cli
 
+## 0.45.0-beta.2
+
+### Patch Changes
+
+- [#328](https://github.com/konamgil/mandu/pull/328) [`fe2a953`](https://github.com/konamgil/mandu/commit/fe2a953deb173efeb8a3adc500792efe3f6ccbb3) Thanks [@konamgil](https://github.com/konamgil)! - Distinguish missing Tailwind platform bindings from blocked or failed native loads in CSS builds and diagnose reports.
+
+- Updated dependencies [[`fe2a953`](https://github.com/konamgil/mandu/commit/fe2a953deb173efeb8a3adc500792efe3f6ccbb3), [`fe2a953`](https://github.com/konamgil/mandu/commit/fe2a953deb173efeb8a3adc500792efe3f6ccbb3)]:
+  - @mandujs/core@0.55.0-beta.2
+
 ## 0.45.0-beta.1
 
 ### Minor Changes
