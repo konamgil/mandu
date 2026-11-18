@@ -6,6 +6,7 @@
  */
 
 import type { DiagnoseCheckResult, DiagnoseReport } from "./types";
+import { isTailwindProject, probeTailwind } from "../bundler/css";
 import {
   checkManifestFreshness,
   checkPrerenderPollution,
@@ -16,6 +17,17 @@ import {
   checkA11yHints,
   checkClientBoundaryManifests,
 } from "./checks";
+
+async function checkTailwindNativeBinding(rootDir: string): Promise<DiagnoseCheckResult> {
+  const rule = "tailwind_native_binding";
+  if (!(await isTailwindProject(rootDir))) {
+    return { ok: true, rule, message: "Tailwind CSS is not configured." };
+  }
+  const failure = await probeTailwind(rootDir);
+  return failure
+    ? { ok: false, rule, severity: "error", message: failure }
+    : { ok: true, rule, message: "Tailwind CLI loaded successfully." };
+}
 
 /**
  * Registered extended checks (Issue #215 + Phase 18.χ).
@@ -34,6 +46,7 @@ export const EXTENDED_CHECKS = [
   { name: "package_export_gaps", run: checkPackageExportGaps },
   { name: "nested_internal_core", run: checkNestedInternalCore },
   { name: "client_boundary_manifests", run: checkClientBoundaryManifests },
+  { name: "tailwind_native_binding", run: checkTailwindNativeBinding },
   { name: "a11y_hints", run: checkA11yHints },
 ] as const;
 

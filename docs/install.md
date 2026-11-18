@@ -11,7 +11,7 @@ Mandu ships in two parallel formats. Pick the one that matches how you plan to u
 | Track | Artifact | Who | Size | Prerequisite |
 |---|---|---|---|---|
 | **Standalone binary** | `mandu-<target>` / `mandu.exe` from GitHub Releases | Beginners, onboarding, desktop users | ~132 MB (Bun runtime embedded) | None |
-| **npm / Bun package** | `@mandujs/cli` on npmjs.org | Framework contributors, CI, monorepos | ~5 MB + deps | Bun 1.3.12+ installed |
+| **npm / Bun package** | `@mandujs/cli` on npmjs.org | Framework contributors, CI, monorepos | ~5 MB + deps | Bun 1.4.0+ installed |
 
 If you are just kicking the tires, grab the binary. If you already have Bun and want to contribute, install the npm package.
 

@@ -317,6 +317,18 @@ describeIfBunSql("@mandujs/core/compat/db — SQLite fragment composition", () =
     expect(rows.map((r) => r.title).sort()).toEqual(["climate action", "housing reform"]);
   });
 
+  it("accepts legacy synthesized templates without mutating them", async () => {
+    const parts = ["SELECT title FROM pledges WHERE party = ", " ORDER BY id"];
+    const template = Object.freeze(Object.assign(parts, { raw: parts.slice() }));
+
+    const green = await db<{ title: string }>(template, "green");
+    expect(green.map((row) => row.title)).toEqual(["climate action", "housing reform"]);
+
+    const blue = await db<{ title: string }>(template, "blue");
+    expect(blue.map((row) => row.title)).toEqual(["tax cut", "transit plan"]);
+    expect(Object.getOwnPropertyDescriptor(template, "raw")?.enumerable).toBe(true);
+  });
+
   it("multiple filters → AND-composed with every value bound", async () => {
     const rows = await listPledges({ party: "green", region: "seoul" });
     expect(rows.map((r) => r.title)).toEqual(["climate action"]);

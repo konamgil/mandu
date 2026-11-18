@@ -114,6 +114,33 @@ const DEFAULT_OUTPUT = ".mandu/client/globals.css";
 const SERVER_CSS_PATH = "/.mandu/client/globals.css";
 const CSS_REBUILD_DEBOUNCE = 150; // ms
 
+function formatTailwindFailure(stderr: string): string {
+  const nativePackage = stderr.includes("@tailwindcss/oxide")
+    ? "@tailwindcss/oxide"
+    : stderr.includes("lightningcss") ? "lightningcss" : undefined;
+  if (!nativePackage) return stderr;
+  if (/application control policy|device guard|애플리케이션 제어 정책/i.test(stderr)) {
+    return `Windows application control blocked ${nativePackage}. Ask your administrator to review the blocked native module.\n${stderr}`;
+  }
+  if (/ERR_DLOPEN_FAILED|LoadLibrary failed/i.test(stderr)) {
+    return `${nativePackage} is installed but its native module could not load.\n${stderr}`;
+  }
+  if (/Cannot find native binding|Cannot find module/i.test(stderr)) {
+    return `${nativePackage} is missing its platform binding. Run bun install with optional dependencies enabled.\n${stderr}`;
+  }
+  return stderr;
+}
+
+export async function probeTailwind(rootDir: string): Promise<string | undefined> {
+  const command = getTailwindCommand(["@tailwindcss/cli", "--help"], process.execPath, undefined, rootDir);
+  if (command[1] === "x") {
+    return "@tailwindcss/cli is missing. Run bun install in the project.";
+  }
+  const proc = spawn(command, { cwd: rootDir, stdout: "ignore", stderr: "pipe", timeout: 10_000 });
+  const [exitCode, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
+  if (exitCode !== 0) return formatTailwindFailure(stderr.trim()) || `Tailwind CLI exited with code ${exitCode}`;
+}
+
 // ========== Detection ==========
 
 /**
@@ -167,14 +194,13 @@ async function runCSSBuild(
   try {
     const proc = spawn(getTailwindCommand(args, process.execPath, undefined, rootDir), {
       cwd: rootDir,
-      stdout: "pipe",
+      stdout: "ignore",
       stderr: "pipe",
     });
 
-    const exitCode = await proc.exited;
+    const [exitCode, rawStderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
 
     if (exitCode !== 0) {
-      const rawStderr = await new Response(proc.stderr).text();
       // ANSI escape + 환경 경고 필터링
       const stderr = rawStderr
         .replace(/\u001b\[[0-9;]*m/g, "")
@@ -185,7 +211,7 @@ async function runCSSBuild(
       return {
         success: false,
         outputPath,
-        error: stderr || `Tailwind CLI exited with code ${exitCode}`,
+        error: formatTailwindFailure(stderr) || `Tailwind CLI exited with code ${exitCode}`,
       };
     }
 

@@ -328,14 +328,15 @@ function hasSqlFragment(values: readonly unknown[]): boolean {
   return false;
 }
 
-/**
- * Rebuilds a synthetic `TemplateStringsArray` from flattened parts so the
- * merged query can be handed back to Bun.SQL's tagged-template entry point.
- * `raw` mirrors the cooked strings — we never expose a raw-interpolation path.
- */
-function toTemplateStringsArray(parts: readonly string[]): TemplateStringsArray {
-  const arr = parts.slice();
-  return Object.assign(arr, { raw: parts.slice() }) as unknown as TemplateStringsArray;
+/** Builds the template shape Bun.SQL expects for a composed query. */
+function toTemplateStringsArray(
+  parts: readonly string[],
+  raw: readonly string[] = parts,
+): TemplateStringsArray {
+  // Like a tagged template literal, `raw` must be non-enumerable.
+  return Object.defineProperty(parts.slice(), "raw", {
+    value: raw.slice(),
+  }) as unknown as TemplateStringsArray;
 }
 
 // ─── Bun runtime surface (structural; no `any`) ─────────────────────────────
@@ -581,9 +582,12 @@ function buildDbHandle(bunSql: BunSqlInstance, provider: SqlProvider): Db {
       const flat = flattenSqlTemplate(strings, values);
       tsa = toTemplateStringsArray(flat.parts);
       binds = flat.binds;
+    } else if (Object.getOwnPropertyDescriptor(strings, "raw")?.enumerable) {
+      // Bun 1.4.4 rejects legacy synthetic templates with enumerable `raw`.
+      // Copy the template so callers can keep reusing it, even if frozen.
+      tsa = toTemplateStringsArray(strings, strings.raw);
     }
     try {
-      // `bunSql` is itself a tagged-template callable; pass through verbatim.
       const result = await bunSql<T>(tsa, ...binds);
       // Bun.SQL returns an array-like with metadata props (count/command/…).
       // Coerce to a plain array so consumers don't accidentally couple to
